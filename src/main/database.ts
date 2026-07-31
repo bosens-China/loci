@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
+import { normalizeCronSchedule } from '../shared/schedule'
 import { getHostname, normalizeUrl } from './crawl/url'
 import type {
   CreateSourceInput,
@@ -121,17 +122,27 @@ export function createDatabase(filename: string): DocHubDatabase {
       return rows.map(toDocumentSource)
     },
     createSource: (input) => {
-      validateSourceInput(input)
+      const schedule = validateSourceInput(input)
       const url = normalizeUrl(input.url)
       const now = new Date().toISOString()
       const id = randomUUID()
       database
         .prepare(
           `INSERT INTO document_sources
-            (id, name, first_url, hostname, fetch_mode, page_limit, schedule, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+           (id, name, first_url, hostname, fetch_mode, page_limit, schedule, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(id, input.name.trim(), url, getHostname(url), input.mode, input.pageLimit, now, now)
+        .run(
+          id,
+          input.name.trim(),
+          url,
+          getHostname(url),
+          input.mode,
+          input.pageLimit,
+          schedule,
+          now,
+          now
+        )
       const source = database
         .prepare(
           `SELECT id, name, first_url, fetch_mode, page_limit, schedule, 0 AS page_count, NULL AS last_crawled_at
@@ -141,16 +152,25 @@ export function createDatabase(filename: string): DocHubDatabase {
       return toDocumentSource(source)
     },
     updateSource: (id, input) => {
-      validateSourceInput(input)
+      const schedule = validateSourceInput(input)
       const url = normalizeUrl(input.url)
       const updatedAt = new Date().toISOString()
       const result = database
         .prepare(
           `UPDATE document_sources
-           SET name = ?, first_url = ?, hostname = ?, fetch_mode = ?, page_limit = ?, updated_at = ?
+           SET name = ?, first_url = ?, hostname = ?, fetch_mode = ?, page_limit = ?, schedule = ?, updated_at = ?
            WHERE id = ?`
         )
-        .run(input.name.trim(), url, getHostname(url), input.mode, input.pageLimit, updatedAt, id)
+        .run(
+          input.name.trim(),
+          url,
+          getHostname(url),
+          input.mode,
+          input.pageLimit,
+          schedule,
+          updatedAt,
+          id
+        )
       if (Number(result.changes) !== 1) throw new Error('文档源不存在')
       const source = database
         .prepare(
@@ -291,12 +311,13 @@ interface DocumentRow {
   markdown: string
 }
 
-function validateSourceInput(input: CreateSourceInput): void {
+function validateSourceInput(input: CreateSourceInput): string | null {
   if (!input.name.trim()) throw new Error('文档源名称不能为空')
   if (!Number.isInteger(input.pageLimit) || input.pageLimit < 1 || input.pageLimit > 10000) {
     throw new Error('页面上限必须在 1 到 10000 之间')
   }
   if (!['auto', 'http', 'browser'].includes(input.mode)) throw new Error('不支持的抓取方式')
+  return normalizeCronSchedule(input.schedule)
 }
 
 function toDocumentSource(row: SourceRow): DocumentSource {
@@ -309,7 +330,7 @@ function toDocumentSource(row: SourceRow): DocumentSource {
     pages: Number(row.page_count),
     pageLimit: Number(row.page_limit),
     lastUpdated: row.last_crawled_at ? formatDate(row.last_crawled_at) : '尚未更新',
-    schedule: row.schedule ?? '关闭'
+    schedule: row.schedule
   }
 }
 

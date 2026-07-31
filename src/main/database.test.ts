@@ -9,9 +9,11 @@ describe('createDatabase', () => {
         name: 'React',
         url: 'https://react.dev/learn#start',
         mode: 'auto',
-        pageLimit: 1000
+        pageLimit: 1000,
+        schedule: '0 2 * * *'
       })
       expect(source.url).toBe('https://react.dev/learn')
+      expect(source.schedule).toBe('0 2 * * *')
       expect(database.listSources()).toEqual([source])
       database.saveDocument({
         sourceId: source.id,
@@ -24,6 +26,15 @@ describe('createDatabase', () => {
       })
       expect(database.listSources()[0]).toMatchObject({ pages: 1 })
       expect(database.listDocumentUrls(source.id)).toEqual([source.url])
+      expect(
+        database.updateSource(source.id, {
+          name: 'React',
+          url: source.url,
+          mode: 'auto',
+          pageLimit: 1000,
+          schedule: null
+        }).schedule
+      ).toBeNull()
       database.updateResolvedSource(source.id, 'https://docs.react.dev/learn?from=redirect', 'http')
       expect(database.getSourceConfig(source.id)).toMatchObject({
         firstUrl: 'https://docs.react.dev/learn',

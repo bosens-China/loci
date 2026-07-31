@@ -12,7 +12,7 @@ import {
   Tag,
   Typography
 } from 'antd'
-import type { DocumentItem, DocumentSource, ViewKey } from '../types'
+import type { DocumentItem, DocumentSource } from '../types'
 
 interface OverviewPageProps {
   sources: DocumentSource[]
@@ -20,7 +20,7 @@ interface OverviewPageProps {
   loading: boolean
   error: string | null
   onRetry: () => void
-  onViewChange: (view: ViewKey) => void
+  onOpenSources: () => void
 }
 
 function OverviewPage({
@@ -29,7 +29,7 @@ function OverviewPage({
   loading,
   error,
   onRetry,
-  onViewChange
+  onOpenSources
 }: OverviewPageProps): React.JSX.Element {
   if (loading && sources.length === 0 && documents.length === 0) {
     return <Skeleton active paragraph={{ rows: 8 }} />
@@ -38,7 +38,7 @@ function OverviewPage({
   if (!loading && !error && sources.length === 0) {
     return (
       <Empty description="添加第一个公开文档页面，开始建立本地知识库">
-        <Button type="primary" icon={<DatabaseOutlined />} onClick={() => onViewChange('sources')}>
+        <Button type="primary" icon={<DatabaseOutlined />} onClick={onOpenSources}>
           添加文档源
         </Button>
       </Empty>
@@ -54,7 +54,7 @@ function OverviewPage({
             管理本地文档源，保持索引新鲜，随时查找答案。
           </Typography.Paragraph>
         </div>
-        <Button type="primary" icon={<DatabaseOutlined />} onClick={() => onViewChange('sources')}>
+        <Button type="primary" icon={<DatabaseOutlined />} onClick={onOpenSources}>
           管理文档源
         </Button>
       </div>
@@ -95,7 +95,7 @@ function OverviewPage({
           <Card
             title="文档源状态"
             extra={
-              <Button type="link" onClick={() => onViewChange('sources')}>
+              <Button type="link" onClick={onOpenSources}>
                 查看全部 <ArrowRightOutlined />
               </Button>
             }

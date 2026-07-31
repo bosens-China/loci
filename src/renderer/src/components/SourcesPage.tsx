@@ -27,9 +27,15 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useState } from 'react'
 import CrawlProgressModal from './CrawlProgressModal'
+import SourceScheduleFields, { SourceScheduleTag } from './SourceScheduleFields'
+import { indexCrawlRuns, mergeCrawlNode } from './crawlRunState'
+import {
+  getSourceFormValues,
+  toCreateSourceInput,
+  type SourceFormValues
+} from './sourceScheduleForm'
 import type {
   CreateSourceInput,
-  CrawlNode,
   CrawlProgress,
   CrawlProgressEvent,
   CrawlRunState,
@@ -61,7 +67,7 @@ function SourcesPage({
   onOpenLibrary,
   onDeleteSource
 }: SourcesPageProps): React.JSX.Element {
-  const [form] = Form.useForm<CreateSourceInput>()
+  const [form] = Form.useForm<SourceFormValues>()
   const [modalOpen, setModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [editingSource, setEditingSource] = useState<DocumentSource | null>(null)
@@ -79,7 +85,7 @@ function SourcesPage({
           [event.sourceId]: {
             sourceId: event.sourceId,
             progress: event.progress,
-            nodes: mergeNode(previous?.nodes ?? [], event.progress.node),
+            nodes: mergeCrawlNode(previous?.nodes ?? [], event.progress.node),
             error: event.error,
             running: event.running
           }
@@ -99,27 +105,27 @@ function SourcesPage({
   }, [])
 
   const openCreateModal = (): void => {
-    form.resetFields()
-    form.setFieldValue('mode', 'auto')
-    form.setFieldValue('pageLimit', 1000)
+    form.setFieldsValue(getSourceFormValues())
     setEditingSource(null)
     setModalOpen(true)
   }
 
   const openEditModal = (source: DocumentSource): void => {
     setEditingSource(source)
-    form.setFieldsValue({
-      name: source.name,
-      url: source.url,
-      mode: source.mode,
-      pageLimit: source.pageLimit
-    })
+    form.setFieldsValue(getSourceFormValues(source))
     setModalOpen(true)
   }
 
-  const handleCreate = (values: CreateSourceInput): void => {
+  const handleCreate = (values: SourceFormValues): void => {
+    let input: CreateSourceInput
+    try {
+      input = toCreateSourceInput(values)
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '定时抓取配置无效')
+      return
+    }
     setSubmitting(true)
-    const save = editingSource ? onUpdateSource(editingSource.id, values) : onCreateSource(values)
+    const save = editingSource ? onUpdateSource(editingSource.id, input) : onCreateSource(input)
     void save
       .then(() => {
         setModalOpen(false)
@@ -197,7 +203,12 @@ function SourcesPage({
       )
     },
     { title: '页面数', dataIndex: 'pages', key: 'pages', render: (pages: number) => `${pages} 页` },
-    { title: '定时更新', dataIndex: 'schedule', key: 'schedule' },
+    {
+      title: '定时更新',
+      dataIndex: 'schedule',
+      key: 'schedule',
+      render: (schedule: DocumentSource['schedule']) => <SourceScheduleTag schedule={schedule} />
+    },
     {
       title: '最近状态',
       dataIndex: 'status',
@@ -365,6 +376,7 @@ function SourcesPage({
           >
             <InputNumber min={1} max={10000} className="w-full" addonAfter="页" />
           </Form.Item>
+          <SourceScheduleFields form={form} />
         </Form>
       </Modal>
       {openCrawlId && crawlRuns[openCrawlId] && (
@@ -380,18 +392,6 @@ function SourcesPage({
       )}
     </div>
   )
-}
-
-function indexCrawlRuns(runs: CrawlRunState[]): Record<string, CrawlRunState> {
-  return Object.fromEntries(runs.map((run) => [run.sourceId, run]))
-}
-
-function mergeNode(nodes: CrawlNode[], node: CrawlNode | undefined): CrawlNode[] {
-  if (!node) return nodes
-  const index = nodes.findIndex((item) => item.id === node.id)
-  return index < 0
-    ? [...nodes, node]
-    : nodes.map((item, itemIndex) => (itemIndex === index ? node : item))
 }
 
 export default SourcesPage

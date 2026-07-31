@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, Menu, Tray } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { Cron } from 'croner'
 import icon from '../../resources/icon.png?asset'
 import { createDatabase, type DocHubDatabase } from './database'
 import type {
@@ -8,8 +9,10 @@ import type {
   CrawlNode,
   CrawlProgress,
   CrawlRunState,
+  DocumentSource,
   UpdateSourceInput
 } from '../shared/api'
+import { normalizeCronSchedule } from '../shared/schedule'
 import { crawlHttpSource, fetchHttpPage } from './crawl/http'
 import { crawlRenderedSource, fetchRenderedCrawlPage } from './crawl/rendered'
 import { selectFetchMode, type SelectedFetchMode } from './crawl/mode'
@@ -22,6 +25,7 @@ let tray: Tray | undefined
 let isQuitting = false
 const runningCrawls = new Set<string>()
 const crawlStates = new Map<string, CrawlRunState>()
+const scheduledCrawls = new Map<string, Cron>()
 
 function createWindow(): void {
   // Create the browser window.
@@ -81,12 +85,16 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('sources:list', () => requireDatabase().listSources())
-  ipcMain.handle('sources:create', (_event, input: CreateSourceInput) =>
-    requireDatabase().createSource(input)
-  )
+  ipcMain.handle('sources:create', (_event, input: CreateSourceInput) => {
+    const source = requireDatabase().createSource(input)
+    scheduleSource(source)
+    return source
+  })
   ipcMain.handle('sources:update', (_event, id: string, input: UpdateSourceInput) => {
     if (runningCrawls.has(id)) throw new Error('更新进行中，暂时不能编辑文档源')
-    return requireDatabase().updateSource(id, input)
+    const source = requireDatabase().updateSource(id, input)
+    scheduleSource(source)
+    return source
   })
   ipcMain.handle('sources:crawl', (_event, id: string) => crawlSource(id))
   ipcMain.handle('sources:crawl-runs', () => [...crawlStates.values()])
@@ -97,9 +105,11 @@ app.whenReady().then(() => {
   ipcMain.handle('sources:delete', (_event, id: string) => {
     if (runningCrawls.has(id)) throw new Error('更新进行中，暂时不能删除文档源')
     crawlStates.delete(id)
+    stopScheduledCrawl(id)
     requireDatabase().deleteSource(id)
   })
 
+  restoreScheduledCrawls(requireDatabase().listSources())
   createWindow()
 
   app.on('activate', function () {
@@ -116,15 +126,51 @@ app.on('window-all-closed', () => {
   // The app stays alive in the tray until the user explicitly exits.
 })
 
-app.on('before-quit', () => database?.close())
 app.on('before-quit', () => {
   isQuitting = true
+  stopScheduledCrawls()
+  database?.close()
   tray?.destroy()
 })
 
 function requireDatabase(): DocHubDatabase {
   if (!database) throw new Error('本地数据库尚未初始化')
   return database
+}
+
+function restoreScheduledCrawls(sources: DocumentSource[]): void {
+  stopScheduledCrawls()
+  sources.forEach(scheduleSource)
+}
+
+function scheduleSource(source: DocumentSource): void {
+  stopScheduledCrawl(source.id)
+  const expression = source.schedule
+  if (!expression) return
+  try {
+    const job = new Cron(
+      normalizeCronSchedule(expression) ?? expression,
+      {
+        protect: true,
+        catch: (error) => console.error(`定时抓取 ${source.name} 失败`, error)
+      },
+      async () => {
+        if (!runningCrawls.has(source.id)) await crawlSource(source.id)
+      }
+    )
+    scheduledCrawls.set(source.id, job)
+  } catch (error) {
+    console.error(`忽略无效的定时抓取规则：${source.name}`, error)
+  }
+}
+
+function stopScheduledCrawl(sourceId: string): void {
+  scheduledCrawls.get(sourceId)?.stop()
+  scheduledCrawls.delete(sourceId)
+}
+
+function stopScheduledCrawls(): void {
+  for (const sourceId of scheduledCrawls.keys()) stopScheduledCrawl(sourceId)
 }
 
 async function crawlSource(id: string): Promise<CrawlProgress> {
@@ -278,13 +324,13 @@ function errorMessage(error: unknown): string {
 
 function createTray(): void {
   tray = new Tray(icon)
-  tray.setToolTip('Doc Hub')
+  tray.setToolTip('Loci')
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '显示主窗口', click: () => mainWindow?.show() },
       { type: 'separator' },
       {
-        label: '退出 Doc Hub',
+        label: '退出 Loci',
         click: () => {
           isQuitting = true
           app.quit()

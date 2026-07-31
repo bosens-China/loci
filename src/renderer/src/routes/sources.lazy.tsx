@@ -1,0 +1,28 @@
+import { createLazyRoute, useNavigate } from '@tanstack/react-router'
+import SourcesPage from '@renderer/components/SourcesPage'
+import { useSources } from '@renderer/hooks/useSources'
+
+export const Route = createLazyRoute('/sources')({
+  component: SourcesRoute
+})
+
+function SourcesRoute(): React.JSX.Element {
+  const navigate = useNavigate()
+  const sources = useSources()
+
+  return (
+    <SourcesPage
+      sources={sources.sources}
+      loading={sources.loading}
+      error={sources.error}
+      onRetry={() => void sources.reload()}
+      onCreateSource={sources.create}
+      onUpdateSource={sources.update}
+      onCrawlSource={sources.crawl}
+      onOpenLibrary={(sourceId) =>
+        void navigate({ to: '/library', search: { source: sourceId, document: undefined } })
+      }
+      onDeleteSource={sources.remove}
+    />
+  )
+}

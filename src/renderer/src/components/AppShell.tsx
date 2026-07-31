@@ -7,7 +7,7 @@ import {
 import { Input, Layout, Menu, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ReactNode } from 'react'
-import type { ViewKey } from '../types'
+import type { ViewKey } from '@renderer/routes/navigation'
 
 const { Header, Sider, Content } = Layout
 
@@ -44,7 +44,7 @@ function AppShell({
           <FileSearchOutlined className="text-xl" />
           <div>
             <Typography.Text strong className="block">
-              Doc Hub
+              Loci
             </Typography.Text>
             <Typography.Text type="secondary" className="text-xs">
               本地知识库

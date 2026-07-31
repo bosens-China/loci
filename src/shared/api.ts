@@ -11,7 +11,7 @@ export interface DocumentSource {
   pages: number
   pageLimit: number
   lastUpdated: string
-  schedule: string
+  schedule: string | null
 }
 
 export interface CreateSourceInput {
@@ -19,6 +19,7 @@ export interface CreateSourceInput {
   url: string
   mode: FetchMode
   pageLimit: number
+  schedule: string | null
 }
 
 export type UpdateSourceInput = CreateSourceInput
