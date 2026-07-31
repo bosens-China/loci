@@ -1,12 +1,10 @@
-# doc-hub
+# Loci
 
-An Electron application with React and TypeScript
+Loci 是为 AI Agent 准备的本地知识库。它将公开文档抓取为本地 Markdown，并提供浏览与全文搜索；未来可作为 Agent 工具调用的知识节点。
 
-## Recommended IDE Setup
+当前版本使用 Electron、React、TypeScript 和 SQLite，数据仅保存在本机。
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
-
-## Project Setup
+## 开发
 
 ### Install
 
