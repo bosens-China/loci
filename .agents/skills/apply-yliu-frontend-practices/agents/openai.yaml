@@ -1,0 +1,4 @@
+interface:
+  display_name: "Yliu Frontend Practices"
+  short_description: "Apply Yliu's frontend engineering conventions"
+  default_prompt: "Use $apply-yliu-frontend-practices to implement this frontend feature with Yliu's request, UI-state, routing, styling, and testing conventions."
