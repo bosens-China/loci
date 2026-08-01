@@ -1,9 +1,14 @@
-import { DatabaseOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons'
-import { Button, Card, Modal, Space, Typography, message } from 'antd'
+import {
+  DatabaseOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  UploadOutlined
+} from '@ant-design/icons'
+import { Button, Card, Divider, Modal, Space, Typography, message } from 'antd'
 import { useState } from 'react'
 import { useAppSettings } from '@renderer/settings-context'
 
-type Operation = 'export' | 'import'
+type Operation = 'export' | 'import' | 'clear'
 
 function DataManagementCard(): React.JSX.Element {
   const { reload } = useAppSettings()
@@ -52,6 +57,29 @@ function DataManagementCard(): React.JSX.Element {
     })
   }
 
+  const handleClear = async (): Promise<void> => {
+    setOperation('clear')
+    try {
+      const count = await window.api.clearDocuments()
+      messageApi.success(count > 0 ? `已清空 ${count} 篇文档` : '当前没有可清空的文档')
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '清空文档失败')
+    } finally {
+      setOperation(null)
+    }
+  }
+
+  const confirmClear = (): void => {
+    modal.confirm({
+      title: '清空全部文档？',
+      content: '这会永久删除所有已抓取文档和全文索引，但保留文档源与应用设置。此操作无法撤销。',
+      okText: '清空全部文档',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: handleClear
+    })
+  }
+
   return (
     <Card
       title={
@@ -84,6 +112,23 @@ function DataManagementCard(): React.JSX.Element {
           导入备份
         </Button>
       </Space>
+      <Divider />
+      <Typography.Text type="danger" strong>
+        危险操作
+      </Typography.Text>
+      <Typography.Paragraph type="secondary" className="mb-3! mt-1! text-xs">
+        清空全部已抓取文档与全文索引，文档源和设置不会受到影响。
+      </Typography.Paragraph>
+      <Button
+        danger
+        type="primary"
+        icon={<DeleteOutlined />}
+        loading={operation === 'clear'}
+        disabled={operation !== null && operation !== 'clear'}
+        onClick={confirmClear}
+      >
+        清空全部文档
+      </Button>
     </Card>
   )
 }

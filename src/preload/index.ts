@@ -26,6 +26,7 @@ const api: LociApi = {
   listDocuments: () => ipcRenderer.invoke('documents:list') as Promise<DocumentRecord[]>,
   searchDocuments: (query) =>
     ipcRenderer.invoke('documents:search', query) as Promise<DocumentRecord[]>,
+  clearDocuments: () => ipcRenderer.invoke('documents:clear') as Promise<number>,
   deleteSource: (id) => ipcRenderer.invoke('sources:delete', id) as Promise<void>,
   getSettings: () => ipcRenderer.invoke('settings:get') as ReturnType<LociApi['getSettings']>,
   saveSettings: (settings) =>

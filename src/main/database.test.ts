@@ -55,6 +55,10 @@ describe('createDatabase', () => {
       })
       expect(database.listDocuments()).toHaveLength(1)
       expect(database.searchDocuments('Components')[0]?.title).toBe('Learn React')
+      expect(database.clearDocuments()).toBe(1)
+      expect(database.listDocuments()).toEqual([])
+      expect(database.searchDocuments('Components')).toEqual([])
+      expect(database.listSources()[0]).toMatchObject({ pages: 0, status: 'attention' })
       expect(database.getSettings()).toEqual({
         mcpPort: 37373,
         theme: 'auto',

@@ -59,6 +59,7 @@ export interface LociDatabase {
   listDocumentUrls: (sourceId: string) => string[]
   saveDocument: (document: StoredDocument) => void
   deleteDocument: (sourceId: string, url: string) => void
+  clearDocuments: () => number
   listDocuments: () => DocumentRecord[]
   searchDocuments: (query: string) => DocumentRecord[]
   deleteSource: (id: string) => void
@@ -306,6 +307,11 @@ export function createDatabase(filename: string): LociDatabase {
       database.prepare('DELETE FROM documents_fts WHERE document_id = ?').run(document.id)
       database.prepare('DELETE FROM documents WHERE id = ?').run(document.id)
     },
+    clearDocuments: () =>
+      withTransaction(database, () => {
+        database.exec('DELETE FROM documents_fts')
+        return Number(database.prepare('DELETE FROM documents').run().changes)
+      }),
     listDocuments: () => {
       const rows = database
         .prepare(

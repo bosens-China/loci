@@ -82,6 +82,10 @@ if (isPrimaryInstance)
     ipcMain.handle('documents:search', (_event, query: string) =>
       requireDatabase().searchDocuments(query)
     )
+    ipcMain.handle('documents:clear', () => {
+      if (runningCrawls.size > 0) throw new Error('文档正在更新，请等待更新完成后再清空')
+      return requireDatabase().clearDocuments()
+    })
     ipcMain.handle('sources:delete', (_event, id: string) => deleteSource(id))
     ipcMain.handle('settings:get', () => requireMcpRuntime().getState())
     ipcMain.handle('settings:save', (_event, settings: AppSettings) =>
