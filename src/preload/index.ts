@@ -32,6 +32,8 @@ const api: LociApi = {
     ipcRenderer.invoke('settings:save', settings) as ReturnType<LociApi['saveSettings']>,
   importAgentClient: (client) =>
     ipcRenderer.invoke('agents:import', client) as ReturnType<LociApi['importAgentClient']>,
+  exportData: () => ipcRenderer.invoke('data:export') as ReturnType<LociApi['exportData']>,
+  importData: () => ipcRenderer.invoke('data:import') as ReturnType<LociApi['importData']>
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

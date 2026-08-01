@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { DEFAULT_APP_SETTINGS, type AppSettingsState } from '@shared/api'
 import { SettingsContext, type SettingsContextValue } from './settings-context'
@@ -15,6 +15,12 @@ const initialState: AppSettingsState = {
 function SettingsProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [state, setState] = useState(initialState)
   const [loading, setLoading] = useState(true)
+
+  const reload = useCallback(async (): Promise<AppSettingsState> => {
+    const value = await window.api.getSettings()
+    setState(value)
+    return value
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -36,13 +42,14 @@ function SettingsProvider({ children }: { children: ReactNode }): React.JSX.Elem
     () => ({
       state,
       loading,
+      reload,
       save: async (settings) => {
         const saved = await window.api.saveSettings(settings)
         setState(saved)
         return saved
       }
     }),
-    [loading, state]
+    [loading, reload, state]
   )
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>
 }

@@ -9,6 +9,7 @@ import type {
   CrawlNode,
   CrawlProgress,
   CrawlRunState,
+  DataTransferResult,
   DocumentSource,
   UpdateSourceInput
 } from '../shared/api'
@@ -23,6 +24,7 @@ import { createMcpRuntime, type McpRuntime } from './mcp/runtime'
 import { importAgentClient } from './agent-import'
 import { registerSingleInstance } from './single-instance'
 import { createAppTray } from './tray'
+import { exportBackupFile, selectBackupFile } from './data-transfer'
 import { createAppWindow } from './app-window'
 
 let database: LociDatabase | undefined
@@ -68,7 +70,7 @@ if (isPrimaryInstance)
     ipcMain.handle('sources:list', () => requireDatabase().listSources())
     ipcMain.handle('sources:create', (_event, input: CreateSourceInput) => createSource(input))
     ipcMain.handle('sources:update', (_event, id: string, input: UpdateSourceInput) => {
-      if (runningCrawls.has(id)) throw new Error('¸üĞÂ½øĞĞÖĞ£¬ÔİÊ±²»ÄÜ±à¼­ÎÄµµÔ´')
+      if (runningCrawls.has(id)) throw new Error('æ›´æ–°è¿›è¡Œä¸­ï¼Œæš‚æ—¶ä¸èƒ½ç¼–è¾‘æ–‡æ¡£æº')
       const source = requireDatabase().updateSource(id, input)
       scheduleSource(source)
       return source
@@ -87,6 +89,10 @@ if (isPrimaryInstance)
     ipcMain.handle('agents:import', (_event, client: unknown) =>
       importAgentClient(client, requireMcpRuntime().getState().mcp.endpoint)
     )
+    ipcMain.handle('data:export', () =>
+      exportBackupFile(mainWindow, requireDatabase().exportBackup())
+    )
+    ipcMain.handle('data:import', () => importLocalData())
 
     restoreScheduledCrawls(requireDatabase().listSources())
     createWindow()
@@ -114,7 +120,7 @@ app.on('before-quit', () => {
 })
 
 function requireDatabase(): LociDatabase {
-  if (!database) throw new Error('±¾µØÊı¾İ¿âÉĞÎ´³õÊ¼»¯')
+  if (!database) throw new Error('æœ¬åœ°æ•°æ®åº“å°šæœªåˆå§‹åŒ–')
   return database
 }
 
@@ -125,7 +131,7 @@ function createSource(input: CreateSourceInput): DocumentSource {
 }
 
 function deleteSource(id: string): void {
-  if (runningCrawls.has(id)) throw new Error('¸üĞÂ½øĞĞÖĞ£¬ÔİÊ±²»ÄÜÉ¾³ıÎÄµµÔ´')
+  if (runningCrawls.has(id)) throw new Error('æ›´æ–°è¿›è¡Œä¸­ï¼Œæš‚æ—¶ä¸èƒ½åˆ é™¤æ–‡æ¡£æº')
   crawlStates.delete(id)
   stopScheduledCrawl(id)
   requireDatabase().deleteSource(id)
@@ -145,8 +151,37 @@ function createMcpServices(): LociMcpServices {
 }
 
 function requireMcpRuntime(): McpRuntime {
-  if (!mcpRuntime) throw new Error('MCP ·şÎñÉĞÎ´³õÊ¼»¯')
+  if (!mcpRuntime) throw new Error('MCP æœåŠ¡å°šæœªåˆå§‹åŒ–')
   return mcpRuntime
+}
+
+async function importLocalData(): Promise<DataTransferResult> {
+  if (runningCrawls.size > 0) throw new Error('æ–‡æ¡£æ­£åœ¨æ›´æ–°ï¼Œè¯·ç­‰å¾…æ›´æ–°å®Œæˆåå†å¯¼å…¥')
+  const selected = await selectBackupFile(mainWindow)
+  if (selected.canceled) return { canceled: true, message: '' }
+
+  const currentDatabase = requireDatabase()
+  stopScheduledCrawls()
+  try {
+    const summary = currentDatabase.importBackup(selected.data)
+    crawlStates.clear()
+    let mcpWarning = false
+    try {
+      await mcpRuntime?.close()
+    } catch (error) {
+      mcpWarning = true
+      console.error('å¯¼å…¥åå…³é—­æ—§ MCP æœåŠ¡å¤±è´¥', error)
+    }
+    mcpRuntime = createMcpRuntime(currentDatabase, createMcpServices())
+    await mcpRuntime.start()
+    mcpWarning ||= Boolean(mcpRuntime.getState().mcp.error)
+    return {
+      canceled: false,
+      message: `å·²ä» ${selected.filename} å¯¼å…¥ ${summary.sources} ä¸ªæ–‡æ¡£æºå’Œ ${summary.documents} ç¯‡æ–‡æ¡£${mcpWarning ? 'ï¼›MCP æœåŠ¡éœ€è¦é‡å¯åº”ç”¨åæ¢å¤' : ''}`
+    }
+  } finally {
+    restoreScheduledCrawls(currentDatabase.listSources())
+  }
 }
 
 function restoreScheduledCrawls(sources: DocumentSource[]): void {
@@ -163,7 +198,7 @@ function scheduleSource(source: DocumentSource): void {
       normalizeCronSchedule(expression) ?? expression,
       {
         protect: true,
-        catch: (error) => console.error(`¶¨Ê±×¥È¡ ${source.name} Ê§°Ü`, error)
+        catch: (error) => console.error(`å®šæ—¶æŠ“å– ${source.name} å¤±è´¥`, error)
       },
       async () => {
         if (!runningCrawls.has(source.id)) await crawlSource(source.id)
@@ -171,7 +206,7 @@ function scheduleSource(source: DocumentSource): void {
     )
     scheduledCrawls.set(source.id, job)
   } catch (error) {
-    console.error(`ºöÂÔÎŞĞ§µÄ¶¨Ê±×¥È¡¹æÔò£º${source.name}`, error)
+    console.error(`å¿½ç•¥æ— æ•ˆçš„å®šæ—¶æŠ“å–è§„åˆ™ï¼š${source.name}`, error)
   }
 }
 
@@ -188,12 +223,12 @@ async function crawlSource(
   id: string,
   onProgress?: (progress: CrawlProgress) => void
 ): Promise<CrawlProgress> {
-  if (runningCrawls.has(id)) throw new Error('Õâ¸öÎÄµµÔ´ÒÑ¾­ÔÚ¸üĞÂÖĞ')
+  if (runningCrawls.has(id)) throw new Error('è¿™ä¸ªæ–‡æ¡£æºå·²ç»åœ¨æ›´æ–°ä¸­')
   const source = requireDatabase().getSourceConfig(id)
   const initialNode: CrawlNode = {
     id: source.firstUrl,
     url: source.firstUrl,
-    title: source.fetchMode === 'auto' ? 'ÕıÔÚ¼ì²â×¥È¡·½Ê½' : 'ÕıÔÚ¶ÁÈ¡µÚÒ»¸öÒ³Ãæ',
+    title: source.fetchMode === 'auto' ? 'æ­£åœ¨æ£€æµ‹æŠ“å–æ–¹å¼' : 'æ­£åœ¨è¯»å–ç¬¬ä¸€ä¸ªé¡µé¢',
     status: 'running'
   }
   publishCrawlState({
@@ -214,7 +249,7 @@ async function crawlSource(
   try {
     const progress = await runCrawl(id, onProgress)
     if (progress.succeeded === 0 && progress.failed > 0) {
-      throw new Error(`×¥È¡Ê§°Ü£º${progress.failed} ¸öÒ³Ãæ¾ùÎ´³É¹¦`)
+      throw new Error(`æŠ“å–å¤±è´¥ï¼š${progress.failed} ä¸ªé¡µé¢å‡æœªæˆåŠŸ`)
     }
     finishCrawl(id, progress, null)
     return progress
@@ -339,11 +374,11 @@ function selectAutoResult(
   if (browserPage?.page) return { mode: 'browser', page: browserPage }
   if (httpPage) return { mode: 'http', page: httpPage }
   if (browserPage) return { mode: 'browser', page: browserPage }
-  throw new Error('µÚÒ»¸öÒ³ÃæµÄ HTTP Óëä¯ÀÀÆ÷×¥È¡¾ùÊ§°Ü')
+  throw new Error('ç¬¬ä¸€ä¸ªé¡µé¢çš„ HTTP ä¸æµè§ˆå™¨æŠ“å–å‡å¤±è´¥')
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : '¸üĞÂÊ§°Ü'
+  return error instanceof Error ? error.message : 'æ›´æ–°å¤±è´¥'
 }
 
 // In this file you can include the rest of your app's specific main process

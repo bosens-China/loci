@@ -5,6 +5,8 @@ import {
   CloudServerOutlined,
   DashboardOutlined,
   DesktopOutlined,
+  GithubOutlined,
+  CodeOutlined,
   MoonOutlined
 } from '@ant-design/icons'
 import {
@@ -21,9 +23,10 @@ import {
   Typography,
   message
 } from 'antd'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AgentClient, AppSettings } from '@shared/api'
 import { useAppSettings } from '@renderer/settings-context'
+import DataManagementCard from './DataManagementCard'
 
 type SavingSection = 'agent' | 'crawl' | 'appearance'
 
@@ -55,7 +58,7 @@ function createAgentConfigs(endpoint: string): Array<{
     {
       key: 'vscode',
       label: 'VS Code',
-      path: 'ÓÃ»§ÅäÖÃ mcp.json',
+      path: 'ç”¨æˆ·é…ç½® mcp.json',
       content: JSON.stringify({ servers: { loci: { type: 'http', url: endpoint } } }, null, 2),
       client: 'vscode'
     },
@@ -92,6 +95,15 @@ function SettingsPage(): React.JSX.Element {
   const [messageApi, contextHolder] = message.useMessage()
   const agentConfigs = createAgentConfigs(state.mcp.endpoint)
 
+  useEffect(() => {
+    agentForm.setFieldsValue({ mcpPort: state.settings.mcpPort })
+    crawlForm.setFieldsValue({
+      httpConcurrency: state.settings.httpConcurrency,
+      browserConcurrency: state.settings.browserConcurrency
+    })
+    appearanceForm.setFieldsValue({ theme: state.settings.theme })
+  }, [agentForm, appearanceForm, crawlForm, state.settings])
+
   const handleSave = (
     section: SavingSection,
     settings: Partial<AppSettings>,
@@ -103,7 +115,7 @@ function SettingsPage(): React.JSX.Element {
         messageApi.success(successMessage)
       })
       .catch((error: unknown) => {
-        messageApi.error(error instanceof Error ? error.message : 'ÉèÖÃ±£´æÊ§°Ü')
+        messageApi.error(error instanceof Error ? error.message : 'è®¾ç½®ä¿å­˜å¤±è´¥')
       })
       .finally(() => setSaving(null))
   }
@@ -114,7 +126,7 @@ function SettingsPage(): React.JSX.Element {
       .importAgentClient(client)
       .then((result) => messageApi.success(result.message))
       .catch((error: unknown) => {
-        messageApi.error(error instanceof Error ? error.message : 'Agent µ¼ÈëÊ§°Ü')
+        messageApi.error(error instanceof Error ? error.message : 'Agent å¯¼å…¥å¤±è´¥')
       })
       .finally(() => setImporting(null))
   }
@@ -123,9 +135,9 @@ function SettingsPage(): React.JSX.Element {
     <div className="mx-auto w-full max-w-3xl">
       {contextHolder}
       <div className="mb-6">
-        <Typography.Title level={2}>ÉèÖÃ</Typography.Title>
+        <Typography.Title level={2}>è®¾ç½®</Typography.Title>
         <Typography.Paragraph type="secondary">
-          ¹ÜÀí±¾»ú Agent Á¬½ÓºÍ Loci µÄÏÔÊ¾·½Ê½¡£
+          ç®¡ç†æœ¬æœº Agent è¿æ¥å’Œ Loci çš„æ˜¾ç¤ºæ–¹å¼ã€‚
         </Typography.Paragraph>
       </div>
 
@@ -138,13 +150,13 @@ function SettingsPage(): React.JSX.Element {
           <Card
             title={
               <Space>
-                <CloudServerOutlined /> Agent Á¬½Ó
+                <CloudServerOutlined /> Agent è¿æ¥
               </Space>
             }
             extra={
               state.mcp.running ? (
                 <Typography.Text type="success">
-                  <CheckCircleOutlined /> ÔËĞĞÖĞ
+                  <CheckCircleOutlined /> è¿è¡Œä¸­
                 </Typography.Text>
               ) : undefined
             }
@@ -153,24 +165,24 @@ function SettingsPage(): React.JSX.Element {
               form={agentForm}
               layout="vertical"
               initialValues={{ mcpPort: state.settings.mcpPort }}
-              onFinish={(settings) => handleSave('agent', settings, 'Agent Á¬½ÓÒÑ±£´æ²¢ÉúĞ§')}
+              onFinish={(settings) => handleSave('agent', settings, 'Agent è¿æ¥å·²ä¿å­˜å¹¶ç”Ÿæ•ˆ')}
             >
               <Typography.Paragraph type="secondary">
-                MCP ·şÎñÖ»¼àÌı±¾»ú»Ø»·µØÖ·¡£±£´æĞÂ¶Ë¿Úºó£¬Agent Á¬½ÓµØÖ·Á¢¼´ÇĞ»»¡£
+                MCP æœåŠ¡åªç›‘å¬æœ¬æœºå›ç¯åœ°å€ã€‚ä¿å­˜æ–°ç«¯å£åï¼ŒAgent è¿æ¥åœ°å€ç«‹å³åˆ‡æ¢ã€‚
               </Typography.Paragraph>
               {state.mcp.error && (
                 <Alert className="mb-4" type="error" showIcon message={state.mcp.error} />
               )}
               <Form.Item
                 name="mcpPort"
-                label="MCP ¶Ë¿Ú"
+                label="MCP ç«¯å£"
                 rules={[
-                  { required: true, message: 'ÇëÊäÈë¶Ë¿ÚºÅ' },
+                  { required: true, message: 'è¯·è¾“å…¥ç«¯å£å·' },
                   {
                     type: 'number',
                     min: 1024,
                     max: 65535,
-                    message: 'ÇëÊäÈë 1024 µ½ 65535 Ö®¼äµÄ¶Ë¿Ú'
+                    message: 'è¯·è¾“å…¥ 1024 åˆ° 65535 ä¹‹é—´çš„ç«¯å£'
                   }
                 ]}
               >
@@ -183,18 +195,18 @@ function SettingsPage(): React.JSX.Element {
                   loading={saving === 'agent'}
                   disabled={saving !== null && saving !== 'agent'}
                 >
-                  ±£´æ Agent Á¬½Ó
+                  ä¿å­˜ Agent è¿æ¥
                 </Button>
               </div>
-              <Typography.Text type="secondary">µ±Ç°µØÖ·</Typography.Text>
+              <Typography.Text type="secondary">å½“å‰åœ°å€</Typography.Text>
               <Typography.Paragraph copyable={{ text: state.mcp.endpoint }} className="mb-0! mt-1!">
                 <Typography.Text code>{state.mcp.endpoint}</Typography.Text>
               </Typography.Paragraph>
 
               <Divider />
-              <Typography.Title level={5}>Ìí¼Óµ½±à¼­Æ÷</Typography.Title>
+              <Typography.Title level={5}>æ·»åŠ åˆ°ç¼–è¾‘å™¨</Typography.Title>
               <Typography.Paragraph type="secondary">
-                Ò»¼üµ¼Èë»áĞ´ÈëÓÃ»§ÅäÖÃ£»Ò²¿ÉÒÔ¸´ÖÆÏÂ·½Æ¬¶ÎÊÖ¶¯ÅäÖÃ¡£
+                ä¸€é”®å¯¼å…¥ä¼šå†™å…¥ç”¨æˆ·é…ç½®ï¼›ä¹Ÿå¯ä»¥å¤åˆ¶ä¸‹æ–¹ç‰‡æ®µæ‰‹åŠ¨é…ç½®ã€‚
               </Typography.Paragraph>
               <Tabs
                 size="small"
@@ -218,19 +230,19 @@ function SettingsPage(): React.JSX.Element {
                                 disabled={importing !== null && importing !== client}
                                 onClick={() => handleImport(client)}
                               >
-                                Ò»¼üµ¼Èë
+                                ä¸€é”®å¯¼å…¥
                               </Button>
                             )}
                             {!client && (
-                              <Typography.Text type="secondary">ÊÖ¶¯ÅäÖÃ</Typography.Text>
+                              <Typography.Text type="secondary">æ‰‹åŠ¨é…ç½®</Typography.Text>
                             )}
                             <Typography.Text
                               copyable={{
                                 text: config.content,
-                                tooltips: ['¸´ÖÆÅäÖÃ', 'ÒÑ¸´ÖÆ']
+                                tooltips: ['å¤åˆ¶é…ç½®', 'å·²å¤åˆ¶']
                               }}
                             >
-                              ¸´ÖÆ
+                              å¤åˆ¶
                             </Typography.Text>
                           </Space>
                         </div>
@@ -248,7 +260,7 @@ function SettingsPage(): React.JSX.Element {
           <Card
             title={
               <Space>
-                <DashboardOutlined /> ×¥È¡Ä¬ÈÏÖµ
+                <DashboardOutlined /> æŠ“å–é»˜è®¤å€¼
               </Space>
             }
           >
@@ -259,25 +271,25 @@ function SettingsPage(): React.JSX.Element {
                 httpConcurrency: state.settings.httpConcurrency,
                 browserConcurrency: state.settings.browserConcurrency
               }}
-              onFinish={(settings) => handleSave('crawl', settings, '×¥È¡Ä¬ÈÏÖµÒÑ±£´æ')}
+              onFinish={(settings) => handleSave('crawl', settings, 'æŠ“å–é»˜è®¤å€¼å·²ä¿å­˜')}
             >
               <Typography.Paragraph type="secondary">
-                ÎÄµµÔ´Ã»ÓĞµ¥¶ÀÉèÖÃ²¢·¢Ê±£¬°´Êµ¼Ê×¥È¡·½Ê½Ê¹ÓÃÕâÀïµÄÖµ¡£
+                æ–‡æ¡£æºæ²¡æœ‰å•ç‹¬è®¾ç½®å¹¶å‘æ—¶ï¼ŒæŒ‰å®é™…æŠ“å–æ–¹å¼ä½¿ç”¨è¿™é‡Œçš„å€¼ã€‚
               </Typography.Paragraph>
               <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
                 <Form.Item
                   name="httpConcurrency"
-                  label="HTTP ²¢·¢"
+                  label="HTTP å¹¶å‘"
                   rules={[{ required: true, type: 'number', min: 1, max: 32 }]}
                 >
-                  <InputNumber min={1} max={32} className="w-full" addonAfter="Ò³" />
+                  <InputNumber min={1} max={32} className="w-full" addonAfter="é¡µ" />
                 </Form.Item>
                 <Form.Item
                   name="browserConcurrency"
-                  label="ä¯ÀÀÆ÷²¢·¢"
+                  label="æµè§ˆå™¨å¹¶å‘"
                   rules={[{ required: true, type: 'number', min: 1, max: 32 }]}
                 >
-                  <InputNumber min={1} max={32} className="w-full" addonAfter="Ò³" />
+                  <InputNumber min={1} max={32} className="w-full" addonAfter="é¡µ" />
                 </Form.Item>
               </div>
               <div className="flex justify-end">
@@ -287,7 +299,7 @@ function SettingsPage(): React.JSX.Element {
                   loading={saving === 'crawl'}
                   disabled={saving !== null && saving !== 'crawl'}
                 >
-                  ±£´æ×¥È¡Ä¬ÈÏÖµ
+                  ä¿å­˜æŠ“å–é»˜è®¤å€¼
                 </Button>
               </div>
             </Form>
@@ -296,7 +308,7 @@ function SettingsPage(): React.JSX.Element {
           <Card
             title={
               <Space>
-                <BgColorsOutlined /> Íâ¹Û
+                <BgColorsOutlined /> å¤–è§‚
               </Space>
             }
           >
@@ -304,15 +316,15 @@ function SettingsPage(): React.JSX.Element {
               form={appearanceForm}
               layout="vertical"
               initialValues={{ theme: state.settings.theme }}
-              onFinish={(settings) => handleSave('appearance', settings, 'Íâ¹ÛÉèÖÃÒÑ±£´æ')}
+              onFinish={(settings) => handleSave('appearance', settings, 'å¤–è§‚è®¾ç½®å·²ä¿å­˜')}
             >
-              <Form.Item name="theme" label="Ö÷Ìâ" className="mb-0!">
+              <Form.Item name="theme" label="ä¸»é¢˜" className="mb-0!">
                 <Segmented
                   block
                   options={[
-                    { value: 'auto', label: '¸úËæÏµÍ³', icon: <DesktopOutlined /> },
-                    { value: 'light', label: 'Ç³É«', icon: <BulbOutlined /> },
-                    { value: 'dark', label: 'ÉîÉ«', icon: <MoonOutlined /> }
+                    { value: 'auto', label: 'è·Ÿéšç³»ç»Ÿ', icon: <DesktopOutlined /> },
+                    { value: 'light', label: 'æµ…è‰²', icon: <BulbOutlined /> },
+                    { value: 'dark', label: 'æ·±è‰²', icon: <MoonOutlined /> }
                   ]}
                 />
               </Form.Item>
@@ -323,12 +335,30 @@ function SettingsPage(): React.JSX.Element {
                   loading={saving === 'appearance'}
                   disabled={saving !== null && saving !== 'appearance'}
                 >
-                  ±£´æÍâ¹Û
+                  ä¿å­˜å¤–è§‚
                 </Button>
               </div>
             </Form>
           </Card>
 
+          <DataManagementCard />
+
+          <Card
+            title={
+              <Space>
+                <CodeOutlined /> å…³äº Loci
+              </Space>
+            }
+          >
+            <Space direction="vertical" size="small">
+              <Typography.Text type="secondary">
+                å¼€å‘è€…å·¥å…·ï¼šWindows / Linux ä½¿ç”¨ Ctrl + Shift + Iï¼ŒmacOS ä½¿ç”¨ Command + Option + Iã€‚
+              </Typography.Text>
+              <Typography.Link href="https://github.com/bosens-China" target="_blank">
+                <GithubOutlined /> bosens-China
+              </Typography.Link>
+            </Space>
+          </Card>
         </Space>
       )}
     </div>

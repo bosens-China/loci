@@ -5,6 +5,7 @@ export interface SettingsContextValue {
   state: AppSettingsState
   loading: boolean
   save: (settings: AppSettings) => Promise<AppSettingsState>
+  reload: () => Promise<AppSettingsState>
 }
 
 export const SettingsContext = createContext<SettingsContextValue | null>(null)

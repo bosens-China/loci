@@ -27,6 +27,11 @@ export interface AgentImportResult {
   message: string
 }
 
+export interface DataTransferResult {
+  canceled: boolean
+  message: string
+}
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   mcpPort: 37373,
   theme: 'auto',
@@ -133,4 +138,6 @@ export interface LociApi {
   getSettings: () => Promise<AppSettingsState>
   saveSettings: (settings: AppSettings) => Promise<AppSettingsState>
   importAgentClient: (client: AgentClient) => Promise<AgentImportResult>
+  exportData: () => Promise<DataTransferResult>
+  importData: () => Promise<DataTransferResult>
 }

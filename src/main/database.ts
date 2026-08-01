@@ -19,6 +19,12 @@ import type {
   UpdateSourceInput
 } from '../shared/api'
 import { DEFAULT_APP_SETTINGS } from '../shared/api'
+import {
+  exportDatabaseBackup,
+  importDatabaseBackup,
+  type BackupImportSummary,
+  type LociBackup
+} from './database-backup'
 
 export interface SourceConfig {
   id: string
@@ -58,6 +64,8 @@ export interface LociDatabase {
   deleteSource: (id: string) => void
   getSettings: () => AppSettings
   saveSettings: (settings: AppSettings) => AppSettings
+  exportBackup: () => LociBackup
+  importBackup: (input: unknown) => BackupImportSummary
   close: () => void
 }
 
@@ -366,6 +374,8 @@ export function createDatabase(filename: string): LociDatabase {
         )
       return settings
     },
+    exportBackup: () => exportDatabaseBackup(database),
+    importBackup: (input) => importDatabaseBackup(database, input),
     close: () => database.close()
   }
 }
