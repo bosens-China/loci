@@ -7,12 +7,19 @@ export interface ParsedPage {
   language: string
   markdown: string
   links: string[]
+  iconUrl?: string
 }
 
 export function parsePage(html: string, pageUrl: string): ParsedPage {
   const root = parse(html)
   const title = root.querySelector('title')?.text.trim() || new URL(pageUrl).hostname
   const language = root.querySelector('html')?.getAttribute('lang')?.trim() || 'und'
+  const iconHref = root
+    .querySelectorAll('link')
+    .find((link) => link.getAttribute('rel')?.toLowerCase().split(/\s+/).includes('icon'))
+    ?.getAttribute('href')
+  const iconUrl =
+    (iconHref && resolveLink(iconHref, pageUrl)) ?? new URL('/favicon.ico', pageUrl).toString()
   const links = root
     .querySelectorAll('a')
     .map((link) => link.getAttribute('href'))
@@ -30,7 +37,7 @@ export function parsePage(html: string, pageUrl: string): ParsedPage {
     root
   const markdown = htmlToMarkdown(content.innerHTML).trim()
 
-  return { title, language, markdown, links: [...new Set(links)] }
+  return { title, language, markdown, links: [...new Set(links)], iconUrl }
 }
 
 function resolveLink(href: string, baseUrl: string): string | undefined {

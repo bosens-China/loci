@@ -1,0 +1,120 @@
+import type { DatabaseSync } from 'node:sqlite'
+import { normalizeCronSchedule } from '../shared/schedule'
+import type { AppSettings, CreateSourceInput, DocumentRecord, DocumentSource } from '../shared/api'
+
+export interface SourceRow {
+  id: string
+  name: string
+  first_url: string
+  fetch_mode: 'auto' | 'http' | 'browser'
+  page_limit: number
+  schedule: string | null
+  concurrency: number | null
+  icon_url: string | null
+  page_count: number
+  last_crawled_at: string | null
+}
+
+export interface DocumentRow {
+  id: string
+  source_id: string
+  source_name: string
+  title: string
+  url: string
+  language: string
+  crawled_at: string
+  markdown: string
+}
+
+export function validateSettings(settings: AppSettings): void {
+  if (!Number.isInteger(settings.mcpPort) || settings.mcpPort < 1024 || settings.mcpPort > 65535) {
+    throw new Error('MCP 端口必须是 1024 到 65535 之间的整数')
+  }
+  if (!['auto', 'light', 'dark'].includes(settings.theme)) throw new Error('不支持的主题设置')
+  validateConcurrency(settings.httpConcurrency, 'HTTP 默认并发')
+  validateConcurrency(settings.browserConcurrency, '浏览器默认并发')
+}
+
+export function validateSourceInput(input: CreateSourceInput): string | null {
+  if (!input.name.trim()) throw new Error('文档源名称不能为空')
+  if (!Number.isInteger(input.pageLimit) || input.pageLimit < 1 || input.pageLimit > 10000) {
+    throw new Error('页面上限必须在 1 到 10000 之间')
+  }
+  if (!['auto', 'http', 'browser'].includes(input.mode)) throw new Error('不支持的抓取方式')
+  if (input.concurrency !== null) validateConcurrency(input.concurrency, '文档源并发')
+  return normalizeCronSchedule(input.schedule)
+}
+
+export function formatDate(value: string): string {
+  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(
+    new Date(value)
+  )
+}
+
+export function toDocumentSource(row: SourceRow): DocumentSource {
+  return {
+    id: row.id,
+    name: row.name,
+    url: row.first_url,
+    mode: row.fetch_mode,
+    status: Number(row.page_count) > 0 ? 'healthy' : 'attention',
+    pages: Number(row.page_count),
+    pageLimit: Number(row.page_limit),
+    lastUpdated: row.last_crawled_at ? formatDate(row.last_crawled_at) : '尚未更新',
+    schedule: row.schedule,
+    concurrency: row.concurrency === null ? null : Number(row.concurrency),
+    iconUrl: row.icon_url
+  }
+}
+
+export function toDocumentRecord(row: DocumentRow): DocumentRecord {
+  const path = new URL(row.url).pathname.split('/').filter(Boolean)
+  return {
+    id: row.id,
+    sourceId: row.source_id,
+    sourceName: row.source_name,
+    title: row.title,
+    url: row.url,
+    folder: path.slice(0, -1).join(' / ') || row.source_name,
+    language: row.language,
+    updatedAt: formatDate(row.crawled_at),
+    content: row.markdown
+  }
+}
+
+export function migrateDatabase(database: DatabaseSync): void {
+  addColumn(database, 'document_sources', 'icon_url', 'TEXT')
+  addColumn(database, 'document_sources', 'concurrency', 'INTEGER')
+  addColumn(database, 'app_settings', 'http_concurrency', 'INTEGER NOT NULL DEFAULT 9')
+  addColumn(database, 'app_settings', 'browser_concurrency', 'INTEGER NOT NULL DEFAULT 2')
+}
+
+function addColumn(
+  database: DatabaseSync,
+  table: string,
+  column: string,
+  definition: string
+): void {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as unknown as {
+    name: string
+  }[]
+  if (!columns.some((item) => item.name === column)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+}
+
+function validateConcurrency(value: number, label: string): void {
+  if (!Number.isInteger(value) || value < 1 || value > 32) {
+    throw new Error(`${label}必须是 1 到 32 之间的整数`)
+  }
+}
+
+export function toFtsExpression(query: string): string {
+  return query
+    .trim()
+    .split(/\s+/u)
+    .map((token) => token.replace(/[^\p{L}\p{N}_-]/gu, ''))
+    .filter(Boolean)
+    .map((token) => `"${token.replaceAll('"', '""')}"`)
+    .join(' AND ')
+}

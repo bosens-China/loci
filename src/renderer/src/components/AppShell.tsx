@@ -2,7 +2,8 @@ import {
   AppstoreOutlined,
   DatabaseOutlined,
   FileSearchOutlined,
-  SearchOutlined
+  SearchOutlined,
+  SettingOutlined
 } from '@ant-design/icons'
 import { Input, Layout, Menu, Typography } from 'antd'
 import type { MenuProps } from 'antd'
@@ -29,6 +30,9 @@ function AppShell({
     { key: 'sources', icon: <DatabaseOutlined />, label: '文档源' },
     { key: 'library', icon: <FileSearchOutlined />, label: '知识库' },
     { key: 'search', icon: <SearchOutlined />, label: '全文搜索' }
+  ]
+  const settingsItem: MenuProps['items'] = [
+    { key: 'settings', icon: <SettingOutlined />, label: '设置' }
   ]
 
   return (
@@ -59,9 +63,17 @@ function AppShell({
             onClick={({ key }) => onViewChange(key as ViewKey)}
           />
         </div>
+        <div className="border-t border-t-solid border-t-[var(--ant-color-border-secondary)] px-3 py-3">
+          <Menu
+            mode="inline"
+            selectedKeys={[activeView]}
+            items={settingsItem}
+            onClick={({ key }) => onViewChange(key as ViewKey)}
+          />
+        </div>
       </Sider>
       <Layout className="min-h-0 min-w-0">
-        <Header className="flex! h-16! shrink-0! items-center! justify-end! border-b! border-b-solid! border-b-gray-200! bg-white! px-6!">
+        <Header className="flex! h-16! shrink-0! items-center! justify-end! border-b! border-b-solid! border-b-[var(--ant-color-border-secondary)]! bg-[var(--ant-color-bg-container)]! px-6!">
           <Input.Search
             allowClear
             className="w-full max-w-96"

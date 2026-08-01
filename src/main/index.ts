@@ -5,6 +5,7 @@ import { Cron } from 'croner'
 import icon from '../../resources/icon.png?asset'
 import { createDatabase, type DocHubDatabase } from './database'
 import type {
+  AppSettings,
   CreateSourceInput,
   CrawlNode,
   CrawlProgress,
@@ -18,10 +19,13 @@ import { crawlRenderedSource, fetchRenderedCrawlPage } from './crawl/rendered'
 import { selectFetchMode, type SelectedFetchMode } from './crawl/mode'
 import type { CrawledPage } from './crawl/runner'
 import { getHostname } from './crawl/url'
+import type { DocHubMcpServices } from './mcp/server'
+import { createMcpRuntime, type McpRuntime } from './mcp/runtime'
 
 let database: DocHubDatabase | undefined
 let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
+let mcpRuntime: McpRuntime | undefined
 let isQuitting = false
 const runningCrawls = new Set<string>()
 const crawlStates = new Map<string, CrawlRunState>()
@@ -70,8 +74,10 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   database = createDatabase(join(app.getPath('userData'), 'doc-hub.sqlite'))
+  mcpRuntime = createMcpRuntime(requireDatabase(), createMcpServices())
+  await mcpRuntime.start()
   createTray()
 
   // Set app user model id for windows
@@ -85,11 +91,7 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('sources:list', () => requireDatabase().listSources())
-  ipcMain.handle('sources:create', (_event, input: CreateSourceInput) => {
-    const source = requireDatabase().createSource(input)
-    scheduleSource(source)
-    return source
-  })
+  ipcMain.handle('sources:create', (_event, input: CreateSourceInput) => createSource(input))
   ipcMain.handle('sources:update', (_event, id: string, input: UpdateSourceInput) => {
     if (runningCrawls.has(id)) throw new Error('更新进行中，暂时不能编辑文档源')
     const source = requireDatabase().updateSource(id, input)
@@ -102,12 +104,11 @@ app.whenReady().then(() => {
   ipcMain.handle('documents:search', (_event, query: string) =>
     requireDatabase().searchDocuments(query)
   )
-  ipcMain.handle('sources:delete', (_event, id: string) => {
-    if (runningCrawls.has(id)) throw new Error('更新进行中，暂时不能删除文档源')
-    crawlStates.delete(id)
-    stopScheduledCrawl(id)
-    requireDatabase().deleteSource(id)
-  })
+  ipcMain.handle('sources:delete', (_event, id: string) => deleteSource(id))
+  ipcMain.handle('settings:get', () => requireMcpRuntime().getState())
+  ipcMain.handle('settings:save', (_event, settings: AppSettings) =>
+    requireMcpRuntime().save(settings)
+  )
 
   restoreScheduledCrawls(requireDatabase().listSources())
   createWindow()
@@ -129,6 +130,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true
   stopScheduledCrawls()
+  void mcpRuntime?.close()
   database?.close()
   tray?.destroy()
 })
@@ -136,6 +138,36 @@ app.on('before-quit', () => {
 function requireDatabase(): DocHubDatabase {
   if (!database) throw new Error('本地数据库尚未初始化')
   return database
+}
+
+function createSource(input: CreateSourceInput): DocumentSource {
+  const source = requireDatabase().createSource(input)
+  scheduleSource(source)
+  return source
+}
+
+function deleteSource(id: string): void {
+  if (runningCrawls.has(id)) throw new Error('更新进行中，暂时不能删除文档源')
+  crawlStates.delete(id)
+  stopScheduledCrawl(id)
+  requireDatabase().deleteSource(id)
+}
+
+function createMcpServices(): DocHubMcpServices {
+  return {
+    listSources: () => requireDatabase().listSources(),
+    listDocuments: () => requireDatabase().listDocuments(),
+    searchDocuments: (query) => requireDatabase().searchDocuments(query),
+    createSource,
+    crawlSource,
+    deleteSource,
+    isCrawling: (id) => runningCrawls.has(id)
+  }
+}
+
+function requireMcpRuntime(): McpRuntime {
+  if (!mcpRuntime) throw new Error('MCP 服务尚未初始化')
+  return mcpRuntime
 }
 
 function restoreScheduledCrawls(sources: DocumentSource[]): void {
@@ -241,12 +273,16 @@ async function runCrawl(id: string): Promise<CrawlProgress> {
 
   const firstUrl = firstPage.url
   const hostname = getHostname(firstUrl)
-  localDatabase.updateResolvedSource(id, firstUrl, selectedMode)
+  localDatabase.updateResolvedSource(id, firstUrl, selectedMode, firstPage.page?.iconUrl ?? null)
+  const settings = localDatabase.getSettings()
   const options = {
     firstUrl,
     firstNodeId: source.firstUrl,
     hostname,
     pageLimit: source.pageLimit,
+    concurrency:
+      source.concurrency ??
+      (selectedMode === 'http' ? settings.httpConcurrency : settings.browserConcurrency),
     initialUrls,
     seedPage: firstPage,
     onDocument: (document) => localDatabase.saveDocument({ ...document, sourceId: id }),

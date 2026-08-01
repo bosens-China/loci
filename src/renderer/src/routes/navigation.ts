@@ -2,7 +2,8 @@ export const VIEW_PATHS = {
   overview: '/',
   sources: '/sources',
   library: '/library',
-  search: '/search'
+  search: '/search',
+  settings: '/settings'
 } as const
 
 export type ViewKey = keyof typeof VIEW_PATHS

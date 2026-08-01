@@ -26,7 +26,10 @@ const api: DocHubApi = {
   listDocuments: () => ipcRenderer.invoke('documents:list') as Promise<DocumentRecord[]>,
   searchDocuments: (query) =>
     ipcRenderer.invoke('documents:search', query) as Promise<DocumentRecord[]>,
-  deleteSource: (id) => ipcRenderer.invoke('sources:delete', id) as Promise<void>
+  deleteSource: (id) => ipcRenderer.invoke('sources:delete', id) as Promise<void>,
+  getSettings: () => ipcRenderer.invoke('settings:get') as ReturnType<DocHubApi['getSettings']>,
+  saveSettings: (settings) =>
+    ipcRenderer.invoke('settings:save', settings) as ReturnType<DocHubApi['saveSettings']>
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -28,7 +28,18 @@ const searchRoute = createRoute({
   validateSearch: (search: Record<string, unknown>) => ({ query: toOptionalString(search.query) })
 }).lazy(() => import('./routes/search.lazy').then((module) => module.Route))
 
-const routeTree = rootRoute.addChildren([overviewRoute, sourcesRoute, libraryRoute, searchRoute])
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'settings'
+}).lazy(() => import('./routes/settings.lazy').then((module) => module.Route))
+
+const routeTree = rootRoute.addChildren([
+  overviewRoute,
+  sourcesRoute,
+  libraryRoute,
+  searchRoute,
+  settingsRoute
+])
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' })
 

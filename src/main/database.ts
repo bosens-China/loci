@@ -1,24 +1,24 @@
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { normalizeCronSchedule } from '../shared/schedule'
 import { getHostname, normalizeUrl } from './crawl/url'
+import {
+  type DocumentRow,
+  migrateDatabase,
+  type SourceRow,
+  toDocumentRecord,
+  toDocumentSource,
+  toFtsExpression,
+  validateSettings,
+  validateSourceInput
+} from './database-values'
 import type {
+  AppSettings,
   CreateSourceInput,
   DocumentRecord,
   DocumentSource,
   UpdateSourceInput
 } from '../shared/api'
-
-interface SourceRow {
-  id: string
-  name: string
-  first_url: string
-  fetch_mode: 'auto' | 'http' | 'browser'
-  page_limit: number
-  schedule: string | null
-  page_count: number
-  last_crawled_at: string | null
-}
+import { DEFAULT_APP_SETTINGS } from '../shared/api'
 
 export interface SourceConfig {
   id: string
@@ -26,6 +26,7 @@ export interface SourceConfig {
   hostname: string
   fetchMode: 'auto' | 'http' | 'browser'
   pageLimit: number
+  concurrency: number | null
 }
 
 export interface StoredDocument {
@@ -42,7 +43,12 @@ export interface DocHubDatabase {
   listSources: () => DocumentSource[]
   createSource: (input: CreateSourceInput) => DocumentSource
   updateSource: (id: string, input: UpdateSourceInput) => DocumentSource
-  updateResolvedSource: (id: string, firstUrl: string, mode: 'http' | 'browser') => void
+  updateResolvedSource: (
+    id: string,
+    firstUrl: string,
+    mode: 'http' | 'browser',
+    iconUrl: string | null
+  ) => void
   getSourceConfig: (id: string) => SourceConfig
   listDocumentUrls: (sourceId: string) => string[]
   saveDocument: (document: StoredDocument) => void
@@ -50,6 +56,8 @@ export interface DocHubDatabase {
   listDocuments: () => DocumentRecord[]
   searchDocuments: (query: string) => DocumentRecord[]
   deleteSource: (id: string) => void
+  getSettings: () => AppSettings
+  saveSettings: (settings: AppSettings) => AppSettings
   close: () => void
 }
 
@@ -64,6 +72,8 @@ const schema = `
     fetch_mode TEXT NOT NULL CHECK (fetch_mode IN ('auto', 'http', 'browser')),
     page_limit INTEGER NOT NULL DEFAULT 1000 CHECK (page_limit BETWEEN 1 AND 10000),
     schedule TEXT,
+    concurrency INTEGER CHECK (concurrency IS NULL OR concurrency BETWEEN 1 AND 32),
+    icon_url TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   ) STRICT;
@@ -98,6 +108,17 @@ const schema = `
     title,
     markdown
   );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    mcp_port INTEGER NOT NULL CHECK (mcp_port BETWEEN 1024 AND 65535),
+    theme TEXT NOT NULL CHECK (theme IN ('auto', 'light', 'dark')),
+    http_concurrency INTEGER NOT NULL DEFAULT 9 CHECK (http_concurrency BETWEEN 1 AND 32),
+    browser_concurrency INTEGER NOT NULL DEFAULT 2 CHECK (browser_concurrency BETWEEN 1 AND 32)
+  ) STRICT;
+
+  INSERT OR IGNORE INTO app_settings (id, mcp_port, theme)
+  VALUES (1, ${DEFAULT_APP_SETTINGS.mcpPort}, '${DEFAULT_APP_SETTINGS.theme}');
 `
 
 export function createDatabase(filename: string): DocHubDatabase {
@@ -106,12 +127,14 @@ export function createDatabase(filename: string): DocHubDatabase {
     enableForeignKeyConstraints: true
   })
   database.exec(schema)
+  migrateDatabase(database)
 
   return {
     listSources: () => {
       const rows = database
         .prepare(
           `SELECT s.id, s.name, s.first_url, s.fetch_mode, s.page_limit, s.schedule,
+             s.concurrency, s.icon_url,
              COUNT(d.id) AS page_count, MAX(d.crawled_at) AS last_crawled_at
            FROM document_sources s
            LEFT JOIN documents d ON d.source_id = s.id
@@ -124,28 +147,35 @@ export function createDatabase(filename: string): DocHubDatabase {
     createSource: (input) => {
       const schedule = validateSourceInput(input)
       const url = normalizeUrl(input.url)
+      const hostname = getHostname(url)
+      const existing = database
+        .prepare('SELECT id FROM document_sources WHERE hostname = ?')
+        .get(hostname)
+      if (existing) throw new Error('这个域名已经存在于文档源中')
       const now = new Date().toISOString()
       const id = randomUUID()
       database
         .prepare(
           `INSERT INTO document_sources
-           (id, name, first_url, hostname, fetch_mode, page_limit, schedule, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           (id, name, first_url, hostname, fetch_mode, page_limit, schedule, concurrency, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           id,
           input.name.trim(),
           url,
-          getHostname(url),
+          hostname,
           input.mode,
           input.pageLimit,
           schedule,
+          input.concurrency,
           now,
           now
         )
       const source = database
         .prepare(
-          `SELECT id, name, first_url, fetch_mode, page_limit, schedule, 0 AS page_count, NULL AS last_crawled_at
+          `SELECT id, name, first_url, fetch_mode, page_limit, schedule, concurrency, icon_url,
+             0 AS page_count, NULL AS last_crawled_at
          FROM document_sources WHERE id = ?`
         )
         .get(id) as unknown as SourceRow
@@ -158,7 +188,7 @@ export function createDatabase(filename: string): DocHubDatabase {
       const result = database
         .prepare(
           `UPDATE document_sources
-           SET name = ?, first_url = ?, hostname = ?, fetch_mode = ?, page_limit = ?, schedule = ?, updated_at = ?
+           SET name = ?, first_url = ?, hostname = ?, fetch_mode = ?, page_limit = ?, schedule = ?, concurrency = ?, updated_at = ?
            WHERE id = ?`
         )
         .run(
@@ -168,13 +198,14 @@ export function createDatabase(filename: string): DocHubDatabase {
           input.mode,
           input.pageLimit,
           schedule,
+          input.concurrency,
           updatedAt,
           id
         )
       if (Number(result.changes) !== 1) throw new Error('文档源不存在')
       const source = database
         .prepare(
-          `SELECT id, name, first_url, fetch_mode, page_limit, schedule,
+          `SELECT id, name, first_url, fetch_mode, page_limit, schedule, concurrency, icon_url,
              (SELECT COUNT(*) FROM documents WHERE source_id = document_sources.id) AS page_count,
              (SELECT MAX(crawled_at) FROM documents WHERE source_id = document_sources.id) AS last_crawled_at
            FROM document_sources WHERE id = ?`
@@ -182,20 +213,20 @@ export function createDatabase(filename: string): DocHubDatabase {
         .get(id) as unknown as SourceRow
       return toDocumentSource(source)
     },
-    updateResolvedSource: (id, firstUrl, mode) => {
+    updateResolvedSource: (id, firstUrl, mode, iconUrl) => {
       const url = normalizeUrl(firstUrl)
       database
         .prepare(
           `UPDATE document_sources
-           SET first_url = ?, hostname = ?, fetch_mode = ?, updated_at = ?
+           SET first_url = ?, hostname = ?, fetch_mode = ?, icon_url = COALESCE(?, icon_url), updated_at = ?
            WHERE id = ?`
         )
-        .run(url, getHostname(url), mode, new Date().toISOString(), id)
+        .run(url, getHostname(url), mode, iconUrl, new Date().toISOString(), id)
     },
     getSourceConfig: (id) => {
       const source = database
         .prepare(
-          `SELECT id, first_url, hostname, fetch_mode, page_limit
+          `SELECT id, first_url, hostname, fetch_mode, page_limit, concurrency
            FROM document_sources WHERE id = ?`
         )
         .get(id) as unknown as
@@ -205,6 +236,7 @@ export function createDatabase(filename: string): DocHubDatabase {
             hostname: string
             fetch_mode: SourceConfig['fetchMode']
             page_limit: number
+            concurrency: number | null
           }
         | undefined
       if (!source) throw new Error('文档源不存在')
@@ -213,7 +245,8 @@ export function createDatabase(filename: string): DocHubDatabase {
         firstUrl: source.first_url,
         hostname: source.hostname,
         fetchMode: source.fetch_mode,
-        pageLimit: Number(source.page_limit)
+        pageLimit: Number(source.page_limit),
+        concurrency: source.concurrency === null ? null : Number(source.concurrency)
       }
     },
     listDocumentUrls: (sourceId) =>
@@ -294,75 +327,47 @@ export function createDatabase(filename: string): DocHubDatabase {
       return rows.map(toDocumentRecord)
     },
     deleteSource: (id) => {
-      database.prepare('DELETE FROM document_sources WHERE id = ?').run(id)
+      withTransaction(database, () => {
+        database.prepare('DELETE FROM documents_fts WHERE source_id = ?').run(id)
+        database.prepare('DELETE FROM document_sources WHERE id = ?').run(id)
+      })
+    },
+    getSettings: () => {
+      const row = database
+        .prepare(
+          'SELECT mcp_port, theme, http_concurrency, browser_concurrency FROM app_settings WHERE id = 1'
+        )
+        .get() as unknown as {
+        mcp_port: number
+        theme: AppSettings['theme']
+        http_concurrency: number
+        browser_concurrency: number
+      }
+      return {
+        mcpPort: Number(row.mcp_port),
+        theme: row.theme,
+        httpConcurrency: Number(row.http_concurrency),
+        browserConcurrency: Number(row.browser_concurrency)
+      }
+    },
+    saveSettings: (settings) => {
+      validateSettings(settings)
+      database
+        .prepare(
+          `UPDATE app_settings
+           SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?
+           WHERE id = 1`
+        )
+        .run(
+          settings.mcpPort,
+          settings.theme,
+          settings.httpConcurrency,
+          settings.browserConcurrency
+        )
+      return settings
     },
     close: () => database.close()
   }
-}
-
-interface DocumentRow {
-  id: string
-  source_id: string
-  source_name: string
-  title: string
-  url: string
-  language: string
-  crawled_at: string
-  markdown: string
-}
-
-function validateSourceInput(input: CreateSourceInput): string | null {
-  if (!input.name.trim()) throw new Error('文档源名称不能为空')
-  if (!Number.isInteger(input.pageLimit) || input.pageLimit < 1 || input.pageLimit > 10000) {
-    throw new Error('页面上限必须在 1 到 10000 之间')
-  }
-  if (!['auto', 'http', 'browser'].includes(input.mode)) throw new Error('不支持的抓取方式')
-  return normalizeCronSchedule(input.schedule)
-}
-
-function toDocumentSource(row: SourceRow): DocumentSource {
-  return {
-    id: row.id,
-    name: row.name,
-    url: row.first_url,
-    mode: row.fetch_mode,
-    status: 'healthy',
-    pages: Number(row.page_count),
-    pageLimit: Number(row.page_limit),
-    lastUpdated: row.last_crawled_at ? formatDate(row.last_crawled_at) : '尚未更新',
-    schedule: row.schedule
-  }
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value)
-  )
-}
-
-function toDocumentRecord(row: DocumentRow): DocumentRecord {
-  const path = new URL(row.url).pathname.split('/').filter(Boolean)
-  return {
-    id: row.id,
-    sourceId: row.source_id,
-    sourceName: row.source_name,
-    title: row.title,
-    url: row.url,
-    folder: path.slice(0, -1).join(' / ') || row.source_name,
-    language: row.language,
-    updatedAt: formatDate(row.crawled_at),
-    content: row.markdown
-  }
-}
-
-function toFtsExpression(query: string): string {
-  return query
-    .trim()
-    .split(/\s+/u)
-    .map((token) => token.replace(/[^\p{L}\p{N}_-]/gu, ''))
-    .filter(Boolean)
-    .map((token) => `"${token.replaceAll('"', '""')}"`)
-    .join(' AND ')
 }
 
 function withTransaction<T>(database: DatabaseSync, work: () => T): T {

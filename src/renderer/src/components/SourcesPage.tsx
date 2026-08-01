@@ -10,6 +10,7 @@ import {
   Alert,
   Avatar,
   Button,
+  Card,
   Empty,
   Form,
   Input,
@@ -19,12 +20,10 @@ import {
   Popconfirm,
   Select,
   Space,
-  Table,
   Tag,
   Tooltip,
   Typography
 } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useState } from 'react'
 import CrawlProgressModal from './CrawlProgressModal'
 import SourceScheduleFields, { SourceScheduleTag } from './SourceScheduleFields'
@@ -40,7 +39,6 @@ import type {
   CrawlProgressEvent,
   CrawlRunState,
   DocumentSource,
-  FetchMode,
   UpdateSourceInput
 } from '../types'
 
@@ -176,125 +174,6 @@ function SourcesPage({
       })
   }
 
-  const columns: ColumnsType<DocumentSource> = [
-    {
-      title: '文档源',
-      key: 'source',
-      render: (_, source) => (
-        <div className="flex items-center gap-3">
-          <Avatar icon={<LinkOutlined />} />
-          <div className="min-w-0">
-            <Typography.Link strong className="block" onClick={() => onOpenLibrary(source.id)}>
-              {source.name}
-            </Typography.Link>
-            <Typography.Text ellipsis type="secondary" className="block max-w-[360px] text-xs">
-              {source.url}
-            </Typography.Text>
-          </div>
-        </div>
-      )
-    },
-    {
-      title: '抓取方式',
-      dataIndex: 'mode',
-      key: 'mode',
-      render: (mode: FetchMode) => (
-        <Tag>{mode === 'auto' ? '自动检测' : mode === 'http' ? 'HTTP 直取' : '浏览器渲染'}</Tag>
-      )
-    },
-    { title: '页面数', dataIndex: 'pages', key: 'pages', render: (pages: number) => `${pages} 页` },
-    {
-      title: '定时更新',
-      dataIndex: 'schedule',
-      key: 'schedule',
-      render: (schedule: DocumentSource['schedule']) => <SourceScheduleTag schedule={schedule} />
-    },
-    {
-      title: '最近状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: DocumentSource['status'], source) => {
-        const run = crawlRuns[source.id]
-        const actualStatus = run?.running
-          ? 'syncing'
-          : run?.error || run?.progress.failed
-            ? 'attention'
-            : status
-        return (
-          <Tag
-            color={
-              actualStatus === 'healthy'
-                ? 'success'
-                : actualStatus === 'syncing'
-                  ? 'processing'
-                  : 'warning'
-            }
-          >
-            {actualStatus === 'healthy' ? '正常' : actualStatus === 'syncing' ? '更新中' : '需检查'}
-          </Tag>
-        )
-      }
-    },
-    {
-      title: '操作',
-      key: 'action',
-      align: 'right',
-      render: (_, source) => {
-        const running = crawlRuns[source.id]?.running ?? false
-        return (
-          <Space size="small">
-            <Tooltip title="在知识库中查看">
-              <Button
-                type="text"
-                size="small"
-                icon={<FileSearchOutlined />}
-                aria-label="在知识库中查看文档源"
-                onClick={() => onOpenLibrary(source.id)}
-              />
-            </Tooltip>
-            <Tooltip title={running ? '查看抓取进度' : '更新文档源'}>
-              <Button
-                type="text"
-                size="small"
-                icon={<ReloadOutlined spin={running} />}
-                aria-label={running ? '查看抓取进度' : '更新文档源'}
-                onClick={() => handleCrawl(source)}
-              />
-            </Tooltip>
-            <Tooltip title="编辑文档源">
-              <Button
-                type="text"
-                size="small"
-                icon={<EditOutlined />}
-                aria-label="编辑文档源"
-                disabled={running}
-                onClick={() => openEditModal(source)}
-              />
-            </Tooltip>
-            <Popconfirm
-              disabled={running}
-              title="删除这个文档源？"
-              description="已收录的页面也会从本地索引中移除。"
-              okText="删除"
-              cancelText="取消"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => onDeleteSource(source.id)}
-            >
-              <Button
-                danger
-                type="text"
-                size="small"
-                icon={<DeleteOutlined />}
-                aria-label="删除文档源"
-                disabled={running}
-              />
-            </Popconfirm>
-          </Space>
-        )
-      }
-    }
-  ]
-
   return (
     <div className="mx-auto w-full max-w-[1440px]">
       {contextHolder}
@@ -322,17 +201,129 @@ function SourcesPage({
           }
         />
       )}
-      <Table
-        rowKey="id"
-        columns={columns}
-        dataSource={sources}
-        loading={loading}
-        locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有文档源" />
-        }}
-        pagination={false}
-        scroll={{ x: 880 }}
-      />
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {[0, 1].map((item) => (
+            <Card key={item} loading />
+          ))}
+        </div>
+      ) : sources.length === 0 ? (
+        <Card>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有文档源" />
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {sources.map((source) => {
+            const run = crawlRuns[source.id]
+            const running = run?.running ?? false
+            const status = running
+              ? 'syncing'
+              : run?.error || run?.progress.failed
+                ? 'attention'
+                : source.status
+            return (
+              <Card key={source.id} className="h-full" hoverable>
+                <div className="flex items-start gap-4">
+                  <Avatar
+                    shape="square"
+                    size={48}
+                    src={source.iconUrl ?? undefined}
+                    alt={`${source.name} 图标`}
+                    icon={<LinkOutlined />}
+                    className="shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <Typography.Link strong onClick={() => onOpenLibrary(source.id)}>
+                        {source.name}
+                      </Typography.Link>
+                      <Tag
+                        color={
+                          status === 'healthy'
+                            ? 'success'
+                            : status === 'syncing'
+                              ? 'processing'
+                              : 'warning'
+                        }
+                      >
+                        {status === 'healthy' ? '正常' : status === 'syncing' ? '更新中' : '需检查'}
+                      </Tag>
+                    </div>
+                    <Typography.Text ellipsis type="secondary" className="mt-1 block text-xs">
+                      {source.url}
+                    </Typography.Text>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <Tag>
+                        {source.mode === 'auto'
+                          ? '自动检测'
+                          : source.mode === 'http'
+                            ? 'HTTP 直取'
+                            : '浏览器渲染'}
+                      </Tag>
+                      <Tag>{source.pages} 页</Tag>
+                      <Tag>{source.concurrency ? `并发 ${source.concurrency}` : '默认并发'}</Tag>
+                      <SourceScheduleTag schedule={source.schedule} />
+                    </div>
+                    <div className="mt-4 flex items-center justify-between gap-3 border-t border-solid border-[var(--ant-color-border-secondary)] pt-3">
+                      <Typography.Text type="secondary" className="text-xs">
+                        更新于 {source.lastUpdated}
+                      </Typography.Text>
+                      <Space size="small">
+                        <Tooltip title="在知识库中查看">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<FileSearchOutlined />}
+                            aria-label="在知识库中查看文档源"
+                            onClick={() => onOpenLibrary(source.id)}
+                          />
+                        </Tooltip>
+                        <Tooltip title={running ? '查看抓取进度' : '更新文档源'}>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<ReloadOutlined spin={running} />}
+                            aria-label={running ? '查看抓取进度' : '更新文档源'}
+                            onClick={() => handleCrawl(source)}
+                          />
+                        </Tooltip>
+                        <Tooltip title="编辑文档源">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<EditOutlined />}
+                            aria-label="编辑文档源"
+                            disabled={running}
+                            onClick={() => openEditModal(source)}
+                          />
+                        </Tooltip>
+                        <Popconfirm
+                          disabled={running}
+                          title="删除这个文档源？"
+                          description="已收录的页面也会从本地索引中移除。"
+                          okText="删除"
+                          cancelText="取消"
+                          okButtonProps={{ danger: true }}
+                          onConfirm={() => onDeleteSource(source.id)}
+                        >
+                          <Button
+                            danger
+                            type="text"
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            aria-label="删除文档源"
+                            disabled={running}
+                          />
+                        </Popconfirm>
+                      </Space>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
       <Modal
         title={editingSource ? '编辑文档源' : '添加文档源'}
         open={modalOpen}
@@ -375,6 +366,14 @@ function SourcesPage({
             rules={[{ required: true, message: '请输入页面上限' }]}
           >
             <InputNumber min={1} max={10000} className="w-full" addonAfter="页" />
+          </Form.Item>
+          <Form.Item
+            name="concurrency"
+            label="抓取并发"
+            extra="留空时按实际抓取方式使用设置页中的全局默认值"
+            rules={[{ type: 'number', min: 1, max: 32, message: '请输入 1 到 32 之间的整数' }]}
+          >
+            <InputNumber min={1} max={32} className="w-full" placeholder="使用全局默认值" />
           </Form.Item>
           <SourceScheduleFields form={form} />
         </Form>

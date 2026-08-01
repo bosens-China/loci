@@ -1,5 +1,32 @@
 export type FetchMode = 'auto' | 'http' | 'browser'
 
+export type ThemeMode = 'auto' | 'light' | 'dark'
+
+export interface AppSettings {
+  mcpPort: number
+  theme: ThemeMode
+  httpConcurrency: number
+  browserConcurrency: number
+}
+
+export interface McpServerStatus {
+  running: boolean
+  endpoint: string
+  error: string | null
+}
+
+export interface AppSettingsState {
+  settings: AppSettings
+  mcp: McpServerStatus
+}
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  mcpPort: 37373,
+  theme: 'auto',
+  httpConcurrency: 9,
+  browserConcurrency: 2
+}
+
 export type SourceStatus = 'healthy' | 'syncing' | 'attention'
 
 export interface DocumentSource {
@@ -12,6 +39,8 @@ export interface DocumentSource {
   pageLimit: number
   lastUpdated: string
   schedule: string | null
+  concurrency: number | null
+  iconUrl: string | null
 }
 
 export interface CreateSourceInput {
@@ -20,6 +49,7 @@ export interface CreateSourceInput {
   mode: FetchMode
   pageLimit: number
   schedule: string | null
+  concurrency: number | null
 }
 
 export type UpdateSourceInput = CreateSourceInput
@@ -80,4 +110,6 @@ export interface DocHubApi {
   listDocuments: () => Promise<DocumentRecord[]>
   searchDocuments: (query: string) => Promise<DocumentRecord[]>
   deleteSource: (id: string) => Promise<void>
+  getSettings: () => Promise<AppSettingsState>
+  saveSettings: (settings: AppSettings) => Promise<AppSettingsState>
 }
