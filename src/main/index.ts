@@ -1,8 +1,7 @@
-import { app, shell, BrowserWindow, ipcMain, Menu, Tray } from 'electron'
+import { app, BrowserWindow, ipcMain, type Tray } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { Cron } from 'croner'
-import icon from '../../resources/icon.png?asset'
 import { createDatabase, type LociDatabase } from './database'
 import type {
   AppSettings,
@@ -21,6 +20,9 @@ import type { CrawledPage } from './crawl/runner'
 import { getHostname } from './crawl/url'
 import type { LociMcpServices } from './mcp/server'
 import { createMcpRuntime, type McpRuntime } from './mcp/runtime'
+import { registerSingleInstance } from './single-instance'
+import { createAppTray } from './tray'
+import { createAppWindow } from './app-window'
 
 let database: LociDatabase | undefined
 let mainWindow: BrowserWindow | undefined
@@ -30,95 +32,67 @@ let isQuitting = false
 const runningCrawls = new Set<string>()
 const crawlStates = new Map<string, CrawlRunState>()
 const scheduledCrawls = new Map<string, Cron>()
+const isPrimaryInstance = registerSingleInstance(() => mainWindow)
 
 function createWindow(): void {
-  // Create the browser window.
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 960,
-    minHeight: 640,
-    show: false,
-    autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
-    }
-  })
-
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
-  })
-
-  mainWindow.on('close', (event) => {
-    if (isQuitting) return
-    event.preventDefault()
-    mainWindow?.hide()
-  })
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  mainWindow = createAppWindow(() => isQuitting)
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(async () => {
-  database = createDatabase(join(app.getPath('userData'), 'loci.sqlite'))
-  mcpRuntime = createMcpRuntime(requireDatabase(), createMcpServices())
-  await mcpRuntime.start()
-  createTray()
+if (isPrimaryInstance)
+  app.whenReady().then(async () => {
+    database = createDatabase(join(app.getPath('userData'), 'loci.sqlite'))
+    mcpRuntime = createMcpRuntime(requireDatabase(), createMcpServices())
+    await mcpRuntime.start()
+    tray = createAppTray(
+      () => mainWindow?.show(),
+      () => {
+        isQuitting = true
+        app.quit()
+      }
+    )
 
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+    // Set app user model id for windows
+    electronApp.setAppUserModelId('com.loci.app')
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    // Default open or close DevTools by F12 in development
+    // and ignore CommandOrControl + R in production.
+    // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
+
+    ipcMain.handle('sources:list', () => requireDatabase().listSources())
+    ipcMain.handle('sources:create', (_event, input: CreateSourceInput) => createSource(input))
+    ipcMain.handle('sources:update', (_event, id: string, input: UpdateSourceInput) => {
+      if (runningCrawls.has(id)) throw new Error('¸üÐÂ½øÐÐÖÐ£¬ÔÝÊ±²»ÄÜ±à¼­ÎÄµµÔ´')
+      const source = requireDatabase().updateSource(id, input)
+      scheduleSource(source)
+      return source
+    })
+    ipcMain.handle('sources:crawl', (_event, id: string) => crawlSource(id))
+    ipcMain.handle('sources:crawl-runs', () => [...crawlStates.values()])
+    ipcMain.handle('documents:list', () => requireDatabase().listDocuments())
+    ipcMain.handle('documents:search', (_event, query: string) =>
+      requireDatabase().searchDocuments(query)
+    )
+    ipcMain.handle('sources:delete', (_event, id: string) => deleteSource(id))
+    ipcMain.handle('settings:get', () => requireMcpRuntime().getState())
+    ipcMain.handle('settings:save', (_event, settings: AppSettings) =>
+      requireMcpRuntime().save(settings)
+    )
+
+    restoreScheduledCrawls(requireDatabase().listSources())
+    createWindow()
+
+    app.on('activate', function () {
+      // On macOS it's common to re-create a window in the app when the
+      // dock icon is clicked and there are no other windows open.
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-
-  ipcMain.handle('sources:list', () => requireDatabase().listSources())
-  ipcMain.handle('sources:create', (_event, input: CreateSourceInput) => createSource(input))
-  ipcMain.handle('sources:update', (_event, id: string, input: UpdateSourceInput) => {
-    if (runningCrawls.has(id)) throw new Error('æ›´æ–°è¿›è¡Œä¸­ï¼Œæš‚æ—¶ä¸èƒ½ç¼–è¾‘æ–‡æ¡£æº')
-    const source = requireDatabase().updateSource(id, input)
-    scheduleSource(source)
-    return source
-  })
-  ipcMain.handle('sources:crawl', (_event, id: string) => crawlSource(id))
-  ipcMain.handle('sources:crawl-runs', () => [...crawlStates.values()])
-  ipcMain.handle('documents:list', () => requireDatabase().listDocuments())
-  ipcMain.handle('documents:search', (_event, query: string) =>
-    requireDatabase().searchDocuments(query)
-  )
-  ipcMain.handle('sources:delete', (_event, id: string) => deleteSource(id))
-  ipcMain.handle('settings:get', () => requireMcpRuntime().getState())
-  ipcMain.handle('settings:save', (_event, settings: AppSettings) =>
-    requireMcpRuntime().save(settings)
-  )
-
-  restoreScheduledCrawls(requireDatabase().listSources())
-  createWindow()
-
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
@@ -136,7 +110,7 @@ app.on('before-quit', () => {
 })
 
 function requireDatabase(): LociDatabase {
-  if (!database) throw new Error('æœ¬åœ°æ•°æ®åº“å°šæœªåˆå§‹åŒ–')
+  if (!database) throw new Error('±¾µØÊý¾Ý¿âÉÐÎ´³õÊ¼»¯')
   return database
 }
 
@@ -147,7 +121,7 @@ function createSource(input: CreateSourceInput): DocumentSource {
 }
 
 function deleteSource(id: string): void {
-  if (runningCrawls.has(id)) throw new Error('æ›´æ–°è¿›è¡Œä¸­ï¼Œæš‚æ—¶ä¸èƒ½åˆ é™¤æ–‡æ¡£æº')
+  if (runningCrawls.has(id)) throw new Error('¸üÐÂ½øÐÐÖÐ£¬ÔÝÊ±²»ÄÜÉ¾³ýÎÄµµÔ´')
   crawlStates.delete(id)
   stopScheduledCrawl(id)
   requireDatabase().deleteSource(id)
@@ -167,7 +141,7 @@ function createMcpServices(): LociMcpServices {
 }
 
 function requireMcpRuntime(): McpRuntime {
-  if (!mcpRuntime) throw new Error('MCP æœåŠ¡å°šæœªåˆå§‹åŒ–')
+  if (!mcpRuntime) throw new Error('MCP ·þÎñÉÐÎ´³õÊ¼»¯')
   return mcpRuntime
 }
 
@@ -185,7 +159,7 @@ function scheduleSource(source: DocumentSource): void {
       normalizeCronSchedule(expression) ?? expression,
       {
         protect: true,
-        catch: (error) => console.error(`å®šæ—¶æŠ“å– ${source.name} å¤±è´¥`, error)
+        catch: (error) => console.error(`¶¨Ê±×¥È¡ ${source.name} Ê§°Ü`, error)
       },
       async () => {
         if (!runningCrawls.has(source.id)) await crawlSource(source.id)
@@ -193,7 +167,7 @@ function scheduleSource(source: DocumentSource): void {
     )
     scheduledCrawls.set(source.id, job)
   } catch (error) {
-    console.error(`å¿½ç•¥æ— æ•ˆçš„å®šæ—¶æŠ“å–è§„åˆ™ï¼š${source.name}`, error)
+    console.error(`ºöÂÔÎÞÐ§µÄ¶¨Ê±×¥È¡¹æÔò£º${source.name}`, error)
   }
 }
 
@@ -210,12 +184,12 @@ async function crawlSource(
   id: string,
   onProgress?: (progress: CrawlProgress) => void
 ): Promise<CrawlProgress> {
-  if (runningCrawls.has(id)) throw new Error('è¿™ä¸ªæ–‡æ¡£æºå·²ç»åœ¨æ›´æ–°ä¸­')
+  if (runningCrawls.has(id)) throw new Error('Õâ¸öÎÄµµÔ´ÒÑ¾­ÔÚ¸üÐÂÖÐ')
   const source = requireDatabase().getSourceConfig(id)
   const initialNode: CrawlNode = {
     id: source.firstUrl,
     url: source.firstUrl,
-    title: source.fetchMode === 'auto' ? 'æ­£åœ¨æ£€æµ‹æŠ“å–æ–¹å¼' : 'æ­£åœ¨è¯»å–ç¬¬ä¸€ä¸ªé¡µé¢',
+    title: source.fetchMode === 'auto' ? 'ÕýÔÚ¼ì²â×¥È¡·½Ê½' : 'ÕýÔÚ¶ÁÈ¡µÚÒ»¸öÒ³Ãæ',
     status: 'running'
   }
   publishCrawlState({
@@ -236,7 +210,7 @@ async function crawlSource(
   try {
     const progress = await runCrawl(id, onProgress)
     if (progress.succeeded === 0 && progress.failed > 0) {
-      throw new Error(`æŠ“å–å¤±è´¥ï¼š${progress.failed} ä¸ªé¡µé¢å‡æœªæˆåŠŸ`)
+      throw new Error(`×¥È¡Ê§°Ü£º${progress.failed} ¸öÒ³Ãæ¾ùÎ´³É¹¦`)
     }
     finishCrawl(id, progress, null)
     return progress
@@ -361,30 +335,11 @@ function selectAutoResult(
   if (browserPage?.page) return { mode: 'browser', page: browserPage }
   if (httpPage) return { mode: 'http', page: httpPage }
   if (browserPage) return { mode: 'browser', page: browserPage }
-  throw new Error('ç¬¬ä¸€ä¸ªé¡µé¢çš„ HTTP ä¸Žæµè§ˆå™¨æŠ“å–å‡å¤±è´¥')
+  throw new Error('µÚÒ»¸öÒ³ÃæµÄ HTTP Óëä¯ÀÀÆ÷×¥È¡¾ùÊ§°Ü')
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'æ›´æ–°å¤±è´¥'
-}
-
-function createTray(): void {
-  tray = new Tray(icon)
-  tray.setToolTip('Loci')
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'æ˜¾ç¤ºä¸»çª—å£', click: () => mainWindow?.show() },
-      { type: 'separator' },
-      {
-        label: 'é€€å‡º Loci',
-        click: () => {
-          isQuitting = true
-          app.quit()
-        }
-      }
-    ])
-  )
-  tray.on('click', () => mainWindow?.show())
+  return error instanceof Error ? error.message : '¸üÐÂÊ§°Ü'
 }
 
 // In this file you can include the rest of your app's specific main process
