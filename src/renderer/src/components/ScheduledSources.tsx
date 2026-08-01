@@ -38,18 +38,20 @@ function ScheduledSources({
       title: '文档源',
       key: 'source',
       render: (_, source) => (
-        <Space>
+        <Space size="middle">
           <Avatar
             shape="square"
+            size={36}
             src={source.iconUrl ?? undefined}
             icon={<LinkOutlined />}
             alt={`${source.name} 图标`}
+            className="shrink-0 rounded bg-[var(--ant-color-fill-secondary)]"
           />
           <div className="min-w-0">
-            <Typography.Text strong className="block">
+            <Typography.Text strong className="block text-sm">
               {source.name}
             </Typography.Text>
-            <Typography.Text type="secondary" ellipsis className="block max-w-72 text-xs">
+            <Typography.Text type="secondary" ellipsis className="block max-w-72 font-mono text-xs">
               {source.url}
             </Typography.Text>
           </div>
@@ -62,28 +64,39 @@ function ScheduledSources({
       render: (_, source) => (
         <Space direction="vertical" size={2}>
           <SourceScheduleTag schedule={source.schedule} />
-          <Typography.Text code className="text-xs">
+          <Typography.Text code className="font-mono text-xs">
             {source.schedule}
           </Typography.Text>
         </Space>
       )
     },
     {
-      title: '下次更新',
+      title: '下次预估更新',
       key: 'nextRun',
       render: (_, source) => {
         const nextRun = getNextScheduledRun(source.schedule)
-        return nextRun ? dateTimeFormatter.format(nextRun) : '计划无效'
+        return nextRun ? (
+          <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+            {dateTimeFormatter.format(nextRun)}
+          </span>
+        ) : (
+          <Typography.Text type="secondary">计划无效</Typography.Text>
+        )
       }
     },
-    { title: '最近更新', dataIndex: 'lastUpdated', key: 'lastUpdated' },
+    {
+      title: '最近一次更新',
+      dataIndex: 'lastUpdated',
+      key: 'lastUpdated',
+      render: (val: string) => <span className="text-xs text-gray-500">{val}</span>
+    },
     {
       title: '操作',
       key: 'actions',
       align: 'right',
       render: (_, source) => (
-        <Button type="link" icon={<EditOutlined />} onClick={() => onEdit(source)}>
-          编辑计划
+        <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(source)}>
+          修改计划
         </Button>
       )
     }
@@ -92,8 +105,8 @@ function ScheduledSources({
   return (
     <Card
       title={
-        <Space>
-          <CalendarOutlined /> 已设置 {sources.length} 个更新计划
+        <Space className="text-base font-medium">
+          <CalendarOutlined className="text-blue-500" /> 已设置 {sources.length} 个定时自动抓取任务
         </Space>
       }
     >
@@ -103,6 +116,7 @@ function ScheduledSources({
         dataSource={sources}
         pagination={false}
         scroll={{ x: 840 }}
+        size="middle"
       />
     </Card>
   )

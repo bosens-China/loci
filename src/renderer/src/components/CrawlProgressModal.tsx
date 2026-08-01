@@ -151,13 +151,19 @@ function selectTreeNodes(nodes: readonly CrawlNode[]): readonly CrawlNode[] {
 
 function createTreeOption(nodes: readonly CrawlNode[]): EChartsOption {
   const tree = buildCrawlTree(nodes)
+  const isDark =
+    typeof window !== 'undefined' &&
+    (document.documentElement.classList.contains('dark') ||
+      window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const lineColor = isDark ? '#595959' : '#d9d9d9'
+
   return {
     tooltip: { show: false },
     series: tree
       ? [
           {
             type: 'tree',
-            data: [toEChartsTreeNode(tree)],
+            data: [toEChartsTreeNode(tree, 0, isDark)],
             top: '8%',
             left: '8%',
             right: '8%',
@@ -168,7 +174,7 @@ function createTreeOption(nodes: readonly CrawlNode[]): EChartsOption {
             initialTreeDepth: -1,
             symbol: 'circle',
             symbolSize: 14,
-            lineStyle: { color: '#d9d9d9', width: 1.5, curveness: 0.25 },
+            lineStyle: { color: lineColor, width: 1.5, curveness: 0.25 },
             label: { position: 'right', verticalAlign: 'middle', align: 'left', fontSize: 11 },
             leaves: { label: { position: 'right', verticalAlign: 'middle', align: 'left' } },
             emphasis: { focus: 'descendant', lineStyle: { width: 3 } },
@@ -180,7 +186,7 @@ function createTreeOption(nodes: readonly CrawlNode[]): EChartsOption {
   }
 }
 
-function toEChartsTreeNode(node: CrawlTreeNode, depth = 0): EChartsTreeNode {
+function toEChartsTreeNode(node: CrawlTreeNode, depth = 0, isDark = false): EChartsTreeNode {
   return {
     name: shorten(node.name),
     value: node.url,
@@ -189,13 +195,13 @@ function toEChartsTreeNode(node: CrawlTreeNode, depth = 0): EChartsTreeNode {
       depth === 0
         ? {
             color: colorForStatus(node.status),
-            borderColor: '#ffffff',
+            borderColor: isDark ? '#141414' : '#ffffff',
             borderWidth: 4,
             shadowBlur: 16,
-            shadowColor: 'rgba(0, 0, 0, 0.2)'
+            shadowColor: isDark ? 'rgba(0, 0, 0, 0.6)' : 'rgba(0, 0, 0, 0.2)'
           }
         : { color: colorForStatus(node.status) },
-    children: node.children.map((child) => toEChartsTreeNode(child, depth + 1))
+    children: node.children.map((child) => toEChartsTreeNode(child, depth + 1, isDark))
   }
 }
 
