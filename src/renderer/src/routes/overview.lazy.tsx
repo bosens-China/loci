@@ -20,6 +20,16 @@ function OverviewRoute(): React.JSX.Element {
       error={sources.error ?? documents.error}
       onRetry={() => void Promise.all([sources.reload(), documents.reload()])}
       onOpenSources={() => void navigate({ to: '/sources', search: { tab: undefined } })}
+      onSelectSource={(sourceId) =>
+        void navigate({ to: '/library', search: { source: sourceId, document: undefined } })
+      }
+      onOpenLibrary={(documentId, sourceId) =>
+        void navigate({
+          to: '/library',
+          search: { document: documentId, source: sourceId }
+        })
+      }
+      onCrawlSource={(sourceId) => void sources.crawl(sourceId)}
     />
   )
 }
