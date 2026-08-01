@@ -23,7 +23,7 @@ export function createAppWindow(isQuitting: () => boolean): BrowserWindow {
 
   window.on('ready-to-show', () => window.show())
   window.on('close', (event) => {
-    if (isQuitting()) return
+    if (isQuitting() || process.platform === 'linux') return
     event.preventDefault()
     window.hide()
   })

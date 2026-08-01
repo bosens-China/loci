@@ -108,7 +108,7 @@ if (isPrimaryInstance)
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
-  // The app stays alive in the tray until the user explicitly exits.
+  if (process.platform === 'linux') app.quit()
 })
 
 app.on('before-quit', () => {
