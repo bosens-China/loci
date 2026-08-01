@@ -96,7 +96,7 @@ describe('createDatabase', () => {
   })
 
   it('migrates existing settings and document source tables', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'doc-hub-'))
+    const directory = mkdtempSync(join(tmpdir(), 'loci-'))
     const filename = join(directory, 'legacy.sqlite')
     const legacy = new DatabaseSync(filename)
     legacy.exec(`

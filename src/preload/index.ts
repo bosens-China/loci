@@ -4,13 +4,13 @@ import type {
   CrawlProgress,
   CrawlProgressEvent,
   CrawlRunState,
-  DocHubApi,
+  LociApi,
   DocumentRecord,
   DocumentSource
 } from '../shared/api'
 
 // Custom APIs for renderer
-const api: DocHubApi = {
+const api: LociApi = {
   listSources: () => ipcRenderer.invoke('sources:list') as Promise<DocumentSource[]>,
   createSource: (input) => ipcRenderer.invoke('sources:create', input) as Promise<DocumentSource>,
   updateSource: (id, input) =>
@@ -27,9 +27,9 @@ const api: DocHubApi = {
   searchDocuments: (query) =>
     ipcRenderer.invoke('documents:search', query) as Promise<DocumentRecord[]>,
   deleteSource: (id) => ipcRenderer.invoke('sources:delete', id) as Promise<void>,
-  getSettings: () => ipcRenderer.invoke('settings:get') as ReturnType<DocHubApi['getSettings']>,
+  getSettings: () => ipcRenderer.invoke('settings:get') as ReturnType<LociApi['getSettings']>,
   saveSettings: (settings) =>
-    ipcRenderer.invoke('settings:save', settings) as ReturnType<DocHubApi['saveSettings']>
+    ipcRenderer.invoke('settings:save', settings) as ReturnType<LociApi['saveSettings']>
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

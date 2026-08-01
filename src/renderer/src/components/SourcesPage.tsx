@@ -1,4 +1,5 @@
 import {
+  ClockCircleOutlined,
   DeleteOutlined,
   EditOutlined,
   FileSearchOutlined,
@@ -21,11 +22,13 @@ import {
   Select,
   Space,
   Tag,
+  Tabs,
   Tooltip,
   Typography
 } from 'antd'
 import { useEffect, useState } from 'react'
 import CrawlProgressModal from './CrawlProgressModal'
+import ScheduledSources from './ScheduledSources'
 import SourceScheduleFields, { SourceScheduleTag } from './SourceScheduleFields'
 import { indexCrawlRuns, mergeCrawlNode } from './crawlRunState'
 import {
@@ -52,7 +55,11 @@ interface SourcesPageProps {
   onCrawlSource: (id: string) => Promise<CrawlProgress>
   onOpenLibrary: (sourceId: string) => void
   onDeleteSource: (id: string) => Promise<void>
+  activeTab: SourcesTab
+  onTabChange: (tab: SourcesTab) => void
 }
+
+export type SourcesTab = 'sources' | 'schedules'
 
 function SourcesPage({
   sources,
@@ -63,7 +70,9 @@ function SourcesPage({
   onUpdateSource,
   onCrawlSource,
   onOpenLibrary,
-  onDeleteSource
+  onDeleteSource,
+  activeTab,
+  onTabChange
 }: SourcesPageProps): React.JSX.Element {
   const [form] = Form.useForm<SourceFormValues>()
   const [modalOpen, setModalOpen] = useState(false)
@@ -72,6 +81,7 @@ function SourcesPage({
   const [crawlRuns, setCrawlRuns] = useState<Record<string, CrawlRunState>>({})
   const [openCrawlId, setOpenCrawlId] = useState<string | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
+  const scheduledSources = sources.filter((source) => source.schedule)
 
   useEffect(() => {
     let active = true
@@ -117,7 +127,11 @@ function SourcesPage({
   const handleCreate = (values: SourceFormValues): void => {
     let input: CreateSourceInput
     try {
-      input = toCreateSourceInput(values)
+      input = toCreateSourceInput({
+        ...values,
+        scheduleEnabled: form.getFieldValue('scheduleEnabled') === true,
+        scheduleExpression: form.getFieldValue('scheduleExpression')
+      })
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : '定时抓取配置无效')
       return
@@ -184,9 +198,11 @@ function SourcesPage({
             管理公开文档站点，控制抓取方式和更新节奏。
           </Typography.Paragraph>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
-          添加文档源
-        </Button>
+        {activeTab === 'sources' && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
+            添加文档源
+          </Button>
+        )}
       </div>
       {error && (
         <Alert
@@ -201,12 +217,28 @@ function SourcesPage({
           }
         />
       )}
+      <Tabs
+        activeKey={activeTab}
+        items={[
+          { key: 'sources', label: '文档源' },
+          { key: 'schedules', label: `定时更新（${scheduledSources.length}）` }
+        ]}
+        onChange={(key) => {
+          if (key === 'sources' || key === 'schedules') onTabChange(key)
+        }}
+      />
       {loading ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {[0, 1].map((item) => (
             <Card key={item} loading />
           ))}
         </div>
+      ) : activeTab === 'schedules' ? (
+        <ScheduledSources
+          sources={scheduledSources}
+          onEdit={openEditModal}
+          onShowSources={() => onTabChange('sources')}
+        />
       ) : sources.length === 0 ? (
         <Card>
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有文档源" />
@@ -265,9 +297,12 @@ function SourcesPage({
                       <SourceScheduleTag schedule={source.schedule} />
                     </div>
                     <div className="mt-4 flex items-center justify-between gap-3 border-t border-solid border-[var(--ant-color-border-secondary)] pt-3">
-                      <Typography.Text type="secondary" className="text-xs">
+                      <Tag
+                        icon={<ClockCircleOutlined />}
+                        className="m-0! border-0! bg-[var(--ant-color-fill-tertiary)]! px-2.5! py-1! text-xs! text-[var(--ant-color-text-secondary)]!"
+                      >
                         更新于 {source.lastUpdated}
-                      </Typography.Text>
+                      </Tag>
                       <Space size="small">
                         <Tooltip title="在知识库中查看">
                           <Button

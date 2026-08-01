@@ -10,7 +10,10 @@ const overviewRoute = createRoute({
 
 const sourcesRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: 'sources'
+  path: 'sources',
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: search.tab === 'schedules' ? ('schedules' as const) : undefined
+  })
 }).lazy(() => import('./routes/sources.lazy').then((module) => module.Route))
 
 const libraryRoute = createRoute({
@@ -22,24 +25,12 @@ const libraryRoute = createRoute({
   })
 }).lazy(() => import('./routes/library.lazy').then((module) => module.Route))
 
-const searchRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: 'search',
-  validateSearch: (search: Record<string, unknown>) => ({ query: toOptionalString(search.query) })
-}).lazy(() => import('./routes/search.lazy').then((module) => module.Route))
-
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'settings'
 }).lazy(() => import('./routes/settings.lazy').then((module) => module.Route))
 
-const routeTree = rootRoute.addChildren([
-  overviewRoute,
-  sourcesRoute,
-  libraryRoute,
-  searchRoute,
-  settingsRoute
-])
+const routeTree = rootRoute.addChildren([overviewRoute, sourcesRoute, libraryRoute, settingsRoute])
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' })
 

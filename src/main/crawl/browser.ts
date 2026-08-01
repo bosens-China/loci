@@ -27,7 +27,7 @@ const responses = new Map<number, MainFrameResponse>()
 // 所有远程页面共用独立的内存 Session，与应用窗口的 Cookie、权限和下载完全隔离。
 function getIsolatedSession(): Session {
   if (isolatedSession) return isolatedSession
-  isolatedSession = session.fromPartition('doc-hub-crawler')
+  isolatedSession = session.fromPartition('loci-crawler')
   isolatedSession.setPermissionCheckHandler(() => false)
   isolatedSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   isolatedSession.on('will-download', (event) => event.preventDefault())

@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Cron } from 'croner'
 import icon from '../../resources/icon.png?asset'
-import { createDatabase, type DocHubDatabase } from './database'
+import { createDatabase, type LociDatabase } from './database'
 import type {
   AppSettings,
   CreateSourceInput,
@@ -19,10 +19,10 @@ import { crawlRenderedSource, fetchRenderedCrawlPage } from './crawl/rendered'
 import { selectFetchMode, type SelectedFetchMode } from './crawl/mode'
 import type { CrawledPage } from './crawl/runner'
 import { getHostname } from './crawl/url'
-import type { DocHubMcpServices } from './mcp/server'
+import type { LociMcpServices } from './mcp/server'
 import { createMcpRuntime, type McpRuntime } from './mcp/runtime'
 
-let database: DocHubDatabase | undefined
+let database: LociDatabase | undefined
 let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
 let mcpRuntime: McpRuntime | undefined
@@ -75,7 +75,7 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
-  database = createDatabase(join(app.getPath('userData'), 'doc-hub.sqlite'))
+  database = createDatabase(join(app.getPath('userData'), 'loci.sqlite'))
   mcpRuntime = createMcpRuntime(requireDatabase(), createMcpServices())
   await mcpRuntime.start()
   createTray()
@@ -135,7 +135,7 @@ app.on('before-quit', () => {
   tray?.destroy()
 })
 
-function requireDatabase(): DocHubDatabase {
+function requireDatabase(): LociDatabase {
   if (!database) throw new Error('本地数据库尚未初始化')
   return database
 }
@@ -153,7 +153,7 @@ function deleteSource(id: string): void {
   requireDatabase().deleteSource(id)
 }
 
-function createMcpServices(): DocHubMcpServices {
+function createMcpServices(): LociMcpServices {
   return {
     listSources: () => requireDatabase().listSources(),
     listDocuments: () => requireDatabase().listDocuments(),
@@ -161,7 +161,8 @@ function createMcpServices(): DocHubMcpServices {
     createSource,
     crawlSource,
     deleteSource,
-    isCrawling: (id) => runningCrawls.has(id)
+    isCrawling: (id) => runningCrawls.has(id),
+    getCrawlState: (id) => crawlStates.get(id)
   }
 }
 
@@ -205,7 +206,10 @@ function stopScheduledCrawls(): void {
   for (const sourceId of scheduledCrawls.keys()) stopScheduledCrawl(sourceId)
 }
 
-async function crawlSource(id: string): Promise<CrawlProgress> {
+async function crawlSource(
+  id: string,
+  onProgress?: (progress: CrawlProgress) => void
+): Promise<CrawlProgress> {
   if (runningCrawls.has(id)) throw new Error('这个文档源已经在更新中')
   const source = requireDatabase().getSourceConfig(id)
   const initialNode: CrawlNode = {
@@ -230,7 +234,7 @@ async function crawlSource(id: string): Promise<CrawlProgress> {
   })
   runningCrawls.add(id)
   try {
-    const progress = await runCrawl(id)
+    const progress = await runCrawl(id, onProgress)
     if (progress.succeeded === 0 && progress.failed > 0) {
       throw new Error(`抓取失败：${progress.failed} 个页面均未成功`)
     }
@@ -244,7 +248,10 @@ async function crawlSource(id: string): Promise<CrawlProgress> {
   }
 }
 
-async function runCrawl(id: string): Promise<CrawlProgress> {
+async function runCrawl(
+  id: string,
+  onProgress?: (progress: CrawlProgress) => void
+): Promise<CrawlProgress> {
   const localDatabase = requireDatabase()
   const source = localDatabase.getSourceConfig(id)
   const initialUrls = localDatabase.listDocumentUrls(id)
@@ -289,7 +296,10 @@ async function runCrawl(id: string): Promise<CrawlProgress> {
     onError: ({ url, missing }) => {
       if (missing) localDatabase.deleteDocument(id, url)
     },
-    onProgress: (progress) => emitCrawlProgress(id, progress)
+    onProgress: (progress) => {
+      emitCrawlProgress(id, progress)
+      onProgress?.(progress)
+    }
   } satisfies Parameters<typeof crawlHttpSource>[0]
   return selectedMode === 'http' ? crawlHttpSource(options) : crawlRenderedSource(options)
 }

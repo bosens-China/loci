@@ -63,4 +63,27 @@ describe('runCrawlQueue', () => {
 
     expect(missing).toEqual([undefined, true, true])
   })
+
+  it('returns actionable failure details', async () => {
+    const progress = await runCrawlQueue({
+      firstUrl: 'https://docs.example.com/start',
+      hostname: 'docs.example.com',
+      pageLimit: 1,
+      concurrency: 1,
+      fetchMode: 'http',
+      seedPage: { url: 'https://other.example.com/login', status: 302 },
+      fetchPage: async () => ({ url: 'https://other.example.com/login', status: 302 }),
+      onDocument: () => undefined
+    })
+
+    expect(progress.failures).toEqual([
+      {
+        url: 'https://docs.example.com/start',
+        reason: 'out_of_scope_redirect',
+        message: '页面跳转到了文档库范围之外',
+        retryable: false,
+        redirectUrl: 'https://other.example.com/login'
+      }
+    ])
+  })
 })

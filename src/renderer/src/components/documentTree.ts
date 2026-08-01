@@ -2,6 +2,16 @@ import type { DataNode } from 'antd/es/tree'
 import { buildUrlTree, type UrlTreeNode } from '@shared/url-tree'
 import type { DocumentItem } from '../types'
 
+export function filterDocumentsByMarkdown(
+  documents: readonly DocumentItem[],
+  query: string
+): readonly DocumentItem[] {
+  const keyword = query.trim().toLowerCase()
+  return keyword
+    ? documents.filter((document) => document.content.toLowerCase().includes(keyword))
+    : documents
+}
+
 export function buildDocumentTree(documents: readonly DocumentItem[]): DataNode[] {
   const sources = new Map<string, { name: string; documents: DocumentItem[] }>()
   for (const document of documents) {

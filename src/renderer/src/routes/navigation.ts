@@ -2,7 +2,6 @@ export const VIEW_PATHS = {
   overview: '/',
   sources: '/sources',
   library: '/library',
-  search: '/search',
   settings: '/settings'
 } as const
 

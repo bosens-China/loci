@@ -10,12 +10,6 @@ function RootRoute(): React.JSX.Element {
     <AppShell
       activeView={getActiveView(pathname)}
       onViewChange={(view) => void navigate({ to: VIEW_PATHS[view] })}
-      onSearch={(query) =>
-        void navigate({
-          to: '/search',
-          search: { query: query.trim() || undefined }
-        })
-      }
     >
       <Outlet />
     </AppShell>

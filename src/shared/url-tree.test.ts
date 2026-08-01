@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildUrlTree } from './url-tree'
+import { buildUrlTree, getUrlTreeSlice } from './url-tree'
 
 describe('buildUrlTree', () => {
   it('builds stable folders while keeping database IDs on readable files', () => {
@@ -21,6 +21,19 @@ describe('buildUrlTree', () => {
           { id: 'file-2', title: '配置', readable: true }
         ]
       }
+    ])
+  })
+
+  it('expands a selected folder to a bounded depth', () => {
+    const tree = buildUrlTree(
+      [{ id: 'file-1', title: '开始', url: 'https://example.com/guide/basic/start' }],
+      'docs'
+    )
+    expect(getUrlTreeSlice(tree, undefined, 1)).toEqual([
+      { id: 'folder:docs:guide', title: 'guide', readable: false }
+    ])
+    expect(getUrlTreeSlice(tree, 'folder:docs:guide', 1)).toEqual([
+      { id: 'folder:docs:guide/basic', title: 'basic', readable: false }
     ])
   })
 })

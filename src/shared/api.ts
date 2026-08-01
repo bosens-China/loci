@@ -60,7 +60,20 @@ export interface CrawlProgress {
   succeeded: number
   failed: number
   limitReached: boolean
+  failures?: CrawlFailure[]
   node?: CrawlNode
+}
+
+export type CrawlFailureReason =
+  'not_found' | 'out_of_scope_redirect' | 'http_error' | 'request_error'
+
+export interface CrawlFailure {
+  url: string
+  reason: CrawlFailureReason
+  message: string
+  retryable: boolean
+  statusCode?: number
+  redirectUrl?: string
 }
 
 export type CrawlNodeStatus = 'queued' | 'running' | 'success' | 'failed'
@@ -100,7 +113,7 @@ export interface DocumentRecord {
   content: string
 }
 
-export interface DocHubApi {
+export interface LociApi {
   listSources: () => Promise<DocumentSource[]>
   createSource: (input: CreateSourceInput) => Promise<DocumentSource>
   updateSource: (id: string, input: UpdateSourceInput) => Promise<DocumentSource>

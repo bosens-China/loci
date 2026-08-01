@@ -39,7 +39,7 @@ export interface StoredDocument {
   crawledAt: string
 }
 
-export interface DocHubDatabase {
+export interface LociDatabase {
   listSources: () => DocumentSource[]
   createSource: (input: CreateSourceInput) => DocumentSource
   updateSource: (id: string, input: UpdateSourceInput) => DocumentSource
@@ -121,7 +121,7 @@ const schema = `
   VALUES (1, ${DEFAULT_APP_SETTINGS.mcpPort}, '${DEFAULT_APP_SETTINGS.theme}');
 `
 
-export function createDatabase(filename: string): DocHubDatabase {
+export function createDatabase(filename: string): LociDatabase {
   const database = new DatabaseSync(filename, {
     timeout: 5000,
     enableForeignKeyConstraints: true

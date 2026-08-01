@@ -19,7 +19,7 @@ function OverviewRoute(): React.JSX.Element {
       loading={sources.loading || documents.loading}
       error={sources.error ?? documents.error}
       onRetry={() => void Promise.all([sources.reload(), documents.reload()])}
-      onOpenSources={() => void navigate({ to: '/sources' })}
+      onOpenSources={() => void navigate({ to: '/sources', search: { tab: undefined } })}
     />
   )
 }

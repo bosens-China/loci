@@ -1,5 +1,6 @@
 import { createLazyRoute, useNavigate } from '@tanstack/react-router'
 import SourcesPage from '@renderer/components/SourcesPage'
+import type { SourcesTab } from '@renderer/components/SourcesPage'
 import { useSources } from '@renderer/hooks/useSources'
 
 export const Route = createLazyRoute('/sources')({
@@ -9,6 +10,8 @@ export const Route = createLazyRoute('/sources')({
 function SourcesRoute(): React.JSX.Element {
   const navigate = useNavigate()
   const sources = useSources()
+  const search = Route.useSearch()
+  const activeTab: SourcesTab = search.tab ?? 'sources'
 
   return (
     <SourcesPage
@@ -23,6 +26,14 @@ function SourcesRoute(): React.JSX.Element {
         void navigate({ to: '/library', search: { source: sourceId, document: undefined } })
       }
       onDeleteSource={sources.remove}
+      activeTab={activeTab}
+      onTabChange={(tab) =>
+        void navigate({
+          to: '/sources',
+          search: { tab: tab === 'schedules' ? tab : undefined },
+          replace: true
+        })
+      }
     />
   )
 }

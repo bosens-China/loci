@@ -1,4 +1,4 @@
-import type { CrawlNode, CrawlProgress } from '../../shared/api'
+import type { CrawlFailure, CrawlNode, CrawlProgress } from '../../shared/api'
 import type { ParsedPage } from './content'
 import { isSameHostname, normalizeUrl } from './url'
 
@@ -29,7 +29,7 @@ export interface CrawlRunnerOptions {
   seedPage?: CrawledPage
   fetchPage: (url: string) => Promise<CrawledPage>
   onDocument: (document: CrawledDocument) => Promise<void> | void
-  onError?: (error: { url: string; status?: number; missing?: boolean }) => Promise<void> | void
+  onError?: (error: CrawlFailure & { missing?: boolean }) => Promise<void> | void
   onProgress?: (progress: CrawlProgress) => void
 }
 
@@ -74,6 +74,7 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
     failed: 0,
     limitReached
   }
+  const failures: CrawlFailure[] = []
   let seedPage = options.seedPage
   let cursor = 0
 
@@ -87,40 +88,70 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
     }
     options.onProgress?.({ ...progress, node: { ...node } })
 
-    let failure: { url: string; status?: number; missing?: boolean } | undefined
+    let failure: (CrawlFailure & { missing?: boolean }) | undefined
     try {
       const result = seedPage?.url === item.url ? seedPage : await options.fetchPage(item.url)
       if (result === seedPage) seedPage = undefined
+      const page = result.page
       node.url = normalizeUrl(result.url)
       if (!isSameHostname(node.url, options.hostname)) {
-        throw new Error('页面跳转到了文档源范围之外')
+        failure = {
+          url: item.url,
+          reason: 'out_of_scope_redirect',
+          message: '页面跳转到了文档库范围之外',
+          retryable: false,
+          redirectUrl: node.url
+        }
       }
-      if (result.status === 404 || result.status === 410) {
-        failure = { url: item.url, status: result.status, missing: true }
-      } else if (result.status < 200 || result.status >= 300 || !result.page) {
-        failure = { url: item.url, status: result.status }
-      } else {
-        node.title = result.page.title
+      if (!failure && (result.status === 404 || result.status === 410)) {
+        failure = {
+          url: item.url,
+          reason: 'not_found',
+          message: `页面返回 HTTP ${result.status}`,
+          retryable: false,
+          statusCode: result.status,
+          missing: true
+        }
+      } else if (!failure && (result.status < 200 || result.status >= 300 || !page)) {
+        failure = {
+          url: item.url,
+          reason: 'http_error',
+          message: result.status ? `页面返回 HTTP ${result.status}` : '页面未返回可解析内容',
+          retryable:
+            result.status === 0 ||
+            result.status === 408 ||
+            result.status === 429 ||
+            result.status >= 500,
+          ...(result.status ? { statusCode: result.status } : {})
+        }
+      } else if (!failure && page) {
+        node.title = page.title
         await options.onDocument({
           url: node.url,
-          title: result.page.title,
-          language: result.page.language,
-          markdown: result.page.markdown,
+          title: page.title,
+          language: page.language,
+          markdown: page.markdown,
           crawledAt: new Date().toISOString(),
           fetchMode: options.fetchMode
         })
         progress.succeeded += 1
         node.status = 'success'
-        for (const link of result.page.links) {
+        for (const link of page.links) {
           if (enqueue(link, item.id)) progress.queued = queue.length
         }
       }
-    } catch {
-      failure = { url: item.url }
+    } catch (error) {
+      failure = {
+        url: item.url,
+        reason: 'request_error',
+        message: error instanceof Error ? error.message : '页面请求失败',
+        retryable: true
+      }
     }
 
     try {
       if (failure) {
+        failures.push(failure)
         progress.failed += 1
         progress.processed += 1
         node.status = 'failed'
@@ -139,5 +170,7 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
     cursor += batch.length
     await Promise.all(batch.map(processPage))
   }
-  return progress
+  const completed = failures.length ? { ...progress, failures } : progress
+  options.onProgress?.(completed)
+  return completed
 }

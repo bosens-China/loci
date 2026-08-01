@@ -11,34 +11,82 @@ import {
   Alert,
   Button,
   Card,
+  Divider,
   Form,
   InputNumber,
   Segmented,
   Skeleton,
   Space,
+  Tabs,
   Typography,
   message
 } from 'antd'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { AppSettings } from '@shared/api'
 import { useAppSettings } from '@renderer/settings-context'
 
+type SavingSection = 'agent' | 'crawl' | 'appearance'
+
+function createAgentConfigs(endpoint: string): Array<{
+  key: string
+  label: string
+  path: string
+  content: string
+}> {
+  const json = (server: Record<string, string>): string =>
+    JSON.stringify({ mcpServers: { loci: server } }, null, 2)
+
+  return [
+    {
+      key: 'codex',
+      label: 'Codex',
+      path: '.codex/config.toml',
+      content: `[mcp_servers.loci]\nurl = "${endpoint}"`
+    },
+    {
+      key: 'cursor',
+      label: 'Cursor',
+      path: '.cursor/mcp.json',
+      content: json({ url: endpoint })
+    },
+    {
+      key: 'claude-code',
+      label: 'Claude Code',
+      path: '.mcp.json',
+      content: json({ type: 'http', url: endpoint })
+    },
+    {
+      key: 'antigravity',
+      label: 'Gemini Antigravity',
+      path: '.agents/mcp_config.json',
+      content: json({ serverUrl: endpoint })
+    }
+  ]
+}
+
 function SettingsPage(): React.JSX.Element {
-  const [form] = Form.useForm<AppSettings>()
+  const [agentForm] = Form.useForm<Pick<AppSettings, 'mcpPort'>>()
+  const [crawlForm] = Form.useForm<Pick<AppSettings, 'httpConcurrency' | 'browserConcurrency'>>()
+  const [appearanceForm] = Form.useForm<Pick<AppSettings, 'theme'>>()
   const { state, loading, save } = useAppSettings()
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving] = useState<SavingSection | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
+  const agentConfigs = createAgentConfigs(state.mcp.endpoint)
 
-  useEffect(() => form.setFieldsValue(state.settings), [form, state.settings])
-
-  const handleSave = (settings: AppSettings): void => {
-    setSaving(true)
-    void save(settings)
-      .then(() => messageApi.success('设置已保存并生效'))
-      .catch((error: unknown) =>
+  const handleSave = (
+    section: SavingSection,
+    settings: Partial<AppSettings>,
+    successMessage: string
+  ): void => {
+    setSaving(section)
+    void save({ ...state.settings, ...settings })
+      .then(() => {
+        messageApi.success(successMessage)
+      })
+      .catch((error: unknown) => {
         messageApi.error(error instanceof Error ? error.message : '设置保存失败')
-      )
-      .finally(() => setSaving(false))
+      })
+      .finally(() => setSaving(null))
   }
 
   return (
@@ -56,21 +104,26 @@ function SettingsPage(): React.JSX.Element {
           <Skeleton active paragraph={{ rows: 6 }} />
         </Card>
       ) : (
-        <Form form={form} layout="vertical" onFinish={handleSave}>
-          <Space direction="vertical" size="middle" className="w-full">
-            <Card
-              title={
-                <Space>
-                  <CloudServerOutlined /> Agent 连接
-                </Space>
-              }
-              extra={
-                state.mcp.running ? (
-                  <Typography.Text type="success">
-                    <CheckCircleOutlined /> 运行中
-                  </Typography.Text>
-                ) : undefined
-              }
+        <Space direction="vertical" size="middle" className="w-full">
+          <Card
+            title={
+              <Space>
+                <CloudServerOutlined /> Agent 连接
+              </Space>
+            }
+            extra={
+              state.mcp.running ? (
+                <Typography.Text type="success">
+                  <CheckCircleOutlined /> 运行中
+                </Typography.Text>
+              ) : undefined
+            }
+          >
+            <Form
+              form={agentForm}
+              layout="vertical"
+              initialValues={{ mcpPort: state.settings.mcpPort }}
+              onFinish={(settings) => handleSave('agent', settings, 'Agent 连接已保存并生效')}
             >
               <Typography.Paragraph type="secondary">
                 MCP 服务只监听本机回环地址。保存新端口后，Agent 连接地址立即切换。
@@ -93,18 +146,71 @@ function SettingsPage(): React.JSX.Element {
               >
                 <InputNumber className="w-full" min={1024} max={65535} addonBefore="127.0.0.1" />
               </Form.Item>
+              <div className="mb-4 flex justify-end">
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={saving === 'agent'}
+                  disabled={saving !== null && saving !== 'agent'}
+                >
+                  保存 Agent 连接
+                </Button>
+              </div>
               <Typography.Text type="secondary">当前地址</Typography.Text>
               <Typography.Paragraph copyable={{ text: state.mcp.endpoint }} className="mb-0! mt-1!">
                 <Typography.Text code>{state.mcp.endpoint}</Typography.Text>
               </Typography.Paragraph>
-            </Card>
 
-            <Card
-              title={
-                <Space>
-                  <DashboardOutlined /> 抓取默认值
-                </Space>
-              }
+              <Divider />
+              <Typography.Title level={5}>添加到编辑器</Typography.Title>
+              <Typography.Paragraph type="secondary">
+                选择你的 Agent，将配置片段合并到对应的项目文件。Codex 使用 TOML，其余为 JSON。
+              </Typography.Paragraph>
+              <Tabs
+                size="small"
+                items={agentConfigs.map((config) => ({
+                  key: config.key,
+                  label: config.label,
+                  children: (
+                    <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <Typography.Text type="secondary" className="font-mono text-xs">
+                          {config.path}
+                        </Typography.Text>
+                        <Typography.Text
+                          copyable={{
+                            text: config.content,
+                            tooltips: ['复制配置', '已复制']
+                          }}
+                        >
+                          复制
+                        </Typography.Text>
+                      </div>
+                      <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs leading-6">
+                        {config.content}
+                      </pre>
+                    </div>
+                  )
+                }))}
+              />
+            </Form>
+          </Card>
+
+          <Card
+            title={
+              <Space>
+                <DashboardOutlined /> 抓取默认值
+              </Space>
+            }
+          >
+            <Form
+              form={crawlForm}
+              layout="vertical"
+              initialValues={{
+                httpConcurrency: state.settings.httpConcurrency,
+                browserConcurrency: state.settings.browserConcurrency
+              }}
+              onFinish={(settings) => handleSave('crawl', settings, '抓取默认值已保存')}
             >
               <Typography.Paragraph type="secondary">
                 文档源没有单独设置并发时，按实际抓取方式使用这里的值。
@@ -125,14 +231,31 @@ function SettingsPage(): React.JSX.Element {
                   <InputNumber min={1} max={32} className="w-full" addonAfter="页" />
                 </Form.Item>
               </div>
-            </Card>
+              <div className="flex justify-end">
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={saving === 'crawl'}
+                  disabled={saving !== null && saving !== 'crawl'}
+                >
+                  保存抓取默认值
+                </Button>
+              </div>
+            </Form>
+          </Card>
 
-            <Card
-              title={
-                <Space>
-                  <BgColorsOutlined /> 外观
-                </Space>
-              }
+          <Card
+            title={
+              <Space>
+                <BgColorsOutlined /> 外观
+              </Space>
+            }
+          >
+            <Form
+              form={appearanceForm}
+              layout="vertical"
+              initialValues={{ theme: state.settings.theme }}
+              onFinish={(settings) => handleSave('appearance', settings, '外观设置已保存')}
             >
               <Form.Item name="theme" label="主题" className="mb-0!">
                 <Segmented
@@ -144,15 +267,19 @@ function SettingsPage(): React.JSX.Element {
                   ]}
                 />
               </Form.Item>
-            </Card>
-
-            <div className="flex justify-end pt-2">
-              <Button type="primary" htmlType="submit" loading={saving}>
-                保存设置
-              </Button>
-            </div>
-          </Space>
-        </Form>
+              <div className="mt-4 flex justify-end">
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={saving === 'appearance'}
+                  disabled={saving !== null && saving !== 'appearance'}
+                >
+                  保存外观
+                </Button>
+              </div>
+            </Form>
+          </Card>
+        </Space>
       )}
     </div>
   )
