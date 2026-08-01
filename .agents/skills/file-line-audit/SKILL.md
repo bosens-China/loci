@@ -6,7 +6,7 @@ compatibility: Requires a bundled binary from scripts/ matching the host OS and 
 allowed-tools: run_shell_command
 metadata:
   author: github.com/bosens-China
-  version: "0.3.0"
+  version: '0.3.0'
 ---
 
 # File Line Audit

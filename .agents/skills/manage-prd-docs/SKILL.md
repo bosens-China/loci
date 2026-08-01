@@ -1,6 +1,6 @@
 ---
 name: manage-prd-docs
-description: "Discuss, materialize, and maintain current product decisions in docs/PRD.md plus temporary feature PRD and Todo workspaces under docs/work/. Use when the user asks to 讨论需求、讨论产品、讨论 PRD、更新需求、落盘, finalize or revise a PRD, plan product work, close a completed requirement, or migrate legacy phased PRD documents. Trigger during discussion, but write only after requirements are mature and the user explicitly authorizes the initial landing."
+description: 'Discuss, materialize, and maintain current product decisions in docs/PRD.md plus temporary feature PRD and Todo workspaces under docs/work/. Use when the user asks to 讨论需求、讨论产品、讨论 PRD、更新需求、落盘, finalize or revise a PRD, plan product work, close a completed requirement, or migrate legacy phased PRD documents. Trigger during discussion, but write only after requirements are mature and the user explicitly authorizes the initial landing.'
 ---
 
 # Manage PRD Docs

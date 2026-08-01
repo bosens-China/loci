@@ -22,7 +22,7 @@ request.interceptors.response.use(
 
     return response
   },
-  (error) => Promise.reject(toRequestError(error)),
+  (error) => Promise.reject(toRequestError(error))
 )
 ```
 
@@ -34,9 +34,7 @@ request.interceptors.response.use(
 - 不把多个接口聚合进 `userApi`、`services` 等对象。
 
 ```ts
-export const createUser = async (
-  params: CreateUserParams,
-): Promise<CreateUserResult> => {
+export const createUser = async (params: CreateUserParams): Promise<CreateUserResult> => {
   const { data } = await request.post<CreateUserResult>('/users', params)
   return data
 }
@@ -61,6 +59,6 @@ const { run: create, loading } = useRequest(createUser, {
   },
   onError: (error) => {
     message.error(error.message)
-  },
+  }
 })
 ```

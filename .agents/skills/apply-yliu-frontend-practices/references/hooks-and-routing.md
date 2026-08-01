@@ -37,11 +37,8 @@ React 示例：
 ```ts
 const { id } = useParams()
 
-const { data, loading, error } = useRequest(
-  () => getPageDetail(id as string),
-  {
-    ready: isValidId(id),
-    refreshDeps: [id],
-  },
-)
+const { data, loading, error } = useRequest(() => getPageDetail(id as string), {
+  ready: isValidId(id),
+  refreshDeps: [id]
+})
 ```

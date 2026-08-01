@@ -1,4 +1,4 @@
 interface:
-  display_name: "Loci 文档助手"
-  short_description: "通过 Loci 浏览、搜索并按需阅读本地同步的可信技术文档"
-  default_prompt: "使用 $use-loci 查找并阅读当前问题所需的官方技术文档。"
+  display_name: 'Loci 文档助手'
+  short_description: '通过 Loci 浏览、搜索并按需阅读本地同步的可信技术文档'
+  default_prompt: '使用 $use-loci 查找并阅读当前问题所需的官方技术文档。'

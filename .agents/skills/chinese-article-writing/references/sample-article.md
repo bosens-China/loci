@@ -74,10 +74,10 @@
 
 ```js
 // 基础用法：直接使用中文
-const msg = t`你好`;
+const msg = t`你好`
 
 // 带上下文的用法
-const status = t("待审核", "金融风控业务状态");
+const status = t('待审核', '金融风控业务状态')
 ```
 
 这样的语法带来几个直接收益：
@@ -115,7 +115,7 @@ const status = t("待审核", "金融风控业务状态");
 简单来说，插件可以在构建阶段动态生成一个模块，例如：
 
 ```ts
-import { t } from "virtual:ai-i18n";
+import { t } from 'virtual:ai-i18n'
 ```
 
 构建工具会拦截该导入，并返回由插件实时生成的运行时代码，其中已经包含：
@@ -140,7 +140,7 @@ import { t } from "virtual:ai-i18n";
 配合 `unplugin-auto-import`，甚至可以省略显式的 import：
 
 ```ts
-t`你好`;
+t`你好`
 ```
 
 从开发体验上看，这已经接近“原生写文案”的感觉。
@@ -151,9 +151,9 @@ t`你好`;
 
 ```ts
 aiI18nPlugin({
-  targetLangs: ["english", "ja", "fr"], // 所有需要生成的目标语言
-  defaultLang: "english", // 默认翻译语言
-});
+  targetLangs: ['english', 'ja', 'fr'], // 所有需要生成的目标语言
+  defaultLang: 'english' // 默认翻译语言
+})
 ```
 
 - 如果未传 `defaultLang`，默认使用 `'english'`
@@ -242,36 +242,36 @@ locales/i18n.json
  * 重点在于架构、数据流和设计思路，而非具体 API 或可运行实现。
  */
 
-import fs from "fs";
-import path from "path";
+import fs from 'fs'
+import path from 'path'
 
 // -------------------------
 // 虚拟模块定义
 // -------------------------
-const VIRTUAL_MODULE_ID = "virtual:ai-i18n";
-const RESOLVED_VIRTUAL_MODULE_ID = "\0" + VIRTUAL_MODULE_ID;
+const VIRTUAL_MODULE_ID = 'virtual:ai-i18n'
+const RESOLVED_VIRTUAL_MODULE_ID = '\0' + VIRTUAL_MODULE_ID
 
 // -------------------------
 // 输出文件与默认语言
 // -------------------------
-const LOCALES_DIR = path.resolve(process.cwd(), "locales");
-const LOCALE_FILE = path.join(LOCALES_DIR, "i18n.json");
-const DEFAULT_LANG = "english";
+const LOCALES_DIR = path.resolve(process.cwd(), 'locales')
+const LOCALE_FILE = path.join(LOCALES_DIR, 'i18n.json')
+const DEFAULT_LANG = 'english'
 
 // -------------------------
 // 类型定义（简化）
 // -------------------------
-type Lang = string;
-type TranslationKey = string;
+type Lang = string
+type TranslationKey = string
 
 interface PendingItem {
-  key: TranslationKey; // 唯一标识：原文#上下文
-  text: string; // 原文
-  context?: string; // 可选上下文信息
+  key: TranslationKey // 唯一标识：原文#上下文
+  text: string // 原文
+  context?: string // 可选上下文信息
 }
 
-type LangMessages = Record<Lang, string>;
-type AllMessages = Record<TranslationKey, LangMessages>;
+type LangMessages = Record<Lang, string>
+type AllMessages = Record<TranslationKey, LangMessages>
 
 // -------------------------
 // 工具函数（伪实现）
@@ -282,8 +282,8 @@ type AllMessages = Record<TranslationKey, LangMessages>;
  * 如果文件不存在，返回空对象
  */
 function loadLocales(): AllMessages {
-  if (!fs.existsSync(LOCALE_FILE)) return {};
-  return JSON.parse(fs.readFileSync(LOCALE_FILE, "utf-8"));
+  if (!fs.existsSync(LOCALE_FILE)) return {}
+  return JSON.parse(fs.readFileSync(LOCALE_FILE, 'utf-8'))
 }
 
 /**
@@ -291,8 +291,8 @@ function loadLocales(): AllMessages {
  * 自动创建目录
  */
 function saveLocales(messages: AllMessages) {
-  if (!fs.existsSync(LOCALES_DIR)) fs.mkdirSync(LOCALES_DIR);
-  fs.writeFileSync(LOCALE_FILE, JSON.stringify(messages, null, 2));
+  if (!fs.existsSync(LOCALES_DIR)) fs.mkdirSync(LOCALES_DIR)
+  fs.writeFileSync(LOCALE_FILE, JSON.stringify(messages, null, 2))
 }
 
 /**
@@ -304,33 +304,33 @@ function scanForI18nTexts(code: string): PendingItem[] {
   // 1. 遍历代码 AST
   // 2. 找到 t`xxx` 或 t('xxx', 'context')
   // 3. 返回 PendingItem 列表
-  return [];
+  return []
 }
 
 // -------------------------
 // 插件主逻辑
 // -------------------------
 export default function aiI18nPlugin(options: {
-  targetLangs?: Lang[]; // 目标语言列表
-  defaultLang?: Lang; // 默认语言
+  targetLangs?: Lang[] // 目标语言列表
+  defaultLang?: Lang // 默认语言
 }) {
-  const defaultLang = options.defaultLang || DEFAULT_LANG;
-  const targetLangs = options.targetLangs || [defaultLang];
+  const defaultLang = options.defaultLang || DEFAULT_LANG
+  const targetLangs = options.targetLangs || [defaultLang]
 
   // 加载已有翻译（人工可校准）
-  const allMessages: AllMessages = loadLocales();
+  const allMessages: AllMessages = loadLocales()
 
   // 待翻译队列，只收集尚未存在的 Key
-  const pendingQueue: Map<string, PendingItem> = new Map();
+  const pendingQueue: Map<string, PendingItem> = new Map()
 
   return {
-    name: "vite-plugin-ai-i18n",
+    name: 'vite-plugin-ai-i18n',
 
     // -------------------------
     // 虚拟模块解析
     // -------------------------
     resolveId(id: string) {
-      if (id === VIRTUAL_MODULE_ID) return RESOLVED_VIRTUAL_MODULE_ID;
+      if (id === VIRTUAL_MODULE_ID) return RESOLVED_VIRTUAL_MODULE_ID
     },
 
     // -------------------------
@@ -353,7 +353,7 @@ export default function aiI18nPlugin(options: {
 
           export function setLang(lang) { currentLang = lang; }
           export function getCurrentLang() { return currentLang; }
-        `;
+        `
       }
     },
 
@@ -362,67 +362,67 @@ export default function aiI18nPlugin(options: {
     // -------------------------
     transform(code: string, id: string) {
       // 忽略 node_modules
-      if (id.includes("node_modules")) return;
+      if (id.includes('node_modules')) return
 
       // 扫描源码，收集 t(...) / t`...` 调用
-      const foundItems = scanForI18nTexts(code);
+      const foundItems = scanForI18nTexts(code)
 
       for (const item of foundItems) {
         // key = 原文 + 可选上下文
-        const key = item.context ? `${item.text}#${item.context}` : item.text;
+        const key = item.context ? `${item.text}#${item.context}` : item.text
 
         // 针对每个目标语言，判断是否已存在翻译
         for (const lang of targetLangs) {
-          const langMessages = allMessages[key] || {};
+          const langMessages = allMessages[key] || {}
           if (!langMessages[lang]) {
             // 尚未存在翻译，加入待翻译队列
-            pendingQueue.set(`${lang}:${key}`, { ...item, key });
+            pendingQueue.set(`${lang}:${key}`, { ...item, key })
           }
         }
       }
 
       // 返回原始代码，不修改
-      return code;
+      return code
     },
 
     // -------------------------
     // 构建结束 / 批量翻译
     // -------------------------
     async buildEnd() {
-      if (!pendingQueue.size) return;
+      if (!pendingQueue.size) return
 
       // 按语言分组
-      const groupedByLang: Record<Lang, PendingItem[]> = {};
+      const groupedByLang: Record<Lang, PendingItem[]> = {}
       for (const [compoundKey, item] of pendingQueue) {
-        const [lang] = compoundKey.split(":");
-        groupedByLang[lang] ||= [];
-        groupedByLang[lang].push(item);
+        const [lang] = compoundKey.split(':')
+        groupedByLang[lang] ||= []
+        groupedByLang[lang].push(item)
       }
 
       // 对每个目标语言调用 LLM 翻译（伪逻辑）
       for (const lang in groupedByLang) {
-        const items = groupedByLang[lang];
+        const items = groupedByLang[lang]
 
         // === 这里可以调用 LLM API ===
         // const results = await llm.translateBatch(items)
 
         // 伪结果示例
-        const results: { key: string; value: string }[] = [];
+        const results: { key: string; value: string }[] = []
 
         // 将翻译结果写入内存缓存
         for (const { key, value } of results) {
-          allMessages[key] ||= {};
-          allMessages[key][lang] = value;
+          allMessages[key] ||= {}
+          allMessages[key][lang] = value
         }
       }
 
       // 持久化到单 JSON 文件，人工可校准
-      saveLocales(allMessages);
+      saveLocales(allMessages)
 
       // 清空队列，避免重复翻译
-      pendingQueue.clear();
-    },
-  };
+      pendingQueue.clear()
+    }
+  }
 }
 ```
 
@@ -438,7 +438,7 @@ export default function aiI18nPlugin(options: {
 切换语言：
 
 ```ts
-setLang("english");
+setLang('english')
 ```
 
 扩展新语言（如日文、法文、韩文）时，只需调整插件配置中的 `targetLangs`，**无需额外维护 Key 或复制文案文件**。
