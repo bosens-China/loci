@@ -20,6 +20,7 @@ import type { CrawledPage } from './crawl/runner'
 import { getHostname } from './crawl/url'
 import type { LociMcpServices } from './mcp/server'
 import { createMcpRuntime, type McpRuntime } from './mcp/runtime'
+import { importAgentClient } from './agent-import'
 import { registerSingleInstance } from './single-instance'
 import { createAppTray } from './tray'
 import { createAppWindow } from './app-window'
@@ -82,6 +83,9 @@ if (isPrimaryInstance)
     ipcMain.handle('settings:get', () => requireMcpRuntime().getState())
     ipcMain.handle('settings:save', (_event, settings: AppSettings) =>
       requireMcpRuntime().save(settings)
+    )
+    ipcMain.handle('agents:import', (_event, client: unknown) =>
+      importAgentClient(client, requireMcpRuntime().getState().mcp.endpoint)
     )
 
     restoreScheduledCrawls(requireDatabase().listSources())

@@ -29,7 +29,9 @@ const api: LociApi = {
   deleteSource: (id) => ipcRenderer.invoke('sources:delete', id) as Promise<void>,
   getSettings: () => ipcRenderer.invoke('settings:get') as ReturnType<LociApi['getSettings']>,
   saveSettings: (settings) =>
-    ipcRenderer.invoke('settings:save', settings) as ReturnType<LociApi['saveSettings']>
+    ipcRenderer.invoke('settings:save', settings) as ReturnType<LociApi['saveSettings']>,
+  importAgentClient: (client) =>
+    ipcRenderer.invoke('agents:import', client) as ReturnType<LociApi['importAgentClient']>,
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -22,7 +22,7 @@ import {
   message
 } from 'antd'
 import { useState } from 'react'
-import type { AppSettings } from '@shared/api'
+import type { AgentClient, AppSettings } from '@shared/api'
 import { useAppSettings } from '@renderer/settings-context'
 
 type SavingSection = 'agent' | 'crawl' | 'appearance'
@@ -32,6 +32,7 @@ function createAgentConfigs(endpoint: string): Array<{
   label: string
   path: string
   content: string
+  client?: AgentClient
 }> {
   const json = (server: Record<string, string>): string =>
     JSON.stringify({ mcpServers: { loci: server } }, null, 2)
@@ -40,25 +41,42 @@ function createAgentConfigs(endpoint: string): Array<{
     {
       key: 'codex',
       label: 'Codex',
-      path: '.codex/config.toml',
-      content: `[mcp_servers.loci]\nurl = "${endpoint}"`
+      path: '~/.codex/config.toml',
+      content: `[mcp_servers.loci]\nurl = "${endpoint}"`,
+      client: 'codex'
     },
     {
       key: 'cursor',
       label: 'Cursor',
-      path: '.cursor/mcp.json',
-      content: json({ url: endpoint })
+      path: '~/.cursor/mcp.json',
+      content: json({ url: endpoint }),
+      client: 'cursor'
+    },
+    {
+      key: 'vscode',
+      label: 'VS Code',
+      path: 'ÓÃ»§ÅäÖÃ mcp.json',
+      content: JSON.stringify({ servers: { loci: { type: 'http', url: endpoint } } }, null, 2),
+      client: 'vscode'
     },
     {
       key: 'claude-code',
       label: 'Claude Code',
       path: '.mcp.json',
-      content: json({ type: 'http', url: endpoint })
+      content: json({ type: 'http', url: endpoint }),
+      client: 'claude-code'
+    },
+    {
+      key: 'gemini-cli',
+      label: 'Gemini CLI',
+      path: '~/.gemini/settings.json',
+      content: json({ httpUrl: endpoint }),
+      client: 'gemini-cli'
     },
     {
       key: 'antigravity',
-      label: 'Gemini Antigravity',
-      path: '.agents/mcp_config.json',
+      label: 'Google Antigravity',
+      path: '~/.gemini/config/mcp_config.json',
       content: json({ serverUrl: endpoint })
     }
   ]
@@ -70,6 +88,7 @@ function SettingsPage(): React.JSX.Element {
   const [appearanceForm] = Form.useForm<Pick<AppSettings, 'theme'>>()
   const { state, loading, save } = useAppSettings()
   const [saving, setSaving] = useState<SavingSection | null>(null)
+  const [importing, setImporting] = useState<AgentClient | null>(null)
   const [messageApi, contextHolder] = message.useMessage()
   const agentConfigs = createAgentConfigs(state.mcp.endpoint)
 
@@ -84,18 +103,29 @@ function SettingsPage(): React.JSX.Element {
         messageApi.success(successMessage)
       })
       .catch((error: unknown) => {
-        messageApi.error(error instanceof Error ? error.message : 'è®¾ç½®ä¿å­˜å¤±è´¥')
+        messageApi.error(error instanceof Error ? error.message : 'ÉèÖÃ±£´æÊ§°Ü')
       })
       .finally(() => setSaving(null))
+  }
+
+  const handleImport = (client: AgentClient): void => {
+    setImporting(client)
+    void window.api
+      .importAgentClient(client)
+      .then((result) => messageApi.success(result.message))
+      .catch((error: unknown) => {
+        messageApi.error(error instanceof Error ? error.message : 'Agent µ¼ÈëÊ§°Ü')
+      })
+      .finally(() => setImporting(null))
   }
 
   return (
     <div className="mx-auto w-full max-w-3xl">
       {contextHolder}
       <div className="mb-6">
-        <Typography.Title level={2}>è®¾ç½®</Typography.Title>
+        <Typography.Title level={2}>ÉèÖÃ</Typography.Title>
         <Typography.Paragraph type="secondary">
-          ç®¡ç†æœ¬æœº Agent è¿æ¥å’Œ Loci çš„æ˜¾ç¤ºæ–¹å¼ã€‚
+          ¹ÜÀí±¾»ú Agent Á¬½ÓºÍ Loci µÄÏÔÊ¾·½Ê½¡£
         </Typography.Paragraph>
       </div>
 
@@ -108,13 +138,13 @@ function SettingsPage(): React.JSX.Element {
           <Card
             title={
               <Space>
-                <CloudServerOutlined /> Agent è¿æ¥
+                <CloudServerOutlined /> Agent Á¬½Ó
               </Space>
             }
             extra={
               state.mcp.running ? (
                 <Typography.Text type="success">
-                  <CheckCircleOutlined /> è¿è¡Œä¸­
+                  <CheckCircleOutlined /> ÔËĞĞÖĞ
                 </Typography.Text>
               ) : undefined
             }
@@ -123,24 +153,24 @@ function SettingsPage(): React.JSX.Element {
               form={agentForm}
               layout="vertical"
               initialValues={{ mcpPort: state.settings.mcpPort }}
-              onFinish={(settings) => handleSave('agent', settings, 'Agent è¿æ¥å·²ä¿å­˜å¹¶ç”Ÿæ•ˆ')}
+              onFinish={(settings) => handleSave('agent', settings, 'Agent Á¬½ÓÒÑ±£´æ²¢ÉúĞ§')}
             >
               <Typography.Paragraph type="secondary">
-                MCP æœåŠ¡åªç›‘å¬æœ¬æœºå›ç¯åœ°å€ã€‚ä¿å­˜æ–°ç«¯å£åï¼ŒAgent è¿æ¥åœ°å€ç«‹å³åˆ‡æ¢ã€‚
+                MCP ·şÎñÖ»¼àÌı±¾»ú»Ø»·µØÖ·¡£±£´æĞÂ¶Ë¿Úºó£¬Agent Á¬½ÓµØÖ·Á¢¼´ÇĞ»»¡£
               </Typography.Paragraph>
               {state.mcp.error && (
                 <Alert className="mb-4" type="error" showIcon message={state.mcp.error} />
               )}
               <Form.Item
                 name="mcpPort"
-                label="MCP ç«¯å£"
+                label="MCP ¶Ë¿Ú"
                 rules={[
-                  { required: true, message: 'è¯·è¾“å…¥ç«¯å£å·' },
+                  { required: true, message: 'ÇëÊäÈë¶Ë¿ÚºÅ' },
                   {
                     type: 'number',
                     min: 1024,
                     max: 65535,
-                    message: 'è¯·è¾“å…¥ 1024 åˆ° 65535 ä¹‹é—´çš„ç«¯å£'
+                    message: 'ÇëÊäÈë 1024 µ½ 65535 Ö®¼äµÄ¶Ë¿Ú'
                   }
                 ]}
               >
@@ -153,45 +183,64 @@ function SettingsPage(): React.JSX.Element {
                   loading={saving === 'agent'}
                   disabled={saving !== null && saving !== 'agent'}
                 >
-                  ä¿å­˜ Agent è¿æ¥
+                  ±£´æ Agent Á¬½Ó
                 </Button>
               </div>
-              <Typography.Text type="secondary">å½“å‰åœ°å€</Typography.Text>
+              <Typography.Text type="secondary">µ±Ç°µØÖ·</Typography.Text>
               <Typography.Paragraph copyable={{ text: state.mcp.endpoint }} className="mb-0! mt-1!">
                 <Typography.Text code>{state.mcp.endpoint}</Typography.Text>
               </Typography.Paragraph>
 
               <Divider />
-              <Typography.Title level={5}>æ·»åŠ åˆ°ç¼–è¾‘å™¨</Typography.Title>
+              <Typography.Title level={5}>Ìí¼Óµ½±à¼­Æ÷</Typography.Title>
               <Typography.Paragraph type="secondary">
-                é€‰æ‹©ä½ çš„ Agentï¼Œå°†é…ç½®ç‰‡æ®µåˆå¹¶åˆ°å¯¹åº”çš„é¡¹ç›®æ–‡ä»¶ã€‚Codex ä½¿ç”¨ TOMLï¼Œå…¶ä½™ä¸º JSONã€‚
+                Ò»¼üµ¼Èë»áĞ´ÈëÓÃ»§ÅäÖÃ£»Ò²¿ÉÒÔ¸´ÖÆÏÂ·½Æ¬¶ÎÊÖ¶¯ÅäÖÃ¡£
               </Typography.Paragraph>
               <Tabs
                 size="small"
-                items={agentConfigs.map((config) => ({
-                  key: config.key,
-                  label: config.label,
-                  children: (
-                    <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] p-4">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <Typography.Text type="secondary" className="font-mono text-xs">
-                          {config.path}
-                        </Typography.Text>
-                        <Typography.Text
-                          copyable={{
-                            text: config.content,
-                            tooltips: ['å¤åˆ¶é…ç½®', 'å·²å¤åˆ¶']
-                          }}
-                        >
-                          å¤åˆ¶
-                        </Typography.Text>
+                items={agentConfigs.map((config) => {
+                  const client = config.client
+                  return {
+                    key: config.key,
+                    label: config.label,
+                    children: (
+                      <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] p-4">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <Typography.Text type="secondary" className="font-mono text-xs">
+                            {config.path}
+                          </Typography.Text>
+                          <Space size="small">
+                            {client && (
+                              <Button
+                                size="small"
+                                type="primary"
+                                loading={importing === client}
+                                disabled={importing !== null && importing !== client}
+                                onClick={() => handleImport(client)}
+                              >
+                                Ò»¼üµ¼Èë
+                              </Button>
+                            )}
+                            {!client && (
+                              <Typography.Text type="secondary">ÊÖ¶¯ÅäÖÃ</Typography.Text>
+                            )}
+                            <Typography.Text
+                              copyable={{
+                                text: config.content,
+                                tooltips: ['¸´ÖÆÅäÖÃ', 'ÒÑ¸´ÖÆ']
+                              }}
+                            >
+                              ¸´ÖÆ
+                            </Typography.Text>
+                          </Space>
+                        </div>
+                        <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs leading-6">
+                          {config.content}
+                        </pre>
                       </div>
-                      <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs leading-6">
-                        {config.content}
-                      </pre>
-                    </div>
-                  )
-                }))}
+                    )
+                  }
+                })}
               />
             </Form>
           </Card>
@@ -199,7 +248,7 @@ function SettingsPage(): React.JSX.Element {
           <Card
             title={
               <Space>
-                <DashboardOutlined /> æŠ“å–é»˜è®¤å€¼
+                <DashboardOutlined /> ×¥È¡Ä¬ÈÏÖµ
               </Space>
             }
           >
@@ -210,25 +259,25 @@ function SettingsPage(): React.JSX.Element {
                 httpConcurrency: state.settings.httpConcurrency,
                 browserConcurrency: state.settings.browserConcurrency
               }}
-              onFinish={(settings) => handleSave('crawl', settings, 'æŠ“å–é»˜è®¤å€¼å·²ä¿å­˜')}
+              onFinish={(settings) => handleSave('crawl', settings, '×¥È¡Ä¬ÈÏÖµÒÑ±£´æ')}
             >
               <Typography.Paragraph type="secondary">
-                æ–‡æ¡£æºæ²¡æœ‰å•ç‹¬è®¾ç½®å¹¶å‘æ—¶ï¼ŒæŒ‰å®é™…æŠ“å–æ–¹å¼ä½¿ç”¨è¿™é‡Œçš„å€¼ã€‚
+                ÎÄµµÔ´Ã»ÓĞµ¥¶ÀÉèÖÃ²¢·¢Ê±£¬°´Êµ¼Ê×¥È¡·½Ê½Ê¹ÓÃÕâÀïµÄÖµ¡£
               </Typography.Paragraph>
               <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
                 <Form.Item
                   name="httpConcurrency"
-                  label="HTTP å¹¶å‘"
+                  label="HTTP ²¢·¢"
                   rules={[{ required: true, type: 'number', min: 1, max: 32 }]}
                 >
-                  <InputNumber min={1} max={32} className="w-full" addonAfter="é¡µ" />
+                  <InputNumber min={1} max={32} className="w-full" addonAfter="Ò³" />
                 </Form.Item>
                 <Form.Item
                   name="browserConcurrency"
-                  label="æµè§ˆå™¨å¹¶å‘"
+                  label="ä¯ÀÀÆ÷²¢·¢"
                   rules={[{ required: true, type: 'number', min: 1, max: 32 }]}
                 >
-                  <InputNumber min={1} max={32} className="w-full" addonAfter="é¡µ" />
+                  <InputNumber min={1} max={32} className="w-full" addonAfter="Ò³" />
                 </Form.Item>
               </div>
               <div className="flex justify-end">
@@ -238,7 +287,7 @@ function SettingsPage(): React.JSX.Element {
                   loading={saving === 'crawl'}
                   disabled={saving !== null && saving !== 'crawl'}
                 >
-                  ä¿å­˜æŠ“å–é»˜è®¤å€¼
+                  ±£´æ×¥È¡Ä¬ÈÏÖµ
                 </Button>
               </div>
             </Form>
@@ -247,7 +296,7 @@ function SettingsPage(): React.JSX.Element {
           <Card
             title={
               <Space>
-                <BgColorsOutlined /> å¤–è§‚
+                <BgColorsOutlined /> Íâ¹Û
               </Space>
             }
           >
@@ -255,15 +304,15 @@ function SettingsPage(): React.JSX.Element {
               form={appearanceForm}
               layout="vertical"
               initialValues={{ theme: state.settings.theme }}
-              onFinish={(settings) => handleSave('appearance', settings, 'å¤–è§‚è®¾ç½®å·²ä¿å­˜')}
+              onFinish={(settings) => handleSave('appearance', settings, 'Íâ¹ÛÉèÖÃÒÑ±£´æ')}
             >
-              <Form.Item name="theme" label="ä¸»é¢˜" className="mb-0!">
+              <Form.Item name="theme" label="Ö÷Ìâ" className="mb-0!">
                 <Segmented
                   block
                   options={[
-                    { value: 'auto', label: 'è·Ÿéšç³»ç»Ÿ', icon: <DesktopOutlined /> },
-                    { value: 'light', label: 'æµ…è‰²', icon: <BulbOutlined /> },
-                    { value: 'dark', label: 'æ·±è‰²', icon: <MoonOutlined /> }
+                    { value: 'auto', label: '¸úËæÏµÍ³', icon: <DesktopOutlined /> },
+                    { value: 'light', label: 'Ç³É«', icon: <BulbOutlined /> },
+                    { value: 'dark', label: 'ÉîÉ«', icon: <MoonOutlined /> }
                   ]}
                 />
               </Form.Item>
@@ -274,11 +323,12 @@ function SettingsPage(): React.JSX.Element {
                   loading={saving === 'appearance'}
                   disabled={saving !== null && saving !== 'appearance'}
                 >
-                  ä¿å­˜å¤–è§‚
+                  ±£´æÍâ¹Û
                 </Button>
               </div>
             </Form>
           </Card>
+
         </Space>
       )}
     </div>

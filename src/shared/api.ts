@@ -20,6 +20,13 @@ export interface AppSettingsState {
   mcp: McpServerStatus
 }
 
+export type AgentClient = 'codex' | 'cursor' | 'vscode' | 'claude-code' | 'gemini-cli'
+
+export interface AgentImportResult {
+  client: AgentClient
+  message: string
+}
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   mcpPort: 37373,
   theme: 'auto',
@@ -125,4 +132,5 @@ export interface LociApi {
   deleteSource: (id: string) => Promise<void>
   getSettings: () => Promise<AppSettingsState>
   saveSettings: (settings: AppSettings) => Promise<AppSettingsState>
+  importAgentClient: (client: AgentClient) => Promise<AgentImportResult>
 }
