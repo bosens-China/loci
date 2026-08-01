@@ -26,6 +26,7 @@ import { registerSingleInstance } from './single-instance'
 import { createAppTray } from './tray'
 import { exportBackupFile, selectBackupFile } from './data-transfer'
 import { createAppWindow } from './app-window'
+import { getOpenAtLogin, setOpenAtLogin, shouldStartHidden } from './open-at-login'
 
 let database: LociDatabase | undefined
 let mainWindow: BrowserWindow | undefined
@@ -37,8 +38,8 @@ const crawlStates = new Map<string, CrawlRunState>()
 const scheduledCrawls = new Map<string, Cron>()
 const isPrimaryInstance = registerSingleInstance(() => mainWindow)
 
-function createWindow(): void {
-  mainWindow = createAppWindow(() => isQuitting)
+function createWindow(showOnReady = true): void {
+  mainWindow = createAppWindow(() => isQuitting, showOnReady)
 }
 
 // This method will be called when Electron has finished
@@ -86,6 +87,11 @@ if (isPrimaryInstance)
     ipcMain.handle('settings:save', (_event, settings: AppSettings) =>
       requireMcpRuntime().save(settings)
     )
+    ipcMain.handle('app:open-at-login:get', getOpenAtLogin)
+    ipcMain.handle('app:open-at-login:set', (_event, enabled: unknown) => {
+      if (typeof enabled !== 'boolean') throw new Error('开机自启设置无效')
+      return setOpenAtLogin(enabled)
+    })
     ipcMain.handle('agents:import', (_event, client: unknown) =>
       importAgentClient(client, requireMcpRuntime().getState().mcp.endpoint)
     )
@@ -95,21 +101,15 @@ if (isPrimaryInstance)
     ipcMain.handle('data:import', () => importLocalData())
 
     restoreScheduledCrawls(requireDatabase().listSources())
-    createWindow()
+    createWindow(!shouldStartHidden())
 
     app.on('activate', function () {
       // On macOS it's common to re-create a window in the app when the
       // dock icon is clicked and there are no other windows open.
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      else mainWindow?.show()
     })
   })
-
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform === 'linux') app.quit()
-})
 
 app.on('before-quit', () => {
   isQuitting = true

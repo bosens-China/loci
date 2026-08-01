@@ -3,7 +3,8 @@ import {
   CloudServerOutlined,
   CodeOutlined,
   DashboardOutlined,
-  HddOutlined
+  HddOutlined,
+  SettingOutlined
 } from '@ant-design/icons'
 import { Card, Skeleton, Tabs, Typography, message } from 'antd'
 import { useState } from 'react'
@@ -14,6 +15,7 @@ import { AboutSettingsCard } from './settings/AboutSettingsCard'
 import { AgentSettingsCard } from './settings/AgentSettingsCard'
 import { AppearanceSettingsCard } from './settings/AppearanceSettingsCard'
 import { CrawlSettingsCard } from './settings/CrawlSettingsCard'
+import { GeneralSettingsCard } from './settings/GeneralSettingsCard'
 
 type SavingSection = 'agent' | 'crawl' | 'appearance'
 
@@ -21,7 +23,7 @@ function SettingsPage(): React.JSX.Element {
   const { state, loading, save } = useAppSettings()
   const [saving, setSaving] = useState<SavingSection | null>(null)
   const [importing, setImporting] = useState<AgentClient | null>(null)
-  const [activeTab, setActiveTab] = useState('agent')
+  const [activeTab, setActiveTab] = useState('general')
   const [messageApi, contextHolder] = message.useMessage()
 
   const handleSavePartial = (
@@ -50,6 +52,15 @@ function SettingsPage(): React.JSX.Element {
   }
 
   const tabItems = [
+    {
+      key: 'general',
+      label: (
+        <span className="flex items-center gap-2">
+          <SettingOutlined /> 通用设置
+        </span>
+      ),
+      children: <GeneralSettingsCard />
+    },
     {
       key: 'agent',
       label: (
@@ -131,7 +142,7 @@ function SettingsPage(): React.JSX.Element {
       <div className="mb-6">
         <Typography.Title level={2}>系统设置</Typography.Title>
         <Typography.Paragraph type="secondary">
-          管理本机 Agent 连接节点、抓取并发默认参数与应用显示外观。
+          管理应用启动、本机 Agent 连接、抓取默认参数与显示外观。
         </Typography.Paragraph>
       </div>
 

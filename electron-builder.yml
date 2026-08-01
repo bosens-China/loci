@@ -16,6 +16,8 @@ win:
   executableName: loci
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always

@@ -20,6 +20,11 @@ export interface AppSettingsState {
   mcp: McpServerStatus
 }
 
+export interface OpenAtLoginState {
+  supported: boolean
+  enabled: boolean
+}
+
 export type AgentClient = 'codex' | 'cursor' | 'vscode' | 'claude-code' | 'gemini-cli'
 
 export interface AgentImportResult {
@@ -137,6 +142,8 @@ export interface LociApi {
   deleteSource: (id: string) => Promise<void>
   getSettings: () => Promise<AppSettingsState>
   saveSettings: (settings: AppSettings) => Promise<AppSettingsState>
+  getOpenAtLogin: () => Promise<OpenAtLoginState>
+  setOpenAtLogin: (enabled: boolean) => Promise<OpenAtLoginState>
   importAgentClient: (client: AgentClient) => Promise<AgentImportResult>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>

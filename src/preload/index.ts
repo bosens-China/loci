@@ -30,6 +30,10 @@ const api: LociApi = {
   getSettings: () => ipcRenderer.invoke('settings:get') as ReturnType<LociApi['getSettings']>,
   saveSettings: (settings) =>
     ipcRenderer.invoke('settings:save', settings) as ReturnType<LociApi['saveSettings']>,
+  getOpenAtLogin: () =>
+    ipcRenderer.invoke('app:open-at-login:get') as ReturnType<LociApi['getOpenAtLogin']>,
+  setOpenAtLogin: (enabled) =>
+    ipcRenderer.invoke('app:open-at-login:set', enabled) as ReturnType<LociApi['setOpenAtLogin']>,
   importAgentClient: (client) =>
     ipcRenderer.invoke('agents:import', client) as ReturnType<LociApi['importAgentClient']>,
   exportData: () => ipcRenderer.invoke('data:export') as ReturnType<LociApi['exportData']>,

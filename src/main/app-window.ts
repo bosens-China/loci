@@ -5,7 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import { registerDevToolsShortcut } from './window-shortcuts'
 
 /** 创建主窗口并集中管理窗口级行为。 */
-export function createAppWindow(isQuitting: () => boolean): BrowserWindow {
+export function createAppWindow(isQuitting: () => boolean, showOnReady = true): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -21,9 +21,11 @@ export function createAppWindow(isQuitting: () => boolean): BrowserWindow {
   window.removeMenu()
   registerDevToolsShortcut(window)
 
-  window.on('ready-to-show', () => window.show())
+  window.on('ready-to-show', () => {
+    if (showOnReady) window.show()
+  })
   window.on('close', (event) => {
-    if (isQuitting() || process.platform === 'linux') return
+    if (isQuitting()) return
     event.preventDefault()
     window.hide()
   })
