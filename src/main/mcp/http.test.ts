@@ -1,11 +1,11 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { DocumentRecord, DocumentSource } from '../../shared/api'
+import type { CrawlProgress, CrawlRunState, DocumentRecord, DocumentSource } from '../../shared/api'
 import { startMcpHttpServer, type McpHttpServer } from './http'
-import type { DocHubMcpServices } from './server'
+import type { LociMcpServices } from './server'
 
 const source: DocumentSource = {
-  id: 'doc-vue',
+  id: 'lib-vue',
   name: 'Vue 中文文档',
   url: 'https://cn.vuejs.org/guide/',
   mode: 'http',
@@ -27,7 +27,15 @@ const document: DocumentRecord = {
   folder: 'guide / essentials',
   language: 'zh-CN',
   updatedAt: '刚刚',
-  content: '# 响应式基础\n\n读取属性时进行依赖追踪。'
+  content: `# 响应式基础\n\n${'读取属性时进行依赖追踪。'.repeat(180)}\n\n## 注意事项\n\n避免直接替换对象。`
+}
+
+const completedProgress: CrawlProgress = {
+  queued: 1,
+  processed: 1,
+  succeeded: 1,
+  failed: 0,
+  limitReached: false
 }
 
 describe('MCP HTTP server', () => {
@@ -39,68 +47,188 @@ describe('MCP HTTP server', () => {
     await httpServer?.close()
   })
 
-  it('supports discovery, tree browsing, search and file reading over HTTP', async () => {
+  it('supports the directory-first workflow, section reading and progress notifications', async () => {
     httpServer = await startMcpHttpServer(0, createServices())
-    client = new Client({ name: 'doc-hub-test', version: '1.0.0' })
-    await client.connect(new StreamableHTTPClientTransport(new URL(httpServer.endpoint)))
+    client = await connect(httpServer)
 
     const tools = await client.listTools()
     expect(tools.tools.map((tool) => tool.name)).toEqual([
-      'doc_hub_add_document',
-      'doc_hub_sync_documents',
-      'doc_hub_list_documents',
-      'doc_hub_get_tree',
-      'doc_hub_read_files',
-      'doc_hub_search',
-      'doc_hub_delete_document'
+      'loci_add_library',
+      'loci_sync_libraries',
+      'loci_get_sync_status',
+      'loci_list_libraries',
+      'loci_get_library_tree',
+      'loci_read_files',
+      'loci_search_files',
+      'loci_delete_library'
     ])
+    expect(tools.tools.every((tool) => tool.outputSchema)).toBe(true)
 
-    const listed = await client.callTool({ name: 'doc_hub_list_documents', arguments: {} })
+    const listed = await client.callTool({ name: 'loci_list_libraries', arguments: {} })
     expect(listed.structuredContent).toMatchObject({ total_count: 1 })
+    expect(listed.content[0]).toMatchObject({ type: 'text' })
 
     const added = await client.callTool({
-      name: 'doc_hub_add_document',
+      name: 'loci_add_library',
       arguments: { url: source.url }
     })
-    expect(added.structuredContent).toMatchObject({ created: false })
+    expect(added.structuredContent).toMatchObject({ created: false, status: 'idle' })
 
     const tree = await client.callTool({
-      name: 'doc_hub_get_tree',
-      arguments: { document_id: source.id }
+      name: 'loci_get_library_tree',
+      arguments: { library_id: source.id, depth: 2 }
     })
     expect(tree.structuredContent).toMatchObject({
-      nodes: [{ title: 'guide', children: [{ title: 'essentials' }] }]
+      nodes: [{ id: `folder:${source.id}:guide`, children: [{ title: 'essentials' }] }]
+    })
+    const expanded = await client.callTool({
+      name: 'loci_get_library_tree',
+      arguments: { library_id: source.id, parent_id: `folder:${source.id}:guide/essentials` }
+    })
+    expect(expanded.structuredContent).toMatchObject({
+      nodes: [{ id: document.id, readable: true }]
     })
 
     const searched = await client.callTool({
-      name: 'doc_hub_search',
+      name: 'loci_search_files',
       arguments: { query: '依赖追踪' }
     })
     expect(searched.structuredContent).toMatchObject({
-      items: [{ file_id: document.id, section_title: '响应式基础' }]
+      items: [{ file_id: document.id, section_id: `${document.id}:section:0` }]
     })
 
-    const read = await client.callTool({
-      name: 'doc_hub_read_files',
-      arguments: { file_ids: [document.id] }
+    const firstRead = await client.callTool({
+      name: 'loci_read_files',
+      arguments: {
+        file_ids: [document.id],
+        section_id: `${document.id}:section:0`,
+        max_chars_per_file: 1000
+      }
     })
-    expect(read.structuredContent).toMatchObject({
-      files: [{ id: document.id, source_url: document.url }]
+    expect(firstRead.structuredContent).toMatchObject({
+      files: [{ id: document.id, offset: 0, truncated: true }]
     })
+    expect(firstRead.content[0]).toMatchObject({ type: 'text' })
+    const firstFile = getFirstFile(firstRead.structuredContent)
+    expect(firstFile.content).toContain('依赖追踪')
+    expect(firstFile.next_offset).toBeGreaterThan(0)
 
-    const synced = await client.callTool({
-      name: 'doc_hub_sync_documents',
-      arguments: { document_ids: [source.id] }
+    const secondRead = await client.callTool({
+      name: 'loci_read_files',
+      arguments: {
+        file_ids: [document.id],
+        section_id: `${document.id}:section:0`,
+        offset: firstFile.next_offset,
+        max_chars_per_file: 1000
+      }
     })
+    expect(getFirstFile(secondRead.structuredContent).offset).toBe(firstFile.next_offset)
+
+    const progressEvents: number[] = []
+    const synced = await client.callTool(
+      {
+        name: 'loci_sync_libraries',
+        arguments: { library_ids: [source.id], wait_for_completion: true }
+      },
+      {
+        onprogress: (progress) => progressEvents.push(progress.progress),
+        resetTimeoutOnProgress: true
+      }
+    )
     expect(synced.structuredContent).toMatchObject({
-      items: [{ document_id: source.id, status: 'completed' }]
+      items: [{ library_id: source.id, status: 'completed' }]
     })
+    expect(progressEvents).toEqual([0, 1])
 
     const deleted = await client.callTool({
-      name: 'doc_hub_delete_document',
-      arguments: { document_id: source.id }
+      name: 'loci_delete_library',
+      arguments: { library_id: source.id }
     })
-    expect(deleted.structuredContent).toMatchObject({ deleted: true })
+    expect(deleted.structuredContent).toEqual({ deleted: true, library_id: source.id })
+  })
+
+  it('returns immediately and prevents duplicate background syncs', async () => {
+    let crawlCalls = 0
+    let active = false
+    let resolveCrawl: ((progress: CrawlProgress) => void) | undefined
+    const services: LociMcpServices = {
+      ...createServices(),
+      crawlSource: async () => {
+        crawlCalls += 1
+        active = true
+        return new Promise((resolve) => {
+          resolveCrawl = resolve
+        })
+      },
+      isCrawling: () => active,
+      getCrawlState: () => (active ? runningState() : undefined)
+    }
+    httpServer = await startMcpHttpServer(0, services)
+    client = await connect(httpServer)
+
+    const first = await client.callTool({
+      name: 'loci_sync_libraries',
+      arguments: { library_ids: [source.id] }
+    })
+    const duplicate = await client.callTool({
+      name: 'loci_sync_libraries',
+      arguments: { library_ids: [source.id, source.id] }
+    })
+    const status = await client.callTool({
+      name: 'loci_get_sync_status',
+      arguments: { library_ids: [source.id] }
+    })
+
+    expect(first.structuredContent).toMatchObject({ items: [{ status: 'syncing' }] })
+    expect(duplicate.structuredContent).toMatchObject({ items: [{ status: 'syncing' }] })
+    expect(status.structuredContent).toMatchObject({ items: [{ status: 'syncing' }] })
+    expect(crawlCalls).toBe(1)
+    active = false
+    resolveCrawl?.(completedProgress)
+    await Promise.resolve()
+  })
+
+  it('exposes structured failure details and retry guidance', async () => {
+    const failedProgress: CrawlProgress = {
+      queued: 1,
+      processed: 1,
+      succeeded: 0,
+      failed: 1,
+      limitReached: false,
+      failures: [
+        {
+          url: 'https://cn.vuejs.org/missing',
+          reason: 'http_error',
+          message: '页面返回 HTTP 503',
+          retryable: true,
+          statusCode: 503
+        }
+      ]
+    }
+    httpServer = await startMcpHttpServer(0, {
+      ...createServices(),
+      crawlSource: async (_id, onProgress) => {
+        onProgress?.(failedProgress)
+        return failedProgress
+      },
+      getCrawlState: () => ({ ...runningState(), progress: failedProgress, running: false })
+    })
+    client = await connect(httpServer)
+
+    const synced = await client.callTool({
+      name: 'loci_sync_libraries',
+      arguments: { library_ids: [source.id], wait_for_completion: true }
+    })
+    expect(synced.structuredContent).toMatchObject({
+      items: [
+        {
+          status: 'completed_with_errors',
+          progress: {
+            failures: [{ reason: 'http_error', status_code: 503, retryable: true }]
+          }
+        }
+      ]
+    })
   })
 
   it('rejects non-local browser origins', async () => {
@@ -112,81 +240,57 @@ describe('MCP HTTP server', () => {
     })
     expect(response.status).toBe(403)
   })
-
-  it('reports an active crawl without starting duplicate work', async () => {
-    let crawlCalls = 0
-    httpServer = await startMcpHttpServer(0, {
-      ...createServices(),
-      isCrawling: () => true,
-      crawlSource: async () => {
-        crawlCalls += 1
-        throw new Error('不应重复抓取')
-      }
-    })
-    client = new Client({ name: 'doc-hub-test', version: '1.0.0' })
-    await client.connect(new StreamableHTTPClientTransport(new URL(httpServer.endpoint)))
-
-    const added = await client.callTool({
-      name: 'doc_hub_add_document',
-      arguments: { url: source.url }
-    })
-    expect(added.structuredContent).toMatchObject({ document: { status: 'syncing' } })
-
-    const synced = await client.callTool({
-      name: 'doc_hub_sync_documents',
-      arguments: { document_ids: [source.id, source.id] }
-    })
-    expect(synced.structuredContent).toMatchObject({
-      items: [{ document_id: source.id, status: 'syncing' }]
-    })
-    expect(crawlCalls).toBe(0)
-  })
-
-  it('makes partial crawl failures explicit', async () => {
-    httpServer = await startMcpHttpServer(0, {
-      ...createServices(),
-      crawlSource: async () => ({
-        queued: 3,
-        processed: 3,
-        succeeded: 2,
-        failed: 1,
-        limitReached: false
-      })
-    })
-    client = new Client({ name: 'doc-hub-test', version: '1.0.0' })
-    await client.connect(new StreamableHTTPClientTransport(new URL(httpServer.endpoint)))
-
-    const synced = await client.callTool({
-      name: 'doc_hub_sync_documents',
-      arguments: { document_ids: [source.id] }
-    })
-    expect(synced.structuredContent).toMatchObject({
-      items: [
-        {
-          document_id: source.id,
-          status: 'completed_with_errors',
-          warning: '1 个页面抓取失败'
-        }
-      ]
-    })
-    expect(synced.content).toEqual([{ type: 'text', text: `${source.id}: completed_with_errors` }])
-  })
 })
 
-function createServices(): DocHubMcpServices {
+function createServices(): LociMcpServices {
   return {
     listSources: () => [source],
     listDocuments: () => [document],
     searchDocuments: () => [document],
     createSource: () => source,
-    crawlSource: async () => ({
-      queued: 1,
-      processed: 1,
-      succeeded: 1,
-      failed: 0,
-      limitReached: false
-    }),
+    crawlSource: async (_id, onProgress) => {
+      onProgress?.({ ...completedProgress, processed: 0, succeeded: 0 })
+      onProgress?.(completedProgress)
+      return completedProgress
+    },
     deleteSource: () => undefined,
-    isCrawling: () => false
+    isCrawling: () => false,
+    getCrawlState: () => ({ ...runningState(), progress: completedProgress, running: false })
   }
+}
+
+async function connect(server: McpHttpServer): Promise<Client> {
+  const connected = new Client({ name: 'loci-test', version: '1.0.0' })
+  await connected.connect(new StreamableHTTPClientTransport(new URL(server.endpoint)))
+  return connected
+}
+
+function runningState(): CrawlRunState {
+  return {
+    sourceId: source.id,
+    progress: { ...completedProgress, processed: 0, succeeded: 0 },
+    nodes: [],
+    error: null,
+    running: true
+  }
+}
+
+function getFirstFile(value: unknown): {
+  content: string
+  offset: number
+  next_offset: number
+} {
+  if (!value || typeof value !== 'object' || !('files' in value) || !Array.isArray(value.files)) {
+    throw new Error('missing files')
+  }
+  const file: unknown = value.files[0]
+  if (!file || typeof file !== 'object') throw new Error('missing first file')
+  const record = file as Record<string, unknown>
+  if (
+    typeof record.content !== 'string' ||
+    typeof record.offset !== 'number' ||
+    typeof record.next_offset !== 'number'
+  )
+    throw new Error('invalid first file')
+  return { content: record.content, offset: record.offset, next_offset: record.next_offset }
 }

@@ -1,7 +1,7 @@
 import type { AppSettings, AppSettingsState } from '../../shared/api'
-import type { DocHubDatabase } from '../database'
+import type { LociDatabase } from '../database'
 import { startMcpHttpServer, type McpHttpServer } from './http'
-import type { DocHubMcpServices } from './server'
+import type { LociMcpServices } from './server'
 
 export interface McpRuntime {
   start: () => Promise<void>
@@ -10,10 +10,7 @@ export interface McpRuntime {
   close: () => Promise<void>
 }
 
-export function createMcpRuntime(
-  database: DocHubDatabase,
-  services: DocHubMcpServices
-): McpRuntime {
+export function createMcpRuntime(database: LociDatabase, services: LociMcpServices): McpRuntime {
   let server: McpHttpServer | undefined
   let error: string | null = null
 
@@ -62,7 +59,8 @@ export function createMcpRuntime(
         const previousServer = server
         server = candidate
         error = null
-        await previousServer
+        // 旧连接在后台排空，设置保存不等待正在执行的 MCP 请求。
+        void previousServer
           ?.close()
           .catch((closeError) => console.error('旧 MCP 服务关闭失败', closeError))
       }

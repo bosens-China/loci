@@ -1,84 +1,90 @@
 import { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
-import { buildUrlTree } from '../../shared/url-tree'
+import { buildUrlTree, getUrlTreeSlice } from '../../shared/url-tree'
 import type {
   CreateSourceInput,
   CrawlProgress,
+  CrawlRunState,
   DocumentRecord,
   DocumentSource
 } from '../../shared/api'
-import { findBestPassage } from './content'
+import { findBestPassage, readMarkdownSection, sliceContent } from './content'
+import {
+  addLibraryOutputSchema,
+  deleteLibraryOutputSchema,
+  listLibrariesOutputSchema,
+  paginationInput,
+  readFilesOutputSchema,
+  searchOutputSchema,
+  syncLibrariesOutputSchema,
+  syncStatusOutputSchema,
+  treeOutputSchema
+} from './schemas'
+import {
+  failure,
+  page,
+  readAnnotations,
+  renderFiles,
+  result,
+  serializeLibrary,
+  startInBackground,
+  stateToSyncItem,
+  syncSummary,
+  waitForSync,
+  writeAnnotations
+} from './server-support'
 
-export interface DocHubMcpServices {
+export interface LociMcpServices {
   listSources: () => DocumentSource[]
   listDocuments: () => DocumentRecord[]
   searchDocuments: (query: string) => DocumentRecord[]
   createSource: (input: CreateSourceInput) => DocumentSource
-  crawlSource: (id: string) => Promise<CrawlProgress>
+  crawlSource: (
+    id: string,
+    onProgress?: (progress: CrawlProgress) => void
+  ) => Promise<CrawlProgress>
   deleteSource: (id: string) => void
   isCrawling: (id: string) => boolean
+  getCrawlState: (id: string) => CrawlRunState | undefined
 }
 
-const paginationSchema = {
-  offset: z.number().int().min(0).default(0).describe('跳过的结果数量，默认 0'),
-  limit: z.number().int().min(1).max(100).default(20).describe('本次最多返回 100 项')
-}
+const WAIT_DESCRIPTION =
+  '默认立即返回 syncing；需要在单次调用内等待结果时传 wait_for_completion=true，并设置客户端进度回调。'
 
-interface TreeNodeOutput {
-  id: string
-  title: string
-  readable: boolean
-  children?: TreeNodeOutput[]
-}
-
-const treeNodeSchema: z.ZodType<TreeNodeOutput> = z.lazy(() =>
-  z.object({
-    id: z.string(),
-    title: z.string(),
-    readable: z.boolean(),
-    children: z.array(treeNodeSchema).optional()
-  })
-)
-
-// 所有工具都只编排现有本地服务，MCP 层不维护第二份文档或抓取状态。
-export function createDocHubMcpServer(services: DocHubMcpServices): McpServer {
-  const server = new McpServer({ name: 'doc-hub-mcp-server', version: '1.0.0' })
+// 所有工具只编排现有本地服务，MCP 层不维护第二份文档或抓取状态。
+export function createLociMcpServer(services: LociMcpServices): McpServer {
+  const server = new McpServer({ name: 'loci-mcp-server', version: '1.1.0' })
 
   server.registerTool(
-    'doc_hub_add_document',
+    'loci_add_library',
     {
-      title: '添加网页文档',
-      description:
-        '从公开网页创建一个本地文档库并立即抓取同 hostname 页面。相同 hostname 已存在时返回已有文档；需要刷新已有文档时改用 doc_hub_sync_documents。',
+      title: '添加网页文档库',
+      description: `创建文档库并抓取同 hostname 页面。相同 hostname 只返回已有文档库。${WAIT_DESCRIPTION}`,
       inputSchema: z.object({
         url: z.url().describe('任意公开文档页面 URL'),
-        name: z.string().trim().min(1).max(100).optional().describe('文档名称，默认使用 hostname'),
-        concurrency: z
-          .number()
-          .int()
-          .min(1)
-          .max(32)
-          .optional()
-          .describe('可选抓取并发；省略时按抓取模式使用全局默认值')
+        name: z.string().trim().min(1).max(100).optional().describe('默认使用 hostname'),
+        concurrency: z.number().int().min(1).max(32).optional().describe('省略时使用全局默认值'),
+        wait_for_completion: z.boolean().default(false)
       }),
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: true
-      }
+      outputSchema: addLibraryOutputSchema,
+      annotations: writeAnnotations(true)
     },
-    async ({ url, name, concurrency }) => {
+    async ({ url, name, concurrency, wait_for_completion }, context) => {
       const hostname = new URL(url).hostname
       const existing = services
         .listSources()
-        .find((source) => new URL(source.url).hostname === hostname)
+        .find((item) => new URL(item.url).hostname === hostname)
       if (existing) {
-        const syncing = services.isCrawling(existing.id)
-        const document = { ...existing, status: syncing ? 'syncing' : existing.status }
         return result(
-          { created: false, document },
-          syncing ? `文档正在同步：${existing.name}` : `文档已存在：${existing.name}`
+          {
+            created: false,
+            status: services.isCrawling(existing.id) ? 'syncing' : 'idle',
+            library: serializeLibrary(
+              existing,
+              services.isCrawling(existing.id) ? 'syncing' : undefined
+            )
+          },
+          services.isCrawling(existing.id) ? '文档库正在同步' : '文档库已存在'
         )
       }
 
@@ -90,88 +96,85 @@ export function createDocHubMcpServer(services: DocHubMcpServices): McpServer {
         schedule: null,
         concurrency: concurrency ?? null
       })
-      try {
-        const progress = await services.crawlSource(source.id)
-        const document = services.listSources().find((item) => item.id === source.id) ?? source
-        const fileCount = services
-          .listDocuments()
-          .filter((item) => item.sourceId === source.id).length
-        const status = progress.failed > 0 ? 'completed_with_errors' : 'completed'
+      if (!wait_for_completion) {
+        startInBackground(services, source.id)
         return result(
-          {
-            created: true,
-            status,
-            document,
-            file_count: fileCount,
-            progress,
-            ...(progress.failed > 0 ? { warning: `${progress.failed} 个页面抓取失败` } : {})
-          },
-          `已添加并收录 ${fileCount} 个唯一文件（成功 ${progress.succeeded} 页，失败 ${progress.failed} 页）`
+          { created: true, status: 'syncing', library: serializeLibrary(source, 'syncing') },
+          '文档库已创建并开始同步；请调用 loci_get_sync_status 查询进度'
         )
-      } catch (error) {
-        return failure(`文档已创建（${source.id}），首次抓取失败：${errorMessage(error)}`)
       }
-    }
-  )
-
-  server.registerTool(
-    'doc_hub_sync_documents',
-    {
-      title: '更新网页文档',
-      description: '按文档 ID 重新拉取网页内容。可一次更新多个文档，并分别返回成功或失败状态。',
-      inputSchema: z.object({
-        document_ids: z.array(z.string().min(1)).min(1).max(10).describe('最多 10 个文档 ID')
-      }),
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true
-      }
-    },
-    async ({ document_ids }) => {
-      const available = new Set(services.listSources().map((source) => source.id))
-      const items: Array<Record<string, unknown>> = []
-      for (const id of new Set(document_ids)) {
-        if (!available.has(id)) {
-          items.push({ document_id: id, status: 'not_found' })
-          continue
-        }
-        if (services.isCrawling(id)) {
-          items.push({ document_id: id, status: 'syncing' })
-          continue
-        }
-        try {
-          const progress = await services.crawlSource(id)
-          const fileCount = services.listDocuments().filter((item) => item.sourceId === id).length
-          items.push({
-            document_id: id,
-            status: progress.failed > 0 ? 'completed_with_errors' : 'completed',
-            file_count: fileCount,
-            progress,
-            ...(progress.failed > 0 ? { warning: `${progress.failed} 个页面抓取失败` } : {})
-          })
-        } catch (error) {
-          items.push({ document_id: id, status: 'failed', error: errorMessage(error) })
-        }
-      }
+      const item = await waitForSync(services, source.id, context)
+      const sync = { ...item }
+      delete sync.library_id
+      const library = services.listSources().find((entry) => entry.id === source.id) ?? source
       return result(
-        { items },
-        items.map((item) => `${String(item.document_id)}: ${String(item.status)}`).join('\n')
+        { created: true, ...sync, library: serializeLibrary(library) },
+        `文档库同步状态：${item.status}`
       )
     }
   )
 
   server.registerTool(
-    'doc_hub_list_documents',
+    'loci_sync_libraries',
     {
-      title: '查看本地文档',
-      description:
-        '分页列出本地文档库。不知道文档 ID 时应首先调用；query 可省略，只匹配文档名称和来源 URL，不搜索正文。',
+      title: '同步网页文档库',
+      description: `按文档库 ID 重新拉取网页内容；新增页面会写入，404/410 页面会移除。${WAIT_DESCRIPTION}`,
       inputSchema: z.object({
-        query: z.string().trim().max(200).optional().describe('可选的文档名称或 URL 关键词'),
-        ...paginationSchema
+        library_ids: z.array(z.string().min(1)).min(1).max(10),
+        wait_for_completion: z.boolean().default(false)
       }),
+      outputSchema: syncLibrariesOutputSchema,
+      annotations: writeAnnotations(false)
+    },
+    async ({ library_ids, wait_for_completion }, context) => {
+      const available = new Set(services.listSources().map((source) => source.id))
+      const items: Array<Record<string, unknown>> = []
+      for (const id of new Set(library_ids)) {
+        if (!available.has(id)) {
+          items.push({ library_id: id, status: 'not_found' })
+        } else if (services.isCrawling(id)) {
+          items.push({ library_id: id, status: 'syncing' })
+        } else if (wait_for_completion) {
+          items.push(await waitForSync(services, id, context))
+        } else {
+          startInBackground(services, id)
+          items.push({ library_id: id, status: 'syncing' })
+        }
+      }
+      return result({ items }, items.map(syncSummary).join('\n'))
+    }
+  )
+
+  server.registerTool(
+    'loci_get_sync_status',
+    {
+      title: '查看文档库同步状态',
+      description: '轮询一个或多个文档库的同步进度、失败页面和可重试信息。',
+      inputSchema: z.object({ library_ids: z.array(z.string().min(1)).min(1).max(20) }),
+      outputSchema: syncStatusOutputSchema,
+      annotations: readAnnotations()
+    },
+    ({ library_ids }) => {
+      const available = new Set(services.listSources().map((source) => source.id))
+      const items = [...new Set(library_ids)].map((id) =>
+        available.has(id)
+          ? stateToSyncItem(id, services.getCrawlState(id), services.isCrawling(id))
+          : { library_id: id, status: 'not_found' }
+      )
+      return result({ items }, items.map(syncSummary).join('\n'))
+    }
+  )
+
+  server.registerTool(
+    'loci_list_libraries',
+    {
+      title: '查看本地文档库',
+      description: '分页列出文档库。query 可省略，只匹配文档库名称和来源 URL，不搜索正文。',
+      inputSchema: z.object({
+        query: z.string().trim().max(200).optional(),
+        ...paginationInput
+      }),
+      outputSchema: listLibrariesOutputSchema,
       annotations: readAnnotations()
     },
     ({ query, offset, limit }) => {
@@ -184,99 +187,123 @@ export function createDocHubMcpServer(services: DocHubMcpServices): McpServer {
             source.name.toLocaleLowerCase().includes(keyword) ||
             source.url.toLocaleLowerCase().includes(keyword)
         )
-      const items = matches.slice(offset, offset + limit).map((source) => ({
-        ...source,
-        status: services.isCrawling(source.id) ? 'syncing' : source.status
-      }))
-      return result(page(items, matches.length, offset, limit), `找到 ${matches.length} 个文档`)
+      const items = matches
+        .slice(offset, offset + limit)
+        .map((source) =>
+          serializeLibrary(source, services.isCrawling(source.id) ? 'syncing' : undefined)
+        )
+      return result(page(items, matches.length, offset, limit), `找到 ${matches.length} 个文档库`)
     }
   )
 
   server.registerTool(
-    'doc_hub_get_tree',
+    'loci_get_library_tree',
     {
-      title: '查看文档目录',
+      title: '查看文档库目录',
       description:
-        '返回一个文档库的 URL 层级目录。先查看目录，再选择 readable=true 的文件 ID 调用 doc_hub_read_files。',
-      inputSchema: z.object({ document_id: z.string().min(1).describe('文档 ID') }),
-      outputSchema: z.object({
-        document_id: z.string(),
-        title: z.string(),
-        nodes: z.array(treeNodeSchema)
+        '按层返回 URL 目录。用 parent_id 展开目录，再选择 readable=true 的文件 ID 阅读。',
+      inputSchema: z.object({
+        library_id: z.string().min(1),
+        parent_id: z.string().min(1).optional(),
+        depth: z.number().int().min(1).max(5).default(2)
       }),
+      outputSchema: treeOutputSchema,
       annotations: readAnnotations()
     },
-    ({ document_id }) => {
-      const source = services.listSources().find((item) => item.id === document_id)
-      if (!source) return failure('文档不存在，请先调用 doc_hub_list_documents 获取有效 ID')
-      const files = services.listDocuments().filter((document) => document.sourceId === document_id)
+    ({ library_id, parent_id, depth }) => {
+      const source = services.listSources().find((item) => item.id === library_id)
+      if (!source) return failure('文档库不存在，请先调用 loci_list_libraries 获取有效 ID')
+      const files = services.listDocuments().filter((document) => document.sourceId === library_id)
+      const nodes = getUrlTreeSlice(buildUrlTree(files, library_id), parent_id, depth)
+      if (!nodes) return failure('parent_id 不存在或不是目录节点')
       return result(
-        { document_id, title: source.name, nodes: buildUrlTree(files, document_id) },
-        `${source.name}：${files.length} 个文件`
+        { library_id, title: source.name, ...(parent_id ? { parent_id } : {}), depth, nodes },
+        `${source.name}：返回 ${nodes.length} 个当前层级节点`
       )
     }
   )
 
   server.registerTool(
-    'doc_hub_read_files',
+    'loci_read_files',
     {
       title: '读取文档文件',
       description:
-        '读取从目录或搜索结果中选出的 Markdown 文件，可批量读取不同文档库的文件。回答问题前应读取完整文件，而不是只依赖搜索片段。',
+        '批量读取 Markdown 文件；offset + next_offset 可续读。传 section_id 时仅允许一个 file_id，并读取搜索命中的完整小节。',
       inputSchema: z.object({
-        file_ids: z.array(z.string().min(1)).min(1).max(20).describe('最多 20 个文件 ID'),
-        max_chars_per_file: z.number().int().min(1000).max(100000).default(30000)
+        file_ids: z.array(z.string().min(1)).min(1).max(20),
+        section_id: z.string().min(1).optional(),
+        offset: z.number().int().min(0).default(0),
+        max_chars_per_file: z.number().int().min(1000).max(50000).default(12000)
       }),
+      outputSchema: readFilesOutputSchema,
       annotations: readAnnotations()
     },
-    ({ file_ids, max_chars_per_file }) => {
+    ({ file_ids, section_id, offset, max_chars_per_file }) => {
+      const ids = [...new Set(file_ids)]
+      if (section_id && ids.length !== 1) return failure('section_id 只能和一个 file_id 一起使用')
       const documents = new Map(services.listDocuments().map((document) => [document.id, document]))
-      const files = file_ids.flatMap((id) => {
+      const perFileLimit = Math.min(max_chars_per_file, Math.floor(60000 / ids.length))
+      const files = ids.flatMap((id) => {
         const document = documents.get(id)
         if (!document) return []
+        const section = section_id
+          ? readMarkdownSection(document.content, section_id, id, document.title)
+          : undefined
+        if (section_id && !section) return []
+        const slice = sliceContent(section?.content ?? document.content, offset, perFileLimit)
         return [
           {
-            id: document.id,
-            document_id: document.sourceId,
+            id,
+            library_id: document.sourceId,
             title: document.title,
+            ...(section_id ? { section_id, section_title: section?.title } : {}),
             path: document.folder,
             source_url: document.url,
             language: document.language,
             updated_at: document.updatedAt,
-            content: document.content.slice(0, max_chars_per_file),
-            truncated: document.content.length > max_chars_per_file
+            content: slice.content,
+            offset: slice.offset,
+            ...(slice.nextOffset === undefined ? {} : { next_offset: slice.nextOffset }),
+            total_chars: slice.totalChars,
+            truncated: slice.truncated
           }
         ]
       })
-      const notFound = file_ids.filter((id) => !documents.has(id))
-      return result({ files, not_found: notFound }, `读取 ${files.length} 个文件`)
+      const notFound = ids.filter((id) => !documents.has(id) || (section_id && files.length === 0))
+      return result(
+        { files, not_found: notFound },
+        `读取 ${files.length} 个文件`,
+        renderFiles(files)
+      )
     }
   )
 
   server.registerTool(
-    'doc_hub_search',
+    'loci_search_files',
     {
-      title: '搜索文档正文',
+      title: '搜索文件正文',
       description:
-        '使用本地 FTS5 搜索标题和 Markdown 正文，返回最佳匹配段落及文件 ID。目录无法定位或用户明确给出关键词时使用，随后调用 doc_hub_read_files 阅读完整文件。',
+        '搜索标题和 Markdown 正文，返回段落、section_id 和 file_id；随后可直接读取命中小节。',
       inputSchema: z.object({
         query: z.string().trim().min(1).max(200),
-        document_ids: z.array(z.string().min(1)).max(20).optional(),
-        ...paginationSchema
+        library_ids: z.array(z.string().min(1)).max(20).optional(),
+        ...paginationInput
       }),
+      outputSchema: searchOutputSchema,
       annotations: readAnnotations()
     },
-    ({ query, document_ids, offset, limit }) => {
-      const scope = document_ids ? new Set(document_ids) : undefined
+    ({ query, library_ids, offset, limit }) => {
+      const scope = library_ids ? new Set(library_ids) : undefined
       const matches = services
         .searchDocuments(query)
         .filter((document) => !scope || scope.has(document.sourceId))
       const hits = matches.slice(offset, offset + limit).map((document) => {
-        const passage = findBestPassage(document.content, query, document.title)
+        const passage = findBestPassage(document.content, query, document.title, document.id)
         return {
           file_id: document.id,
-          document_id: document.sourceId,
+          library_id: document.sourceId,
           file_title: document.title,
+          section_id: passage.sectionId,
           section_title: passage.sectionTitle,
           path: document.folder,
           source_url: document.url,
@@ -289,12 +316,12 @@ export function createDocHubMcpServer(services: DocHubMcpServices): McpServer {
   )
 
   server.registerTool(
-    'doc_hub_delete_document',
+    'loci_delete_library',
     {
-      title: '删除本地文档',
-      description:
-        '永久删除整个文档库及其文件和搜索索引。不能删除单个同步文件；仅在用户明确要求删除时调用。',
-      inputSchema: z.object({ document_id: z.string().min(1) }),
+      title: '删除本地文档库',
+      description: '永久删除整个文档库及文件和搜索索引；仅在用户明确要求时调用。',
+      inputSchema: z.object({ library_id: z.string().min(1) }),
+      outputSchema: deleteLibraryOutputSchema,
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -302,66 +329,14 @@ export function createDocHubMcpServer(services: DocHubMcpServices): McpServer {
         openWorldHint: false
       }
     },
-    ({ document_id }) => {
-      const source = services.listSources().find((item) => item.id === document_id)
-      if (!source) return result({ deleted: false, document_id }, '文档已经不存在')
-      if (services.isCrawling(document_id)) return failure('文档正在更新，完成后才能删除')
-      services.deleteSource(document_id)
-      return result({ deleted: true, document_id }, `已删除 ${source.name}`)
+    ({ library_id }) => {
+      const source = services.listSources().find((item) => item.id === library_id)
+      if (!source) return result({ deleted: false, library_id }, '文档库已经不存在')
+      if (services.isCrawling(library_id)) return failure('文档库正在同步，完成后才能删除')
+      services.deleteSource(library_id)
+      return result({ deleted: true, library_id }, `已删除 ${source.name}`)
     }
   )
 
   return server
-}
-
-function page<T>(
-  items: T[],
-  total: number,
-  offset: number,
-  limit: number
-): Record<string, unknown> {
-  const hasMore = offset + items.length < total
-  return {
-    total_count: total,
-    count: items.length,
-    offset,
-    items,
-    has_more: hasMore,
-    ...(hasMore ? { next_offset: offset + limit } : {})
-  }
-}
-
-function result(
-  output: Record<string, unknown>,
-  summary: string
-): {
-  content: Array<{ type: 'text'; text: string }>
-  structuredContent: Record<string, unknown>
-} {
-  return { content: [{ type: 'text' as const, text: summary }], structuredContent: output }
-}
-
-function failure(message: string): {
-  content: Array<{ type: 'text'; text: string }>
-  isError: true
-} {
-  return { content: [{ type: 'text' as const, text: message }], isError: true }
-}
-
-function readAnnotations(): {
-  readOnlyHint: boolean
-  destructiveHint: boolean
-  idempotentHint: boolean
-  openWorldHint: boolean
-} {
-  return {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false
-  }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : '未知错误'
 }

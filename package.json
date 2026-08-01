@@ -1,5 +1,5 @@
 {
-  "name": "doc-hub",
+  "name": "loci",
   "version": "1.0.0",
   "description": "Local knowledge nodes for AI agents.",
   "main": "./out/main/index.js",

@@ -5,7 +5,7 @@ import {
   localhostOriginValidation,
   toNodeHandler
 } from '@modelcontextprotocol/node'
-import { createDocHubMcpServer, type DocHubMcpServices } from './server'
+import { createLociMcpServer, type LociMcpServices } from './server'
 
 export interface McpHttpServer {
   port: number
@@ -16,9 +16,9 @@ export interface McpHttpServer {
 // 服务只绑定回环地址，并在进入 MCP handler 前拦截非本机 Host 与 Origin。
 export async function startMcpHttpServer(
   requestedPort: number,
-  services: DocHubMcpServices
+  services: LociMcpServices
 ): Promise<McpHttpServer> {
-  const handler = createMcpHandler(() => createDocHubMcpServer(services))
+  const handler = createMcpHandler(() => createLociMcpServer(services))
   const handleMcp = toNodeHandler(handler, {
     onerror: (error) => console.error('MCP 请求处理失败', error)
   })
