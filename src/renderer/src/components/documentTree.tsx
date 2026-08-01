@@ -1,3 +1,4 @@
+import { DatabaseOutlined, FileMarkdownOutlined, FolderOutlined } from '@ant-design/icons'
 import type { DataNode } from 'antd/es/tree'
 import { buildUrlTree, type UrlTreeNode } from '@shared/url-tree'
 import type { DocumentItem } from '../types'
@@ -23,6 +24,7 @@ export function buildDocumentTree(documents: readonly DocumentItem[]): DataNode[
     title: `${source.name}（${source.documents.length} 页）`,
     key: `source:${sourceId}`,
     selectable: false,
+    icon: <DatabaseOutlined className="text-blue-500 shrink-0" />,
     children: buildUrlTree(source.documents, sourceId).map(toDataNode)
   }))
 }
@@ -33,6 +35,31 @@ function toDataNode(node: UrlTreeNode): DataNode {
     key: node.id,
     selectable: node.readable,
     isLeaf: node.readable,
+    icon: node.readable ? (
+      <FileMarkdownOutlined className="text-emerald-500 shrink-0" />
+    ) : (
+      <FolderOutlined className="text-amber-500 shrink-0" />
+    ),
     children: node.children?.map(toDataNode)
   }
+}
+
+export function getAncestorKeysForDocument(
+  documents: readonly DocumentItem[],
+  selectedId?: string
+): string[] {
+  if (!selectedId) return []
+  const doc = documents.find((d) => d.id === selectedId)
+  if (!doc) return []
+
+  const keys: string[] = [`source:${doc.sourceId}`]
+  if (doc.folder) {
+    const parts = doc.folder.split('/').filter(Boolean)
+    let currentPath = ''
+    for (const part of parts) {
+      currentPath = currentPath ? `${currentPath}/${part}` : part
+      keys.push(`folder:${doc.sourceId}:${currentPath}`)
+    }
+  }
+  return keys
 }

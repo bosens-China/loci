@@ -2,11 +2,13 @@ import {
   AppstoreOutlined,
   DatabaseOutlined,
   FileSearchOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   SettingOutlined
 } from '@ant-design/icons'
-import { Layout, Menu, Typography } from 'antd'
+import { Button, Layout, Menu, Typography } from 'antd'
 import type { MenuProps } from 'antd'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { ViewKey } from '@renderer/routes/navigation'
 
 const { Sider, Content } = Layout
@@ -18,6 +20,8 @@ interface AppShellProps {
 }
 
 function AppShell({ activeView, onViewChange, children }: AppShellProps): React.JSX.Element {
+  const [collapsed, setCollapsed] = useState(false)
+
   const menuItems: MenuProps['items'] = [
     { key: 'overview', icon: <AppstoreOutlined />, label: '总览' },
     { key: 'sources', icon: <DatabaseOutlined />, label: '文档源' },
@@ -34,22 +38,35 @@ function AppShell({ activeView, onViewChange, children }: AppShellProps): React.
         theme="light"
         breakpoint="lg"
         collapsedWidth={0}
-        className="h-screen! flex! flex-col! overflow-y-auto!"
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        className="h-screen! relative! [&>.ant-layout-sider-children]:flex [&>.ant-layout-sider-children]:flex-col [&>.ant-layout-sider-children]:h-full [&_.ant-menu-inline]:border-r-0! [&_.ant-menu]:border-r-0!"
       >
-        <div className="flex h-16 items-center gap-3 px-5">
-          <FileSearchOutlined className="text-xl" />
-          <div>
-            <Typography.Text strong className="block">
-              Loci
-            </Typography.Text>
-            <Typography.Text type="secondary" className="text-xs">
-              本地知识库
-            </Typography.Text>
+        <div className="flex h-16 items-center justify-between px-5">
+          <div className="flex items-center gap-3 min-w-0">
+            <FileSearchOutlined className="text-xl shrink-0" />
+            <div className="min-w-0 overflow-hidden">
+              <Typography.Text strong className="block truncate">
+                Loci
+              </Typography.Text>
+              <Typography.Text type="secondary" className="text-xs block truncate">
+                本地知识库
+              </Typography.Text>
+            </div>
           </div>
+          <Button
+            type="text"
+            size="small"
+            icon={<MenuFoldOutlined />}
+            aria-label="折叠侧边栏"
+            onClick={() => setCollapsed(true)}
+          />
         </div>
         <div className="flex-1 px-3">
           <Menu
             mode="inline"
+            style={{ borderRight: 0 }}
+            className="border-r-0!"
             selectedKeys={[activeView]}
             items={menuItems}
             onClick={({ key }) => onViewChange(key as ViewKey)}
@@ -58,14 +75,30 @@ function AppShell({ activeView, onViewChange, children }: AppShellProps): React.
         <div className="border-t border-t-solid border-t-[var(--ant-color-border-secondary)] px-3 py-3">
           <Menu
             mode="inline"
+            style={{ borderRight: 0 }}
+            className="border-r-0!"
             selectedKeys={[activeView]}
             items={settingsItem}
             onClick={({ key }) => onViewChange(key as ViewKey)}
           />
         </div>
       </Sider>
-      <Layout className="min-h-0 min-w-0">
-        <Content className="min-h-0 overflow-y-auto p-6">{children}</Content>
+      <Layout className="min-h-0 min-w-0 flex-1 overflow-hidden">
+        <Content className="relative flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto p-6">
+          {collapsed && (
+            <Button
+              type="default"
+              size="small"
+              icon={<MenuUnfoldOutlined />}
+              aria-label="展开侧边栏"
+              className="absolute left-4 top-4 z-10"
+              onClick={() => setCollapsed(false)}
+            />
+          )}
+          <div className={`flex-1 min-h-0 h-full flex flex-col ${collapsed ? 'pt-6' : ''}`}>
+            {children}
+          </div>
+        </Content>
       </Layout>
     </Layout>
   )
