@@ -38,4 +38,12 @@ jobs:
         run: pnpm lint
       - if: matrix.os == 'ubuntu-latest'
         run: pnpm test
+      - if: matrix.os == 'ubuntu-latest'
+        run: pnpm --filter @loci/core typecheck
+      - if: matrix.os == 'ubuntu-latest'
+        run: pnpm server:typecheck
+      - if: matrix.os == 'ubuntu-latest'
+        run: pnpm server:build
+      - if: matrix.os == 'ubuntu-latest'
+        run: docker build --file apps/server/Dockerfile .
       - run: pnpm build:unpack

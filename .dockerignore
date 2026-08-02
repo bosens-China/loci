@@ -1,0 +1,10 @@
+.git
+.github
+.husky
+.agents
+**/dist
+**/node_modules
+build
+data
+docs
+out
