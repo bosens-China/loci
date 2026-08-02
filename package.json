@@ -1,6 +1,6 @@
 {
   "name": "loci",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Local knowledge nodes for AI agents.",
   "main": "./out/main/index.js",
   "scripts": {
