@@ -3,7 +3,7 @@ import { Alert, Button, Card, Divider, Form, InputNumber, Space, Tabs, Typograph
 import { useEffect } from 'react'
 import type { AgentClient, McpServerStatus } from '@shared/api'
 
-const SKILL_INSTALL_COMMAND = 'npx skills add bosens-China/dochub-mcp'
+const SKILL_INSTALL_COMMAND = 'npx skills add bosens-China/dochub-mcp --skill use-loci -y'
 
 function createAgentConfigs(endpoint: string): Array<{
   key: string
