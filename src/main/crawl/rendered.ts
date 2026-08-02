@@ -1,7 +1,7 @@
 import type { CrawlProgress } from '../../shared/api'
 import { fetchRenderedPage } from './browser'
 import { parsePage } from './content'
-import { discoverSitemapUrls } from './http'
+import { discoverSitemapUrls, type HttpCrawlOptions } from './http'
 import type { FetchOptions } from './fetch'
 import { runCrawlQueue, type CrawledDocument, type CrawledPage } from './runner'
 import { normalizeUrl } from './url'
@@ -17,7 +17,7 @@ export interface RenderedCrawlOptions {
   fetch?: FetchOptions['fetchImpl']
   sleep?: FetchOptions['sleep']
   onDocument: (document: CrawledDocument) => Promise<void> | void
-  onError?: (error: { url: string; status?: number; missing?: boolean }) => Promise<void> | void
+  onError?: HttpCrawlOptions['onError']
   onProgress?: (progress: CrawlProgress) => void
 }
 

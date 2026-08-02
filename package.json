@@ -4,13 +4,20 @@
   "description": "Local knowledge nodes for AI agents.",
   "main": "./out/main/index.js",
   "scripts": {
+    "predev": "pnpm --filter @loci/core build",
     "format": "prettier --write .",
     "lint": "eslint --cache .",
+    "pretest": "pnpm --filter @loci/core build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "pretypecheck": "pnpm --filter @loci/core build",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "server:build": "pnpm --filter @loci/core build && pnpm --filter @loci/server build",
+    "server:start": "pnpm --filter @loci/server start",
+    "server:test": "pnpm --filter @loci/server test",
+    "server:typecheck": "pnpm --filter @loci/server typecheck",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
@@ -27,6 +34,7 @@
     ]
   },
   "dependencies": {
+    "@loci/core": "workspace:*",
     "@ant-design/icons": "^6.3.2",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
