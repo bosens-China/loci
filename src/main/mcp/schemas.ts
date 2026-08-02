@@ -15,7 +15,8 @@ export const librarySchema = z.object({
   page_limit: z.number().int(),
   last_updated: z.string(),
   schedule: z.string().nullable(),
-  concurrency: z.number().int().nullable(),
+  http_concurrency: z.number().int().nullable(),
+  browser_concurrency: z.number().int().nullable(),
   icon_url: z.string().nullable()
 })
 

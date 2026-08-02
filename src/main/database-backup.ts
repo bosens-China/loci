@@ -10,7 +10,9 @@ const sourceSchema = z
     fetch_mode: z.enum(['auto', 'http', 'browser']),
     page_limit: z.number().int().min(1).max(10000),
     schedule: z.string().nullable(),
-    concurrency: z.number().int().min(1).max(32).nullable(),
+    http_concurrency: z.number().int().min(1).max(32).nullable().optional(),
+    browser_concurrency: z.number().int().min(1).max(32).nullable().optional(),
+    concurrency: z.number().int().min(1).max(32).nullable().optional(),
     icon_url: z.string().nullable(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime()
@@ -106,7 +108,13 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
     version: 1,
     exportedAt: new Date().toISOString(),
     data: {
-      sources: database.prepare('SELECT * FROM document_sources ORDER BY created_at').all(),
+      sources: database
+        .prepare(
+          `SELECT id, name, first_url, hostname, fetch_mode, page_limit, schedule,
+             http_concurrency, browser_concurrency, icon_url, created_at, updated_at
+           FROM document_sources ORDER BY created_at`
+        )
+        .all(),
       documents: database.prepare('SELECT * FROM documents ORDER BY crawled_at').all(),
       crawlRuns: database.prepare('SELECT * FROM crawl_runs ORDER BY rowid').all(),
       settings: database
@@ -133,8 +141,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
 
     const insertSource = database.prepare(
       `INSERT INTO document_sources
-       (id, name, first_url, hostname, fetch_mode, page_limit, schedule, concurrency, icon_url, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, name, first_url, hostname, fetch_mode, page_limit, schedule, http_concurrency, browser_concurrency, icon_url, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     for (const source of sources) {
       insertSource.run(
@@ -145,7 +153,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         source.fetch_mode,
         source.page_limit,
         source.schedule,
-        source.concurrency,
+        source.http_concurrency ?? source.concurrency ?? null,
+        source.browser_concurrency ?? source.concurrency ?? null,
         source.icon_url,
         source.created_at,
         source.updated_at

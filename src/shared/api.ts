@@ -56,7 +56,8 @@ export interface DocumentSource {
   pageLimit: number
   lastUpdated: string
   schedule: string | null
-  concurrency: number | null
+  httpConcurrency: number | null
+  browserConcurrency: number | null
   iconUrl: string | null
 }
 
@@ -66,7 +67,8 @@ export interface CreateSourceInput {
   mode: FetchMode
   pageLimit: number
   schedule: string | null
-  concurrency: number | null
+  httpConcurrency: number | null
+  browserConcurrency: number | null
 }
 
 export type UpdateSourceInput = CreateSourceInput

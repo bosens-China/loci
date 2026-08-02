@@ -1,6 +1,12 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { CrawlProgress, CrawlRunState, DocumentRecord, DocumentSource } from '../../shared/api'
+import type {
+  CreateSourceInput,
+  CrawlProgress,
+  CrawlRunState,
+  DocumentRecord,
+  DocumentSource
+} from '../../shared/api'
 import { startMcpHttpServer, type McpHttpServer } from './http'
 import type { LociMcpServices } from './server'
 
@@ -14,7 +20,8 @@ const source: DocumentSource = {
   pageLimit: 1000,
   lastUpdated: '刚刚',
   schedule: null,
-  concurrency: null,
+  httpConcurrency: null,
+  browserConcurrency: null,
   iconUrl: 'https://cn.vuejs.org/logo.svg'
 }
 
@@ -186,6 +193,35 @@ describe('MCP HTTP server', () => {
     active = false
     resolveCrawl?.(completedProgress)
     await Promise.resolve()
+  })
+
+  it('添加文档库时分别传递两种并发覆盖值', async () => {
+    let createdInput: CreateSourceInput | undefined
+    httpServer = await startMcpHttpServer(0, {
+      ...createServices(),
+      listSources: () => [],
+      createSource: (input) => {
+        createdInput = input
+        return {
+          ...source,
+          httpConcurrency: input.httpConcurrency,
+          browserConcurrency: input.browserConcurrency
+        }
+      }
+    })
+    client = await connect(httpServer)
+
+    await client.callTool({
+      name: 'loci_add_library',
+      arguments: {
+        url: source.url,
+        http_concurrency: 8,
+        browser_concurrency: 2,
+        wait_for_completion: true
+      }
+    })
+
+    expect(createdInput).toMatchObject({ httpConcurrency: 8, browserConcurrency: 2 })
   })
 
   it('exposes structured failure details and retry guidance', async () => {

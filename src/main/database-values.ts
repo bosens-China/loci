@@ -9,7 +9,8 @@ export interface SourceRow {
   fetch_mode: 'auto' | 'http' | 'browser'
   page_limit: number
   schedule: string | null
-  concurrency: number | null
+  http_concurrency: number | null
+  browser_concurrency: number | null
   icon_url: string | null
   page_count: number
   last_crawled_at: string | null
@@ -41,7 +42,10 @@ export function validateSourceInput(input: CreateSourceInput): string | null {
     throw new Error('页面上限必须在 1 到 10000 之间')
   }
   if (!['auto', 'http', 'browser'].includes(input.mode)) throw new Error('不支持的抓取方式')
-  if (input.concurrency !== null) validateConcurrency(input.concurrency, '文档源并发')
+  if (input.httpConcurrency !== null) validateConcurrency(input.httpConcurrency, '文档源 HTTP 并发')
+  if (input.browserConcurrency !== null) {
+    validateConcurrency(input.browserConcurrency, '文档源浏览器并发')
+  }
   return normalizeCronSchedule(input.schedule)
 }
 
@@ -62,7 +66,8 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
     pageLimit: Number(row.page_limit),
     lastUpdated: row.last_crawled_at ? formatDate(row.last_crawled_at) : '尚未更新',
     schedule: row.schedule,
-    concurrency: row.concurrency === null ? null : Number(row.concurrency),
+    httpConcurrency: row.http_concurrency === null ? null : Number(row.http_concurrency),
+    browserConcurrency: row.browser_concurrency === null ? null : Number(row.browser_concurrency),
     iconUrl: row.icon_url
   }
 }
@@ -84,7 +89,19 @@ export function toDocumentRecord(row: DocumentRow): DocumentRecord {
 
 export function migrateDatabase(database: DatabaseSync): void {
   addColumn(database, 'document_sources', 'icon_url', 'TEXT')
-  addColumn(database, 'document_sources', 'concurrency', 'INTEGER')
+  const hasLegacyConcurrency = hasColumn(database, 'document_sources', 'concurrency')
+  if (
+    addColumn(database, 'document_sources', 'http_concurrency', 'INTEGER') &&
+    hasLegacyConcurrency
+  ) {
+    database.exec('UPDATE document_sources SET http_concurrency = concurrency')
+  }
+  if (
+    addColumn(database, 'document_sources', 'browser_concurrency', 'INTEGER') &&
+    hasLegacyConcurrency
+  ) {
+    database.exec('UPDATE document_sources SET browser_concurrency = concurrency')
+  }
   addColumn(database, 'app_settings', 'http_concurrency', 'INTEGER NOT NULL DEFAULT 9')
   addColumn(database, 'app_settings', 'browser_concurrency', 'INTEGER NOT NULL DEFAULT 2')
 }
@@ -94,13 +111,17 @@ function addColumn(
   table: string,
   column: string,
   definition: string
-): void {
+): boolean {
+  if (hasColumn(database, table, column)) return false
+  database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  return true
+}
+
+function hasColumn(database: DatabaseSync, table: string, column: string): boolean {
   const columns = database.prepare(`PRAGMA table_info(${table})`).all() as unknown as {
     name: string
   }[]
-  if (!columns.some((item) => item.name === column)) {
-    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
-  }
+  return columns.some((item) => item.name === column)
 }
 
 function validateConcurrency(value: number, label: string): void {

@@ -63,13 +63,26 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
       inputSchema: z.object({
         url: z.url().describe('任意公开文档页面 URL'),
         name: z.string().trim().min(1).max(100).optional().describe('默认使用 hostname'),
-        concurrency: z.number().int().min(1).max(32).optional().describe('省略时使用全局默认值'),
+        http_concurrency: z
+          .number()
+          .int()
+          .min(1)
+          .max(32)
+          .optional()
+          .describe('省略时使用全局 HTTP 默认值'),
+        browser_concurrency: z
+          .number()
+          .int()
+          .min(1)
+          .max(32)
+          .optional()
+          .describe('省略时使用全局浏览器默认值'),
         wait_for_completion: z.boolean().default(false)
       }),
       outputSchema: addLibraryOutputSchema,
       annotations: writeAnnotations(true)
     },
-    async ({ url, name, concurrency, wait_for_completion }, context) => {
+    async ({ url, name, http_concurrency, browser_concurrency, wait_for_completion }, context) => {
       const hostname = new URL(url).hostname
       const existing = services
         .listSources()
@@ -94,7 +107,8 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
         mode: 'auto',
         pageLimit: 1000,
         schedule: null,
-        concurrency: concurrency ?? null
+        httpConcurrency: http_concurrency ?? null,
+        browserConcurrency: browser_concurrency ?? null
       })
       if (!wait_for_completion) {
         startInBackground(services, source.id)

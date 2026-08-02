@@ -12,7 +12,8 @@ describe('database backup', () => {
         mode: 'http',
         pageLimit: 500,
         schedule: null,
-        concurrency: 4
+        httpConcurrency: 4,
+        browserConcurrency: 2
       })
       sourceDatabase.saveDocument({
         sourceId: source.id,
@@ -35,7 +36,8 @@ describe('database backup', () => {
         mode: 'auto',
         pageLimit: 10,
         schedule: null,
-        concurrency: null
+        httpConcurrency: null,
+        browserConcurrency: null
       })
 
       const backup = sourceDatabase.exportBackup()
@@ -45,7 +47,12 @@ describe('database backup', () => {
       expect(targetDatabase.listSources()[0]?.name).toBe('Existing')
 
       expect(targetDatabase.importBackup(backup)).toEqual({ sources: 1, documents: 1 })
-      expect(targetDatabase.listSources()[0]).toMatchObject({ name: 'React', pages: 1 })
+      expect(targetDatabase.listSources()[0]).toMatchObject({
+        name: 'React',
+        pages: 1,
+        httpConcurrency: 4,
+        browserConcurrency: 2
+      })
       expect(targetDatabase.searchDocuments('Components')[0]?.title).toBe('Learn React')
       expect(targetDatabase.getSettings()).toMatchObject({ mcpPort: 41000, theme: 'dark' })
     } finally {
@@ -64,7 +71,8 @@ describe('database backup', () => {
         mode: 'http',
         pageLimit: 10,
         schedule: null,
-        concurrency: null
+        httpConcurrency: null,
+        browserConcurrency: null
       })
       sourceDatabase.saveDocument({
         sourceId: source.id,
@@ -81,7 +89,8 @@ describe('database backup', () => {
         mode: 'auto',
         pageLimit: 10,
         schedule: null,
-        concurrency: null
+        httpConcurrency: null,
+        browserConcurrency: null
       })
 
       const backup = sourceDatabase.exportBackup()

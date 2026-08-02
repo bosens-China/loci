@@ -305,8 +305,9 @@ async function runCrawl(
     hostname,
     pageLimit: source.pageLimit,
     concurrency:
-      source.concurrency ??
-      (selectedMode === 'http' ? settings.httpConcurrency : settings.browserConcurrency),
+      selectedMode === 'http'
+        ? (source.httpConcurrency ?? settings.httpConcurrency)
+        : (source.browserConcurrency ?? settings.browserConcurrency),
     initialUrls,
     seedPage: firstPage,
     onDocument: (document) => localDatabase.saveDocument({ ...document, sourceId: id }),

@@ -88,7 +88,8 @@ export function serializeLibrary(
     page_limit: source.pageLimit,
     last_updated: source.lastUpdated,
     schedule: source.schedule,
-    concurrency: source.concurrency,
+    http_concurrency: source.httpConcurrency,
+    browser_concurrency: source.browserConcurrency,
     icon_url: source.iconUrl
   }
 }

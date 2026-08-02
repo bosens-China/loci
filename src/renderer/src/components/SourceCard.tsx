@@ -96,7 +96,9 @@ function SourceCard({
               {source.pages} 页
             </Tag>
             <Tag bordered={false} className="bg-[var(--ant-color-fill-quaternary)] text-xs">
-              {source.concurrency ? `并发 ${source.concurrency}` : '默认并发'}
+              {source.httpConcurrency || source.browserConcurrency
+                ? `HTTP ${source.httpConcurrency ?? '默认'} · 浏览器 ${source.browserConcurrency ?? '默认'}`
+                : '默认并发'}
             </Tag>
             <SourceScheduleTag schedule={source.schedule} />
           </div>

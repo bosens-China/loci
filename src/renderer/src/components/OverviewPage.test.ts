@@ -11,7 +11,8 @@ const mockSource: DocumentSource = {
   pageLimit: 1000,
   lastUpdated: '2026-08-01 10:00:00',
   schedule: null,
-  concurrency: null,
+  httpConcurrency: null,
+  browserConcurrency: null,
   iconUrl: 'https://react.dev/favicon.ico'
 }
 

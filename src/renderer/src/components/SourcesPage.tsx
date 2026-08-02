@@ -361,6 +361,7 @@ function SourcesPage({
               {
                 key: 'advanced',
                 label: '高级设置',
+                forceRender: true,
                 children: (
                   <div className="space-y-3 pt-2">
                     <Form.Item name="mode" label="网页读取方式" rules={[{ required: true }]}>
@@ -372,19 +373,24 @@ function SourcesPage({
                         ]}
                       />
                     </Form.Item>
-                    <Form.Item
-                      name="concurrency"
-                      label="并发抓取数"
-                      extra="留空时默认使用“设置”页面中的全局并发配置（常规保持默认即可）"
-                      rules={[{ type: 'number', min: 1, max: 32, message: '请输入 1-32' }]}
-                    >
-                      <InputNumber
-                        min={1}
-                        max={32}
-                        className="w-full"
-                        placeholder="使用全局默认值"
-                      />
-                    </Form.Item>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <Form.Item
+                        name="httpConcurrency"
+                        label="HTTP 并发抓取数（选填）"
+                        extra="留空时使用全局 HTTP 默认值"
+                        rules={[{ type: 'number', min: 1, max: 32, message: '请输入 1-32' }]}
+                      >
+                        <InputNumber min={1} max={32} className="w-full" placeholder="全局默认" />
+                      </Form.Item>
+                      <Form.Item
+                        name="browserConcurrency"
+                        label="浏览器并发抓取数（选填）"
+                        extra="留空时使用全局浏览器默认值"
+                        rules={[{ type: 'number', min: 1, max: 32, message: '请输入 1-32' }]}
+                      >
+                        <InputNumber min={1} max={32} className="w-full" placeholder="全局默认" />
+                      </Form.Item>
+                    </div>
                   </div>
                 )
               }

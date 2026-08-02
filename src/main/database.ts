@@ -32,7 +32,8 @@ export interface SourceConfig {
   hostname: string
   fetchMode: 'auto' | 'http' | 'browser'
   pageLimit: number
-  concurrency: number | null
+  httpConcurrency: number | null
+  browserConcurrency: number | null
 }
 
 export interface StoredDocument {
@@ -81,7 +82,8 @@ const schema = `
     fetch_mode TEXT NOT NULL CHECK (fetch_mode IN ('auto', 'http', 'browser')),
     page_limit INTEGER NOT NULL DEFAULT 1000 CHECK (page_limit BETWEEN 1 AND 10000),
     schedule TEXT,
-    concurrency INTEGER CHECK (concurrency IS NULL OR concurrency BETWEEN 1 AND 32),
+    http_concurrency INTEGER CHECK (http_concurrency IS NULL OR http_concurrency BETWEEN 1 AND 32),
+    browser_concurrency INTEGER CHECK (browser_concurrency IS NULL OR browser_concurrency BETWEEN 1 AND 32),
     icon_url TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -143,7 +145,7 @@ export function createDatabase(filename: string): LociDatabase {
       const rows = database
         .prepare(
           `SELECT s.id, s.name, s.first_url, s.fetch_mode, s.page_limit, s.schedule,
-             s.concurrency, s.icon_url,
+             s.http_concurrency, s.browser_concurrency, s.icon_url,
              COUNT(d.id) AS page_count, MAX(d.crawled_at) AS last_crawled_at
            FROM document_sources s
            LEFT JOIN documents d ON d.source_id = s.id
@@ -166,8 +168,8 @@ export function createDatabase(filename: string): LociDatabase {
       database
         .prepare(
           `INSERT INTO document_sources
-           (id, name, first_url, hostname, fetch_mode, page_limit, schedule, concurrency, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           (id, name, first_url, hostname, fetch_mode, page_limit, schedule, http_concurrency, browser_concurrency, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           id,
@@ -177,13 +179,14 @@ export function createDatabase(filename: string): LociDatabase {
           input.mode,
           input.pageLimit,
           schedule,
-          input.concurrency,
+          input.httpConcurrency,
+          input.browserConcurrency,
           now,
           now
         )
       const source = database
         .prepare(
-          `SELECT id, name, first_url, fetch_mode, page_limit, schedule, concurrency, icon_url,
+          `SELECT id, name, first_url, fetch_mode, page_limit, schedule, http_concurrency, browser_concurrency, icon_url,
              0 AS page_count, NULL AS last_crawled_at
          FROM document_sources WHERE id = ?`
         )
@@ -197,7 +200,7 @@ export function createDatabase(filename: string): LociDatabase {
       const result = database
         .prepare(
           `UPDATE document_sources
-           SET name = ?, first_url = ?, hostname = ?, fetch_mode = ?, page_limit = ?, schedule = ?, concurrency = ?, updated_at = ?
+           SET name = ?, first_url = ?, hostname = ?, fetch_mode = ?, page_limit = ?, schedule = ?, http_concurrency = ?, browser_concurrency = ?, updated_at = ?
            WHERE id = ?`
         )
         .run(
@@ -207,14 +210,15 @@ export function createDatabase(filename: string): LociDatabase {
           input.mode,
           input.pageLimit,
           schedule,
-          input.concurrency,
+          input.httpConcurrency,
+          input.browserConcurrency,
           updatedAt,
           id
         )
       if (Number(result.changes) !== 1) throw new Error('文档源不存在')
       const source = database
         .prepare(
-          `SELECT id, name, first_url, fetch_mode, page_limit, schedule, concurrency, icon_url,
+          `SELECT id, name, first_url, fetch_mode, page_limit, schedule, http_concurrency, browser_concurrency, icon_url,
              (SELECT COUNT(*) FROM documents WHERE source_id = document_sources.id) AS page_count,
              (SELECT MAX(crawled_at) FROM documents WHERE source_id = document_sources.id) AS last_crawled_at
            FROM document_sources WHERE id = ?`
@@ -235,7 +239,7 @@ export function createDatabase(filename: string): LociDatabase {
     getSourceConfig: (id) => {
       const source = database
         .prepare(
-          `SELECT id, first_url, hostname, fetch_mode, page_limit, concurrency
+          `SELECT id, first_url, hostname, fetch_mode, page_limit, http_concurrency, browser_concurrency
            FROM document_sources WHERE id = ?`
         )
         .get(id) as unknown as
@@ -245,7 +249,8 @@ export function createDatabase(filename: string): LociDatabase {
             hostname: string
             fetch_mode: SourceConfig['fetchMode']
             page_limit: number
-            concurrency: number | null
+            http_concurrency: number | null
+            browser_concurrency: number | null
           }
         | undefined
       if (!source) throw new Error('文档源不存在')
@@ -255,7 +260,9 @@ export function createDatabase(filename: string): LociDatabase {
         hostname: source.hostname,
         fetchMode: source.fetch_mode,
         pageLimit: Number(source.page_limit),
-        concurrency: source.concurrency === null ? null : Number(source.concurrency)
+        httpConcurrency: source.http_concurrency === null ? null : Number(source.http_concurrency),
+        browserConcurrency:
+          source.browser_concurrency === null ? null : Number(source.browser_concurrency)
       }
     },
     listDocumentUrls: (sourceId) =>

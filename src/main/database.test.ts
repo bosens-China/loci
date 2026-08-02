@@ -15,7 +15,8 @@ describe('createDatabase', () => {
         mode: 'auto',
         pageLimit: 1000,
         schedule: '0 2 * * *',
-        concurrency: 6
+        httpConcurrency: 6,
+        browserConcurrency: 3
       })
       expect(source.url).toBe('https://react.dev/learn')
       expect(source.schedule).toBe('0 2 * * *')
@@ -39,7 +40,8 @@ describe('createDatabase', () => {
           mode: 'auto',
           pageLimit: 1000,
           schedule: null,
-          concurrency: null
+          httpConcurrency: null,
+          browserConcurrency: null
         }).schedule
       ).toBeNull()
       database.updateResolvedSource(
@@ -106,13 +108,17 @@ describe('createDatabase', () => {
     legacy.exec(`
       CREATE TABLE document_sources (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, first_url TEXT NOT NULL, hostname TEXT NOT NULL,
-        fetch_mode TEXT NOT NULL, page_limit INTEGER NOT NULL, schedule TEXT,
+        fetch_mode TEXT NOT NULL, page_limit INTEGER NOT NULL, schedule TEXT, concurrency INTEGER,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       ) STRICT;
       CREATE TABLE app_settings (
         id INTEGER PRIMARY KEY, mcp_port INTEGER NOT NULL, theme TEXT NOT NULL
       ) STRICT;
       INSERT INTO app_settings VALUES (1, 37373, 'auto');
+      INSERT INTO document_sources VALUES (
+        'legacy-source', 'Legacy', 'https://example.com', 'example.com', 'auto', 1000, NULL, 5,
+        '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+      );
     `)
     legacy.close()
 
@@ -126,9 +132,14 @@ describe('createDatabase', () => {
           mode: 'auto',
           pageLimit: 1000,
           schedule: null,
-          concurrency: null
+          httpConcurrency: null,
+          browserConcurrency: null
         })
-      ).toMatchObject({ concurrency: null, iconUrl: null })
+      ).toMatchObject({ httpConcurrency: null, browserConcurrency: null, iconUrl: null })
+      expect(database.listSources().find((source) => source.id === 'legacy-source')).toMatchObject({
+        httpConcurrency: 5,
+        browserConcurrency: 5
+      })
     } finally {
       database.close()
       rmSync(directory, { recursive: true, force: true })
