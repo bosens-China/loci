@@ -43,5 +43,7 @@ jobs:
       - if: matrix.os == 'ubuntu-latest'
         run: pnpm server:build
       - if: matrix.os == 'ubuntu-latest'
+        run: pnpm cli:build
+      - if: matrix.os == 'ubuntu-latest'
         run: docker build --file apps/server/Dockerfile .
       - run: pnpm build:unpack
