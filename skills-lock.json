@@ -29,7 +29,7 @@
       "source": "bosens-China/my-skills",
       "sourceType": "github",
       "skillPath": "skills/git-step-commit/SKILL.md",
-      "computedHash": "a2a152e342b5c3b1110195616830e08b4fbadfd03bf925b850eb0b89db2c8e93"
+      "computedHash": "788e754cb046df6de368de7eb1731e67a80bfa0c765448195ef7104fb85cdf66"
     },
     "manage-prd-docs": {
       "source": "bosens-China/my-skills",
@@ -42,6 +42,12 @@
       "sourceType": "github",
       "skillPath": "skills/mcp-builder/SKILL.md",
       "computedHash": "6498a736a8dc5c645047c8a875b8ea7417e2ad97146f005200e50d20a9337ada"
+    },
+    "publish-npm-packages": {
+      "source": "bosens-China/my-skills",
+      "sourceType": "github",
+      "skillPath": "skills/publish-npm-packages/SKILL.md",
+      "computedHash": "e819d4f1f80afed4c2942f3db1bb55b01ab0c884b53e28006949be8367708a97"
     }
   }
 }
