@@ -8,6 +8,7 @@ import { router } from './router'
 import SettingsProvider from './SettingsProvider'
 import { useAppSettings } from './settings-context'
 import { useResolvedTheme } from './settings-theme'
+import { CloudAdminProvider } from './CloudAdminProvider'
 
 dayjs.locale('zh-cn')
 
@@ -35,7 +36,9 @@ function ThemedApp(): React.JSX.Element {
         cssVar: { key: 'loci' }
       }}
     >
-      <RouterProvider router={router} />
+      <CloudAdminProvider>
+        <RouterProvider router={router} />
+      </CloudAdminProvider>
     </ConfigProvider>
   )
 }

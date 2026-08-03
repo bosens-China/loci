@@ -7,6 +7,7 @@ export interface AppSettings {
   theme: ThemeMode
   httpConcurrency: number
   browserConcurrency: number
+  serverUrl: string
 }
 
 export interface McpServerStatus {
@@ -37,11 +38,75 @@ export interface DataTransferResult {
   message: string
 }
 
+export interface CloudAdminLoginInput {
+  username: string
+  password: string
+}
+
+export interface CloudAdminSession {
+  serverUrl: string
+  username: string
+  expiresAt: string
+}
+
+export interface CloudLibraryInput {
+  name: string
+  url: string
+  pageLimit: number
+  schedule: string | null
+}
+
+export interface CloudLibrary extends CloudLibraryInput {
+  id: string
+  hostname: string
+  pages: number
+  lastCrawledAt: string | null
+  lastError: string | null
+  revision: string | null
+  publishedAt: string | null
+}
+
+export interface CloudCatalogItem {
+  id: string
+  name: string
+  url: string
+  revision: string
+  pages: number
+  snapshotSize: number
+  lastCrawledAt: string | null
+  publishedAt: string
+  localSourceId: string | null
+  localRevision: string | null
+  autoSync: boolean
+  updateAvailable: boolean
+}
+
+export interface CloudImportResult {
+  source: DocumentSource
+  updated: boolean
+  documents: number
+}
+
+export type CloudSyncJobStatus =
+  'queued' | 'running' | 'completed' | 'completed_with_errors' | 'failed'
+
+export interface CloudSyncJob {
+  id: string
+  libraryId: string
+  status: CloudSyncJobStatus
+  createdAt: string
+  finishedAt: string | null
+  progress: CrawlProgress | null
+  failures: CrawlFailure[]
+  error: string | null
+}
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   mcpPort: 37373,
   theme: 'auto',
   httpConcurrency: 9,
-  browserConcurrency: 2
+  browserConcurrency: 2,
+  serverUrl: 'http://localhost:7001'
 }
 
 export type SourceStatus = 'healthy' | 'syncing' | 'attention'
@@ -59,6 +124,14 @@ export interface DocumentSource {
   httpConcurrency: number | null
   browserConcurrency: number | null
   iconUrl: string | null
+  cloud: CloudSourceOrigin | null
+}
+
+export interface CloudSourceOrigin {
+  serverUrl: string
+  libraryId: string
+  revision: string
+  autoSync: boolean
 }
 
 export interface CreateSourceInput {
@@ -150,4 +223,17 @@ export interface LociApi {
   importAgentClient: (client: AgentClient) => Promise<AgentImportResult>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>
+  cloudAdminLogin: (input: CloudAdminLoginInput) => Promise<CloudAdminSession>
+  cloudAdminLogout: () => Promise<void>
+  getCloudAdminSession: () => Promise<CloudAdminSession | null>
+  listCloudLibraries: () => Promise<CloudLibrary[]>
+  createCloudLibrary: (input: CloudLibraryInput) => Promise<CloudLibrary>
+  updateCloudLibrary: (id: string, input: CloudLibraryInput) => Promise<CloudLibrary>
+  deleteCloudLibrary: (id: string) => Promise<void>
+  syncCloudLibrary: (id: string) => Promise<CloudSyncJob>
+  getCloudSyncJob: (id: string) => Promise<CloudSyncJob>
+  listCloudCatalog: () => Promise<CloudCatalogItem[]>
+  importCloudLibrary: (libraryId: string, autoSync: boolean) => Promise<CloudImportResult>
+  updateCloudLibraryCopy: (sourceId: string) => Promise<CloudImportResult>
+  setCloudLibraryAutoSync: (sourceId: string, enabled: boolean) => Promise<void>
 }

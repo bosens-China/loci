@@ -12,10 +12,11 @@ function SourcesRoute(): React.JSX.Element {
   const sources = useSources()
   const search = Route.useSearch()
   const activeTab: SourcesTab = search.tab ?? 'sources'
+  const localSources = sources.sources.filter((source) => !source.cloud)
 
   return (
     <SourcesPage
-      sources={sources.sources}
+      sources={localSources}
       loading={sources.loading}
       error={sources.error}
       onRetry={() => void sources.reload()}

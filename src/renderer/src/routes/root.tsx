@@ -6,6 +6,8 @@ function RootRoute(): React.JSX.Element {
   const navigate = useNavigate()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
 
+  if (pathname === '/admin/login') return <Outlet />
+
   return (
     <AppShell
       activeView={getActiveView(pathname)}

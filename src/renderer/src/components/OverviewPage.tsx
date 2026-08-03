@@ -73,7 +73,7 @@ export function OverviewPage({
       />
 
       <OverviewSourceGrid
-        sources={sources}
+        sources={sources.filter((source) => !source.cloud)}
         onOpenSources={onOpenSources}
         onSelectSource={onSelectSource}
         onCrawlSource={onCrawlSource}

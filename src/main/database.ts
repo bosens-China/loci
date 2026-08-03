@@ -8,17 +8,17 @@ import {
   toDocumentRecord,
   toDocumentSource,
   toFtsExpression,
-  validateSettings,
   validateSourceInput
 } from './database-values'
 import type {
-  AppSettings,
   CreateSourceInput,
   DocumentRecord,
   DocumentSource,
   UpdateSourceInput
 } from '../shared/api'
 import { DEFAULT_APP_SETTINGS } from '../shared/api'
+import { createCloudLibraryDatabase, type CloudLibraryDatabase } from './cloud-library-database'
+import { createSettingsDatabase, type SettingsDatabase } from './settings-database'
 import {
   exportDatabaseBackup,
   importDatabaseBackup,
@@ -46,7 +46,7 @@ export interface StoredDocument {
   crawledAt: string
 }
 
-export interface LociDatabase {
+export interface LociDatabase extends CloudLibraryDatabase, SettingsDatabase {
   listSources: () => DocumentSource[]
   createSource: (input: CreateSourceInput) => DocumentSource
   updateSource: (id: string, input: UpdateSourceInput) => DocumentSource
@@ -64,8 +64,6 @@ export interface LociDatabase {
   listDocuments: () => DocumentRecord[]
   searchDocuments: (query: string) => DocumentRecord[]
   deleteSource: (id: string) => void
-  getSettings: () => AppSettings
-  saveSettings: (settings: AppSettings) => AppSettings
   exportBackup: () => LociBackup
   importBackup: (input: unknown) => BackupImportSummary
   close: () => void
@@ -85,6 +83,11 @@ const schema = `
     http_concurrency INTEGER CHECK (http_concurrency IS NULL OR http_concurrency BETWEEN 1 AND 32),
     browser_concurrency INTEGER CHECK (browser_concurrency IS NULL OR browser_concurrency BETWEEN 1 AND 32),
     icon_url TEXT,
+    source_type TEXT NOT NULL DEFAULT 'local' CHECK (source_type IN ('local', 'cloud')),
+    cloud_server_url TEXT,
+    cloud_library_id TEXT,
+    cloud_revision TEXT,
+    cloud_auto_sync INTEGER NOT NULL DEFAULT 0 CHECK (cloud_auto_sync IN (0, 1)),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   ) STRICT;
@@ -125,7 +128,8 @@ const schema = `
     mcp_port INTEGER NOT NULL CHECK (mcp_port BETWEEN 1024 AND 65535),
     theme TEXT NOT NULL CHECK (theme IN ('auto', 'light', 'dark')),
     http_concurrency INTEGER NOT NULL DEFAULT 9 CHECK (http_concurrency BETWEEN 1 AND 32),
-    browser_concurrency INTEGER NOT NULL DEFAULT 2 CHECK (browser_concurrency BETWEEN 1 AND 32)
+    browser_concurrency INTEGER NOT NULL DEFAULT 2 CHECK (browser_concurrency BETWEEN 1 AND 32),
+    server_url TEXT NOT NULL DEFAULT 'http://localhost:7001'
   ) STRICT;
 
   INSERT OR IGNORE INTO app_settings (id, mcp_port, theme)
@@ -141,11 +145,14 @@ export function createDatabase(filename: string): LociDatabase {
   migrateDatabase(database)
 
   return {
+    ...createCloudLibraryDatabase(database),
+    ...createSettingsDatabase(database),
     listSources: () => {
       const rows = database
         .prepare(
           `SELECT s.id, s.name, s.first_url, s.fetch_mode, s.page_limit, s.schedule,
-             s.http_concurrency, s.browser_concurrency, s.icon_url,
+             s.http_concurrency, s.browser_concurrency, s.icon_url, s.source_type,
+             s.cloud_server_url, s.cloud_library_id, s.cloud_revision, s.cloud_auto_sync,
              COUNT(d.id) AS page_count, MAX(d.crawled_at) AS last_crawled_at
            FROM document_sources s
            LEFT JOIN documents d ON d.source_id = s.id
@@ -160,7 +167,7 @@ export function createDatabase(filename: string): LociDatabase {
       const url = normalizeUrl(input.url)
       const hostname = getHostname(url)
       const existing = database
-        .prepare('SELECT id FROM document_sources WHERE hostname = ?')
+        .prepare("SELECT id FROM document_sources WHERE hostname = ? AND source_type = 'local'")
         .get(hostname)
       if (existing) throw new Error('这个域名已经存在于文档源中')
       const now = new Date().toISOString()
@@ -187,6 +194,7 @@ export function createDatabase(filename: string): LociDatabase {
       const source = database
         .prepare(
           `SELECT id, name, first_url, fetch_mode, page_limit, schedule, http_concurrency, browser_concurrency, icon_url,
+             source_type, cloud_server_url, cloud_library_id, cloud_revision, cloud_auto_sync,
              0 AS page_count, NULL AS last_crawled_at
          FROM document_sources WHERE id = ?`
         )
@@ -201,7 +209,7 @@ export function createDatabase(filename: string): LociDatabase {
         .prepare(
           `UPDATE document_sources
            SET name = ?, first_url = ?, hostname = ?, fetch_mode = ?, page_limit = ?, schedule = ?, http_concurrency = ?, browser_concurrency = ?, updated_at = ?
-           WHERE id = ?`
+           WHERE id = ? AND source_type = 'local'`
         )
         .run(
           input.name.trim(),
@@ -219,6 +227,7 @@ export function createDatabase(filename: string): LociDatabase {
       const source = database
         .prepare(
           `SELECT id, name, first_url, fetch_mode, page_limit, schedule, http_concurrency, browser_concurrency, icon_url,
+             source_type, cloud_server_url, cloud_library_id, cloud_revision, cloud_auto_sync,
              (SELECT COUNT(*) FROM documents WHERE source_id = document_sources.id) AS page_count,
              (SELECT MAX(crawled_at) FROM documents WHERE source_id = document_sources.id) AS last_crawled_at
            FROM document_sources WHERE id = ?`
@@ -239,7 +248,7 @@ export function createDatabase(filename: string): LociDatabase {
     getSourceConfig: (id) => {
       const source = database
         .prepare(
-          `SELECT id, first_url, hostname, fetch_mode, page_limit, http_concurrency, browser_concurrency
+          `SELECT id, first_url, hostname, fetch_mode, page_limit, http_concurrency, browser_concurrency, source_type
            FROM document_sources WHERE id = ?`
         )
         .get(id) as unknown as
@@ -251,9 +260,11 @@ export function createDatabase(filename: string): LociDatabase {
             page_limit: number
             http_concurrency: number | null
             browser_concurrency: number | null
+            source_type: 'local' | 'cloud'
           }
         | undefined
       if (!source) throw new Error('文档源不存在')
+      if (source.source_type !== 'local') throw new Error('云文档只能从来源服务器更新')
       return {
         id: source.id,
         firstUrl: source.first_url,
@@ -352,40 +363,6 @@ export function createDatabase(filename: string): LociDatabase {
         database.prepare('DELETE FROM documents_fts WHERE source_id = ?').run(id)
         database.prepare('DELETE FROM document_sources WHERE id = ?').run(id)
       })
-    },
-    getSettings: () => {
-      const row = database
-        .prepare(
-          'SELECT mcp_port, theme, http_concurrency, browser_concurrency FROM app_settings WHERE id = 1'
-        )
-        .get() as unknown as {
-        mcp_port: number
-        theme: AppSettings['theme']
-        http_concurrency: number
-        browser_concurrency: number
-      }
-      return {
-        mcpPort: Number(row.mcp_port),
-        theme: row.theme,
-        httpConcurrency: Number(row.http_concurrency),
-        browserConcurrency: Number(row.browser_concurrency)
-      }
-    },
-    saveSettings: (settings) => {
-      validateSettings(settings)
-      database
-        .prepare(
-          `UPDATE app_settings
-           SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?
-           WHERE id = 1`
-        )
-        .run(
-          settings.mcpPort,
-          settings.theme,
-          settings.httpConcurrency,
-          settings.browserConcurrency
-        )
-      return settings
     },
     exportBackup: () => exportDatabaseBackup(database),
     importBackup: (input) => importDatabaseBackup(database, input),

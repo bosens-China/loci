@@ -65,26 +65,30 @@ describe('createDatabase', () => {
         mcpPort: 37373,
         theme: 'auto',
         httpConcurrency: 9,
-        browserConcurrency: 2
+        browserConcurrency: 2,
+        serverUrl: 'http://localhost:7001'
       })
       expect(
         database.saveSettings({
           mcpPort: 41000,
           theme: 'dark',
           httpConcurrency: 12,
-          browserConcurrency: 3
+          browserConcurrency: 3,
+          serverUrl: 'https://docs.example.com/'
         })
       ).toEqual({
         mcpPort: 41000,
         theme: 'dark',
         httpConcurrency: 12,
-        browserConcurrency: 3
+        browserConcurrency: 3,
+        serverUrl: 'https://docs.example.com'
       })
       expect(database.getSettings()).toEqual({
         mcpPort: 41000,
         theme: 'dark',
         httpConcurrency: 12,
-        browserConcurrency: 3
+        browserConcurrency: 3,
+        serverUrl: 'https://docs.example.com'
       })
       database.deleteSource(source.id)
       expect(database.searchDocuments('Components')).toEqual([])
@@ -93,7 +97,8 @@ describe('createDatabase', () => {
           mcpPort: 80,
           theme: 'auto',
           httpConcurrency: 9,
-          browserConcurrency: 2
+          browserConcurrency: 2,
+          serverUrl: 'http://localhost:7001'
         })
       ).toThrow('MCP 端口必须是 1024 到 65535 之间的整数')
     } finally {

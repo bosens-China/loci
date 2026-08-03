@@ -6,7 +6,12 @@ import type {
   CrawlRunState,
   LociApi,
   DocumentRecord,
-  DocumentSource
+  DocumentSource,
+  CloudAdminSession,
+  CloudLibrary,
+  CloudSyncJob,
+  CloudCatalogItem,
+  CloudImportResult
 } from '../shared/api'
 
 // Custom APIs for renderer
@@ -38,7 +43,30 @@ const api: LociApi = {
   importAgentClient: (client) =>
     ipcRenderer.invoke('agents:import', client) as ReturnType<LociApi['importAgentClient']>,
   exportData: () => ipcRenderer.invoke('data:export') as ReturnType<LociApi['exportData']>,
-  importData: () => ipcRenderer.invoke('data:import') as ReturnType<LociApi['importData']>
+  importData: () => ipcRenderer.invoke('data:import') as ReturnType<LociApi['importData']>,
+  cloudAdminLogin: (input) =>
+    ipcRenderer.invoke('cloud-admin:login', input) as Promise<CloudAdminSession>,
+  cloudAdminLogout: () => ipcRenderer.invoke('cloud-admin:logout') as Promise<void>,
+  getCloudAdminSession: () =>
+    ipcRenderer.invoke('cloud-admin:session') as Promise<CloudAdminSession | null>,
+  listCloudLibraries: () =>
+    ipcRenderer.invoke('cloud-admin:libraries:list') as Promise<CloudLibrary[]>,
+  createCloudLibrary: (input) =>
+    ipcRenderer.invoke('cloud-admin:libraries:create', input) as Promise<CloudLibrary>,
+  updateCloudLibrary: (id, input) =>
+    ipcRenderer.invoke('cloud-admin:libraries:update', id, input) as Promise<CloudLibrary>,
+  deleteCloudLibrary: (id) =>
+    ipcRenderer.invoke('cloud-admin:libraries:delete', id) as Promise<void>,
+  syncCloudLibrary: (id) =>
+    ipcRenderer.invoke('cloud-admin:libraries:sync', id) as Promise<CloudSyncJob>,
+  getCloudSyncJob: (id) => ipcRenderer.invoke('cloud-admin:jobs:get', id) as Promise<CloudSyncJob>,
+  listCloudCatalog: () => ipcRenderer.invoke('cloud-catalog:list') as Promise<CloudCatalogItem[]>,
+  importCloudLibrary: (libraryId, autoSync) =>
+    ipcRenderer.invoke('cloud-catalog:import', libraryId, autoSync) as Promise<CloudImportResult>,
+  updateCloudLibraryCopy: (sourceId) =>
+    ipcRenderer.invoke('cloud-catalog:update', sourceId) as Promise<CloudImportResult>,
+  setCloudLibraryAutoSync: (sourceId, enabled) =>
+    ipcRenderer.invoke('cloud-catalog:auto-sync', sourceId, enabled) as Promise<void>
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { normalizeCronSchedule } from '../shared/schedule'
 import type { AppSettings, CreateSourceInput, DocumentRecord, DocumentSource } from '../shared/api'
+import { normalizeServerUrl } from '../shared/server-url'
 
 export interface SourceRow {
   id: string
@@ -14,6 +15,11 @@ export interface SourceRow {
   icon_url: string | null
   page_count: number
   last_crawled_at: string | null
+  source_type: 'local' | 'cloud'
+  cloud_server_url: string | null
+  cloud_library_id: string | null
+  cloud_revision: string | null
+  cloud_auto_sync: number
 }
 
 export interface DocumentRow {
@@ -27,13 +33,14 @@ export interface DocumentRow {
   markdown: string
 }
 
-export function validateSettings(settings: AppSettings): void {
+export function validateSettings(settings: AppSettings): AppSettings {
   if (!Number.isInteger(settings.mcpPort) || settings.mcpPort < 1024 || settings.mcpPort > 65535) {
     throw new Error('MCP 端口必须是 1024 到 65535 之间的整数')
   }
   if (!['auto', 'light', 'dark'].includes(settings.theme)) throw new Error('不支持的主题设置')
   validateConcurrency(settings.httpConcurrency, 'HTTP 默认并发')
   validateConcurrency(settings.browserConcurrency, '浏览器默认并发')
+  return { ...settings, serverUrl: normalizeServerUrl(settings.serverUrl) }
 }
 
 export function validateSourceInput(input: CreateSourceInput): string | null {
@@ -68,7 +75,19 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
     schedule: row.schedule,
     httpConcurrency: row.http_concurrency === null ? null : Number(row.http_concurrency),
     browserConcurrency: row.browser_concurrency === null ? null : Number(row.browser_concurrency),
-    iconUrl: row.icon_url
+    iconUrl: row.icon_url,
+    cloud:
+      row.source_type === 'cloud' &&
+      row.cloud_server_url &&
+      row.cloud_library_id &&
+      row.cloud_revision
+        ? {
+            serverUrl: row.cloud_server_url,
+            libraryId: row.cloud_library_id,
+            revision: row.cloud_revision,
+            autoSync: Boolean(row.cloud_auto_sync)
+          }
+        : null
   }
 }
 
@@ -104,6 +123,27 @@ export function migrateDatabase(database: DatabaseSync): void {
   }
   addColumn(database, 'app_settings', 'http_concurrency', 'INTEGER NOT NULL DEFAULT 9')
   addColumn(database, 'app_settings', 'browser_concurrency', 'INTEGER NOT NULL DEFAULT 2')
+  addColumn(database, 'app_settings', 'server_url', "TEXT NOT NULL DEFAULT 'http://localhost:7001'")
+  addColumn(
+    database,
+    'document_sources',
+    'source_type',
+    "TEXT NOT NULL DEFAULT 'local' CHECK (source_type IN ('local', 'cloud'))"
+  )
+  addColumn(database, 'document_sources', 'cloud_server_url', 'TEXT')
+  addColumn(database, 'document_sources', 'cloud_library_id', 'TEXT')
+  addColumn(database, 'document_sources', 'cloud_revision', 'TEXT')
+  addColumn(
+    database,
+    'document_sources',
+    'cloud_auto_sync',
+    'INTEGER NOT NULL DEFAULT 0 CHECK (cloud_auto_sync IN (0, 1))'
+  )
+  database.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS document_sources_cloud_origin
+     ON document_sources(cloud_server_url, cloud_library_id)
+     WHERE source_type = 'cloud'`
+  )
 }
 
 function addColumn(

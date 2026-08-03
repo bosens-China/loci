@@ -1,6 +1,7 @@
 import {
   BgColorsOutlined,
   CloudServerOutlined,
+  SafetyCertificateOutlined,
   CodeOutlined,
   DashboardOutlined,
   HddOutlined,
@@ -16,6 +17,7 @@ import { AgentSettingsCard } from './settings/AgentSettingsCard'
 import { AppearanceSettingsCard } from './settings/AppearanceSettingsCard'
 import { CrawlSettingsCard } from './settings/CrawlSettingsCard'
 import { GeneralSettingsCard } from './settings/GeneralSettingsCard'
+import { CloudAdminSettingsCard } from './settings/CloudAdminSettingsCard'
 
 type SavingSection = 'agent' | 'crawl' | 'appearance'
 
@@ -115,6 +117,15 @@ function SettingsPage(): React.JSX.Element {
           }
         />
       )
+    },
+    {
+      key: 'cloud-admin',
+      label: (
+        <span className="flex items-center gap-2">
+          <SafetyCertificateOutlined /> 云端服务
+        </span>
+      ),
+      children: <CloudAdminSettingsCard />
     },
     {
       key: 'data',

@@ -28,7 +28,8 @@ describe('database backup', () => {
         mcpPort: 41000,
         theme: 'dark',
         httpConcurrency: 12,
-        browserConcurrency: 3
+        browserConcurrency: 3,
+        serverUrl: 'https://docs.example.com'
       })
       targetDatabase.createSource({
         name: 'Existing',

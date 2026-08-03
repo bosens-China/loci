@@ -30,7 +30,30 @@ const settingsRoute = createRoute({
   path: 'settings'
 }).lazy(() => import('./routes/settings.lazy').then((module) => module.Route))
 
-const routeTree = rootRoute.addChildren([overviewRoute, sourcesRoute, libraryRoute, settingsRoute])
+const cloudCatalogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'cloud'
+}).lazy(() => import('./routes/cloud.lazy').then((module) => module.Route))
+
+const adminLoginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'admin/login'
+}).lazy(() => import('./routes/admin-login.lazy').then((module) => module.Route))
+
+const adminCloudRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'admin/cloud'
+}).lazy(() => import('./routes/admin-cloud.lazy').then((module) => module.Route))
+
+const routeTree = rootRoute.addChildren([
+  overviewRoute,
+  sourcesRoute,
+  libraryRoute,
+  settingsRoute,
+  cloudCatalogRoute,
+  adminLoginRoute,
+  adminCloudRoute
+])
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' })
 

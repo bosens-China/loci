@@ -15,7 +15,8 @@ describe('MCP runtime', () => {
       mcpPort: 3100,
       theme: 'auto',
       httpConcurrency: 9,
-      browserConcurrency: 2
+      browserConcurrency: 2,
+      serverUrl: 'http://localhost:7001'
     }
     const previousClose = vi.fn(() => new Promise<void>(() => undefined))
     vi.mocked(startMcpHttpServer)

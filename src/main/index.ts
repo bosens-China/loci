@@ -27,12 +27,15 @@ import { createAppTray } from './tray'
 import { exportBackupFile, selectBackupFile } from './data-transfer'
 import { createAppWindow } from './app-window'
 import { getOpenAtLogin, setOpenAtLogin, shouldStartHidden } from './open-at-login'
+import { registerCloudAdminIpc } from './cloud-admin-ipc'
+import { registerCloudLibraryRuntime } from './cloud-library-runtime'
 
 let database: LociDatabase | undefined
 let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
 let mcpRuntime: McpRuntime | undefined
 let isQuitting = false
+let stopCloudLibraryRuntime = (): void => undefined
 const runningCrawls = new Set<string>()
 const crawlStates = new Map<string, CrawlRunState>()
 const scheduledCrawls = new Map<string, Cron>()
@@ -103,6 +106,8 @@ if (isPrimaryInstance)
       exportBackupFile(mainWindow, requireDatabase().exportBackup())
     )
     ipcMain.handle('data:import', () => importLocalData())
+    registerCloudAdminIpc(() => requireDatabase().getSettings().serverUrl)
+    stopCloudLibraryRuntime = registerCloudLibraryRuntime(requireDatabase())
 
     restoreScheduledCrawls(requireDatabase().listSources())
     createWindow(!shouldStartHidden())
@@ -118,6 +123,7 @@ if (isPrimaryInstance)
 app.on('before-quit', () => {
   isQuitting = true
   stopScheduledCrawls()
+  stopCloudLibraryRuntime()
   void mcpRuntime?.close()
   database?.close()
   tray?.destroy()

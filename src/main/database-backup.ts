@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
+import { DEFAULT_APP_SETTINGS } from '../shared/api'
+import { normalizeServerUrl } from '../shared/server-url'
 
 const sourceSchema = z
   .object({
@@ -14,6 +16,11 @@ const sourceSchema = z
     browser_concurrency: z.number().int().min(1).max(32).nullable().optional(),
     concurrency: z.number().int().min(1).max(32).nullable().optional(),
     icon_url: z.string().nullable(),
+    source_type: z.enum(['local', 'cloud']).optional(),
+    cloud_server_url: z.string().nullable().optional(),
+    cloud_library_id: z.string().nullable().optional(),
+    cloud_revision: z.string().nullable().optional(),
+    cloud_auto_sync: z.number().int().min(0).max(1).optional(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime()
   })
@@ -51,7 +58,8 @@ const settingsSchema = z
     mcp_port: z.number().int().min(1024).max(65535),
     theme: z.enum(['auto', 'light', 'dark']),
     http_concurrency: z.number().int().min(1).max(32),
-    browser_concurrency: z.number().int().min(1).max(32)
+    browser_concurrency: z.number().int().min(1).max(32),
+    server_url: z.string().url().optional()
   })
   .strict()
 
@@ -111,7 +119,8 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
       sources: database
         .prepare(
           `SELECT id, name, first_url, hostname, fetch_mode, page_limit, schedule,
-             http_concurrency, browser_concurrency, icon_url, created_at, updated_at
+             http_concurrency, browser_concurrency, icon_url, source_type, cloud_server_url,
+             cloud_library_id, cloud_revision, cloud_auto_sync, created_at, updated_at
            FROM document_sources ORDER BY created_at`
         )
         .all(),
@@ -119,7 +128,7 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
       crawlRuns: database.prepare('SELECT * FROM crawl_runs ORDER BY rowid').all(),
       settings: database
         .prepare(
-          'SELECT mcp_port, theme, http_concurrency, browser_concurrency FROM app_settings WHERE id = 1'
+          'SELECT mcp_port, theme, http_concurrency, browser_concurrency, server_url FROM app_settings WHERE id = 1'
         )
         .get()
     }
@@ -141,10 +150,19 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
 
     const insertSource = database.prepare(
       `INSERT INTO document_sources
-       (id, name, first_url, hostname, fetch_mode, page_limit, schedule, http_concurrency, browser_concurrency, icon_url, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, name, first_url, hostname, fetch_mode, page_limit, schedule, http_concurrency,
+        browser_concurrency, icon_url, source_type, cloud_server_url, cloud_library_id,
+        cloud_revision, cloud_auto_sync, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     for (const source of sources) {
+      const sourceType = source.source_type ?? 'local'
+      if (
+        sourceType === 'cloud' &&
+        (!source.cloud_server_url || !source.cloud_library_id || !source.cloud_revision)
+      ) {
+        throw new Error(`云文档来源信息不完整：${source.name}`)
+      }
       insertSource.run(
         source.id,
         source.name,
@@ -156,6 +174,11 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         source.http_concurrency ?? source.concurrency ?? null,
         source.browser_concurrency ?? source.concurrency ?? null,
         source.icon_url,
+        sourceType,
+        sourceType === 'cloud' ? normalizeServerUrl(source.cloud_server_url ?? '') : null,
+        sourceType === 'cloud' ? (source.cloud_library_id ?? null) : null,
+        sourceType === 'cloud' ? (source.cloud_revision ?? null) : null,
+        sourceType === 'cloud' ? (source.cloud_auto_sync ?? 0) : 0,
         source.created_at,
         source.updated_at
       )
@@ -205,14 +228,15 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
     database
       .prepare(
         `UPDATE app_settings
-         SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?
+         SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?, server_url = ?
          WHERE id = 1`
       )
       .run(
         settings.mcp_port,
         settings.theme,
         settings.http_concurrency,
-        settings.browser_concurrency
+        settings.browser_concurrency,
+        normalizeServerUrl(settings.server_url ?? DEFAULT_APP_SETTINGS.serverUrl)
       )
     database.exec('COMMIT')
     return { sources: sources.length, documents: documents.length }

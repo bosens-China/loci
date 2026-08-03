@@ -13,7 +13,8 @@ const mockSource: DocumentSource = {
   schedule: null,
   httpConcurrency: null,
   browserConcurrency: null,
-  iconUrl: 'https://react.dev/favicon.ico'
+  iconUrl: 'https://react.dev/favicon.ico',
+  cloud: null
 }
 
 const mockDoc: DocumentItem = {

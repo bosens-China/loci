@@ -1,5 +1,7 @@
 import {
   AppstoreOutlined,
+  CloudServerOutlined,
+  CloudDownloadOutlined,
   DatabaseOutlined,
   FileSearchOutlined,
   MenuFoldOutlined,
@@ -10,6 +12,7 @@ import { Button, Layout, Menu, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { useState, type ReactNode } from 'react'
 import type { ViewKey } from '@renderer/routes/navigation'
+import { useCloudAdmin } from '@renderer/cloud-admin-context'
 
 const { Sider, Content } = Layout
 
@@ -21,11 +24,35 @@ interface AppShellProps {
 
 function AppShell({ activeView, onViewChange, children }: AppShellProps): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
+  const { session } = useCloudAdmin()
 
   const menuItems: MenuProps['items'] = [
-    { key: 'overview', icon: <AppstoreOutlined />, label: '总览' },
-    { key: 'sources', icon: <DatabaseOutlined />, label: '文档源' },
-    { key: 'library', icon: <FileSearchOutlined />, label: '知识库' }
+    {
+      type: 'group',
+      label: '本地知识库',
+      children: [
+        { key: 'overview', icon: <AppstoreOutlined />, label: '总览' },
+        { key: 'sources', icon: <DatabaseOutlined />, label: '文档源' },
+        { key: 'library', icon: <FileSearchOutlined />, label: '知识库' },
+        { key: 'cloudCatalog', icon: <CloudDownloadOutlined />, label: '云端资源' }
+      ]
+    },
+    ...(session
+      ? [
+          { type: 'divider' as const },
+          {
+            type: 'group' as const,
+            label: '云端管理',
+            children: [
+              {
+                key: 'cloudLibraries',
+                icon: <CloudServerOutlined />,
+                label: '云文档管理'
+              }
+            ]
+          }
+        ]
+      : [])
   ]
   const settingsItem: MenuProps['items'] = [
     { key: 'settings', icon: <SettingOutlined />, label: '设置' }
@@ -50,7 +77,7 @@ function AppShell({ activeView, onViewChange, children }: AppShellProps): React.
                 Loci
               </Typography.Text>
               <Typography.Text type="secondary" className="text-xs block truncate">
-                本地知识库
+                {session ? '超级管理员' : '本地知识库'}
               </Typography.Text>
             </div>
           </div>

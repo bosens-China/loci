@@ -22,7 +22,8 @@ const source: DocumentSource = {
   schedule: null,
   httpConcurrency: null,
   browserConcurrency: null,
-  iconUrl: 'https://cn.vuejs.org/logo.svg'
+  iconUrl: 'https://cn.vuejs.org/logo.svg',
+  cloud: null
 }
 
 const document: DocumentRecord = {
