@@ -1,9 +1,23 @@
 import { app, BrowserWindow, ipcMain, type Tray } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import dockIcon from '../../resources/icon.png?asset'
+import dockIcon from '@resources/icon.png?asset'
 import { Cron } from 'croner'
-import { createDatabase, databaseNeedsMigration, type LociDatabase } from './database'
+import {
+  CloudLibraryService,
+  acquireCrawlRuntimeLock,
+  acquireMaintenanceRuntimeLock,
+  createDatabase,
+  createMcpRuntime,
+  databaseNeedsMigration,
+  importAgentClient,
+  readRuntimeLock,
+  resolveLociDataDir,
+  resolvePreferredMcpConnection,
+  type LociDatabase,
+  type McpRuntime,
+  type RuntimeLock
+} from '@loci/runtime'
 import type {
   AppSettings,
   CreateSourceInput,
@@ -16,9 +30,7 @@ import type {
 } from '@loci/shared'
 import { normalizeCronSchedule } from '@loci/shared'
 import { runSourceCrawl } from './crawl/source'
-import type { LociMcpServices } from './mcp/server'
-import { createMcpRuntime, type McpRuntime } from './mcp/runtime'
-import { importAgentClient, resolvePreferredMcpConnection } from './agent-import'
+import type { LociMcpServices } from '@loci/runtime'
 import { registerSingleInstance } from './single-instance'
 import { createAppTray } from './tray'
 import { exportBackupFile, selectBackupFile } from './data-transfer'
@@ -26,14 +38,6 @@ import { createAppWindow } from './app-window'
 import { getOpenAtLogin, setOpenAtLogin, shouldStartHidden } from './open-at-login'
 import { registerCloudAdminIpc } from './cloud-admin-ipc'
 import { registerCloudLibraryRuntime } from './cloud-library-runtime'
-import { CloudLibraryService } from './cloud-library-service'
-import { resolveLociDataDir } from './data-path'
-import {
-  acquireCrawlRuntimeLock,
-  acquireMaintenanceRuntimeLock,
-  readRuntimeLock,
-  type RuntimeLock
-} from './runtime-lock'
 
 let database: LociDatabase | undefined
 let mainWindow: BrowserWindow | undefined

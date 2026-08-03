@@ -1,7 +1,7 @@
 import type { AppSettings, AppSettingsState } from '@loci/shared'
-import type { LociDatabase } from '../database'
-import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from './http'
-import type { LociMcpServices } from './server'
+import type { LociDatabase } from '../database.js'
+import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from './http.js'
+import type { LociMcpServices } from './server.js'
 
 export interface McpRuntime {
   start: () => Promise<void>

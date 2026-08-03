@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { app, dialog, type BrowserWindow, type OpenDialogOptions } from 'electron'
 import type { DataTransferResult } from '@loci/shared'
-import type { LociBackup } from './database-backup'
+import type { LociBackup } from '@loci/runtime'
 
 export type BackupSelection =
   { canceled: true } | { canceled: false; data: unknown; filename: string }

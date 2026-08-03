@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { normalizeCronSchedule } from '@loci/shared'
 import type { AppSettings, CreateSourceInput, DocumentRecord, DocumentSource } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
-import { normalizeScopePath } from './crawl/url'
+import { normalizeScopePath } from '@loci/core'
 
 export interface SourceRow {
   id: string
@@ -16,6 +16,7 @@ export interface SourceRow {
   browser_concurrency: number | null
   icon_url: string | null
   page_count: number
+  content_size: number
   last_crawled_at: string | null
   source_type: 'local' | 'cloud'
   cloud_server_url: string | null
@@ -73,6 +74,7 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
     mode: row.fetch_mode,
     status: Number(row.page_count) > 0 ? 'healthy' : 'attention',
     pages: Number(row.page_count),
+    contentSize: Number(row.content_size),
     pageLimit: Number(row.page_limit),
     scopePath: row.scope_path,
     lastUpdated: row.last_crawled_at ? formatDate(row.last_crawled_at) : '尚未更新',

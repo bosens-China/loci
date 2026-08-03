@@ -8,10 +8,11 @@ import type {
   CrawlProgress,
   CrawlRunState,
   DocumentRecord,
-  DocumentSource
+  DocumentSource,
+  UrlTreeNode
 } from '@loci/shared'
-import { registerCloudTools } from './cloud-tools'
-import { findBestPassage, readMarkdownSection, sliceContent } from './content'
+import { registerCloudTools } from './cloud-tools.js'
+import { findBestPassage, readMarkdownSection, sliceContent } from './content.js'
 import {
   addLibraryOutputSchema,
   deleteLibraryOutputSchema,
@@ -21,8 +22,9 @@ import {
   searchOutputSchema,
   syncLibrariesOutputSchema,
   syncStatusOutputSchema,
-  treeOutputSchema
-} from './schemas'
+  treeOutputSchema,
+  type TreeNodeOutput
+} from './schemas.js'
 import {
   failure,
   page,
@@ -35,7 +37,7 @@ import {
   syncSummary,
   waitForSync,
   writeAnnotations
-} from './server-support'
+} from './server-support.js'
 
 export interface LociMcpServices {
   listSources: () => DocumentSource[]
@@ -55,6 +57,19 @@ export interface LociMcpServices {
 
 const WAIT_DESCRIPTION =
   '默认立即返回 syncing；需要在单次调用内等待结果时传 wait_for_completion=true，并设置客户端进度回调。'
+
+function withFileLanguages(
+  nodes: readonly UrlTreeNode[],
+  languages: ReadonlyMap<string, string>
+): TreeNodeOutput[] {
+  return nodes.map((node) => ({
+    id: node.id,
+    title: node.title,
+    readable: node.readable,
+    ...(node.readable ? { language: languages.get(node.id) ?? 'und' } : {}),
+    ...(node.children ? { children: withFileLanguages(node.children, languages) } : {})
+  }))
+}
 
 // 所有工具只编排现有本地服务，MCP 层不维护第二份文档或抓取状态。
 export function createLociMcpServer(services: LociMcpServices): McpServer {
@@ -222,7 +237,7 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
     {
       title: '查看文档库目录',
       description:
-        '按层返回 URL 目录。用 parent_id 展开目录，再选择 readable=true 的文件 ID 阅读。',
+        '按层返回 URL 目录、文档库语言集合和文件语言。根据 languages 组织搜索词；用 parent_id 展开目录，再选择 readable=true 的文件 ID 阅读。',
       inputSchema: z.object({
         library_id: z.string().min(1),
         parent_id: z.string().min(1).optional(),
@@ -235,10 +250,20 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
       const source = services.listSources().find((item) => item.id === library_id)
       if (!source) return failure('文档库不存在，请先调用 loci_list_libraries 获取有效 ID')
       const files = services.listDocuments().filter((document) => document.sourceId === library_id)
-      const nodes = getUrlTreeSlice(buildUrlTree(files, library_id), parent_id, depth)
-      if (!nodes) return failure('parent_id 不存在或不是目录节点')
+      const tree = getUrlTreeSlice(buildUrlTree(files, library_id), parent_id, depth)
+      if (!tree) return failure('parent_id 不存在或不是目录节点')
+      const languageByFile = new Map(files.map((file) => [file.id, file.language]))
+      const languages = [...new Set(files.map((file) => file.language))].sort()
+      const nodes = withFileLanguages(tree, languageByFile)
       return result(
-        { library_id, title: source.name, ...(parent_id ? { parent_id } : {}), depth, nodes },
+        {
+          library_id,
+          title: source.name,
+          languages,
+          ...(parent_id ? { parent_id } : {}),
+          depth,
+          nodes
+        },
         `${source.name}：返回 ${nodes.length} 个当前层级节点`
       )
     }
@@ -304,35 +329,38 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
     {
       title: '搜索文件正文',
       description:
-        '搜索标题和 Markdown 正文，返回段落、section_id 和 file_id；随后可直接读取命中小节。',
+        '一次搜索多组标题和 Markdown 正文关键词，按查询分组返回段落、section_id 和 file_id；随后可直接读取命中小节。',
       inputSchema: z.object({
-        query: z.string().trim().min(1).max(200),
+        queries: z.array(z.string().trim().min(1).max(200)).min(1).max(10),
         library_ids: z.array(z.string().min(1)).max(20).optional(),
         ...paginationInput
       }),
       outputSchema: searchOutputSchema,
       annotations: readAnnotations()
     },
-    ({ query, library_ids, offset, limit }) => {
+    ({ queries, library_ids, offset, limit }) => {
       const scope = library_ids ? new Set(library_ids) : undefined
-      const matches = services
-        .searchDocuments(query)
-        .filter((document) => !scope || scope.has(document.sourceId))
-      const hits = matches.slice(offset, offset + limit).map((document) => {
-        const passage = findBestPassage(document.content, query, document.title, document.id)
-        return {
-          file_id: document.id,
-          library_id: document.sourceId,
-          file_title: document.title,
-          section_id: passage.sectionId,
-          section_title: passage.sectionTitle,
-          path: document.folder,
-          source_url: document.url,
-          paragraph: passage.paragraph,
-          truncated: passage.truncated
-        }
+      const results = queries.map((query) => {
+        const matches = services
+          .searchDocuments(query)
+          .filter((document) => !scope || scope.has(document.sourceId))
+        const hits = matches.slice(offset, offset + limit).map((document) => {
+          const passage = findBestPassage(document.content, query, document.title, document.id)
+          return {
+            file_id: document.id,
+            library_id: document.sourceId,
+            file_title: document.title,
+            section_id: passage.sectionId,
+            section_title: passage.sectionTitle,
+            path: document.folder,
+            source_url: document.url,
+            paragraph: passage.paragraph,
+            truncated: passage.truncated
+          }
+        })
+        return { query, ...page(hits, matches.length, offset, limit) }
       })
-      return result(page(hits, matches.length, offset, limit), `找到 ${matches.length} 个匹配文件`)
+      return result({ results }, `完成 ${results.length} 组文档搜索`)
     }
   )
 

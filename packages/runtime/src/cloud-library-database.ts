@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import { getHostname, normalizeUrl } from './crawl/url'
+import { getHostname, normalizeUrl } from '@loci/core'
 
 export interface CloudSnapshot {
   schemaVersion: 1

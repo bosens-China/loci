@@ -1,7 +1,7 @@
 import { accessSync, constants } from 'node:fs'
 import { join } from 'node:path'
 import type { Command } from 'commander'
-import { hasActiveCrawlLocks, readRuntimeLock } from '../../../desktop/src/main/runtime-lock.js'
+import { hasActiveCrawlLocks, readRuntimeLock } from '@loci/runtime'
 import { browserStatus } from '../browser.js'
 import { runWithRuntime } from '../command-runtime.js'
 import { canConnect } from './status.js'

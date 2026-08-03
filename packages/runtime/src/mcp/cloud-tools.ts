@@ -5,7 +5,7 @@ import {
   listCloudLibrariesOutputSchema,
   paginationInput,
   pullCloudLibraryOutputSchema
-} from './schemas'
+} from './schemas.js'
 import {
   failure,
   page,
@@ -13,8 +13,8 @@ import {
   result,
   serializeLibrary,
   writeAnnotations
-} from './server-support'
-import type { LociMcpServices } from './server'
+} from './server-support.js'
+import type { LociMcpServices } from './server.js'
 
 /** 注册访问公开 Loci Server 的工具，本地数据库读写仍由共享服务完成。 */
 export function registerCloudTools(server: McpServer, services: LociMcpServices): void {
@@ -97,7 +97,7 @@ function serializeCloudLibrary(item: CloudCatalogItem): Record<string, unknown> 
     url: item.url,
     revision: item.revision,
     pages: item.pages,
-    snapshot_size: item.snapshotSize,
+    content_size: item.contentSize,
     last_crawled_at: item.lastCrawledAt,
     published_at: item.publishedAt,
     local_source_id: item.localSourceId,

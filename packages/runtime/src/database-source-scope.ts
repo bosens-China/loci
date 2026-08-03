@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { isUrlInScope } from './crawl/url'
+import { isUrlInScope } from '@loci/core'
 
 /** 编辑为更窄范围时，同步移除越界正文和全文索引。 */
 export function deleteDocumentsOutsideScope(

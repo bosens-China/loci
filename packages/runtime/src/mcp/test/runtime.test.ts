@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppSettings } from '@loci/shared'
-import type { LociDatabase } from '../../database'
+import type { LociDatabase } from '@loci/runtime'
 import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from '../http'
 import { createMcpRuntime } from '../runtime'
 import type { LociMcpServices } from '../server'

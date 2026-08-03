@@ -12,6 +12,7 @@ export const librarySchema = z.object({
   mode: z.enum(['auto', 'http', 'browser']),
   status: z.enum(['healthy', 'syncing', 'attention']),
   pages: z.number().int(),
+  content_size: z.number().int().nonnegative(),
   page_limit: z.number().int(),
   last_updated: z.string(),
   schedule: z.string().nullable(),
@@ -82,7 +83,7 @@ const cloudLibrarySchema = z.object({
   url: z.string(),
   revision: z.string(),
   pages: z.number().int(),
-  snapshot_size: z.number().int(),
+  content_size: z.number().int().nonnegative(),
   last_crawled_at: z.string().nullable(),
   published_at: z.string(),
   local_source_id: z.string().nullable(),
@@ -110,6 +111,7 @@ export interface TreeNodeOutput {
   id: string
   title: string
   readable: boolean
+  language?: string
   children?: TreeNodeOutput[]
 }
 
@@ -118,6 +120,7 @@ const treeNodeSchema: z.ZodType<TreeNodeOutput> = z.lazy(() =>
     id: z.string(),
     title: z.string(),
     readable: z.boolean(),
+    language: z.string().optional(),
     children: z.array(treeNodeSchema).optional()
   })
 )
@@ -125,6 +128,7 @@ const treeNodeSchema: z.ZodType<TreeNodeOutput> = z.lazy(() =>
 export const treeOutputSchema = z.object({
   library_id: z.string(),
   title: z.string(),
+  languages: z.array(z.string()),
   parent_id: z.string().optional(),
   depth: z.number().int(),
   nodes: z.array(treeNodeSchema)
@@ -164,13 +168,18 @@ const searchHitSchema = z.object({
   truncated: z.boolean()
 })
 
-export const searchOutputSchema = z.object({
+const searchResultSchema = z.object({
+  query: z.string(),
   total_count: z.number().int(),
   count: z.number().int(),
   offset: z.number().int(),
   items: z.array(searchHitSchema),
   has_more: z.boolean(),
   next_offset: z.number().int().optional()
+})
+
+export const searchOutputSchema = z.object({
+  results: z.array(searchResultSchema)
 })
 
 export const deleteLibraryOutputSchema = z.object({

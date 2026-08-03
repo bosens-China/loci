@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Command } from 'commander'
-import { acquireMaintenanceRuntimeLock } from '../../../desktop/src/main/runtime-lock.js'
+import { acquireMaintenanceRuntimeLock } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
 import { askConfirm, askText } from '../ui.js'
@@ -61,6 +61,26 @@ export function registerDataCommands(program: Command): void {
         try {
           const removed = runtime.database.clearDocuments()
           return `已清空 ${removed} 篇文档，文档源保留不变`
+        } finally {
+          lock.release()
+        }
+      })
+    )
+
+  data
+    .command('clear-sources')
+    .description('清空全部文档源及其文档、全文索引和抓取历史')
+    .option('--yes', '跳过确认')
+    .action((options: { yes?: boolean }) =>
+      runWithRuntime('清空本地文档源', async (runtime) => {
+        const count = runtime.database.listSources().length
+        if (!options.yes && !(await askConfirm(`确定清空全部 ${count} 个文档源及其文档吗？`))) {
+          throw new CliCanceledError()
+        }
+        const lock = acquireMaintenanceRuntimeLock(runtime.dataDir, 'CLI 文档源清理')
+        try {
+          const removed = runtime.database.clearSources()
+          return `已清空 ${removed} 个文档源及其关联数据`
         } finally {
           lock.release()
         }

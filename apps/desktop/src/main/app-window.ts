@@ -1,7 +1,7 @@
 import { BrowserWindow, shell } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import { join } from 'node:path'
-import icon from '../../resources/icon.png?asset'
+import icon from '@resources/icon.png?asset'
 import { registerDevToolsShortcut } from './window-shortcuts'
 
 /** 创建主窗口并集中管理窗口级行为。 */

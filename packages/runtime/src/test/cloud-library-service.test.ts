@@ -21,9 +21,11 @@ describe('CloudLibraryService', () => {
     })
     const service = new CloudLibraryService(database, fetcher)
 
-    expect((await service.listCatalog('HTTP://LOCALHOST:7001/'))[0]?.localSourceId).toBeNull()
+    const catalogItem = (await service.listCatalog('HTTP://LOCALHOST:7001/'))[0]
+    expect(catalogItem?.localSourceId).toBeNull()
     const imported = await service.importLibrary('http://localhost:7001', 'library-1', true)
     expect(imported).toMatchObject({ updated: true, documents: 1 })
+    expect(imported.source.contentSize).toBe(catalogItem?.contentSize)
     expect(imported.source.cloud).toMatchObject({
       serverUrl: 'http://localhost:7001',
       revision: 'sha256:v1',
@@ -59,7 +61,7 @@ function library(revision: string): Record<string, unknown> {
     url: 'https://docs.example.com',
     revision,
     pages: 1,
-    snapshotSize: 256,
+    contentSize: Buffer.byteLength(`version-${revision.split(':').at(-1)}`),
     lastCrawledAt: '2026-08-03T00:00:00.000Z',
     publishedAt: '2026-08-03T00:00:00.000Z'
   }

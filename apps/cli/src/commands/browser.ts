@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import type { Command } from 'commander'
-import { resolveLociCacheDir } from '../../../desktop/src/main/data-path.js'
+import { resolveLociCacheDir } from '@loci/runtime'
 import { browserStatus, runBrowserCommand } from '../browser.js'
 import { askConfirm, finishUi, startUi } from '../ui.js'
 

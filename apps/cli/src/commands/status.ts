@@ -1,5 +1,5 @@
 import type { Command } from 'commander'
-import { isLociMcpAvailable } from '../../../desktop/src/main/mcp/http.js'
+import { isLociMcpAvailable } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { printTable } from '../ui.js'
 

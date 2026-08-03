@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createDatabase } from '../../database'
+import { createDatabase } from '@loci/runtime'
 import { runSourceCrawl } from '../source'
 
 vi.mock('../browser', () => ({ fetchRenderedPage: vi.fn() }))

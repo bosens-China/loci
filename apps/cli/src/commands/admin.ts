@@ -1,5 +1,6 @@
 import type { Command } from 'commander'
 import type { CloudLibrary, CloudLibraryInput } from '@loci/shared'
+import type { CloudAdminClient } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError, errorMessage } from '../errors.js'
 import {
@@ -45,9 +46,7 @@ export function registerAdminCommand(program: Command): void {
     )
 }
 
-async function adminLoop(
-  client: import('../../../desktop/src/main/cloud-admin-client.js').CloudAdminClient
-): Promise<void> {
+async function adminLoop(client: CloudAdminClient): Promise<void> {
   let running = true
   while (running) {
     const action = await askSelect<AdminAction>('请选择管理操作', [
@@ -90,10 +89,7 @@ async function adminLoop(
   }
 }
 
-async function syncLibrary(
-  client: import('../../../desktop/src/main/cloud-admin-client.js').CloudAdminClient,
-  library: CloudLibrary
-): Promise<void> {
+async function syncLibrary(client: CloudAdminClient, library: CloudLibrary): Promise<void> {
   let job = await client.syncLibrary(library.id)
   const spinner = createSpinner()
   spinner.start(`正在同步“${library.name}”`)

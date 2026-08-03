@@ -5,7 +5,7 @@ import {
   localhostOriginValidation,
   toNodeHandler
 } from '@modelcontextprotocol/node'
-import { createLociMcpServer, type LociMcpServices } from './server'
+import { createLociMcpServer, type LociMcpServices } from './server.js'
 
 export interface McpHttpServer {
   port: number

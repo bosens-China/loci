@@ -1,6 +1,6 @@
 import { crawlSource } from '@loci/core'
 import type { CrawlProgress } from '@loci/shared'
-import type { LociDatabase } from '../database'
+import type { LociDatabase } from '@loci/runtime'
 import { fetchRenderedCrawlPage } from './rendered'
 
 /** 桌面端只连接数据库与 Electron 浏览器，抓取流程统一由核心包编排。 */

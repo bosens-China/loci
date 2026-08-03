@@ -1,6 +1,5 @@
 import { ipcMain } from 'electron'
-import { CloudLibraryService } from './cloud-library-service'
-import type { LociDatabase } from './database'
+import { CloudLibraryService, type LociDatabase } from '@loci/runtime'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import type { CloudCatalogItem, CloudImportResult } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
-import type { CloudSnapshot } from './cloud-library-database'
-import type { LociDatabase } from './database'
+import type { CloudSnapshot } from './cloud-library-database.js'
+import type { LociDatabase } from './database.js'
 
 const publicLibrarySchema = z.object({
   id: z.string().min(1),
@@ -10,7 +10,7 @@ const publicLibrarySchema = z.object({
   url: z.string().url(),
   revision: z.string().min(1),
   pages: z.number().int().nonnegative(),
-  snapshotSize: z.number().int().nonnegative(),
+  contentSize: z.number().int().nonnegative(),
   lastCrawledAt: z.string().nullable(),
   publishedAt: z.string()
 })

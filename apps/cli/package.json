@@ -1,7 +1,25 @@
 {
-  "name": "@loci/cli",
+  "name": "@boses/cli",
   "version": "1.1.0",
   "description": "面向终端用户的 Loci 本地文档知识库。",
+  "author": "yliu",
+  "license": "MIT",
+  "homepage": "https://github.com/bosens-China/loci#readme",
+  "bugs": {
+    "url": "https://github.com/bosens-China/loci/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bosens-China/loci.git",
+    "directory": "apps/cli"
+  },
+  "keywords": [
+    "loci",
+    "documentation",
+    "knowledge-base",
+    "mcp",
+    "cli"
+  ],
   "type": "module",
   "bin": {
     "loci": "dist/index.js"
@@ -9,14 +27,15 @@
   "files": [
     "dist/index.js",
     "dist/index.js.map",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22.13"
   },
   "publishConfig": {
     "access": "public",
-    "provenance": true
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "tsdown",
@@ -41,6 +60,7 @@
   },
   "devDependencies": {
     "@loci/core": "workspace:*",
+    "@loci/runtime": "workspace:*",
     "@loci/shared": "workspace:*",
     "@types/node": "^22.19.1",
     "@types/which": "^3.0.4",

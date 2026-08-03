@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
-import { getHostname, isUrlInScope, normalizeScopePath, normalizeUrl } from './crawl/url'
-import { deleteDocumentsOutsideScope } from './database-source-scope'
+import { getHostname, isUrlInScope, normalizeScopePath, normalizeUrl } from '@loci/core'
+import { deleteDocumentsOutsideScope } from './database-source-scope.js'
 import {
   type DocumentRow,
   migrateDatabase,
@@ -11,7 +11,7 @@ import {
   toDocumentSource,
   toFtsExpression,
   validateSourceInput
-} from './database-values'
+} from './database-values.js'
 import type {
   CreateSourceInput,
   DocumentRecord,
@@ -19,14 +19,14 @@ import type {
   UpdateSourceInput
 } from '@loci/shared'
 import { DEFAULT_APP_SETTINGS } from '@loci/shared'
-import { createCloudLibraryDatabase, type CloudLibraryDatabase } from './cloud-library-database'
-import { createSettingsDatabase, type SettingsDatabase } from './settings-database'
+import { createCloudLibraryDatabase, type CloudLibraryDatabase } from './cloud-library-database.js'
+import { createSettingsDatabase, type SettingsDatabase } from './settings-database.js'
 import {
   exportDatabaseBackup,
   importDatabaseBackup,
   type BackupImportSummary,
   type LociBackup
-} from './database-backup'
+} from './database-backup.js'
 
 export interface SourceConfig {
   id: string
@@ -77,6 +77,7 @@ export interface LociDatabase extends CloudLibraryDatabase, SettingsDatabase {
   saveDocument: (document: StoredDocument) => void
   deleteDocument: (sourceId: string, url: string) => void
   clearDocuments: () => number
+  clearSources: () => number
   listDocuments: () => DocumentRecord[]
   searchDocuments: (query: string) => DocumentRecord[]
   deleteSource: (id: string) => void
@@ -209,7 +210,9 @@ export function createDatabase(filename: string): LociDatabase {
           `SELECT s.id, s.name, s.first_url, s.fetch_mode, s.page_limit, s.scope_path, s.schedule,
              s.http_concurrency, s.browser_concurrency, s.icon_url, s.source_type,
              s.cloud_server_url, s.cloud_library_id, s.cloud_revision, s.cloud_auto_sync,
-             COUNT(d.id) AS page_count, MAX(d.crawled_at) AS last_crawled_at
+             COUNT(d.id) AS page_count,
+             COALESCE(SUM(length(CAST(d.markdown AS BLOB))), 0) AS content_size,
+             MAX(d.crawled_at) AS last_crawled_at
            FROM document_sources s
            LEFT JOIN documents d ON d.source_id = s.id
            GROUP BY s.id
@@ -254,7 +257,7 @@ export function createDatabase(filename: string): LociDatabase {
         .prepare(
           `SELECT id, name, first_url, fetch_mode, page_limit, scope_path, schedule, http_concurrency, browser_concurrency, icon_url,
              source_type, cloud_server_url, cloud_library_id, cloud_revision, cloud_auto_sync,
-             0 AS page_count, NULL AS last_crawled_at
+             0 AS page_count, 0 AS content_size, NULL AS last_crawled_at
          FROM document_sources WHERE id = ?`
         )
         .get(id) as unknown as SourceRow
@@ -294,6 +297,7 @@ export function createDatabase(filename: string): LociDatabase {
           `SELECT id, name, first_url, fetch_mode, page_limit, scope_path, schedule, http_concurrency, browser_concurrency, icon_url,
              source_type, cloud_server_url, cloud_library_id, cloud_revision, cloud_auto_sync,
              (SELECT COUNT(*) FROM documents WHERE source_id = document_sources.id) AS page_count,
+             (SELECT COALESCE(SUM(length(CAST(markdown AS BLOB))), 0) FROM documents WHERE source_id = document_sources.id) AS content_size,
              (SELECT MAX(crawled_at) FROM documents WHERE source_id = document_sources.id) AS last_crawled_at
            FROM document_sources WHERE id = ?`
         )
@@ -396,6 +400,11 @@ export function createDatabase(filename: string): LociDatabase {
       withTransaction(database, () => {
         database.exec('DELETE FROM documents_fts')
         return Number(database.prepare('DELETE FROM documents').run().changes)
+      }),
+    clearSources: () =>
+      withTransaction(database, () => {
+        database.exec('DELETE FROM documents_fts')
+        return Number(database.prepare('DELETE FROM document_sources').run().changes)
       }),
     listDocuments: () => {
       const rows = database

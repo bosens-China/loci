@@ -1,6 +1,6 @@
 import type { ServerContext } from '@modelcontextprotocol/server'
 import type { CrawlProgress, CrawlRunState, DocumentSource, SourceStatus } from '@loci/shared'
-import type { LociMcpServices } from './server'
+import type { LociMcpServices } from './server.js'
 
 export async function waitForSync(
   services: LociMcpServices,
@@ -85,6 +85,7 @@ export function serializeLibrary(
     mode: source.mode,
     status: status ?? source.status,
     pages: source.pages,
+    content_size: source.contentSize,
     page_limit: source.pageLimit,
     last_updated: source.lastUpdated,
     schedule: source.schedule,

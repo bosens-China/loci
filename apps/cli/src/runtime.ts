@@ -2,18 +2,17 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { crawlSource, type CrawlNode, type CrawlProgress } from '@loci/core'
 import {
-  createDatabase,
-  databaseNeedsMigration,
-  type LociDatabase
-} from '../../desktop/src/main/database.js'
-import { CloudLibraryService } from '../../desktop/src/main/cloud-library-service.js'
-import { CloudAdminClient } from '../../desktop/src/main/cloud-admin-client.js'
-import { resolveLociCacheDir, resolveLociDataDir } from '../../desktop/src/main/data-path.js'
-import {
+  CloudAdminClient,
+  CloudLibraryService,
   acquireCrawlRuntimeLock,
   acquireMaintenanceRuntimeLock,
-  readRuntimeLock
-} from '../../desktop/src/main/runtime-lock.js'
+  createDatabase,
+  databaseNeedsMigration,
+  readRuntimeLock,
+  resolveLociCacheDir,
+  resolveLociDataDir,
+  type LociDatabase
+} from '@loci/runtime'
 import type {
   CreateSourceInput,
   CrawlRunState,

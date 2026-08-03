@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import type { CloudAdminLoginInput, CloudLibraryInput } from '@loci/shared'
-import { CloudAdminClient } from './cloud-admin-client'
+import { CloudAdminClient } from '@loci/runtime'
 
 /** 注册云端管理通道，并把敏感会话限制在主进程。 */
 export function registerCloudAdminIpc(getServerUrl: () => string): void {

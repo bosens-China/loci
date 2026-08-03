@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { Menu, Tray, nativeImage, type NativeImage } from 'electron'
-import icon from '../../resources/icon.png?asset'
-import trayTemplate from '../../resources/trayTemplate.png?asset'
-import trayTemplate2x from '../../resources/trayTemplate@2x.png?asset'
+import icon from '@resources/icon.png?asset'
+import trayTemplate from '@resources/trayTemplate.png?asset'
+import trayTemplate2x from '@resources/trayTemplate@2x.png?asset'
 
 export function createAppTray(onShow: () => void, onQuit: () => void): Tray {
   const tray = new Tray(createTrayIcon())

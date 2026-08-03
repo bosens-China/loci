@@ -93,6 +93,9 @@ importers:
       '@loci/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@loci/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@loci/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -126,6 +129,9 @@ importers:
       '@loci/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@loci/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@loci/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -285,6 +291,43 @@ importers:
         specifier: ^9.0.1
         version: 9.0.1
     devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@22.20.1)(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/runtime:
+    dependencies:
+      '@loci/core':
+        specifier: workspace:*
+        version: link:../core
+      '@loci/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@modelcontextprotocol/node':
+        specifier: ^2.0.0
+        version: 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.12.32)
+      '@modelcontextprotocol/server':
+        specifier: ^2.0.0
+        version: 2.0.0
+      which:
+        specifier: ^6.0.1
+        version: 6.0.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@modelcontextprotocol/client':
+        specifier: ^2.0.0
+        version: 2.0.0
+      '@types/node':
+        specifier: ^22.19.1
+        version: 22.20.1
+      '@types/which':
+        specifier: ^3.0.4
+        version: 3.0.4
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

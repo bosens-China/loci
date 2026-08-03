@@ -18,6 +18,7 @@ const source: DocumentSource = {
   mode: 'http',
   status: 'healthy',
   pages: 1,
+  contentSize: Buffer.byteLength('# 响应式基础'),
   pageLimit: 1000,
   scopePath: '/',
   lastUpdated: '刚刚',
@@ -54,7 +55,7 @@ const cloudLibrary: CloudCatalogItem = {
   url: source.url,
   revision: 'revision-1',
   pages: 1,
-  snapshotSize: 1024,
+  contentSize: 1024,
   lastCrawledAt: '2026-08-03T00:00:00.000Z',
   publishedAt: '2026-08-03T00:00:00.000Z',
   localSourceId: null,
@@ -108,7 +109,7 @@ describe('MCP HTTP server', () => {
     })
     expect(cloud.structuredContent).toMatchObject({
       total_count: 1,
-      items: [{ id: cloudLibrary.id, snapshot_size: 1024, local_source_id: null }]
+      items: [{ id: cloudLibrary.id, content_size: 1024, local_source_id: null }]
     })
 
     const pulled = await client.callTool({
@@ -126,6 +127,7 @@ describe('MCP HTTP server', () => {
       arguments: { library_id: source.id, depth: 2 }
     })
     expect(tree.structuredContent).toMatchObject({
+      languages: ['zh-CN'],
       nodes: [{ id: `folder:${source.id}:guide`, children: [{ title: 'essentials' }] }]
     })
     const expanded = await client.callTool({
@@ -133,15 +135,25 @@ describe('MCP HTTP server', () => {
       arguments: { library_id: source.id, parent_id: `folder:${source.id}:guide/essentials` }
     })
     expect(expanded.structuredContent).toMatchObject({
-      nodes: [{ id: document.id, readable: true }]
+      languages: ['zh-CN'],
+      nodes: [{ id: document.id, readable: true, language: 'zh-CN' }]
     })
 
     const searched = await client.callTool({
       name: 'loci_search_files',
-      arguments: { query: '依赖追踪' }
+      arguments: { queries: ['响应式基础', '依赖追踪'] }
     })
     expect(searched.structuredContent).toMatchObject({
-      items: [{ file_id: document.id, section_id: `${document.id}:section:0` }]
+      results: [
+        {
+          query: '响应式基础',
+          items: [{ file_id: document.id, section_id: `${document.id}:section:0` }]
+        },
+        {
+          query: '依赖追踪',
+          items: [{ file_id: document.id }]
+        }
+      ]
     })
 
     const firstRead = await client.callTool({
@@ -153,7 +165,7 @@ describe('MCP HTTP server', () => {
       }
     })
     expect(firstRead.structuredContent).toMatchObject({
-      files: [{ id: document.id, offset: 0, truncated: true }]
+      files: [{ id: document.id, language: 'zh-CN', offset: 0, truncated: true }]
     })
     expect(firstRead.content[0]).toMatchObject({ type: 'text' })
     const firstFile = getFirstFile(firstRead.structuredContent)

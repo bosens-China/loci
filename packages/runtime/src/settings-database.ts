@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { AppSettings } from '@loci/shared'
-import { validateSettings } from './database-values'
+import { validateSettings } from './database-values.js'
 
 export interface SettingsDatabase {
   getSettings: () => AppSettings

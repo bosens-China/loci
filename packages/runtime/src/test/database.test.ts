@@ -22,16 +22,21 @@ describe('createDatabase', () => {
       expect(source.schedule).toBe('0 2 * * *')
       expect(source.status).toBe('attention')
       expect(database.listSources()).toEqual([source])
+      const markdown = '# Learn React\n\n组件🙂 are reusable.'
       database.saveDocument({
         sourceId: source.id,
         url: source.url,
         title: 'Learn React',
-        markdown: '# Learn React\n\nComponents are reusable.',
+        markdown,
         language: 'en-US',
         fetchMode: 'http',
         crawledAt: new Date().toISOString()
       })
-      expect(database.listSources()[0]).toMatchObject({ pages: 1, status: 'healthy' })
+      expect(database.listSources()[0]).toMatchObject({
+        pages: 1,
+        contentSize: Buffer.byteLength(markdown),
+        status: 'healthy'
+      })
       expect(database.listDocumentUrls(source.id)).toEqual([source.url])
       expect(
         database.updateSource(source.id, {
@@ -56,11 +61,15 @@ describe('createDatabase', () => {
         fetchMode: 'http'
       })
       expect(database.listDocuments()).toHaveLength(1)
-      expect(database.searchDocuments('Components')[0]?.title).toBe('Learn React')
+      expect(database.searchDocuments('reusable')[0]?.title).toBe('Learn React')
       expect(database.clearDocuments()).toBe(1)
       expect(database.listDocuments()).toEqual([])
-      expect(database.searchDocuments('Components')).toEqual([])
-      expect(database.listSources()[0]).toMatchObject({ pages: 0, status: 'attention' })
+      expect(database.searchDocuments('reusable')).toEqual([])
+      expect(database.listSources()[0]).toMatchObject({
+        pages: 0,
+        contentSize: 0,
+        status: 'attention'
+      })
       expect(database.getSettings()).toEqual({
         mcpPort: 37373,
         theme: 'auto',
@@ -121,6 +130,46 @@ describe('createDatabase', () => {
 
     expect(() => createDatabase(filename)).toThrow('请升级 Loci 后重试')
     rmSync(directory, { recursive: true, force: true })
+  })
+
+  it('清空全部文档源及其关联数据但保留设置', () => {
+    const database = createDatabase(':memory:')
+    try {
+      for (const [name, url] of [
+        ['React', 'https://react.dev'],
+        ['Vue', 'https://vuejs.org']
+      ]) {
+        const source = database.createSource({
+          name,
+          url,
+          mode: 'http',
+          pageLimit: 100,
+          schedule: null,
+          httpConcurrency: null,
+          browserConcurrency: null
+        })
+        database.saveDocument({
+          sourceId: source.id,
+          url,
+          title: name,
+          markdown: `# ${name} Components`,
+          language: 'en',
+          fetchMode: 'http',
+          crawledAt: new Date().toISOString()
+        })
+        database.startCrawlRun(source.id)
+      }
+
+      const settings = database.getSettings()
+      expect(database.clearSources()).toBe(2)
+      expect(database.listSources()).toEqual([])
+      expect(database.listDocuments()).toEqual([])
+      expect(database.searchDocuments('Components')).toEqual([])
+      expect(database.listCrawlHistory()).toEqual([])
+      expect(database.getSettings()).toEqual(settings)
+    } finally {
+      database.close()
+    }
   })
 
   it('migrates existing settings and document source tables', () => {

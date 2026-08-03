@@ -1,14 +1,16 @@
 import { Option, type Command } from 'commander'
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
-import { startMcpHttpServer } from '../../../desktop/src/main/mcp/http.js'
-import { createLociMcpServer, type LociMcpServices } from '../../../desktop/src/main/mcp/server.js'
-import type { AgentClient } from '@loci/shared'
 import {
+  acquireRuntimeLock,
   createHttpMcpConnection,
-  importAgentClient,
-  LOCI_CLI_STDIO_CONNECTION
-} from '../../../desktop/src/main/agent-import.js'
-import { acquireRuntimeLock, readRuntimeLock } from '../../../desktop/src/main/runtime-lock.js'
+  createLociMcpServer,
+  LOCI_CLI_STDIO_CONNECTION,
+  readRuntimeLock,
+  startMcpHttpServer,
+  type LociMcpServices
+} from '@loci/runtime'
+import type { AgentClient } from '@loci/shared'
+import { importAgentClient } from '@loci/runtime'
 import { createCliRuntime } from '../runtime.js'
 import { runWithRuntime } from '../command-runtime.js'
 import { askSelect, finishUi, info, startUi, success } from '../ui.js'
