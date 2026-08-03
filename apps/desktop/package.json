@@ -1,6 +1,6 @@
 {
   "name": "@loci/desktop",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Loci desktop application.",
   "author": "yliu <yangboses@gmail.com>",
