@@ -19,7 +19,7 @@ import {
 } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import type { CloudCatalogItem } from '@loci/shared'
+import { formatBytes, type CloudCatalogItem } from '@loci/shared'
 import { useAppSettings } from '../settings-context'
 
 function CloudCatalogPage(): React.JSX.Element {
@@ -132,7 +132,7 @@ function CloudCatalogPage(): React.JSX.Element {
 
                 <div className="my-5 flex flex-wrap gap-2">
                   <Tag bordered={false}>{item.pages} 页</Tag>
-                  <Tag bordered={false}>{formatBytes(item.snapshotSize)}</Tag>
+                  <Tag bordered={false}>{formatBytes(item.contentSize)}</Tag>
                   <Tag bordered={false}>发布于 {formatDate(item.publishedAt)}</Tag>
                 </div>
 
@@ -220,12 +220,6 @@ function CloudCatalogPage(): React.JSX.Element {
       )}
     </div>
   )
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 function formatDate(value: string): string {

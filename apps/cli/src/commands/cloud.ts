@@ -1,5 +1,5 @@
 import type { Command } from 'commander'
-import type { CloudCatalogItem, DocumentSource } from '@loci/shared'
+import { formatBytes, type CloudCatalogItem, type DocumentSource } from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
 import { askConfirm, askSelect, createSpinner, printTable } from '../ui.js'
@@ -137,19 +137,13 @@ async function selectCloudSource(
 
 function printCatalog(items: CloudCatalogItem[]): void {
   printTable(
-    ['名称', '页面', '快照大小', '本地状态', '短 ID'],
+    ['名称', '页面', '内容大小', '本地状态', '短 ID'],
     items.map((item) => [
       item.name,
       item.pages,
-      formatBytes(item.snapshotSize),
+      formatBytes(item.contentSize),
       !item.localSourceId ? '未下载' : item.updateAvailable ? '有更新' : '最新',
       item.id.slice(0, 8)
     ])
   )
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }

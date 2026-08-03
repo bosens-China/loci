@@ -27,6 +27,11 @@ describe('Loci CLI command surface', () => {
         .find((command) => command.name() === 'mcp')
         ?.commands.map((command) => command.name())
     ).toEqual(['stdio', 'serve', 'status', 'configure'])
+    expect(
+      program.commands
+        .find((command) => command.name() === 'data')
+        ?.commands.map((command) => command.name())
+    ).toEqual(['export', 'import', 'clear-documents', 'clear-sources'])
   })
 
   it('translates Commander failures into clear Chinese errors', async () => {

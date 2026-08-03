@@ -72,7 +72,7 @@ export interface CloudCatalogItem {
   url: string
   revision: string
   pages: number
-  snapshotSize: number
+  contentSize: number
   lastCrawledAt: string | null
   publishedAt: string
   localSourceId: string | null
@@ -118,6 +118,7 @@ export interface DocumentSource {
   mode: FetchMode
   status: SourceStatus
   pages: number
+  contentSize: number
   pageLimit: number
   scopePath: string
   lastUpdated: string

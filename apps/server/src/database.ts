@@ -125,7 +125,7 @@ export class ServerDatabase {
       url: row.first_url,
       revision: row.revision,
       pages: Number(row.page_count),
-      snapshotSize: Number(row.byte_size),
+      contentSize: Number(row.byte_size),
       lastCrawledAt: row.last_crawled_at,
       publishedAt: row.published_at
     }))
@@ -249,11 +249,20 @@ export class ServerDatabase {
       library: { id: library.id, name: library.name, url: library.url },
       documents
     }
+    const contentSize = documents.reduce(
+      (total, document) => total + Buffer.byteLength(document.markdown),
+      0
+    )
     const revision = `sha256:${createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`
     const current = this.#database
       .prepare('SELECT revision, content FROM library_snapshots WHERE library_id = ?')
       .get(libraryId) as unknown as SnapshotRow | undefined
-    if (current?.revision === revision) return JSON.parse(current.content) as LibrarySnapshot
+    if (current?.revision === revision) {
+      this.#database
+        .prepare('UPDATE library_snapshots SET byte_size = ? WHERE library_id = ?')
+        .run(contentSize, libraryId)
+      return JSON.parse(current.content) as LibrarySnapshot
+    }
 
     const publishedAt = new Date().toISOString()
     const snapshot: LibrarySnapshot = {
@@ -274,7 +283,7 @@ export class ServerDatabase {
           byte_size = excluded.byte_size,
           content = excluded.content`
       )
-      .run(libraryId, revision, publishedAt, documents.length, Buffer.byteLength(content), content)
+      .run(libraryId, revision, publishedAt, documents.length, contentSize, content)
     return snapshot
   }
 

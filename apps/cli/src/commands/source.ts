@@ -1,5 +1,5 @@
 import { Option, type Command } from 'commander'
-import type { FetchMode } from '@loci/shared'
+import { formatBytes, type FetchMode } from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { resolveSource } from '../resources.js'
@@ -29,10 +29,11 @@ export function registerSourceCommands(program: Command): void {
           process.stdout.write('还没有本地文档源，可运行 loci source add 创建。\n')
         } else {
           printTable(
-            ['名称', '页面', '方式', '范围', '最近更新', '短 ID'],
+            ['名称', '页面', '内容大小', '方式', '范围', '最近更新', '短 ID'],
             sources.map((item) => [
               item.name,
               item.pages,
+              formatBytes(item.contentSize),
               modeLabel(item.mode),
               item.scopePath,
               item.lastUpdated,

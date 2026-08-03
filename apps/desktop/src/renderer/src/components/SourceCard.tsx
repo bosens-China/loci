@@ -9,6 +9,7 @@ import {
   ReloadOutlined
 } from '@ant-design/icons'
 import { Avatar, Button, Card, Popconfirm, Space, Tag, Tooltip, Typography } from 'antd'
+import { formatBytes } from '@loci/shared'
 import { SourceScheduleTag } from './SourceScheduleFields'
 import type { CrawlRunState, DocumentSource } from '../types'
 
@@ -94,6 +95,9 @@ function SourceCard({
             </Tag>
             <Tag bordered={false} className="bg-[var(--ant-color-fill-quaternary)] text-xs">
               {source.pages} 页
+            </Tag>
+            <Tag bordered={false} className="bg-[var(--ant-color-fill-quaternary)] text-xs">
+              {formatBytes(source.contentSize)}
             </Tag>
             <Tag bordered={false} className="bg-[var(--ant-color-fill-quaternary)] text-xs">
               {source.httpConcurrency || source.browserConcurrency

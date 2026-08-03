@@ -6,7 +6,7 @@ import {
   SyncOutlined
 } from '@ant-design/icons'
 import { Button, Card, Empty, Progress, Space, Tag, Tooltip, Typography } from 'antd'
-import type { DocumentSource } from '../../types'
+import type { DocumentSource } from '@/types'
 
 interface OverviewSourceGridProps {
   sources: DocumentSource[]

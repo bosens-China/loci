@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { DocumentItem, DocumentSource } from '../../types'
+import type { DocumentItem, DocumentSource } from '@/types'
 
 const mockSource: DocumentSource = {
   id: 'source-1',
@@ -8,6 +8,7 @@ const mockSource: DocumentSource = {
   mode: 'auto',
   status: 'healthy',
   pages: 120,
+  contentSize: 1024 * 1024,
   pageLimit: 1000,
   scopePath: '/',
   lastUpdated: '2026-08-01 10:00:00',

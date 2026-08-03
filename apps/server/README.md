@@ -58,7 +58,7 @@ pnpm server:start
 ## 公开 API
 
 - `GET /health`：健康检查。
-- `GET /api/v1/libraries`：列出已经发布的文档库。
+- `GET /api/v1/libraries`：列出已经发布的文档库，包括页面数和下载后将保存的 Markdown UTF-8 原始字节数 `contentSize`。
 - `GET /api/v1/libraries/:id/snapshot`：下载完整 JSON 快照。
 
 快照响应提供 `ETag`。客户端再次请求时传入 `If-None-Match`，内容未变化会返回 `304 Not Modified`。

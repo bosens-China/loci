@@ -9,7 +9,7 @@ CLI 的消息、提醒和交互目前只提供中文。输出用于人在终端�
 需要 Node.js 22.13 或更高版本：
 
 ```bash
-npm install --global @loci/cli
+npm install --global @boses/cli
 loci --help
 ```
 
@@ -34,7 +34,7 @@ loci cloud list
 loci doctor
 ```
 
-缺少参数时，交互式终端会提示输入；在 CI 或管道中应通过选项提供全部必填值。删除、覆盖导入和清空文档默认要求确认，可显式传入 `--yes`。
+缺少参数时，交互式终端会提示输入；在 CI 或管道中应通过选项提供全部必填值。删除、覆盖导入、清空文档和清空文档源默认要求确认，可显式传入 `--yes`。
 
 完整命令分组：
 
@@ -46,8 +46,12 @@ loci admin
 loci mcp stdio|serve|status|configure
 loci browser status|install|uninstall
 loci config list|set
-loci data export|import|clear-documents
+loci data export|import|clear-documents|clear-sources
 ```
+
+`loci source list` 和 `loci cloud list` 都会展示页面数和 Markdown 内容大小，按 `B`、`KB`、`MB`、`GB` 等单位自动转换。同一云端 revision 在下载前后的内容大小一致；JSON 传输包装和 SQLite、FTS 存储开销不计入。
+
+`loci data clear-documents` 只清空文档和全文索引并保留文档源；`loci data clear-sources` 会清空全部本地文档源及其文档、索引和抓取历史，包括已下载的云端副本，但不会删除应用设置或远程 Server 内容。
 
 ## 与桌面端共享数据
 

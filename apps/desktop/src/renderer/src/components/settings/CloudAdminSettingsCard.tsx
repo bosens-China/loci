@@ -13,8 +13,8 @@ import {
 } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useCloudAdmin } from '../../cloud-admin-context'
-import { useAppSettings } from '../../settings-context'
+import { useCloudAdmin } from '@/cloud-admin-context'
+import { useAppSettings } from '@/settings-context'
 
 export function CloudAdminSettingsCard(): React.JSX.Element {
   const navigate = useNavigate()

@@ -1,6 +1,6 @@
 import { ArrowRightOutlined, FileTextOutlined, FolderOutlined } from '@ant-design/icons'
 import { Button, Card, Empty, List, Tag, Typography } from 'antd'
-import type { DocumentItem } from '../../types'
+import type { DocumentItem } from '@/types'
 
 interface OverviewRecentDocsProps {
   documents: DocumentItem[]

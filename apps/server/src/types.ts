@@ -23,7 +23,7 @@ export interface PublicLibrary {
   url: string
   revision: string
   pages: number
-  snapshotSize: number
+  contentSize: number
   lastCrawledAt: string | null
   publishedAt: string
 }

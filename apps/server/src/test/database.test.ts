@@ -21,17 +21,20 @@ describe('ServerDatabase', () => {
       title: 'Node.js',
       url: 'https://hono.dev/docs/getting-started/nodejs',
       language: 'en-US',
-      markdown: '# Node.js',
+      markdown: '# Node.js\n\n中文🙂',
       crawledAt: '2026-08-02T00:00:00.000Z',
       fetchMode: 'http'
     })
 
     const first = database.publishSnapshot(library.id)
+    expect(database.listPublishedLibraries()[0]?.contentSize).toBe(
+      Buffer.byteLength('# Node.js\n\n中文🙂')
+    )
     database.saveDocument(library.id, {
       title: 'Node.js',
       url: 'https://hono.dev/docs/getting-started/nodejs',
       language: 'en-US',
-      markdown: '# Node.js',
+      markdown: '# Node.js\n\n中文🙂',
       crawledAt: '2026-08-03T00:00:00.000Z',
       fetchMode: 'http'
     })
