@@ -29,12 +29,14 @@ dmg:
   artifactName: loci-${version}.${ext}
 linux:
   icon: resources/icon.svg
+  executableName: loci
+  syncDesktopName: true
   artifactName: loci-${version}.${ext}
   target:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: yliu <yangboses@gmail.com>
   category: Utility
 appImage:
   artifactName: loci-${version}.${ext}
