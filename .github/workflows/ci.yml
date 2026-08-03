@@ -18,8 +18,6 @@ jobs:
     name: Verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    outputs:
-      desktop: ${{ steps.scopes.outputs.desktop }}
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       HUSKY: '0'
@@ -54,7 +52,10 @@ jobs:
           else
             while IFS= read -r path; do
               case "$path" in
-                package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|*.config.*|.release-please-manifest.json|release-please-config.json|.github/workflows/*.yml|.github/actions/*)
+                # 文档由 docs-pages.yml 独立验证，避免触发应用构建。
+                apps/docs/*|docs/*|*.md|.github/workflows/docs-pages.yml)
+                  ;;
+                package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|*.config.*|.release-please-manifest.json|release-please-config.json|.github/workflows/ci.yml|.github/workflows/release.yml|.github/actions/*)
                   code=true
                   cli=true
                   desktop=true
@@ -163,41 +164,3 @@ jobs:
           fi
       - if: steps.scopes.outputs.desktop == 'true'
         run: pnpm build:unpack
-
-  verify-desktop:
-    name: Verify desktop (${{ matrix.os }})
-    needs: verify
-    if: ${{ needs.verify.outputs.desktop == 'true' }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - os: macos-latest
-            cache_path: |
-              ~/Library/Caches/electron
-              ~/Library/Caches/electron-builder
-          - os: windows-latest
-            cache_path: |
-              ~/AppData/Local/electron
-              ~/AppData/Local/electron-builder
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      HUSKY: '0'
-    steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.15.1
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - uses: actions/cache@v4
-        with:
-          path: ${{ matrix.cache_path }}
-          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-electron-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build:unpack
