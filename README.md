@@ -12,6 +12,8 @@ Loci 提供 Electron 桌面应用和独立 CLI，两者共享同一份本地 SQL
 
 前往 [GitHub Releases](https://github.com/bosens-China/loci/releases) 下载适用于 macOS、Windows 或 Linux 的安装包。安装后，添加公开文档源并同步，即可在应用中浏览和搜索文档。
 
+桌面端会在启动时每天检查一次更新；可在“系统设置 → 关于 Loci”手动检查并前往 Releases 下载新版。macOS 未签名版本需要手动安装，并可能要求在系统“隐私与安全性”中确认打开。
+
 ### CLI
 
 CLI 需要 Node.js 22.13 或更高版本：

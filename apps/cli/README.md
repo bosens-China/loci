@@ -26,6 +26,7 @@ loci browser status
 
 ```bash
 loci status
+loci update
 loci source add
 loci source sync
 loci document search React
@@ -88,6 +89,8 @@ loci mcp status
 两种 transport 暴露相同的十个工具，包括本地文档库的获取、同步、目录、搜索和阅读，以及云端公开目录查询与快照拉取。Agent 的推荐获取顺序和确认边界由 [`use-loci`](../../.agents/skills/use-loci/SKILL.md) Skill 约束。
 
 普通 CLI 命令不会隐式启动后台进程，也不会运行本地定时同步或云端自动同步。
+
+CLI 每天首次在交互终端运行时会在后台检查一次 npm 最新版本，网络检查最多持续 5 秒，不会阻塞当前命令。发现更新后会在后续命令中提示；也可随时运行 `loci update` 立即检查。
 
 ## 退出码
 
