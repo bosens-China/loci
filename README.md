@@ -1,35 +1,43 @@
 # Loci
 
-Loci 是为 AI Agent 准备的本地知识库。它将用户指定的公开文档抓取为本地 Markdown，提供目录浏览、全文搜索和本机 MCP 服务，并通过配套的 [`use-loci`](./.agents/skills/use-loci/SKILL.md) Skill 指导 Agent 按需发现和组合阅读文档。
+## 项目是什么
 
-当前版本提供 Electron 桌面端和通过 npm 分发的独立 CLI，两者共享同一份 SQLite 数据。仓库同时提供可选的 [Loci Server](./apps/server/README.md)，用于抓取和发布公开文档库的只读快照，本地内容不会上传到服务器。
+Loci 是为 AI Agent 准备的本地知识库。它将公开文档抓取为本地 Markdown，提供目录浏览、全文搜索和 MCP 服务，让 Agent 能按需发现和阅读文档。
 
-Loci 只抓取无需登录即可访问的公开 HTTP/HTTPS 页面，不处理登录态、验证码、Cloudflare 等反爬挑战或访问限制。URL 会移除 Query 和 Fragment，因此不支持使用 `#` 区分页面的 Hash Router 文档站。
+Loci 提供 Electron 桌面应用和独立 CLI，两者共享同一份本地 SQLite 数据；本地文档不会上传到服务器。
 
-## 仓库结构
+## 如何使用
 
-- `apps/desktop`：Electron 桌面应用，包括主进程、Preload 和 React Renderer。
-- `apps/cli`：面向终端用户的独立 CLI，可在没有桌面环境的机器上运行。
-- `apps/server`：可选的 Hono 文档抓取与快照服务。
-- `packages/core`：桌面端与服务端复用的抓取和调度能力。
-- `docs`：产品决策与功能工作区文档。
+### 桌面应用
 
-根目录只负责 pnpm workspace 编排、统一质量检查和发布，不再承载应用源码。
+前往 [GitHub Releases](https://github.com/bosens-China/loci/releases) 下载适用于 macOS、Windows 或 Linux 的安装包。安装后，添加公开文档源并同步，即可在应用中浏览和搜索文档。
 
-## 文档
+### CLI
 
-- [产品 PRD](./docs/PRD.md)
-- [Loci Server 部署与 API](./apps/server/README.md)
-- [CLI 安装与使用](./apps/cli/README.md)
-- [Agent 使用 Skill](./.agents/skills/use-loci/SKILL.md)
+CLI 需要 Node.js 22.13 或更高版本：
 
-## 下载与发布
+```bash
+npm install --global @boses/cli
+loci --help
+```
 
-桌面安装包发布在 [GitHub Releases](https://github.com/bosens-China/loci/releases)，CLI 发布到 npm。合并普通 PR 后，Release Please 会根据提交消息维护版本 PR；再合并版本 PR，即创建对应 tag、Release、三平台安装包和同版本 CLI 包。
+常用命令：
 
-仓库采用单一产品版本：根 `package.json` 是 Release Please 的版本源，版本 PR 会同步更新桌面端、服务端和 core 包版本，并统一写入根 `CHANGELOG.md`。服务端目前仍通过仓库内 Compose 从源码构建，不单独发布容器镜像。
+```bash
+loci source add
+loci source sync
+loci document search React
+loci mcp configure codex
+```
 
-- `fix:` 发布补丁版本，例如 `1.0.0` → `1.0.1`
-- `feat:` 发布次版本，例如 `1.0.0` → `1.1.0`
-- `feat!:` 或提交正文中的 `BREAKING CHANGE:` 发布主版本
-- 提交正文中的 `Release-As: 1.2.3` 可指定下一版本
+需要抓取依赖客户端渲染的文档站时，安装浏览器运行时：
+
+```bash
+loci browser install
+```
+
+更多命令请查看 [CLI 文档](./apps/cli/README.md)。
+
+## 开源协议
+
+MIT License
