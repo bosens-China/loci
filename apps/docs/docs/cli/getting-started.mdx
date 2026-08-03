@@ -1,0 +1,72 @@
+# CLI 安装与使用
+
+Loci CLI 适合终端、服务器和 Agent 环境。CLI 与桌面应用使用同一份本地数据。
+
+## 安装 CLI
+
+CLI 需要 Node.js 22.13 或更高版本。
+
+```bash
+npm install --global @boses/cli
+loci --help
+```
+
+如果要抓取依赖浏览器渲染的文档站，再安装 Chromium headless shell。普通 HTTP 文档站不需要这一步。
+
+```bash
+loci browser install
+```
+
+## 收录第一份文档
+
+以下示例收录 Rspress 文档。`--page-limit` 用于限制本次最多抓取的页面数。
+
+```bash
+loci source add --name Rspress --url https://rspress.rs/ --mode http --page-limit 100
+loci source sync Rspress
+```
+
+同步完成后，使用关键词查找文档。命令会显示每篇文档的短 ID；可用短 ID 读取全文。
+
+```bash
+loci document search "Quick start"
+loci document read <短 ID>
+```
+
+可以随时查看本地数据和 MCP 状态：
+
+```bash
+loci status
+loci source list
+```
+
+## 接入 MCP
+
+Loci 通过 MCP 让 Agent 发现、搜索和读取本地文档。CLI 默认使用 stdio：Agent 需要使用时才会启动 Loci，不需要手动常驻运行服务。
+
+目前可自动配置的客户端包括 Codex、Cursor、VS Code、Claude Code 和 Gemini CLI。以 Codex 为例：
+
+```bash
+loci mcp configure codex
+```
+
+配置完成后，重启或新建 Agent 会话即可使用 `loci` MCP。检查配置和服务状态：
+
+```bash
+loci mcp status
+```
+
+需要以前台 HTTP 服务接入时，先在一个终端运行服务，再在另一个终端使用 HTTP 传输写入 Agent 配置：
+
+```bash
+loci mcp serve
+```
+
+```bash
+loci mcp configure codex --transport http
+```
+
+## 下一步
+
+- 需要更多 CLI 命令，查看 [CLI 安装与使用](https://github.com/bosens-China/loci/tree/master/apps/cli#readme)。
+- 遇到环境或浏览器问题，运行 `loci doctor`；浏览器不可用时运行 `loci browser install`。

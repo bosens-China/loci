@@ -19,6 +19,8 @@
     "typecheck": "pnpm --filter @loci/core typecheck && pnpm --filter @loci/shared typecheck && pnpm --filter @loci/runtime typecheck && pnpm --filter @loci/desktop typecheck && pnpm --filter @loci/server typecheck && pnpm --filter @boses/cli typecheck",
     "cli:build": "pnpm --filter @boses/cli build",
     "cli:test": "pnpm --filter @boses/cli test",
+    "docs:dev": "pnpm --filter @loci/docs dev",
+    "docs:build": "pnpm --filter @loci/docs build",
     "desktop:typecheck": "pnpm --filter @loci/desktop typecheck",
     "server:build": "pnpm --filter @loci/server build",
     "server:start": "pnpm --filter @loci/server start",

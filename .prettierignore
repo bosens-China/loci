@@ -1,5 +1,6 @@
 out
 dist
+doc_build
 pnpm-lock.yaml
 LICENSE.md
 tsconfig.json

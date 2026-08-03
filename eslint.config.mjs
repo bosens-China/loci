@@ -7,7 +7,7 @@ import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 // ESLint 专注于代码质量与语法检查；移除并屏蔽所有代码格式化规则，格式化统一交由 Prettier 在提交时处理
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out'] },
+  { ignores: ['**/node_modules', '**/dist', '**/doc_build', '**/out'] },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],
