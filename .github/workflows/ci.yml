@@ -15,15 +15,158 @@ permissions:
 
 jobs:
   verify:
-    name: Verify (${{ matrix.os }})
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      desktop: ${{ steps.scopes.outputs.desktop }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: scopes
+        name: Detect affected scopes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          code=false
+          cli=false
+          desktop=false
+          server=false
+          base_sha="$BEFORE_SHA"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+          fi
+
+          if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]] || ! git cat-file -e "$base_sha^{commit}"; then
+            code=true
+            cli=true
+            desktop=true
+            server=true
+          else
+            while IFS= read -r path; do
+              case "$path" in
+                package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|*.config.*|.github/workflows/ci.yml|.github/actions/*)
+                  code=true
+                  cli=true
+                  desktop=true
+                  server=true
+                  ;;
+                compose.yaml|compose.local.yaml|.dockerignore|.env.example)
+                  code=true
+                  server=true
+                  ;;
+                apps/cli/*)
+                  code=true
+                  cli=true
+                  ;;
+                apps/desktop/*)
+                  code=true
+                  desktop=true
+                  ;;
+                apps/server/*)
+                  code=true
+                  server=true
+                  ;;
+                packages/core/*)
+                  code=true
+                  cli=true
+                  desktop=true
+                  server=true
+                  ;;
+                packages/shared/*|packages/runtime/*)
+                  code=true
+                  cli=true
+                  desktop=true
+                  ;;
+                apps/*|packages/*)
+                  code=true
+                  ;;
+              esac
+            done < <(git diff --name-only "$base_sha" "$GITHUB_SHA")
+          fi
+
+          {
+            echo "code=$code"
+            echo "cli=$cli"
+            echo "desktop=$desktop"
+            echo "server=$server"
+          } >> "$GITHUB_OUTPUT"
+      - if: steps.scopes.outputs.code == 'true'
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.15.1
+      - if: steps.scopes.outputs.code == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - if: steps.scopes.outputs.code == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.scopes.outputs.code == 'true'
+        run: pnpm lint
+      - if: steps.scopes.outputs.code == 'true'
+        run: pnpm test
+      - if: steps.scopes.outputs.code == 'true'
+        run: pnpm typecheck
+      - if: steps.scopes.outputs.cli == 'true'
+        run: pnpm cli:build
+      - if: steps.scopes.outputs.server == 'true'
+        name: Build and smoke-test server image
+        shell: bash
+        run: |
+          docker build --tag loci-server-ci --file apps/server/Dockerfile .
+
+          container_id=$(docker run --detach \
+            --env LOCI_ADMIN_PASSWORD=ci \
+            loci-server-ci)
+          cleanup() {
+            docker rm --force "$container_id" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for _ in {1..20}; do
+            if docker exec "$container_id" node -e \
+              "fetch('http://127.0.0.1:7001/health').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+              ready=true
+              break
+            fi
+            if [[ "$(docker inspect --format '{{.State.Running}}' "$container_id")" != true ]]; then
+              break
+            fi
+            sleep 0.25
+          done
+
+          docker logs "$container_id"
+          if [[ "$ready" != true ]]; then
+            echo "Server container did not become healthy"
+            exit 1
+          fi
+      - if: steps.scopes.outputs.desktop == 'true'
+        run: pnpm build:unpack
+
+  verify-desktop:
+    name: Verify desktop (${{ matrix.os }})
+    needs: verify
+    if: ${{ needs.verify.outputs.desktop == 'true' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      HUSKY: '0'
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
@@ -34,19 +177,4 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - if: matrix.os == 'ubuntu-latest'
-        run: pnpm lint
-      - if: matrix.os == 'ubuntu-latest'
-        run: pnpm test
-      - if: matrix.os == 'ubuntu-latest'
-        run: pnpm typecheck
-      - if: matrix.os == 'ubuntu-latest'
-        run: pnpm server:build
-      - if: matrix.os == 'ubuntu-latest'
-        run: pnpm cli:build
-      - if: matrix.os == 'ubuntu-latest'
-        run: docker build --file apps/server/Dockerfile .
-      - if: matrix.os == 'ubuntu-latest'
-        run: pnpm build:linux
-      - if: matrix.os != 'ubuntu-latest'
-        run: pnpm build:unpack
+      - run: pnpm build:unpack
