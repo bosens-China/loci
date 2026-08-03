@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0](https://github.com/bosens-China/loci/compare/loci-v1.1.0...loci-v1.2.0) (2026-08-03)
+
+
+### Features
+
+* 展示文档内容大小并完善数据维护 ([770d804](https://github.com/bosens-China/loci/commit/770d8049be2583e74e49e4eb365763613725654e))
+* 支持桌面端云文档同步与管理 ([f97944e](https://github.com/bosens-China/loci/commit/f97944e139e7e3733c64951d67873b0c4ee364da))
+* 添加 Hono 云端文档服务 ([6fe5deb](https://github.com/bosens-China/loci/commit/6fe5deb90837f2012862155eeead70fbc88217c4))
+* 添加独立 CLI 与统一 Loci MCP ([b9ba795](https://github.com/bosens-China/loci/commit/b9ba7954855349c79cce7d0fe3c4db19de1588ab))
+* 统一爬取能力并整理 monorepo 结构 ([ed87f55](https://github.com/bosens-China/loci/commit/ed87f557e7af729d03a51cf4c9c7a91fdba659cb))
+
+
+### Bug Fixes
+
+* 统一桌面端与 CLI 本地数据目录 ([1f0d2d3](https://github.com/bosens-China/loci/commit/1f0d2d3d597417c0670ce7266df133d4c5edd5d1))
+
 ## [1.1.0](https://github.com/bosens-China/loci/compare/loci-v1.0.0...loci-v1.1.0) (2026-08-02)
 
 
