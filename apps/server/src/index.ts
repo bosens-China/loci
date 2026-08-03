@@ -10,7 +10,7 @@ import { SyncService } from './sync-service.js'
 const dataDirectory = resolve(process.env.LOCI_DATA_DIR ?? './data')
 const adminUsername = process.env.LOCI_ADMIN_USERNAME ?? 'admin'
 const adminPassword = process.env.LOCI_ADMIN_PASSWORD
-const port = Number(process.env.PORT ?? 3000)
+const port = Number(process.env.PORT ?? 7001)
 const browserEndpoint = readBrowserEndpoint()
 
 if (!adminPassword) throw new Error('请设置 LOCI_ADMIN_PASSWORD')

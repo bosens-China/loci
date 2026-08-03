@@ -2,7 +2,26 @@
 
 Loci Server 是单机 Hono 服务，负责抓取公开文档、定时更新并向桌面端发布只读快照。本地文档不会上传到这里。
 
-## 运行
+## 本地 Docker 环境
+
+仓库提供独立的本地 Compose 环境，默认监听端口 `7001`：
+
+```bash
+docker compose -f compose.local.yaml up --build -d
+```
+
+- 服务地址：`http://127.0.0.1:7001`
+- 管理员账号：`admin`
+- 本地默认密码：`loci-local-admin-password`
+
+可以通过 `LOCI_LOCAL_SERVER_PORT`、`LOCI_LOCAL_ADMIN_PASSWORD` 和
+`LOCI_LOCAL_BROWSER_TOKEN` 覆盖本地默认值。默认凭据只用于本机开发，不得用于部署。
+
+```bash
+docker compose -f compose.local.yaml down
+```
+
+## 生产运行
 
 生产环境复制并修改根目录的环境变量示例，然后通过 Compose 启动：
 
@@ -30,7 +49,7 @@ pnpm server:start
 | `LOCI_BROWSER_URL`    | 无       | Browserless Playwright WebSocket 地址     |
 | `LOCI_BROWSER_TOKEN`  | 无       | Browserless 访问令牌，必须与 URL 同时设置 |
 | `LOCI_DATA_DIR`       | `./data` | SQLite 数据目录                           |
-| `PORT`                | `3000`   | HTTP 端口                                 |
+| `PORT`                | `7001`   | HTTP 端口（Compose 内显式使用 `3000`）    |
 
 生产环境必须通过 HTTPS 反向代理暴露服务，并持久化 `LOCI_DATA_DIR`。当前只运行一个服务实例。
 
@@ -92,7 +111,7 @@ Node HTTP 和浏览器请求都会拒绝回环、局域网及链路本地地址�
 hostname 导航、弹窗、下载和权限申请。生产机应同时通过主机防火墙或云网络策略
 阻断容器访问内网及云元数据地址，避免仅依赖应用层 DNS 检查。
 
-Compose 固定使用 `ghcr.io/browserless/chromium:2.55.2`，服务端固定使用
+Compose 固定使用 `ghcr.io/browserless/chromium:v2.55.2`，服务端固定使用
 `playwright-core@1.62.0`。Playwright 原生连接要求两端版本兼容，升级时必须同时
 检查 [Browserless 版本说明](https://github.com/browserless/browserless/blob/main/CHANGELOG.md)。
 
