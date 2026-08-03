@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { resolveLociDataDir } from '../data-path'
 
 const originalDataDir = process.env.LOCI_DATA_DIR
@@ -27,6 +27,6 @@ describe('resolveLociDataDir', () => {
 
   it('allows an explicit isolated data directory', () => {
     process.env.LOCI_DATA_DIR = '/tmp/loci-isolated'
-    expect(resolveLociDataDir()).toBe('/tmp/loci-isolated')
+    expect(resolveLociDataDir()).toBe(resolve('/tmp/loci-isolated'))
   })
 })
