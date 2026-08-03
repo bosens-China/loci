@@ -10,6 +10,7 @@
       "release-type": "node",
       "component": "loci",
       "draft": true,
+      "force-tag-creation": true,
       "changelog-path": "/CHANGELOG.md"
     },
     "apps/cli": {
