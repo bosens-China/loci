@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.1](https://github.com/bosens-China/loci/compare/loci-v1.5.0...loci-v1.5.1) (2026-08-03)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/runtime bumped to 1.1.4
+    * @loci/shared bumped to 1.6.0
+
 ## [1.5.0](https://github.com/bosens-China/loci/compare/loci-v1.4.0...loci-v1.5.0) (2026-08-03)
 
 
