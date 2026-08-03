@@ -54,7 +54,7 @@ jobs:
           else
             while IFS= read -r path; do
               case "$path" in
-                package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|*.config.*|.github/workflows/ci.yml|.github/actions/*)
+                package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|*.config.*|.release-please-manifest.json|release-please-config.json|.github/workflows/*.yml|.github/actions/*)
                   code=true
                   cli=true
                   desktop=true
@@ -109,8 +109,18 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - if: steps.scopes.outputs.desktop == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-electron-
       - if: steps.scopes.outputs.code == 'true'
         run: pnpm install --frozen-lockfile
+      - if: steps.scopes.outputs.code == 'true'
+        run: pnpm check:release-versions
       - if: steps.scopes.outputs.code == 'true'
         run: pnpm lint
       - if: steps.scopes.outputs.code == 'true'
@@ -163,7 +173,15 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            cache_path: |
+              ~/Library/Caches/electron
+              ~/Library/Caches/electron-builder
+          - os: windows-latest
+            cache_path: |
+              ~/AppData/Local/electron
+              ~/AppData/Local/electron-builder
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       HUSKY: '0'
@@ -176,5 +194,10 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ${{ matrix.cache_path }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-electron-
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:unpack

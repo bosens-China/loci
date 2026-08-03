@@ -13,7 +13,8 @@
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
-    "test": "pnpm --filter @loci/core test && pnpm --filter @loci/shared test && pnpm --filter @loci/runtime test && pnpm --filter @boses/cli test && pnpm --filter @loci/server test && pnpm --filter @loci/desktop test",
+    "check:release-versions": "node --experimental-strip-types scripts/check-release-versions.mts",
+    "test": "vitest run scripts/test/check-release-versions.test.ts && pnpm --filter @loci/core test && pnpm --filter @loci/shared test && pnpm --filter @loci/runtime test && pnpm --filter @boses/cli test && pnpm --filter @loci/server test && pnpm --filter @loci/desktop test",
     "test:watch": "pnpm --parallel --filter @loci/core --filter @loci/shared --filter @boses/cli --filter @loci/server --filter @loci/desktop test:watch",
     "typecheck": "pnpm --filter @loci/core typecheck && pnpm --filter @loci/shared typecheck && pnpm --filter @loci/runtime typecheck && pnpm --filter @loci/desktop typecheck && pnpm --filter @loci/server typecheck && pnpm --filter @boses/cli typecheck",
     "cli:build": "pnpm --filter @boses/cli build",
@@ -51,6 +52,7 @@
     "lint-staged": "^17.2.0",
     "prettier": "^3.7.4",
     "react": "^19.2.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   }
 }

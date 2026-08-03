@@ -35,15 +35,21 @@ jobs:
           - os: windows-latest
             target: win
             artifacts: apps/desktop/dist/*.exe
+            cache_path: |
+              ~/AppData/Local/electron
+              ~/AppData/Local/electron-builder
           - os: macos-latest
             target: mac
             artifacts: apps/desktop/dist/*.dmg
+            cache_path: |
+              ~/Library/Caches/electron
+              ~/Library/Caches/electron-builder
           - os: ubuntu-latest
             target: linux
-            artifacts: |
-              apps/desktop/dist/*.AppImage
-              apps/desktop/dist/*.deb
-              apps/desktop/dist/*.snap
+            artifacts: apps/desktop/dist/*.AppImage
+            cache_path: |
+              ~/.cache/electron
+              ~/.cache/electron-builder
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -60,6 +66,11 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ${{ matrix.cache_path }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-electron-
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:${{ matrix.target }}
       - uses: actions/upload-artifact@v4
@@ -67,6 +78,7 @@ jobs:
           name: release-${{ matrix.target }}
           path: ${{ matrix.artifacts }}
           if-no-files-found: error
+          compression-level: 0
 
   publish-cli:
     needs: release
