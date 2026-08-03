@@ -15,7 +15,7 @@ export function SourceScopeSelector({
   const options = getSourceScopeOptions(url)
   if (!options.length) {
     return (
-      <div className="rounded-lg bg-gray-50 px-3 py-3 text-sm text-gray-500">
+      <div className="rounded-lg bg-[var(--ant-color-fill-quaternary)] px-3 py-3 text-sm text-[var(--ant-color-text-tertiary)]">
         输入有效 URL 后可选择
       </div>
     )
@@ -28,7 +28,7 @@ export function SourceScopeSelector({
   const selectIndex = (index: number): void => onChange?.(options[index]?.value ?? '/')
 
   return (
-    <div className="rounded-xl border border-solid border-gray-200 px-4 pb-3 pt-2">
+    <div className="rounded-xl border border-solid border-[var(--ant-color-border)] px-4 pb-3 pt-2">
       {options.length > 1 ? (
         <Slider
           min={0}
@@ -47,8 +47,8 @@ export function SourceScopeSelector({
             aria-pressed={index === selectedIndex}
             className={
               index <= selectedIndex
-                ? 'shrink-0 cursor-pointer rounded-md border-0 bg-blue-50 px-2 py-1 text-xs text-blue-700'
-                : 'shrink-0 cursor-pointer rounded-md border-0 bg-gray-50 px-2 py-1 text-xs text-gray-500'
+                ? 'shrink-0 cursor-pointer rounded-md border-0 bg-[var(--ant-color-primary-bg)] px-2 py-1 text-xs text-[var(--ant-color-primary-text)]'
+                : 'shrink-0 cursor-pointer rounded-md border-0 bg-[var(--ant-color-fill-quaternary)] px-2 py-1 text-xs text-[var(--ant-color-text-tertiary)]'
             }
             onClick={() => selectIndex(index)}
           >
@@ -56,7 +56,9 @@ export function SourceScopeSelector({
           </button>
         ))}
       </div>
-      <div className="mt-2 text-xs text-gray-500">将收录 {selected.label} 及其子路径</div>
+      <div className="mt-2 text-xs text-[var(--ant-color-text-tertiary)]">
+        将收录 {selected.label} 及其子路径
+      </div>
     </div>
   )
 }
