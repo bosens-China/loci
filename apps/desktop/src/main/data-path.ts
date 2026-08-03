@@ -2,10 +2,9 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 /** 桌面端和 CLI 必须通过同一规则定位本地数据。 */
-export function resolveLociDataDir(electronUserData?: string): string {
+export function resolveLociDataDir(): string {
   const override = process.env.LOCI_DATA_DIR?.trim()
   if (override) return resolve(override)
-  if (electronUserData) return electronUserData
 
   if (process.platform === 'darwin') {
     return join(homedir(), 'Library', 'Application Support', 'Loci')

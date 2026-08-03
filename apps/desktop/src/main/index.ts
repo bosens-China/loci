@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, type Tray } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import dockIcon from '../../resources/icon.png?asset'
 import { Cron } from 'croner'
 import { createDatabase, databaseNeedsMigration, type LociDatabase } from './database'
 import type {
@@ -12,8 +13,8 @@ import type {
   DataTransferResult,
   DocumentSource,
   UpdateSourceInput
-} from '../shared/api'
-import { normalizeCronSchedule } from '../shared/schedule'
+} from '@loci/shared'
+import { normalizeCronSchedule } from '@loci/shared'
 import { runSourceCrawl } from './crawl/source'
 import type { LociMcpServices } from './mcp/server'
 import { createMcpRuntime, type McpRuntime } from './mcp/runtime'
@@ -47,6 +48,8 @@ const crawlStates = new Map<string, CrawlRunState>()
 const scheduledCrawls = new Map<string, Cron>()
 const isPrimaryInstance = registerSingleInstance(() => mainWindow)
 
+app.setName('Loci')
+
 function createWindow(showOnReady = true): void {
   mainWindow = createAppWindow(() => isQuitting, showOnReady)
 }
@@ -56,7 +59,8 @@ function createWindow(showOnReady = true): void {
 // Some APIs can only be used after this event occurs.
 if (isPrimaryInstance)
   app.whenReady().then(async () => {
-    dataDir = resolveLociDataDir(app.getPath('userData'))
+    dataDir = resolveLociDataDir()
+    if (process.platform === 'darwin') app.dock?.setIcon(dockIcon)
     const databasePath = join(dataDir, 'loci.sqlite')
     const migrationLock = databaseNeedsMigration(databasePath)
       ? acquireMigrationLock('桌面端')
