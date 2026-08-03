@@ -227,7 +227,10 @@ function formatDate(value: string): string {
 }
 
 function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback
+  if (!(error instanceof Error)) return fallback
+  return error.message
+    .replace(/^Error invoking remote method '[^']+':\s*/u, '')
+    .replace(/^Error:\s*/u, '')
 }
 
 export default CloudCatalogPage

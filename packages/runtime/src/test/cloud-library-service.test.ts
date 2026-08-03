@@ -52,6 +52,23 @@ describe('CloudLibraryService', () => {
     await service.syncEligible('http://localhost:7001')
     expect(database.searchDocuments('version-v3')).toHaveLength(1)
   })
+
+  it('把连接失败和旧版响应转换为可读错误', async () => {
+    database = createDatabase(':memory:')
+    const offline = new CloudLibraryService(database, async () => {
+      throw new Error('ECONNREFUSED')
+    })
+    await expect(offline.listCatalog('http://localhost:7001')).rejects.toThrow(
+      '无法连接云端后端，请检查地址和网络'
+    )
+
+    const incompatible = new CloudLibraryService(database, async () =>
+      jsonResponse({ libraries: [{ ...library('sha256:v1'), contentSize: undefined }] })
+    )
+    await expect(incompatible.listCatalog('http://localhost:7001')).rejects.toThrow(
+      '云端后端版本不兼容，请更新后端服务'
+    )
+  })
 })
 
 function library(revision: string): Record<string, unknown> {

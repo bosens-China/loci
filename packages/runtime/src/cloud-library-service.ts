@@ -47,9 +47,11 @@ export class CloudLibraryService {
 
   async listCatalog(serverUrl: string): Promise<CloudCatalogItem[]> {
     const normalized = normalizeServerUrl(serverUrl)
-    const payload = z
+    const parsed = z
       .object({ libraries: z.array(publicLibrarySchema) })
-      .parse(await this.request(normalized, '/api/v1/libraries'))
+      .safeParse(await this.request(normalized, '/api/v1/libraries'))
+    if (!parsed.success) throw new Error('云端后端版本不兼容，请更新后端服务')
+    const payload = parsed.data
     return payload.libraries.map((library) => {
       const local = this.database.findCloudSource(normalized, library.id)
       return {
@@ -141,7 +143,9 @@ export class CloudLibraryService {
     if (response.status === 304) return null
     const body = await response.json().catch(() => null)
     if (!response.ok) throw requestError(response.status, body)
-    return snapshotSchema.parse(body)
+    const parsed = snapshotSchema.safeParse(body)
+    if (!parsed.success) throw new Error('云端后端版本不兼容，请更新后端服务')
+    return parsed.data
   }
 
   private async request(serverUrl: string, path: string): Promise<unknown> {
