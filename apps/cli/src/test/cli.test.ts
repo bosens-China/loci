@@ -11,6 +11,7 @@ describe('Loci CLI command surface', () => {
 
     expect(commands).toEqual([
       'status',
+      'update',
       'source',
       'document',
       'cloud',

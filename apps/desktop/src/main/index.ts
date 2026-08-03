@@ -38,6 +38,7 @@ import { createAppWindow } from './app-window'
 import { getOpenAtLogin, setOpenAtLogin, shouldStartHidden } from './open-at-login'
 import { registerCloudAdminIpc } from './cloud-admin-ipc'
 import { registerCloudLibraryRuntime } from './cloud-library-runtime'
+import { createAppUpdater, type AppUpdater } from './app-update'
 
 let database: LociDatabase | undefined
 let mainWindow: BrowserWindow | undefined
@@ -46,6 +47,7 @@ let mcpRuntime: McpRuntime | undefined
 let cloudLibraryService: CloudLibraryService | undefined
 let isQuitting = false
 let stopCloudLibraryRuntime = (): void => undefined
+let appUpdater: AppUpdater | undefined
 let dataDir = ''
 const runningCrawls = new Set<string>()
 const crawlStates = new Map<string, CrawlRunState>()
@@ -143,9 +145,14 @@ if (isPrimaryInstance)
       requireDatabase(),
       requireCloudLibraryService()
     )
+    appUpdater = createAppUpdater()
+    ipcMain.handle('app:update:get', () => requireAppUpdater().getState())
+    ipcMain.handle('app:update:check', () => requireAppUpdater().check())
+    ipcMain.handle('app:update:open-release', () => requireAppUpdater().openRelease())
 
     restoreScheduledCrawls(requireDatabase().listSources())
     createWindow(!shouldStartHidden())
+    if (app.isPackaged) void requireAppUpdater().check(false)
     mainWindow?.on('focus', () => mainWindow?.webContents.send('database:external-change'))
 
     app.on('activate', function () {
@@ -220,6 +227,11 @@ function requireCloudLibraryService(): CloudLibraryService {
 function requireMcpRuntime(): McpRuntime {
   if (!mcpRuntime) throw new Error('MCP 服务尚未初始化')
   return mcpRuntime
+}
+
+function requireAppUpdater(): AppUpdater {
+  if (!appUpdater) throw new Error('应用更新检查尚未初始化')
+  return appUpdater
 }
 
 async function importLocalData(): Promise<DataTransferResult> {

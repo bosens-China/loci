@@ -10,8 +10,21 @@ import { registerDocumentCommands } from './commands/document.js'
 import { registerMcpCommands } from './commands/mcp.js'
 import { registerSourceCommands } from './commands/source.js'
 import { registerStatusCommand } from './commands/status.js'
+import { registerUpdateCommand } from './commands/update.js'
+import {
+  CLI_VERSION,
+  formatUpdateMessage,
+  readCachedUpdate,
+  startDailyUpdateCheck
+} from './update.js'
+import { warning } from './ui.js'
 
 export async function runCli(args: readonly string[]): Promise<void> {
+  const cachedUpdate = readCachedUpdate()
+  if (cachedUpdate && args[0] !== 'update' && !isVersionOrHelp(args)) {
+    warning(formatUpdateMessage(cachedUpdate))
+  }
+  startDailyUpdateCheck(args)
   const program = createProgram()
   if (args.length === 0) {
     program.outputHelp()
@@ -32,7 +45,7 @@ export function createProgram(): Command {
   const program = new Command()
     .name('loci')
     .description('面向终端用户的本地文档知识库')
-    .version('1.1.0', '-V, --version', '显示 CLI 版本')
+    .version(CLI_VERSION, '-V, --version', '显示 CLI 版本')
     .helpOption('-h, --help', '显示帮助')
     .addHelpCommand('help [command]', '显示指定命令的帮助')
     .optionsGroup('选项：')
@@ -52,6 +65,7 @@ export function createProgram(): Command {
     .configureOutput({ writeErr: () => undefined })
 
   registerStatusCommand(program)
+  registerUpdateCommand(program)
   registerSourceCommands(program)
   registerDocumentCommands(program)
   registerCloudCommands(program)
@@ -62,6 +76,10 @@ export function createProgram(): Command {
   registerDataCommands(program)
   registerDoctorCommand(program)
   return program
+}
+
+function isVersionOrHelp(args: readonly string[]): boolean {
+  return ['-V', '--version', '-h', '--help', 'help'].includes(args[0] ?? '')
 }
 
 function translateCommanderError(message: string): string {

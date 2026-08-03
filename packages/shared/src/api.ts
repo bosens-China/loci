@@ -26,6 +26,14 @@ export interface OpenAtLoginState {
   enabled: boolean
 }
 
+export interface DesktopUpdateState {
+  currentVersion: string
+  latestVersion: string | null
+  updateAvailable: boolean
+  checkedAt: string | null
+  manualInstallHint: string | null
+}
+
 export type AgentClient = 'codex' | 'cursor' | 'vscode' | 'claude-code' | 'gemini-cli'
 
 export interface AgentImportResult {
@@ -224,6 +232,9 @@ export interface LociApi {
   saveSettings: (settings: AppSettings) => Promise<AppSettingsState>
   getOpenAtLogin: () => Promise<OpenAtLoginState>
   setOpenAtLogin: (enabled: boolean) => Promise<OpenAtLoginState>
+  getDesktopUpdate: () => Promise<DesktopUpdateState>
+  checkDesktopUpdate: () => Promise<DesktopUpdateState>
+  openDesktopRelease: () => Promise<void>
   importAgentClient: (client: AgentClient) => Promise<AgentImportResult>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>

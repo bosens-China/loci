@@ -45,6 +45,12 @@ const api: LociApi = {
     ipcRenderer.invoke('app:open-at-login:get') as ReturnType<LociApi['getOpenAtLogin']>,
   setOpenAtLogin: (enabled) =>
     ipcRenderer.invoke('app:open-at-login:set', enabled) as ReturnType<LociApi['setOpenAtLogin']>,
+  getDesktopUpdate: () =>
+    ipcRenderer.invoke('app:update:get') as ReturnType<LociApi['getDesktopUpdate']>,
+  checkDesktopUpdate: () =>
+    ipcRenderer.invoke('app:update:check') as ReturnType<LociApi['checkDesktopUpdate']>,
+  openDesktopRelease: () =>
+    ipcRenderer.invoke('app:update:open-release') as ReturnType<LociApi['openDesktopRelease']>,
   importAgentClient: (client) =>
     ipcRenderer.invoke('agents:import', client) as ReturnType<LociApi['importAgentClient']>,
   exportData: () => ipcRenderer.invoke('data:export') as ReturnType<LociApi['exportData']>,
