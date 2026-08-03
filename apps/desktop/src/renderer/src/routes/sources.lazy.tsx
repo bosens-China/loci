@@ -1,7 +1,7 @@
 import { createLazyRoute, useNavigate } from '@tanstack/react-router'
-import SourcesPage from '@renderer/components/SourcesPage'
-import type { SourcesTab } from '@renderer/components/SourcesPage'
-import { useSources } from '@renderer/hooks/useSources'
+import SourcesPage from '../components/SourcesPage'
+import type { SourcesTab } from '../components/SourcesPage'
+import { useSources } from '../hooks/useSources'
 
 export const Route = createLazyRoute('/sources')({
   component: SourcesRoute

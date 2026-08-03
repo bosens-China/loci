@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { OpenAtLoginState } from '../shared/api'
+import type { OpenAtLoginState } from '@loci/shared'
 
 const HIDDEN_ARGUMENT = '--hidden'
 

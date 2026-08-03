@@ -1,5 +1,5 @@
 import type { Command } from 'commander'
-import type { CloudLibrary, CloudLibraryInput } from '../../../desktop/src/shared/api.js'
+import type { CloudLibrary, CloudLibraryInput } from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError, errorMessage } from '../errors.js'
 import {

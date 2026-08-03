@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { CloudAdminLoginInput, CloudAdminSession } from '@shared/api'
+import type { CloudAdminLoginInput, CloudAdminSession } from '@loci/shared'
 import { CloudAdminContext, type CloudAdminContextValue } from './cloud-admin-context'
 
 export function CloudAdminProvider({ children }: { children: ReactNode }): React.JSX.Element {

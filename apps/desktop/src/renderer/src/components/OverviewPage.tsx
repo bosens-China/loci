@@ -1,6 +1,6 @@
 import { Alert, Button, Skeleton } from 'antd'
-import { useAppSettings } from '@renderer/settings-context'
-import type { DocumentItem, DocumentSource } from '@renderer/types'
+import { useAppSettings } from '../settings-context'
+import type { DocumentItem, DocumentSource } from '../types'
 import { OverviewEmptyState } from './overview/OverviewEmptyState'
 import { OverviewHero } from './overview/OverviewHero'
 import { OverviewRecentDocs } from './overview/OverviewRecentDocs'

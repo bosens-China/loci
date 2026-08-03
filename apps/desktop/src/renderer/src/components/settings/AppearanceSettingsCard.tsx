@@ -1,7 +1,7 @@
 import { BgColorsOutlined, BulbOutlined, DesktopOutlined, MoonOutlined } from '@ant-design/icons'
 import { Button, Card, Form, Segmented, Space, Typography } from 'antd'
 import { useEffect } from 'react'
-import type { ThemeMode } from '@shared/api'
+import type { ThemeMode } from '@loci/shared'
 
 interface AppearanceSettingsCardProps {
   theme: ThemeMode

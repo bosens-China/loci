@@ -19,7 +19,7 @@ import type {
   CrawlRunState,
   DocumentSource,
   UpdateSourceInput
-} from '../../desktop/src/shared/api.js'
+} from '@loci/shared'
 import { CliBrowserCrawler } from './browser.js'
 
 export interface CliRuntime {

@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
-import type { CloudCatalogItem } from '../../shared/api'
+import type { CloudCatalogItem } from '@loci/shared'
 import {
   listCloudLibrariesOutputSchema,
   paginationInput,

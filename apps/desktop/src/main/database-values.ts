@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { normalizeCronSchedule } from '../shared/schedule'
-import type { AppSettings, CreateSourceInput, DocumentRecord, DocumentSource } from '../shared/api'
-import { normalizeServerUrl } from '../shared/server-url'
+import { normalizeCronSchedule } from '@loci/shared'
+import type { AppSettings, CreateSourceInput, DocumentRecord, DocumentSource } from '@loci/shared'
+import { normalizeServerUrl } from '@loci/shared'
 import { normalizeScopePath } from './crawl/url'
 
 export interface SourceRow {

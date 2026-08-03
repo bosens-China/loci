@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { DocumentItem } from '@renderer/types'
+import type { DocumentItem } from '../types'
 
 interface DocumentsState {
   documents: DocumentItem[]

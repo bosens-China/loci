@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
-import AppShell from '@renderer/components/AppShell'
+import AppShell from '../components/AppShell'
 import { VIEW_PATHS, getActiveView } from './navigation'
 
 function RootRoute(): React.JSX.Element {

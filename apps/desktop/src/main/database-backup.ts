@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
-import { DEFAULT_APP_SETTINGS } from '../shared/api'
-import { normalizeServerUrl } from '../shared/server-url'
+import { DEFAULT_APP_SETTINGS } from '@loci/shared'
+import { normalizeServerUrl } from '@loci/shared'
 
 const sourceSchema = z
   .object({

@@ -11,8 +11,8 @@ import {
 import { Button, Layout, Menu, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { useState, type ReactNode } from 'react'
-import type { ViewKey } from '@renderer/routes/navigation'
-import { useCloudAdmin } from '@renderer/cloud-admin-context'
+import type { ViewKey } from '../routes/navigation'
+import { useCloudAdmin } from '../cloud-admin-context'
 
 const { Sider, Content } = Layout
 

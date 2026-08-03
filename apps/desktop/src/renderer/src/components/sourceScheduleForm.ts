@@ -3,7 +3,7 @@ import {
   DEFAULT_SCHEDULE,
   getSchedulePreset,
   normalizeCronSchedule
-} from '@shared/schedule'
+} from '@loci/shared'
 import type { CreateSourceInput, DocumentSource, FetchMode } from '../types'
 
 export interface SourceFormValues {

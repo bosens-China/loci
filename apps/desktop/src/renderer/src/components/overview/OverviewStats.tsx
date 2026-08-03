@@ -1,7 +1,7 @@
 import { ApiOutlined, DatabaseOutlined, FileTextOutlined, SyncOutlined } from '@ant-design/icons'
 import { Card, Col, Row, Statistic, Tag, Tooltip, Typography } from 'antd'
-import type { McpServerStatus } from '@shared/api'
-import type { DocumentItem, DocumentSource } from '@renderer/types'
+import type { McpServerStatus } from '@loci/shared'
+import type { DocumentItem, DocumentSource } from '../../types'
 
 interface OverviewStatsProps {
   sources: DocumentSource[]

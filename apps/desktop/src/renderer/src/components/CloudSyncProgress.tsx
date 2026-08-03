@@ -1,5 +1,5 @@
 import { Progress, Tag, Typography } from 'antd'
-import type { CloudSyncJob } from '@shared/api'
+import type { CloudSyncJob } from '@loci/shared'
 import { getCloudSyncPercent, isCloudSyncJobActive } from './cloud-sync-progress'
 
 export function CloudSyncProgress({ job }: { job?: CloudSyncJob }): React.JSX.Element {

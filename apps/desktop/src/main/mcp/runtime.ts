@@ -1,4 +1,4 @@
-import type { AppSettings, AppSettingsState } from '../../shared/api'
+import type { AppSettings, AppSettingsState } from '@loci/shared'
 import type { LociDatabase } from '../database'
 import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from './http'
 import type { LociMcpServices } from './server'

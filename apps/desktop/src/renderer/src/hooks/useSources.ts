@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type {
-  CreateSourceInput,
-  CrawlProgress,
-  DocumentSource,
-  UpdateSourceInput
-} from '@renderer/types'
+import type { CreateSourceInput, CrawlProgress, DocumentSource, UpdateSourceInput } from '../types'
 
 interface SourcesState {
   sources: DocumentSource[]

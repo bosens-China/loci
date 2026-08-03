@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { stripVTControlCharacters } from 'node:util'
 import which from 'which'
-import type { AgentClient, AgentImportResult } from '../shared/api'
+import type { AgentClient, AgentImportResult } from '@loci/shared'
 
 export type McpAgentConnection =
   { type: 'http'; endpoint: string } | { type: 'stdio'; command: string; args: readonly string[] }

@@ -5,11 +5,11 @@
   "description": "Loci desktop application.",
   "main": "./out/main/index.js",
   "scripts": {
-    "predev": "pnpm --filter @loci/core build",
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
-    "pretypecheck": "pnpm --filter @loci/core build",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "build": "pnpm typecheck && electron-vite build",
@@ -24,6 +24,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@loci/core": "workspace:*",
+    "@loci/shared": "workspace:*",
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@tanstack/react-router": "^1.170.18",
@@ -56,8 +57,10 @@
     "electron-vite": "^5.0.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "tsx": "^4.23.1",
     "typescript": "^5.9.3",
     "unocss": "^66.7.5",
-    "vite": "^7.2.6"
+    "vite": "^7.2.6",
+    "vitest": "^4.1.10"
   }
 }

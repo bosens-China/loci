@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import type { AppSettings } from '../shared/api'
+import type { AppSettings } from '@loci/shared'
 import { validateSettings } from './database-values'
 
 export interface SettingsDatabase {

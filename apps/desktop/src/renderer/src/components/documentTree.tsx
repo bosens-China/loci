@@ -1,6 +1,6 @@
 import { DatabaseOutlined, FileMarkdownOutlined, FolderOutlined } from '@ant-design/icons'
 import type { DataNode } from 'antd/es/tree'
-import { buildUrlTree, type UrlTreeNode } from '@shared/url-tree'
+import { buildUrlTree, type UrlTreeNode } from '@loci/shared'
 import type { DocumentItem } from '../types'
 
 export function filterDocumentsByMarkdown(

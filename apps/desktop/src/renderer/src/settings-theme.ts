@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ThemeMode } from '@shared/api'
+import type { ThemeMode } from '@loci/shared'
 
 export function resolveTheme(mode: ThemeMode, prefersDark: boolean): 'light' | 'dark' {
   return mode === 'auto' ? (prefersDark ? 'dark' : 'light') : mode

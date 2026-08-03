@@ -1,7 +1,7 @@
 import { PoweroffOutlined } from '@ant-design/icons'
 import { Alert, Card, Space, Switch, Typography, message } from 'antd'
 import { useEffect, useState } from 'react'
-import type { OpenAtLoginState } from '@shared/api'
+import type { OpenAtLoginState } from '@loci/shared'
 
 /** 操作系统级通用设置。 */
 export function GeneralSettingsCard(): React.JSX.Element {

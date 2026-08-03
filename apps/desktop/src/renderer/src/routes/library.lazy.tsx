@@ -1,7 +1,7 @@
 import { createLazyRoute, useNavigate } from '@tanstack/react-router'
-import LibraryPage from '@renderer/components/LibraryPage'
-import { useDocuments } from '@renderer/hooks/useDocuments'
-import { useSources } from '@renderer/hooks/useSources'
+import LibraryPage from '../components/LibraryPage'
+import { useDocuments } from '../hooks/useDocuments'
+import { useSources } from '../hooks/useSources'
 
 export const Route = createLazyRoute('/library')({
   component: LibraryRoute

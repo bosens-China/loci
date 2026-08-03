@@ -1,5 +1,5 @@
 import { crawlSource } from '@loci/core'
-import type { CrawlProgress } from '../../shared/api'
+import type { CrawlProgress } from '@loci/shared'
 import type { LociDatabase } from '../database'
 import { fetchRenderedCrawlPage } from './rendered'
 

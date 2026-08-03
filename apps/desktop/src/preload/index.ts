@@ -12,7 +12,7 @@ import type {
   CloudSyncJob,
   CloudCatalogItem,
   CloudImportResult
-} from '../shared/api'
+} from '@loci/shared'
 
 // Custom APIs for renderer
 const api: LociApi = {

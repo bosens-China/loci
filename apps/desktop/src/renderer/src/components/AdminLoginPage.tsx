@@ -9,9 +9,9 @@ import {
 import { Button, Card, Form, Input, Skeleton, Space, Tag, Typography, message } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import type { CloudAdminLoginInput } from '@shared/api'
-import { useCloudAdmin } from '@renderer/cloud-admin-context'
-import { useAppSettings } from '@renderer/settings-context'
+import type { CloudAdminLoginInput } from '@loci/shared'
+import { useCloudAdmin } from '../cloud-admin-context'
+import { useAppSettings } from '../settings-context'
 
 function AdminLoginPage(): React.JSX.Element {
   const navigate = useNavigate()

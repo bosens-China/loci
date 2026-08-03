@@ -17,8 +17,8 @@ import type {
   DocumentRecord,
   DocumentSource,
   UpdateSourceInput
-} from '../shared/api'
-import { DEFAULT_APP_SETTINGS } from '../shared/api'
+} from '@loci/shared'
+import { DEFAULT_APP_SETTINGS } from '@loci/shared'
 import { createCloudLibraryDatabase, type CloudLibraryDatabase } from './cloud-library-database'
 import { createSettingsDatabase, type SettingsDatabase } from './settings-database'
 import {

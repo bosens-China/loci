@@ -10,6 +10,6 @@ export type {
   FetchMode,
   SourceStatus,
   UpdateSourceInput
-} from '../../shared/api'
+} from '@loci/shared'
 
-export type { DocumentRecord as DocumentItem } from '../../shared/api'
+export type { DocumentRecord as DocumentItem } from '@loci/shared'

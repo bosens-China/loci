@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
-import { buildUrlTree, getUrlTreeSlice } from '../../shared/url-tree'
+import { buildUrlTree, getUrlTreeSlice } from '@loci/shared'
 import type {
   CreateSourceInput,
   CloudCatalogItem,
@@ -9,7 +9,7 @@ import type {
   CrawlRunState,
   DocumentRecord,
   DocumentSource
-} from '../../shared/api'
+} from '@loci/shared'
 import { registerCloudTools } from './cloud-tools'
 import { findBestPassage, readMarkdownSection, sliceContent } from './content'
 import {

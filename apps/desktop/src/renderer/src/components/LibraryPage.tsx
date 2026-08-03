@@ -19,7 +19,7 @@ import {
 import { useDeferredValue, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { DocumentItem, DocumentSource } from '@renderer/types'
+import type { DocumentItem, DocumentSource } from '../types'
 import {
   buildDocumentTree,
   filterDocumentsByMarkdown,

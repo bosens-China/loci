@@ -2,7 +2,7 @@ import { Option, type Command } from 'commander'
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { startMcpHttpServer } from '../../../desktop/src/main/mcp/http.js'
 import { createLociMcpServer, type LociMcpServices } from '../../../desktop/src/main/mcp/server.js'
-import type { AgentClient } from '../../../desktop/src/shared/api.js'
+import type { AgentClient } from '@loci/shared'
 import {
   createHttpMcpConnection,
   importAgentClient,

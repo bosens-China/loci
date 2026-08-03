@@ -1,5 +1,5 @@
 import type { Command } from 'commander'
-import type { CloudCatalogItem, DocumentSource } from '../../../desktop/src/shared/api.js'
+import type { CloudCatalogItem, DocumentSource } from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
 import { askConfirm, askSelect, createSpinner, printTable } from '../ui.js'

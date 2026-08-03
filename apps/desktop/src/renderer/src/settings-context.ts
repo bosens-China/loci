@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { AppSettings, AppSettingsState } from '@shared/api'
+import type { AppSettings, AppSettingsState } from '@loci/shared'
 
 export interface SettingsContextValue {
   state: AppSettingsState

@@ -1,5 +1,5 @@
 import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
-import RootRoute from '@renderer/routes/root'
+import RootRoute from './routes/root'
 
 const rootRoute = createRootRoute({ component: RootRoute })
 

@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import type { CloudCatalogItem, CloudImportResult } from '../shared/api'
-import { normalizeServerUrl } from '../shared/server-url'
+import type { CloudCatalogItem, CloudImportResult } from '@loci/shared'
+import { normalizeServerUrl } from '@loci/shared'
 import type { CloudSnapshot } from './cloud-library-database'
 import type { LociDatabase } from './database'
 

@@ -1,5 +1,5 @@
 import type { ServerContext } from '@modelcontextprotocol/server'
-import type { CrawlProgress, CrawlRunState, DocumentSource, SourceStatus } from '../../shared/api'
+import type { CrawlProgress, CrawlRunState, DocumentSource, SourceStatus } from '@loci/shared'
 import type { LociMcpServices } from './server'
 
 export async function waitForSync(

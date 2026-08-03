@@ -6,7 +6,7 @@ import {
 } from '@ant-design/icons'
 import { Button, Card, Divider, Modal, Space, Typography, message } from 'antd'
 import { useState } from 'react'
-import { useAppSettings } from '@renderer/settings-context'
+import { useAppSettings } from '../settings-context'
 
 type Operation = 'export' | 'import' | 'clear'
 

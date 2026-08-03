@@ -6,7 +6,7 @@ import {
   getNextScheduledRun,
   getSchedulePreset,
   normalizeCronSchedule
-} from '@shared/schedule'
+} from '@loci/shared'
 import type { DocumentSource } from '../types'
 import type { SourceFormValues } from './sourceScheduleForm'
 

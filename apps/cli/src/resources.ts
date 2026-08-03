@@ -1,4 +1,4 @@
-import type { DocumentRecord, DocumentSource } from '../../desktop/src/shared/api.js'
+import type { DocumentRecord, DocumentSource } from '@loci/shared'
 import type { CliRuntime } from './runtime.js'
 import { CliError } from './errors.js'
 import { askSelect } from './ui.js'

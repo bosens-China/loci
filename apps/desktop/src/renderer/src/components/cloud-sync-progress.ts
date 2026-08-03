@@ -1,4 +1,4 @@
-import type { CloudSyncJob } from '@shared/api'
+import type { CloudSyncJob } from '@loci/shared'
 
 export function isCloudSyncJobActive(job: CloudSyncJob): boolean {
   return job.status === 'queued' || job.status === 'running'

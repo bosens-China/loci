@@ -1,5 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { LociApi } from '../shared/api'
+import type { LociApi } from '@loci/shared'
 
 declare global {
   interface Window {

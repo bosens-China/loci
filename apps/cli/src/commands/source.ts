@@ -1,5 +1,5 @@
 import { Option, type Command } from 'commander'
-import type { FetchMode } from '../../../desktop/src/shared/api.js'
+import type { FetchMode } from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { resolveSource } from '../resources.js'

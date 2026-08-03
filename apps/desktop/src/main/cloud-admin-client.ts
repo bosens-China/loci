@@ -5,8 +5,8 @@ import type {
   CloudLibrary,
   CloudLibraryInput,
   CloudSyncJob
-} from '../shared/api'
-import { normalizeServerUrl } from '../shared/server-url'
+} from '@loci/shared'
+import { normalizeServerUrl } from '@loci/shared'
 
 const loginResponseSchema = z.object({ token: z.string().min(1), expiresIn: z.number().positive() })
 const errorResponseSchema = z.object({ error: z.string() })

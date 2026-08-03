@@ -1,7 +1,7 @@
 import { CheckCircleOutlined, CloudServerOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Divider, Form, InputNumber, Space, Tabs, Typography } from 'antd'
 import { useEffect } from 'react'
-import type { AgentClient, McpServerStatus } from '@shared/api'
+import type { AgentClient, McpServerStatus } from '@loci/shared'
 
 const SKILL_INSTALL_COMMAND = 'npx skills add bosens-China/dochub-mcp --skill use-loci -y'
 

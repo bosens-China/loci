@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { DEFAULT_APP_SETTINGS, type AppSettingsState } from '@shared/api'
+import { DEFAULT_APP_SETTINGS, type AppSettingsState } from '@loci/shared'
 import { SettingsContext, type SettingsContextValue } from './settings-context'
 
 const initialState: AppSettingsState = {

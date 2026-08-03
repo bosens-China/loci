@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import type { CloudAdminLoginInput, CloudLibraryInput } from '../shared/api'
+import type { CloudAdminLoginInput, CloudLibraryInput } from '@loci/shared'
 import { CloudAdminClient } from './cloud-admin-client'
 
 /** 注册云端管理通道，并把敏感会话限制在主进程。 */

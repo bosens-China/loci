@@ -1,8 +1,8 @@
 import { ClockCircleOutlined, LinkOutlined } from '@ant-design/icons'
 import { AutoComplete, Form, Input, InputNumber, Modal } from 'antd'
 import { useEffect } from 'react'
-import type { CloudLibrary, CloudLibraryInput } from '@shared/api'
-import { SCHEDULE_PRESETS, normalizeCronSchedule } from '@shared/schedule'
+import type { CloudLibrary, CloudLibraryInput } from '@loci/shared'
+import { SCHEDULE_PRESETS, normalizeCronSchedule } from '@loci/shared'
 
 interface CloudLibraryFormValues {
   name: string

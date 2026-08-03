@@ -1,7 +1,7 @@
 import { createLazyRoute, useNavigate } from '@tanstack/react-router'
-import OverviewPage from '@renderer/components/OverviewPage'
-import { useDocuments } from '@renderer/hooks/useDocuments'
-import { useSources } from '@renderer/hooks/useSources'
+import OverviewPage from '../components/OverviewPage'
+import { useDocuments } from '../hooks/useDocuments'
+import { useSources } from '../hooks/useSources'
 
 export const Route = createLazyRoute('/')({
   component: OverviewRoute

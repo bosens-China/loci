@@ -19,8 +19,8 @@ import {
 } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import type { CloudCatalogItem } from '@shared/api'
-import { useAppSettings } from '@renderer/settings-context'
+import type { CloudCatalogItem } from '@loci/shared'
+import { useAppSettings } from '../settings-context'
 
 function CloudCatalogPage(): React.JSX.Element {
   const navigate = useNavigate()

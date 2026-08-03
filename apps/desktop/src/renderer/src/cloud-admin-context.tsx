@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { CloudAdminLoginInput, CloudAdminSession } from '@shared/api'
+import type { CloudAdminLoginInput, CloudAdminSession } from '@loci/shared'
 
 export interface CloudAdminContextValue {
   session: CloudAdminSession | null

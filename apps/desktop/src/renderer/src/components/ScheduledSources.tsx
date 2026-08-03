@@ -1,7 +1,7 @@
 import { CalendarOutlined, EditOutlined, LinkOutlined } from '@ant-design/icons'
 import { Avatar, Button, Card, Empty, Space, Table, Typography } from 'antd'
 import type { TableProps } from 'antd'
-import { getNextScheduledRun } from '@shared/schedule'
+import { getNextScheduledRun } from '@loci/shared'
 import type { DocumentSource } from '../types'
 import { SourceScheduleTag } from './SourceScheduleFields'
 
