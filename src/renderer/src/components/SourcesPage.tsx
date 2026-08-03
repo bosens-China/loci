@@ -1,24 +1,10 @@
-import { LinkOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import {
-  Alert,
-  Button,
-  Card,
-  Empty,
-  Form,
-  Input,
-  InputNumber,
-  message,
-  Modal,
-  Segmented,
-  Select,
-  Tabs,
-  Typography
-} from 'antd'
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Empty, Form, Input, message, Segmented, Tabs, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 import CrawlProgressModal from './CrawlProgressModal'
 import ScheduledSources from './ScheduledSources'
 import SourceCard from './SourceCard'
-import SourceScheduleFields from './SourceScheduleFields'
+import { SourceFormModal } from './SourceFormModal'
 import { indexCrawlRuns, mergeCrawlNode } from './crawlRunState'
 import {
   getSourceFormValues,
@@ -302,102 +288,14 @@ function SourcesPage({
           ))}
         </div>
       )}
-      <Modal
-        title={editingSource ? '编辑文档源' : '添加文档源'}
+      <SourceFormModal
+        form={form}
+        editingSource={editingSource}
         open={modalOpen}
-        width={580}
-        confirmLoading={submitting}
+        submitting={submitting}
         onCancel={() => setModalOpen(false)}
-        onOk={() => form.submit()}
-        okText={editingSource ? '保存修改' : '添加文档源'}
-        cancelText="取消"
-      >
-        <Form form={form} layout="vertical" onFinish={handleCreate} className="mt-4!">
-          <Tabs
-            defaultActiveKey="basic"
-            items={[
-              {
-                key: 'basic',
-                label: '基础配置',
-                children: (
-                  <div className="space-y-3 pt-2">
-                    <Form.Item
-                      name="name"
-                      label="文档源名称"
-                      rules={[{ required: true, message: '请输入文档源名称' }]}
-                    >
-                      <Input placeholder="例如：Electron Vite 官方文档" />
-                    </Form.Item>
-                    <Form.Item
-                      name="url"
-                      label="起始页面 URL"
-                      extra="请输入文档站点的首页或任意起始阅读页面 URL"
-                      rules={[
-                        { required: true, message: '请输入公开文档页面 URL' },
-                        { type: 'url', message: '请输入有效 URL 地址' }
-                      ]}
-                    >
-                      <Input
-                        prefix={<LinkOutlined />}
-                        placeholder="https://example.com/docs/start"
-                      />
-                    </Form.Item>
-                    <Form.Item
-                      name="pageLimit"
-                      label="收录页面上限"
-                      extra="达到设定的页面上限后将自动停止，防止无限制抓取"
-                      rules={[{ required: true, message: '请输入页面上限' }]}
-                    >
-                      <InputNumber min={1} max={10000} className="w-full" addonAfter="页" />
-                    </Form.Item>
-                  </div>
-                )
-              },
-              {
-                key: 'schedule',
-                label: '自动更新',
-                children: <SourceScheduleFields form={form} />
-              },
-              {
-                key: 'advanced',
-                label: '高级设置',
-                forceRender: true,
-                children: (
-                  <div className="space-y-3 pt-2">
-                    <Form.Item name="mode" label="网页读取方式" rules={[{ required: true }]}>
-                      <Select
-                        options={[
-                          { value: 'auto', label: '自动检测（推荐 · 识别最佳速度）' },
-                          { value: 'http', label: 'HTTP 直取（适用于普通静态网页）' },
-                          { value: 'browser', label: '浏览器渲染（适用于动态渲染网页）' }
-                        ]}
-                      />
-                    </Form.Item>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <Form.Item
-                        name="httpConcurrency"
-                        label="HTTP 并发抓取数（选填）"
-                        extra="留空时使用全局 HTTP 默认值"
-                        rules={[{ type: 'number', min: 1, max: 32, message: '请输入 1-32' }]}
-                      >
-                        <InputNumber min={1} max={32} className="w-full" placeholder="全局默认" />
-                      </Form.Item>
-                      <Form.Item
-                        name="browserConcurrency"
-                        label="浏览器并发抓取数（选填）"
-                        extra="留空时使用全局浏览器默认值"
-                        rules={[{ type: 'number', min: 1, max: 32, message: '请输入 1-32' }]}
-                      >
-                        <InputNumber min={1} max={32} className="w-full" placeholder="全局默认" />
-                      </Form.Item>
-                    </div>
-                  </div>
-                )
-              }
-            ]}
-          />
-        </Form>
-      </Modal>
+        onSubmit={handleCreate}
+      />
       {openCrawlId && crawlRuns[openCrawlId] && (
         <CrawlProgressModal
           open
