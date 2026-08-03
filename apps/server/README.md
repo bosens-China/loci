@@ -2,6 +2,8 @@
 
 Loci Server 是单机 Hono 服务，负责抓取公开文档、定时更新并向桌面端发布只读快照。本地文档不会上传到这里。
 
+服务端只支持无需登录即可访问的公开 HTTP/HTTPS 文档，不保存登录态，也不处理验证码、Cloudflare 挑战、代理或其他反爬绕过能力。URL 会移除 Query 和 Fragment，因此不支持使用 `#` 区分页面的 Hash Router 文档站。
+
 ## 本地 Docker 环境
 
 仓库提供独立的本地 Compose 环境，默认监听端口 `7001`：

@@ -12,4 +12,4 @@
 
 - [项目说明](../README.md)
 - [Loci Server](../apps/server/README.md)
-- [Agent 使用 Skill](../skills/use-loci/SKILL.md)
+- [Agent 使用 Skill](../.agents/skills/use-loci/SKILL.md)
