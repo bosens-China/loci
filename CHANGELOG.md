@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/bosens-China/loci/compare/loci-v1.2.0...loci-v1.2.1) (2026-08-03)
+
+
+### Bug Fixes
+
+* 修复 Linux 桌面端打包配置 ([64c0c2e](https://github.com/bosens-China/loci/commit/64c0c2e519d56e12de088e9685dd45127df4c181))
+
 ## [1.2.0](https://github.com/bosens-China/loci/compare/loci-v1.1.0...loci-v1.2.0) (2026-08-03)
 
 
