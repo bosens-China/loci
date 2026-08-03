@@ -1,36 +1,38 @@
 {
+  "bootstrap-sha": "4e21dfc45e53213691f8a7c441fe22c9a94f540a",
+  "plugins": [
+    {
+      "type": "node-workspace"
+    }
+  ],
   "packages": {
-    ".": {
+    "apps/desktop": {
       "release-type": "node",
+      "component": "loci",
       "draft": true,
-      "force-tag-creation": true,
-      "extra-files": [
-        {
-          "type": "json",
-          "path": "apps/desktop/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "apps/server/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "apps/cli/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "packages/core/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "packages/shared/package.json",
-          "jsonpath": "$.version"
-        }
-      ]
+      "changelog-path": "/CHANGELOG.md"
+    },
+    "apps/cli": {
+      "release-type": "node",
+      "component": "cli"
+    },
+    "packages/core": {
+      "release-type": "node",
+      "component": "core",
+      "skip-changelog": true,
+      "skip-github-release": true
+    },
+    "packages/shared": {
+      "release-type": "node",
+      "component": "shared",
+      "skip-changelog": true,
+      "skip-github-release": true
+    },
+    "packages/runtime": {
+      "release-type": "node",
+      "component": "runtime",
+      "skip-changelog": true,
+      "skip-github-release": true
     }
   }
 }
