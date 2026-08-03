@@ -25,5 +25,6 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/server ./apps/server
 COPY --from=build /app/packages/core ./packages/core
 
+WORKDIR /app/apps/server
 EXPOSE 3000
-CMD ["node", "apps/server/dist/index.js"]
+CMD ["node", "--import", "tsx", "src/index.ts"]
