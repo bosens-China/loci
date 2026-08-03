@@ -57,7 +57,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:${{ matrix.target }}
       - uses: actions/upload-artifact@v4
@@ -67,9 +67,10 @@ jobs:
           if-no-files-found: error
 
   publish-cli:
-    needs: release
+    needs: [release, build]
     if: ${{ needs.release.outputs.created == 'true' }}
     runs-on: ubuntu-latest
+    environment: npm
     permissions:
       contents: read
       id-token: write
@@ -83,16 +84,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
-      - run: npm publish --access public --provenance
+      - run: npm publish
         working-directory: apps/cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish:
-    needs: [release, build]
+    needs: [release, build, publish-cli]
     runs-on: ubuntu-latest
     permissions:
       contents: write

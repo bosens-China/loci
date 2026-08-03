@@ -22,7 +22,7 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
-  icon: resources/icon.svg
+  icon: resources/icon-mac.svg
   entitlementsInherit: build/entitlements.mac.plist
   notarize: false
 dmg:

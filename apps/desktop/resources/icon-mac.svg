@@ -1,0 +1,57 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="-124 -124 1272 1272"
+  role="img"
+  aria-labelledby="title"
+>
+  <title id="title">Loci</title>
+  <defs>
+    <linearGradient
+      id="background"
+      x1="96"
+      y1="64"
+      x2="928"
+      y2="960"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#0B2B63" />
+      <stop offset="1" stop-color="#07142F" />
+    </linearGradient>
+    <linearGradient id="network" x1="282" y1="228" x2="754" y2="826" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#62E5FF" />
+      <stop offset=".52" stop-color="#79B7FF" />
+      <stop offset="1" stop-color="#B297FF" />
+    </linearGradient>
+    <filter id="glow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#background)" />
+  <g fill="none" stroke="url(#network)" stroke-linecap="round" stroke-linejoin="round">
+    <path
+      d="M512 142C304 142 194 318 234 502c32 147 154 274 278 380 124-106 246-233 278-380 40-184-70-360-278-360Z"
+      stroke-width="20"
+    />
+    <path
+      d="M365 382 512 246l147 136M291 486l174-55 47 141 47-141 174 55M352 609l113-178 47 141 47-141 113 178M421 720l91-148 91 148M512 246v100M512 572v148"
+      stroke-width="15"
+    />
+  </g>
+  <g fill="url(#network)" filter="url(#glow)">
+    <circle cx="512" cy="246" r="35" />
+    <circle cx="365" cy="382" r="28" />
+    <circle cx="659" cy="382" r="28" />
+    <circle cx="291" cy="486" r="25" />
+    <circle cx="465" cy="431" r="21" />
+    <circle cx="559" cy="431" r="21" />
+    <circle cx="733" cy="486" r="25" />
+    <circle cx="512" cy="572" r="29" />
+    <circle cx="421" cy="720" r="23" />
+    <circle cx="603" cy="720" r="23" />
+    <circle cx="512" cy="832" r="31" />
+  </g>
+</svg>
