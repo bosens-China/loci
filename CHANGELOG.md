@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.0](https://github.com/bosens-China/loci/compare/loci-v1.3.0...loci-v1.4.0) (2026-08-03)
+
+
+### Features
+
+* 支持 CLI 与桌面端检测版本更新 ([0114ea1](https://github.com/bosens-China/loci/commit/0114ea157165be180de74211fa4aa69b749dd821))
+
+
+### Bug Fixes
+
+* 修复 Linux 桌面端打包配置 ([64c0c2e](https://github.com/bosens-China/loci/commit/64c0c2e519d56e12de088e9685dd45127df4c181))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/runtime bumped to 1.1.2
+    * @loci/shared bumped to 1.4.0
+
 ## [1.3.0](https://github.com/bosens-China/loci/compare/loci-v1.2.1...loci-v1.3.0) (2026-08-03)
 
 
