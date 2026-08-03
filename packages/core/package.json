@@ -1,6 +1,6 @@
 {
   "name": "@loci/core",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -17,10 +17,12 @@
   },
   "dependencies": {
     "croner": "^10.0.1",
+    "mdast-util-from-markdown": "^2.0.3",
     "mdream": "^1.5.8",
     "node-html-parser": "^9.0.1"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   }
 }

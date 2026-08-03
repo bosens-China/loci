@@ -1,5 +1,6 @@
 import { parse } from 'node-html-parser'
 import { htmlToMarkdown } from 'mdream'
+import { isUrlInScope } from './scope.js'
 import type {
   CrawledDocument,
   CrawledPage,
@@ -55,10 +56,10 @@ export function isSameHostname(input: string, hostname: string): boolean {
   return getHostname(input) === hostname.toLowerCase()
 }
 
-export function isAllowedNavigation(input: string, hostname?: string): boolean {
+export function isAllowedNavigation(input: string, hostname?: string, scopePath = '/'): boolean {
   try {
     normalizeUrl(input)
-    return !hostname || isSameHostname(input, hostname)
+    return !hostname || isUrlInScope(input, hostname, scopePath)
   } catch {
     return false
   }
@@ -148,14 +149,15 @@ export function parseSitemap(
   xml: string,
   baseUrl: string,
   hostname: string,
-  limit: number
+  limit: number,
+  scopePath = '/'
 ): string[] {
   const urls: string[] = []
   const seen = new Set<string>()
   for (const node of parse(xml).querySelectorAll('loc')) {
     try {
       const url = normalizeUrl(new URL(node.text.trim(), baseUrl).toString())
-      if (isSameHostname(url, hostname) && !seen.has(url)) {
+      if (isUrlInScope(url, hostname, scopePath) && !seen.has(url)) {
         urls.push(url)
         seen.add(url)
       }
@@ -184,13 +186,14 @@ export async function discoverSitemapUrls(
   firstUrl: string,
   hostname: string,
   pageLimit: number,
-  options: Pick<FetchOptions, 'fetchImpl' | 'sleep'> = {}
+  options: Pick<FetchOptions, 'fetchImpl' | 'sleep'> = {},
+  scopePath = '/'
 ): Promise<string[]> {
   try {
     const sitemapUrl = new URL('/sitemap.xml', firstUrl).toString()
     const response = await fetchWithRetry(sitemapUrl, options)
     if (!response.ok) return []
-    return parseSitemap(await response.text(), sitemapUrl, hostname, pageLimit + 1)
+    return parseSitemap(await response.text(), sitemapUrl, hostname, pageLimit + 1, scopePath)
   } catch {
     return []
   }
@@ -201,7 +204,8 @@ export async function crawlHttpSource(options: HttpCrawlOptions): Promise<CrawlP
     options.firstUrl,
     options.hostname,
     options.pageLimit,
-    { fetchImpl: options.fetch, sleep: options.sleep }
+    { fetchImpl: options.fetch, sleep: options.sleep },
+    options.scopePath
   )
   return runCrawlQueue({
     ...options,
@@ -223,7 +227,7 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
     let url: string
     try {
       url = normalizeUrl(input)
-      if (!isSameHostname(url, options.hostname) || seen.has(url)) return false
+      if (!isUrlInScope(url, options.hostname, options.scopePath) || seen.has(url)) return false
     } catch {
       return false
     }
@@ -267,7 +271,7 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
       if (result === seedPage) seedPage = undefined
       const page = result.page
       node.url = normalizeUrl(result.url)
-      if (!isSameHostname(node.url, options.hostname)) {
+      if (!isUrlInScope(node.url, options.hostname, options.scopePath)) {
         failure = {
           url: item.url,
           reason: 'out_of_scope_redirect',

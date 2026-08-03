@@ -50,6 +50,7 @@ export interface CrawledDocument {
 export interface CrawledPage {
   url: string
   status: number
+  retryAfter?: string | null
   page?: ParsedPage
 }
 
@@ -64,6 +65,7 @@ export interface HttpCrawlOptions {
   firstUrl: string
   firstNodeId?: string
   hostname: string
+  scopePath?: string
   pageLimit: number
   initialUrls?: readonly string[]
   seedPage?: CrawledPage

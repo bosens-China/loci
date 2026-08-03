@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { Cron } from 'croner'
-import { crawlHttpSource, fetchHttpPage, normalizeCronSchedule, selectFetchMode } from '@loci/core'
-import type { CrawlProgress, HttpCrawlOptions } from '@loci/core'
-import { crawlRenderedSource, fetchRenderedPage } from './browser-crawl.js'
+import { crawlSource, normalizeCronSchedule } from '@loci/core'
+import type { CrawlProgress } from '@loci/core'
+import { createBrowserlessCrawler } from './browser-crawl.js'
 import { ConflictError, ServerDatabase } from './database.js'
 import type { SyncJob } from './types.js'
 
@@ -90,12 +90,15 @@ export class SyncService {
     job.status = 'running'
     try {
       const library = this.database.getLibrary(job.libraryId)
-      const crawlOptions: HttpCrawlOptions = {
+      const result = await crawlSource({
         firstUrl: library.url,
         hostname: library.hostname,
         pageLimit: library.pageLimit,
         initialUrls: this.database.listDocumentUrls(library.id),
-        concurrency: 9,
+        fetchMode: 'auto',
+        httpConcurrency: 9,
+        browserConcurrency: 2,
+        crawler: this.browserEndpoint ? createBrowserlessCrawler(this.browserEndpoint) : undefined,
         fetch: this.fetchImpl,
         onDocument: (document) => this.database.saveDocument(library.id, document),
         onError: ({ url, missing }) => {
@@ -104,30 +107,8 @@ export class SyncService {
         onProgress: (progressEvent) => {
           job.progress = withoutNode(progressEvent)
         }
-      }
-      let progress: CrawlProgress
-      if (!this.browserEndpoint) {
-        progress = await crawlHttpSource(crawlOptions)
-      } else {
-        const [httpPage, browserPage] = await Promise.all([
-          fetchHttpPage(library.url, { fetchImpl: this.fetchImpl }),
-          fetchRenderedPage(library.url, {
-            endpoint: this.browserEndpoint,
-            hostname: library.hostname
-          })
-        ])
-        if (!browserPage.page) throw new Error('浏览器未返回可解析的入口页面')
-        const mode = httpPage.page ? selectFetchMode(httpPage.page, browserPage.page) : 'browser'
-        progress =
-          mode === 'http'
-            ? await crawlHttpSource({ ...crawlOptions, seedPage: httpPage })
-            : await crawlRenderedSource({
-                ...crawlOptions,
-                endpoint: this.browserEndpoint,
-                seedPage: browserPage,
-                concurrency: 2
-              })
-      }
+      })
+      const progress = result.progress
       if (progress.succeeded === 0 && progress.failed > 0) {
         throw new Error(`同步失败：${progress.failed} 个页面均未成功`)
       }

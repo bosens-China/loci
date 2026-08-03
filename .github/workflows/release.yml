@@ -33,16 +33,16 @@ jobs:
         include:
           - os: windows-latest
             target: win
-            artifacts: dist/*.exe
+            artifacts: apps/desktop/dist/*.exe
           - os: macos-latest
             target: mac
-            artifacts: dist/*.dmg
+            artifacts: apps/desktop/dist/*.dmg
           - os: ubuntu-latest
             target: linux
             artifacts: |
-              dist/*.AppImage
-              dist/*.deb
-              dist/*.snap
+              apps/desktop/dist/*.AppImage
+              apps/desktop/dist/*.deb
+              apps/desktop/dist/*.snap
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:

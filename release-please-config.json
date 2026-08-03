@@ -3,7 +3,24 @@
     ".": {
       "release-type": "node",
       "draft": true,
-      "force-tag-creation": true
+      "force-tag-creation": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "apps/desktop/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "apps/server/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/core/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }
