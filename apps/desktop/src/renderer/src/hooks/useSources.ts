@@ -36,6 +36,7 @@ export function useSources(): SourcesState {
 
   useEffect(() => {
     void Promise.resolve().then(reload)
+    return window.api.onExternalDataChange(() => void reload())
   }, [reload])
 
   const create = useCallback(async (input: CreateSourceInput): Promise<void> => {

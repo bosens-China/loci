@@ -76,6 +76,36 @@ export const listLibrariesOutputSchema = z.object({
   next_offset: z.number().int().optional()
 })
 
+const cloudLibrarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string(),
+  revision: z.string(),
+  pages: z.number().int(),
+  snapshot_size: z.number().int(),
+  last_crawled_at: z.string().nullable(),
+  published_at: z.string(),
+  local_source_id: z.string().nullable(),
+  local_revision: z.string().nullable(),
+  auto_sync: z.boolean(),
+  update_available: z.boolean()
+})
+
+export const listCloudLibrariesOutputSchema = z.object({
+  total_count: z.number().int(),
+  count: z.number().int(),
+  offset: z.number().int(),
+  items: z.array(cloudLibrarySchema),
+  has_more: z.boolean(),
+  next_offset: z.number().int().optional()
+})
+
+export const pullCloudLibraryOutputSchema = z.object({
+  updated: z.boolean(),
+  documents: z.number().int(),
+  library: librarySchema
+})
+
 export interface TreeNodeOutput {
   id: string
   title: string

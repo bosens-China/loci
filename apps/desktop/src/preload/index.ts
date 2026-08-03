@@ -28,6 +28,11 @@ const api: LociApi = {
     ipcRenderer.on('sources:crawl-progress', handler)
     return () => ipcRenderer.removeListener('sources:crawl-progress', handler)
   },
+  onExternalDataChange: (listener) => {
+    const handler = (): void => listener()
+    ipcRenderer.on('database:external-change', handler)
+    return () => ipcRenderer.removeListener('database:external-change', handler)
+  },
   listDocuments: () => ipcRenderer.invoke('documents:list') as Promise<DocumentRecord[]>,
   searchDocuments: (query) =>
     ipcRenderer.invoke('documents:search', query) as Promise<DocumentRecord[]>,

@@ -169,6 +169,15 @@ export function readAnnotations(): {
   return { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
 }
 
+export function remoteReadAnnotations(): {
+  readOnlyHint: boolean
+  destructiveHint: boolean
+  idempotentHint: boolean
+  openWorldHint: boolean
+} {
+  return { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+}
+
 export function writeAnnotations(idempotent: boolean): {
   readOnlyHint: boolean
   destructiveHint: boolean

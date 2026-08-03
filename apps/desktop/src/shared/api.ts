@@ -214,6 +214,7 @@ export interface LociApi {
   crawlSource: (id: string) => Promise<CrawlProgress>
   listCrawlRuns: () => Promise<CrawlRunState[]>
   onCrawlProgress: (listener: (event: CrawlProgressEvent) => void) => () => void
+  onExternalDataChange: (listener: () => void) => () => void
   listDocuments: () => Promise<DocumentRecord[]>
   searchDocuments: (query: string) => Promise<DocumentRecord[]>
   clearDocuments: () => Promise<number>

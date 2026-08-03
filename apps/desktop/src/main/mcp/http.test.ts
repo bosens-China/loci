@@ -1,13 +1,14 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { afterEach, describe, expect, it } from 'vitest'
 import type {
+  CloudCatalogItem,
   CreateSourceInput,
   CrawlProgress,
   CrawlRunState,
   DocumentRecord,
   DocumentSource
 } from '../../shared/api'
-import { startMcpHttpServer, type McpHttpServer } from './http'
+import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from './http'
 import type { LociMcpServices } from './server'
 
 const source: DocumentSource = {
@@ -47,6 +48,21 @@ const completedProgress: CrawlProgress = {
   limitReached: false
 }
 
+const cloudLibrary: CloudCatalogItem = {
+  id: 'cloud-vue',
+  name: 'Vue 云端文档',
+  url: source.url,
+  revision: 'revision-1',
+  pages: 1,
+  snapshotSize: 1024,
+  lastCrawledAt: '2026-08-03T00:00:00.000Z',
+  publishedAt: '2026-08-03T00:00:00.000Z',
+  localSourceId: null,
+  localRevision: null,
+  autoSync: false,
+  updateAvailable: false
+}
+
 describe('MCP HTTP server', () => {
   let httpServer: McpHttpServer | undefined
   let client: Client | undefined
@@ -58,6 +74,7 @@ describe('MCP HTTP server', () => {
 
   it('supports the directory-first workflow, section reading and progress notifications', async () => {
     httpServer = await startMcpHttpServer(0, createServices())
+    expect(await isLociMcpAvailable(httpServer.port)).toBe(true)
     client = await connect(httpServer)
 
     const tools = await client.listTools()
@@ -66,6 +83,8 @@ describe('MCP HTTP server', () => {
       'loci_sync_libraries',
       'loci_get_sync_status',
       'loci_list_libraries',
+      'loci_list_cloud_libraries',
+      'loci_pull_cloud_library',
       'loci_get_library_tree',
       'loci_read_files',
       'loci_search_files',
@@ -82,6 +101,25 @@ describe('MCP HTTP server', () => {
       arguments: { url: source.url }
     })
     expect(added.structuredContent).toMatchObject({ created: false, status: 'idle' })
+
+    const cloud = await client.callTool({
+      name: 'loci_list_cloud_libraries',
+      arguments: { query: 'Vue' }
+    })
+    expect(cloud.structuredContent).toMatchObject({
+      total_count: 1,
+      items: [{ id: cloudLibrary.id, snapshot_size: 1024, local_source_id: null }]
+    })
+
+    const pulled = await client.callTool({
+      name: 'loci_pull_cloud_library',
+      arguments: { library_id: cloudLibrary.id }
+    })
+    expect(pulled.structuredContent).toMatchObject({
+      updated: true,
+      documents: 1,
+      library: { id: source.id }
+    })
 
     const tree = await client.callTool({
       name: 'loci_get_library_tree',
@@ -293,7 +331,9 @@ function createServices(): LociMcpServices {
     },
     deleteSource: () => undefined,
     isCrawling: () => false,
-    getCrawlState: () => ({ ...runningState(), progress: completedProgress, running: false })
+    getCrawlState: () => ({ ...runningState(), progress: completedProgress, running: false }),
+    listCloudLibraries: async () => [cloudLibrary],
+    pullCloudLibrary: async () => ({ source, updated: true, documents: source.pages })
   }
 }
 

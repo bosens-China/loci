@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { getHostname, isUrlInScope, normalizeScopePath, normalizeUrl } from './crawl/url'
 import { deleteDocumentsOutsideScope } from './database-source-scope'
@@ -48,7 +49,20 @@ export interface StoredDocument {
   crawledAt: string
 }
 
+export interface CrawlHistoryRecord {
+  id: string
+  sourceId: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  startedAt: string | null
+  finishedAt: string | null
+  discovered: number
+  succeeded: number
+  failed: number
+  error: string | null
+}
+
 export interface LociDatabase extends CloudLibraryDatabase, SettingsDatabase {
+  schemaVersion: number
   listSources: () => DocumentSource[]
   createSource: (input: CreateSourceInput) => DocumentSource
   updateSource: (id: string, input: UpdateSourceInput) => DocumentSource
@@ -66,9 +80,32 @@ export interface LociDatabase extends CloudLibraryDatabase, SettingsDatabase {
   listDocuments: () => DocumentRecord[]
   searchDocuments: (query: string) => DocumentRecord[]
   deleteSource: (id: string) => void
+  startCrawlRun: (sourceId: string) => string
+  finishCrawlRun: (
+    id: string,
+    status: 'completed' | 'failed',
+    progress: { queued: number; succeeded: number; failed: number } | undefined,
+    error: string | null
+  ) => void
+  listCrawlHistory: (sourceId?: string) => CrawlHistoryRecord[]
   exportBackup: () => LociBackup
   importBackup: (input: unknown) => BackupImportSummary
   close: () => void
+}
+
+export const LOCI_SCHEMA_VERSION = 1
+
+export function databaseNeedsMigration(filename: string): boolean {
+  if (filename === ':memory:' || !existsSync(filename)) return true
+  const database = new DatabaseSync(filename, { readOnly: true })
+  try {
+    const row = database.prepare('PRAGMA user_version').get() as unknown as {
+      user_version: number
+    }
+    return row.user_version < LOCI_SCHEMA_VERSION
+  } finally {
+    database.close()
+  }
 }
 
 const schema = `
@@ -144,10 +181,26 @@ export function createDatabase(filename: string): LociDatabase {
     timeout: 5000,
     enableForeignKeyConstraints: true
   })
-  database.exec(schema)
-  migrateDatabase(database)
+  try {
+    database.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;')
+    const row = database.prepare('PRAGMA user_version').get() as unknown as {
+      user_version: number
+    }
+    if (row.user_version > LOCI_SCHEMA_VERSION) {
+      throw new Error(
+        `数据库版本 ${row.user_version} 高于当前支持的 ${LOCI_SCHEMA_VERSION}，请升级 Loci 后重试`
+      )
+    }
+    database.exec(schema)
+    migrateDatabase(database)
+    database.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION}`)
+  } catch (error) {
+    database.close()
+    throw error
+  }
 
   return {
+    schemaVersion: LOCI_SCHEMA_VERSION,
     ...createCloudLibraryDatabase(database),
     ...createSettingsDatabase(database),
     listSources: () => {
@@ -371,6 +424,71 @@ export function createDatabase(filename: string): LociDatabase {
         )
         .all(expression) as unknown as DocumentRow[]
       return rows.map(toDocumentRecord)
+    },
+    startCrawlRun: (sourceId) => {
+      const id = randomUUID()
+      database
+        .prepare(
+          `INSERT INTO crawl_runs (id, source_id, status, started_at)
+           VALUES (?, ?, 'running', ?)`
+        )
+        .run(id, sourceId, new Date().toISOString())
+      return id
+    },
+    finishCrawlRun: (id, status, progress, error) => {
+      database
+        .prepare(
+          `UPDATE crawl_runs
+           SET status = ?, finished_at = ?, discovered_count = ?, success_count = ?, failure_count = ?, error_message = ?
+           WHERE id = ?`
+        )
+        .run(
+          status,
+          new Date().toISOString(),
+          progress?.queued ?? 0,
+          progress?.succeeded ?? 0,
+          progress?.failed ?? 0,
+          error,
+          id
+        )
+    },
+    listCrawlHistory: (sourceId) => {
+      const rows = (sourceId
+        ? database
+            .prepare(
+              `SELECT id, source_id, status, started_at, finished_at, discovered_count,
+                 success_count, failure_count, error_message
+               FROM crawl_runs WHERE source_id = ? ORDER BY started_at DESC LIMIT 50`
+            )
+            .all(sourceId)
+        : database
+            .prepare(
+              `SELECT id, source_id, status, started_at, finished_at, discovered_count,
+                 success_count, failure_count, error_message
+               FROM crawl_runs ORDER BY started_at DESC LIMIT 50`
+            )
+            .all()) as unknown as Array<{
+        id: string
+        source_id: string
+        status: CrawlHistoryRecord['status']
+        started_at: string | null
+        finished_at: string | null
+        discovered_count: number
+        success_count: number
+        failure_count: number
+        error_message: string | null
+      }>
+      return rows.map((row) => ({
+        id: row.id,
+        sourceId: row.source_id,
+        status: row.status,
+        startedAt: row.started_at,
+        finishedAt: row.finished_at,
+        discovered: Number(row.discovered_count),
+        succeeded: Number(row.success_count),
+        failed: Number(row.failure_count),
+        error: row.error_message
+      }))
     },
     deleteSource: (id) => {
       withTransaction(database, () => {

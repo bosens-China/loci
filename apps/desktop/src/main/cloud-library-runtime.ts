@@ -5,8 +5,10 @@ import type { LociDatabase } from './database'
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /** 注册公开云文档 IPC，并在启动时及每天更新当前后端的同源副本。 */
-export function registerCloudLibraryRuntime(database: LociDatabase): () => void {
-  const service = new CloudLibraryService(database)
+export function registerCloudLibraryRuntime(
+  database: LociDatabase,
+  service = new CloudLibraryService(database)
+): () => void {
   const serverUrl = (): string => database.getSettings().serverUrl
 
   ipcMain.handle('cloud-catalog:list', () => service.listCatalog(serverUrl()))

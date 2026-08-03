@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppSettings } from '../../shared/api'
 import type { LociDatabase } from '../database'
-import { startMcpHttpServer, type McpHttpServer } from './http'
+import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from './http'
 import { createMcpRuntime } from './runtime'
 import type { LociMcpServices } from './server'
 
-vi.mock('./http', () => ({ startMcpHttpServer: vi.fn() }))
+vi.mock('./http', () => ({
+  startMcpHttpServer: vi.fn(),
+  isLociMcpAvailable: vi.fn().mockResolvedValue(false)
+}))
 
 describe('MCP runtime', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -34,6 +37,30 @@ describe('MCP runtime', () => {
 
     expect(result.settings.mcpPort).toBe(3101)
     expect(previousClose).toHaveBeenCalledOnce()
+  })
+
+  it('recognizes an existing Loci MCP instead of reporting a port conflict', async () => {
+    const settings: AppSettings = {
+      mcpPort: 3100,
+      theme: 'auto',
+      httpConcurrency: 9,
+      browserConcurrency: 2,
+      serverUrl: 'http://localhost:7001'
+    }
+    vi.mocked(startMcpHttpServer).mockRejectedValueOnce(new Error('EADDRINUSE'))
+    vi.mocked(isLociMcpAvailable).mockResolvedValueOnce(true)
+    const database = {
+      getSettings: () => settings,
+      saveSettings: vi.fn()
+    } as unknown as LociDatabase
+
+    const runtime = createMcpRuntime(database, {} as unknown as LociMcpServices)
+    await runtime.start()
+
+    expect(runtime.getState().mcp).toMatchObject({ running: true, error: null })
+    await expect(runtime.save({ ...settings, mcpPort: 3101 })).rejects.toThrow(
+      '请先停止由 CLI 启动的 Loci MCP'
+    )
   })
 })
 

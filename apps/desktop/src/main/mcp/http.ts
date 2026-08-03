@@ -13,6 +13,8 @@ export interface McpHttpServer {
   close: () => Promise<void>
 }
 
+const MCP_HEALTH_SERVICE = 'loci-mcp'
+
 // 服务只绑定回环地址，并在进入 MCP handler 前拦截非本机 Host 与 Origin。
 export async function startMcpHttpServer(
   requestedPort: number,
@@ -25,7 +27,15 @@ export async function startMcpHttpServer(
   const validateHost = localhostHostValidation()
   const validateOrigin = localhostOriginValidation()
   const server = createServer((request, response) => {
-    if (request.url?.split('?')[0] !== '/mcp') {
+    const path = request.url?.split('?')[0]
+    if (path === '/health') {
+      if (!validateHost(request, response)) return
+      response
+        .writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+        .end(JSON.stringify({ service: MCP_HEALTH_SERVICE }))
+      return
+    }
+    if (path !== '/mcp') {
       response.writeHead(404).end()
       return
     }
@@ -43,6 +53,21 @@ export async function startMcpHttpServer(
       await handler.close()
       await close(server)
     }
+  }
+}
+
+export async function isLociMcpAvailable(port: number): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/health`, {
+      signal: AbortSignal.timeout(800)
+    })
+    if (!response.ok) return false
+    const body = (await response.json()) as unknown
+    return Boolean(
+      body && typeof body === 'object' && 'service' in body && body.service === MCP_HEALTH_SERVICE
+    )
+  } catch {
+    return false
   }
 }
 

@@ -3,11 +3,14 @@ import * as z from 'zod/v4'
 import { buildUrlTree, getUrlTreeSlice } from '../../shared/url-tree'
 import type {
   CreateSourceInput,
+  CloudCatalogItem,
+  CloudImportResult,
   CrawlProgress,
   CrawlRunState,
   DocumentRecord,
   DocumentSource
 } from '../../shared/api'
+import { registerCloudTools } from './cloud-tools'
 import { findBestPassage, readMarkdownSection, sliceContent } from './content'
 import {
   addLibraryOutputSchema,
@@ -46,6 +49,8 @@ export interface LociMcpServices {
   deleteSource: (id: string) => void
   isCrawling: (id: string) => boolean
   getCrawlState: (id: string) => CrawlRunState | undefined
+  listCloudLibraries: () => Promise<CloudCatalogItem[]>
+  pullCloudLibrary: (libraryId: string) => Promise<CloudImportResult>
 }
 
 const WAIT_DESCRIPTION =
@@ -209,6 +214,8 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
       return result(page(items, matches.length, offset, limit), `找到 ${matches.length} 个文档库`)
     }
   )
+
+  registerCloudTools(server, services)
 
   server.registerTool(
     'loci_get_library_tree',

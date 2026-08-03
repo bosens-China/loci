@@ -1,6 +1,6 @@
 import type { AppSettings, AppSettingsState } from '../../shared/api'
 import type { LociDatabase } from '../database'
-import { startMcpHttpServer, type McpHttpServer } from './http'
+import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from './http'
 import type { LociMcpServices } from './server'
 
 export interface McpRuntime {
@@ -12,6 +12,7 @@ export interface McpRuntime {
 
 export function createMcpRuntime(database: LociDatabase, services: LociMcpServices): McpRuntime {
   let server: McpHttpServer | undefined
+  let externalServer = false
   let error: string | null = null
 
   const getState = (): AppSettingsState => {
@@ -19,7 +20,7 @@ export function createMcpRuntime(database: LociDatabase, services: LociMcpServic
     return {
       settings,
       mcp: {
-        running: Boolean(server),
+        running: Boolean(server) || externalServer,
         endpoint: `http://127.0.0.1:${settings.mcpPort}/mcp`,
         error
       }
@@ -31,16 +32,22 @@ export function createMcpRuntime(database: LociDatabase, services: LociMcpServic
       const port = database.getSettings().mcpPort
       try {
         server = await startMcpHttpServer(port, services)
+        externalServer = false
         error = null
       } catch (startError) {
-        error = `MCP 服务无法监听端口 ${port}：${errorMessage(startError)}`
-        console.error(error)
+        externalServer = await isLociMcpAvailable(port)
+        error = externalServer ? null : `MCP 服务无法监听端口 ${port}：${errorMessage(startError)}`
+        if (error) console.error(error)
       }
     },
     getState,
     save: async (settings) => {
       const previousSettings = database.getSettings()
-      const shouldRestart = !server || settings.mcpPort !== previousSettings.mcpPort
+      if (externalServer && settings.mcpPort !== previousSettings.mcpPort) {
+        throw new Error('请先停止由 CLI 启动的 Loci MCP，再修改 MCP 端口')
+      }
+      const shouldRestart =
+        (!server && !externalServer) || settings.mcpPort !== previousSettings.mcpPort
       let candidate: McpHttpServer | undefined
       if (shouldRestart) {
         try {
@@ -58,6 +65,7 @@ export function createMcpRuntime(database: LociDatabase, services: LociMcpServic
       if (candidate) {
         const previousServer = server
         server = candidate
+        externalServer = false
         error = null
         // 旧连接在后台排空，设置保存不等待正在执行的 MCP 请求。
         void previousServer

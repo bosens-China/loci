@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
-import { createDatabase } from './database'
+import { createDatabase, databaseNeedsMigration, LOCI_SCHEMA_VERSION } from './database'
 
 describe('createDatabase', () => {
   it('creates and lists a document source', () => {
@@ -104,6 +104,23 @@ describe('createDatabase', () => {
     } finally {
       database.close()
     }
+  })
+
+  it('records the schema version and rejects a database from a newer client', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-version-'))
+    const filename = join(directory, 'future.sqlite')
+    expect(databaseNeedsMigration(filename)).toBe(true)
+    const current = createDatabase(filename)
+    expect(current.schemaVersion).toBe(LOCI_SCHEMA_VERSION)
+    current.close()
+    expect(databaseNeedsMigration(filename)).toBe(false)
+
+    const future = new DatabaseSync(filename)
+    future.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION + 1}`)
+    future.close()
+
+    expect(() => createDatabase(filename)).toThrow('请升级 Loci 后重试')
+    rmSync(directory, { recursive: true, force: true })
   })
 
   it('migrates existing settings and document source tables', () => {

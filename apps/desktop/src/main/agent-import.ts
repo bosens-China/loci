@@ -1,6 +1,10 @@
-import { execFile, spawn } from 'node:child_process'
-import { promisify, stripVTControlCharacters } from 'node:util'
+import { spawn } from 'node:child_process'
+import { stripVTControlCharacters } from 'node:util'
+import which from 'which'
 import type { AgentClient, AgentImportResult } from '../shared/api'
+
+export type McpAgentConnection =
+  { type: 'http'; endpoint: string } | { type: 'stdio'; command: string; args: readonly string[] }
 
 interface AgentImportCommand {
   command: string
@@ -8,60 +12,147 @@ interface AgentImportCommand {
   label: string
 }
 
-const execFileAsync = promisify(execFile)
+interface CommandResult {
+  code: number | null
+  output: string
+}
 
-const clients: Record<
-  AgentClient,
-  { command: string; label: string; args: (endpoint: string) => string[] }
-> = {
+type ConnectionArgs = (connection: McpAgentConnection) => string[]
+
+export const LOCI_CLI_STDIO_CONNECTION: McpAgentConnection = {
+  type: 'stdio',
+  command: 'loci',
+  args: ['mcp', 'stdio']
+}
+
+const clients: Record<AgentClient, { command: string; label: string; args: ConnectionArgs }> = {
   codex: {
     command: 'codex',
     label: 'Codex',
-    args: (endpoint) => ['mcp', 'add', 'loci', '--url', endpoint]
+    args: (connection) =>
+      connection.type === 'http'
+        ? ['mcp', 'add', 'loci', '--url', connection.endpoint]
+        : ['mcp', 'add', 'loci', '--', connection.command, ...connection.args]
   },
   cursor: {
     command: 'cursor',
     label: 'Cursor',
-    args: (endpoint) => ['--add-mcp', JSON.stringify({ name: 'loci', type: 'http', url: endpoint })]
+    args: (connection) => ['--add-mcp', createEditorConfig(connection)]
   },
   vscode: {
     command: 'code',
     label: 'VS Code',
-    args: (endpoint) => ['--add-mcp', JSON.stringify({ name: 'loci', type: 'http', url: endpoint })]
+    args: (connection) => ['--add-mcp', createEditorConfig(connection)]
   },
   'claude-code': {
     command: 'claude',
     label: 'Claude Code',
-    args: (endpoint) => ['mcp', 'add', '--transport', 'http', '--scope', 'user', 'loci', endpoint]
+    args: (connection) =>
+      connection.type === 'http'
+        ? ['mcp', 'add', '--transport', 'http', '--scope', 'user', 'loci', connection.endpoint]
+        : [
+            'mcp',
+            'add',
+            '--transport',
+            'stdio',
+            '--scope',
+            'user',
+            'loci',
+            '--',
+            connection.command,
+            ...connection.args
+          ]
   },
   'gemini-cli': {
     command: 'gemini',
     label: 'Gemini CLI',
-    args: (endpoint) => ['mcp', 'add', '--transport', 'http', '--scope', 'user', 'loci', endpoint]
+    args: (connection) =>
+      connection.type === 'http'
+        ? ['mcp', 'add', '--transport', 'http', '--scope', 'user', 'loci', connection.endpoint]
+        : [
+            'mcp',
+            'add',
+            '--transport',
+            'stdio',
+            '--scope',
+            'user',
+            'loci',
+            connection.command,
+            ...connection.args
+          ]
+  }
+}
+
+export function createHttpMcpConnection(endpoint: string): McpAgentConnection {
+  return { type: 'http', endpoint }
+}
+
+export async function resolvePreferredMcpConnection(
+  endpoint: string,
+  findCli: () => Promise<string | null> = findLociCliExecutable
+): Promise<McpAgentConnection> {
+  const executable = await findCli()
+  return executable
+    ? { type: 'stdio', command: executable, args: ['mcp', 'stdio'] }
+    : createHttpMcpConnection(endpoint)
+}
+
+export async function findLociCliExecutable(): Promise<string | null> {
+  const executable = await which('loci', { nothrow: true })
+  if (!executable) return null
+  try {
+    const result = await executeCommand(executable, ['mcp', 'stdio', '--help'], 3_000)
+    return result.code === 0 && result.output.includes('Loci MCP stdio') ? executable : null
+  } catch {
+    return null
   }
 }
 
 export async function importAgentClient(
   client: unknown,
-  endpoint: string
+  connection: McpAgentConnection
 ): Promise<AgentImportResult> {
-  const command = createAgentImportCommand(client, endpoint)
+  const command = createAgentImportCommand(client, connection)
   const executable = await resolveExecutable(command)
   await runCommand(executable, command.args, command.label)
-  return { client: client as AgentClient, message: `已导入到 ${command.label} 的用户配置` }
+  const transport = connection.type === 'stdio' ? 'CLI stdio' : '桌面 HTTP'
+  return {
+    client: client as AgentClient,
+    message: `已将 ${transport} MCP 导入到 ${command.label} 的用户配置`
+  }
 }
 
-export function createAgentImportCommand(client: unknown, endpoint: string): AgentImportCommand {
+export function createAgentImportCommand(
+  client: unknown,
+  connection: McpAgentConnection
+): AgentImportCommand {
   if (typeof client !== 'string' || !Object.hasOwn(clients, client)) {
     throw new Error('不支持这个 Agent 客户端')
   }
-  validateEndpoint(endpoint)
+  validateConnection(connection)
   const definition = clients[client as AgentClient]
-  return { command: definition.command, args: definition.args(endpoint), label: definition.label }
+  return { command: definition.command, args: definition.args(connection), label: definition.label }
 }
 
-function validateEndpoint(endpoint: string): void {
-  const url = new URL(endpoint)
+function createEditorConfig(connection: McpAgentConnection): string {
+  return JSON.stringify(
+    connection.type === 'http'
+      ? { name: 'loci', type: 'http', url: connection.endpoint }
+      : {
+          name: 'loci',
+          type: 'stdio',
+          command: connection.command,
+          args: [...connection.args]
+        }
+  )
+}
+
+function validateConnection(connection: McpAgentConnection): void {
+  if (connection.type === 'stdio') {
+    if (!connection.command.trim()) throw new Error('MCP stdio 命令不能为空')
+    return
+  }
+  const url = new URL(connection.endpoint)
   if (
     url.protocol !== 'http:' ||
     url.hostname !== '127.0.0.1' ||
@@ -77,25 +168,33 @@ function validateEndpoint(endpoint: string): void {
 }
 
 async function resolveExecutable(command: AgentImportCommand): Promise<string> {
-  if (process.platform !== 'win32') return command.command
-  try {
-    const { stdout } = await execFileAsync('where.exe', [command.command], {
-      encoding: 'utf8',
-      timeout: 3_000,
-      windowsHide: true
-    })
-    const matches = stdout.split(/\r?\n/).filter(Boolean)
-    const executable =
-      matches.find((match) => match.toLowerCase().endsWith('.exe')) ??
-      matches.find((match) => /\.(cmd|bat)$/i.test(match))
-    if (executable) return executable
-  } catch {
-    // 统一使用面向用户的未安装提示。
-  }
+  const executable = await which(command.command, { nothrow: true })
+  if (executable) return executable
   throw new Error(`未检测到 ${command.label}，请先安装并确保命令已加入 PATH`)
 }
 
-function runCommand(executable: string, args: string[], label: string): Promise<void> {
+async function runCommand(executable: string, args: string[], label: string): Promise<void> {
+  let result: CommandResult
+  try {
+    result = await executeCommand(executable, args, 15_000)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ETIMEDOUT') throw new Error(`${label} 导入超时，请稍后重试`)
+    if (code === 'ENOENT') {
+      throw new Error(`未检测到 ${label}，请先安装并确保命令已加入 PATH`)
+    }
+    throw new Error(`${label} 导入失败`)
+  }
+  if (result.code !== 0) {
+    throw new Error(`${label} 导入失败${lastOutputLine(result.output)}`)
+  }
+}
+
+function executeCommand(
+  executable: string,
+  args: string[],
+  timeout: number
+): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     const isWindowsScript = process.platform === 'win32' && /\.(cmd|bat)$/i.test(executable)
     // 参数均由白名单生成，Windows 仅为执行 CLI 的 cmd 包装脚本而使用命令解释器。
@@ -119,26 +218,19 @@ function runCommand(executable: string, args: string[], label: string): Promise<
     }
     const timer = setTimeout(() => {
       child.kill()
-      fail(new Error(`${label} 导入超时，请稍后重试`))
-    }, 15_000)
+      const error = new Error('命令执行超时') as NodeJS.ErrnoException
+      error.code = 'ETIMEDOUT'
+      fail(error)
+    }, timeout)
 
     child.stdout.on('data', append)
     child.stderr.on('data', append)
-    child.once('error', (error: NodeJS.ErrnoException) => {
-      fail(
-        new Error(
-          error.code === 'ENOENT'
-            ? `未检测到 ${label}，请先安装并确保命令已加入 PATH`
-            : `${label} 导入失败`
-        )
-      )
-    })
+    child.once('error', fail)
     child.once('close', (code) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      if (code === 0) resolve()
-      else reject(new Error(`${label} 导入失败${lastOutputLine(output)}`))
+      resolve({ code, output })
     })
   })
 }

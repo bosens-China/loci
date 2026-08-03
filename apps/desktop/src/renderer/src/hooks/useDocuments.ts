@@ -27,6 +27,7 @@ export function useDocuments(): DocumentsState {
 
   useEffect(() => {
     void Promise.resolve().then(reload)
+    return window.api.onExternalDataChange(() => void reload())
   }, [reload])
 
   return { documents, loading, error, reload }
