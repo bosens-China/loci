@@ -169,7 +169,11 @@ const schema = `
     mcp_port INTEGER NOT NULL CHECK (mcp_port BETWEEN 1024 AND 65535),
     theme TEXT NOT NULL CHECK (theme IN ('auto', 'light', 'dark')),
     http_concurrency INTEGER NOT NULL DEFAULT 9 CHECK (http_concurrency BETWEEN 1 AND 32),
-    browser_concurrency INTEGER NOT NULL DEFAULT 2 CHECK (browser_concurrency BETWEEN 1 AND 32),
+    browser_concurrency INTEGER NOT NULL DEFAULT 5 CHECK (browser_concurrency BETWEEN 1 AND 32),
+    max_retries INTEGER NOT NULL DEFAULT 3 CHECK (max_retries BETWEEN 0 AND 10),
+    batch_interval_seconds INTEGER NOT NULL DEFAULT 0 CHECK (
+      batch_interval_seconds = 0 OR batch_interval_seconds BETWEEN 100 AND 3000
+    ),
     server_url TEXT NOT NULL DEFAULT 'http://localhost:7001'
   ) STRICT;
 

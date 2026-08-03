@@ -21,6 +21,8 @@ const api: LociApi = {
   updateSource: (id, input) =>
     ipcRenderer.invoke('sources:update', id, input) as Promise<DocumentSource>,
   crawlSource: (id) => ipcRenderer.invoke('sources:crawl', id) as Promise<CrawlProgress>,
+  pauseCrawl: (id) => ipcRenderer.invoke('sources:crawl-pause', id) as Promise<void>,
+  resumeCrawl: (id) => ipcRenderer.invoke('sources:crawl-resume', id) as Promise<void>,
   listCrawlRuns: () => ipcRenderer.invoke('sources:crawl-runs') as Promise<CrawlRunState[]>,
   onCrawlProgress: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: CrawlProgressEvent): void =>

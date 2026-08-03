@@ -30,6 +30,7 @@ import type {
 } from '@loci/shared'
 import { normalizeCronSchedule } from '@loci/shared'
 import { runSourceCrawl } from './crawl/source'
+import { CrawlControl } from './crawl/control'
 import type { LociMcpServices } from '@loci/runtime'
 import { registerSingleInstance } from './single-instance'
 import { createAppTray } from './tray'
@@ -51,6 +52,7 @@ let appUpdater: AppUpdater | undefined
 let dataDir = ''
 const runningCrawls = new Set<string>()
 const crawlStates = new Map<string, CrawlRunState>()
+const crawlControls = new Map<string, CrawlControl>()
 const scheduledCrawls = new Map<string, Cron>()
 const isPrimaryInstance = registerSingleInstance(() => mainWindow)
 
@@ -107,6 +109,8 @@ if (isPrimaryInstance)
       return source
     })
     ipcMain.handle('sources:crawl', (_event, id: string) => crawlSource(id))
+    ipcMain.handle('sources:crawl-pause', (_event, id: string) => setCrawlPaused(id, true))
+    ipcMain.handle('sources:crawl-resume', (_event, id: string) => setCrawlPaused(id, false))
     ipcMain.handle('sources:crawl-runs', () => [...crawlStates.values()])
     ipcMain.handle('documents:list', () => requireDatabase().listDocuments())
     ipcMain.handle('documents:search', (_event, query: string) =>
@@ -188,9 +192,16 @@ function createSource(input: CreateSourceInput): DocumentSource {
   return source
 }
 
-function deleteSource(id: string): void {
+async function deleteSource(id: string): Promise<void> {
   assertMaintenanceIdle()
-  if (isSourceCrawling(id)) throw new Error('更新进行中，暂时不能删除文档源')
+  if (isSourceCrawling(id)) {
+    const control = crawlControls.get(id)
+    if (!control?.paused) throw new Error('更新进行中，请先暂停再删除文档源')
+    control.cancel()
+    setCrawlPaused(id, false, false)
+    await control.done
+    assertMaintenanceIdle()
+  }
   crawlStates.delete(id)
   stopScheduledCrawl(id)
   requireDatabase().deleteSource(id)
@@ -312,6 +323,7 @@ async function crawlSource(
     title: source.fetchMode === 'auto' ? '正在检测抓取方式' : '正在读取第一个页面',
     status: 'running'
   }
+  crawlControls.set(id, new CrawlControl())
   publishCrawlState({
     sourceId: id,
     progress: {
@@ -324,15 +336,22 @@ async function crawlSource(
     },
     nodes: [initialNode],
     error: null,
-    running: true
+    running: true,
+    paused: false
   })
   const runId = requireDatabase().startCrawlRun(id)
   runningCrawls.add(id)
   try {
-    const progress = await runSourceCrawl(requireDatabase(), id, (progress) => {
-      emitCrawlProgress(id, progress)
-      onProgress?.(progress)
-    })
+    const progress = await runSourceCrawl(
+      requireDatabase(),
+      id,
+      (progress) => {
+        emitCrawlProgress(id, progress)
+        onProgress?.(progress)
+      },
+      () => waitIfCrawlPaused(id),
+      (milliseconds) => waitForCrawlDelay(id, milliseconds)
+    )
     if (progress.succeeded === 0 && progress.failed > 0) {
       throw new Error(`抓取失败：${progress.failed} 个页面均未成功`)
     }
@@ -346,9 +365,37 @@ async function crawlSource(
     requireDatabase().finishCrawlRun(runId, 'failed', progress, message)
     throw error
   } finally {
+    const control = crawlControls.get(id)
+    setCrawlPaused(id, false, false)
+    crawlControls.delete(id)
     runningCrawls.delete(id)
     lock.release()
+    control?.finish()
   }
+}
+
+function setCrawlPaused(sourceId: string, paused: boolean, required = true): void {
+  const control = crawlControls.get(sourceId)
+  if (!control) {
+    if (required) throw new Error('这个文档源当前没有正在运行的抓取任务')
+    return
+  }
+  if (paused) control.pause()
+  else control.resume()
+  const current = crawlStates.get(sourceId)
+  if (current) publishCrawlState({ ...current, paused })
+}
+
+async function waitIfCrawlPaused(sourceId: string): Promise<void> {
+  const control = crawlControls.get(sourceId)
+  if (!control) throw new Error('抓取任务不存在')
+  await control.waitIfPaused()
+}
+
+async function waitForCrawlDelay(sourceId: string, milliseconds: number): Promise<void> {
+  const control = crawlControls.get(sourceId)
+  if (!control) throw new Error('抓取任务不存在')
+  await control.waitForDelay(milliseconds)
 }
 
 function isSourceCrawling(sourceId: string): boolean {
@@ -381,7 +428,8 @@ function finishCrawl(
     ...current,
     progress: progress ? { ...progress, node: current.progress.node } : current.progress,
     error,
-    running: false
+    running: false,
+    paused: false
   })
 }
 
@@ -391,7 +439,8 @@ function publishCrawlState(state: CrawlRunState): void {
     sourceId: state.sourceId,
     progress: state.progress,
     error: state.error,
-    running: state.running
+    running: state.running,
+    paused: state.paused
   })
 }
 

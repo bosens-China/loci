@@ -30,6 +30,8 @@ describe('database backup', () => {
         theme: 'dark',
         httpConcurrency: 12,
         browserConcurrency: 3,
+        maxRetries: 4,
+        batchIntervalSeconds: 100,
         serverUrl: 'https://docs.example.com'
       })
       targetDatabase.createSource({
@@ -57,7 +59,12 @@ describe('database backup', () => {
         scopePath: '/learn'
       })
       expect(targetDatabase.searchDocuments('Components')[0]?.title).toBe('Learn React')
-      expect(targetDatabase.getSettings()).toMatchObject({ mcpPort: 41000, theme: 'dark' })
+      expect(targetDatabase.getSettings()).toMatchObject({
+        mcpPort: 41000,
+        theme: 'dark',
+        maxRetries: 4,
+        batchIntervalSeconds: 100
+      })
     } finally {
       sourceDatabase.close()
       targetDatabase.close()

@@ -56,14 +56,14 @@ export async function crawlRenderedSource(options: RenderedCrawlOptions): Promis
     options.firstUrl,
     options.hostname,
     options.pageLimit,
-    { fetchImpl: options.fetch, sleep: options.sleep },
+    { fetchImpl: options.fetch, maxRetries: options.maxRetries, sleep: options.sleep },
     options.scopePath
   )
   const run = (crawler: RenderedCrawler): Promise<CrawlProgress> => {
     const request = { hostname: options.hostname, scopePath: options.scopePath }
     return runCrawlQueue({
       ...options,
-      concurrency: options.concurrency ?? 2,
+      concurrency: options.concurrency ?? 5,
       fetchMode: 'browser',
       sitemapUrls,
       fetchPage: (url) =>

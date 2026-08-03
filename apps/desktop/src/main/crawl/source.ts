@@ -7,7 +7,9 @@ import { fetchRenderedCrawlPage } from './rendered'
 export async function runSourceCrawl(
   database: LociDatabase,
   sourceId: string,
-  onProgress?: (progress: CrawlProgress) => void
+  onProgress?: (progress: CrawlProgress) => void,
+  waitIfPaused?: () => Promise<void>,
+  sleep?: (milliseconds: number) => Promise<void>
 ): Promise<CrawlProgress> {
   const source = database.getSourceConfig(sourceId)
   const settings = database.getSettings()
@@ -21,6 +23,10 @@ export async function runSourceCrawl(
     fetchMode: source.fetchMode,
     httpConcurrency: source.httpConcurrency ?? settings.httpConcurrency,
     browserConcurrency: source.browserConcurrency ?? settings.browserConcurrency,
+    maxRetries: settings.maxRetries,
+    batchIntervalMs: settings.batchIntervalSeconds * 1000,
+    waitIfPaused,
+    sleep,
     crawler: { fetchPage: fetchRenderedCrawlPage },
     onDocument: (document) => database.saveDocument({ ...document, sourceId }),
     onError: ({ url, missing }) => {

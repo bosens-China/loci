@@ -7,6 +7,8 @@ export interface AppSettings {
   theme: ThemeMode
   httpConcurrency: number
   browserConcurrency: number
+  maxRetries: number
+  batchIntervalSeconds: number
   serverUrl: string
 }
 
@@ -113,7 +115,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   mcpPort: 37373,
   theme: 'auto',
   httpConcurrency: 9,
-  browserConcurrency: 2,
+  browserConcurrency: 5,
+  maxRetries: 3,
+  batchIntervalSeconds: 0,
   serverUrl: 'http://localhost:7001'
 }
 
@@ -194,6 +198,7 @@ export interface CrawlProgressEvent {
   progress: CrawlProgress
   error: string | null
   running: boolean
+  paused: boolean
 }
 
 export interface CrawlRunState {
@@ -202,6 +207,7 @@ export interface CrawlRunState {
   nodes: CrawlNode[]
   error: string | null
   running: boolean
+  paused: boolean
 }
 
 export interface DocumentRecord {
@@ -221,6 +227,8 @@ export interface LociApi {
   createSource: (input: CreateSourceInput) => Promise<DocumentSource>
   updateSource: (id: string, input: UpdateSourceInput) => Promise<DocumentSource>
   crawlSource: (id: string) => Promise<CrawlProgress>
+  pauseCrawl: (id: string) => Promise<void>
+  resumeCrawl: (id: string) => Promise<void>
   listCrawlRuns: () => Promise<CrawlRunState[]>
   onCrawlProgress: (listener: (event: CrawlProgressEvent) => void) => () => void
   onExternalDataChange: (listener: () => void) => () => void

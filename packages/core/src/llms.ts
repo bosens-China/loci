@@ -69,7 +69,7 @@ export async function discoverLlmsEntries(
   hostname: string,
   scopePath: string,
   pageLimit: number,
-  options: Pick<FetchOptions, 'fetchImpl' | 'sleep'> = {}
+  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'> = {}
 ): Promise<LlmsEntry[]> {
   try {
     const llmsUrl = new URL('/llms.txt', firstUrl).toString()
@@ -96,7 +96,7 @@ function normalizeMarkdown(markdown: string): string {
 
 export async function fetchMarkdownPage(
   entry: LlmsEntry,
-  options: Pick<FetchOptions, 'fetchImpl' | 'sleep'> = {}
+  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'> = {}
 ): Promise<CrawledPage> {
   const response = await fetchWithRetry(entry.url, options)
   const url = normalizeUrl(response.url || entry.url)
@@ -138,6 +138,7 @@ export function crawlLlmsSource(
     fetchPage: (url) =>
       fetchMarkdownPage(entryByUrl.get(url) ?? { title: new URL(url).pathname, url }, {
         fetchImpl: options.fetch,
+        maxRetries: options.maxRetries,
         sleep: options.sleep
       })
   })

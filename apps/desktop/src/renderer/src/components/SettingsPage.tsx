@@ -94,10 +94,10 @@ function SettingsPage(): React.JSX.Element {
         <CrawlSettingsCard
           httpConcurrency={state.settings.httpConcurrency}
           browserConcurrency={state.settings.browserConcurrency}
+          maxRetries={state.settings.maxRetries}
+          batchIntervalSeconds={state.settings.batchIntervalSeconds}
           saving={saving === 'crawl'}
-          onSave={(concurrency) =>
-            handleSavePartial('crawl', concurrency, '抓取默认并发配置已保存')
-          }
+          onSave={(crawlSettings) => handleSavePartial('crawl', crawlSettings, '抓取默认值已保存')}
         />
       )
     },

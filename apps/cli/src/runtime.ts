@@ -89,7 +89,8 @@ export function createCliRuntime(): CliRuntime {
       },
       nodes: [initialNode],
       error: null,
-      running: true
+      running: true,
+      paused: false
     })
     const runId = database.startCrawlRun(sourceId)
     try {
@@ -104,6 +105,8 @@ export function createCliRuntime(): CliRuntime {
         fetchMode: source.fetchMode,
         httpConcurrency: source.httpConcurrency ?? settings.httpConcurrency,
         browserConcurrency: source.browserConcurrency ?? settings.browserConcurrency,
+        maxRetries: settings.maxRetries,
+        batchIntervalMs: settings.batchIntervalSeconds * 1000,
         crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
         onDocument: (document) => database.saveDocument({ ...document, sourceId }),
         onError: ({ url, missing }) => {
@@ -196,5 +199,5 @@ function updateState(
     : existingIndex < 0
       ? [...current.nodes, node]
       : current.nodes.map((item, index) => (index === existingIndex ? node : item))
-  states.set(sourceId, { ...current, progress, nodes, error, running })
+  states.set(sourceId, { ...current, progress, nodes, error, running, paused: false })
 }

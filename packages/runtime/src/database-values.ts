@@ -43,6 +43,20 @@ export function validateSettings(settings: AppSettings): AppSettings {
   if (!['auto', 'light', 'dark'].includes(settings.theme)) throw new Error('不支持的主题设置')
   validateConcurrency(settings.httpConcurrency, 'HTTP 默认并发')
   validateConcurrency(settings.browserConcurrency, '浏览器默认并发')
+  if (
+    !Number.isInteger(settings.maxRetries) ||
+    settings.maxRetries < 0 ||
+    settings.maxRetries > 10
+  ) {
+    throw new Error('失败重试次数必须是 0 到 10 之间的整数')
+  }
+  if (
+    !Number.isInteger(settings.batchIntervalSeconds) ||
+    (settings.batchIntervalSeconds !== 0 &&
+      (settings.batchIntervalSeconds < 100 || settings.batchIntervalSeconds > 3000))
+  ) {
+    throw new Error('批次间隔必须为 0，或 100 到 3000 之间的整数秒')
+  }
   return { ...settings, serverUrl: normalizeServerUrl(settings.serverUrl) }
 }
 
@@ -129,7 +143,17 @@ export function migrateDatabase(database: DatabaseSync): void {
     database.exec('UPDATE document_sources SET browser_concurrency = concurrency')
   }
   addColumn(database, 'app_settings', 'http_concurrency', 'INTEGER NOT NULL DEFAULT 9')
-  addColumn(database, 'app_settings', 'browser_concurrency', 'INTEGER NOT NULL DEFAULT 2')
+  addColumn(database, 'app_settings', 'browser_concurrency', 'INTEGER NOT NULL DEFAULT 5')
+  const addedCrawlDefaults = addColumn(
+    database,
+    'app_settings',
+    'max_retries',
+    'INTEGER NOT NULL DEFAULT 3'
+  )
+  addColumn(database, 'app_settings', 'batch_interval_seconds', 'INTEGER NOT NULL DEFAULT 0')
+  if (addedCrawlDefaults) {
+    database.exec('UPDATE app_settings SET browser_concurrency = 5 WHERE browser_concurrency = 2')
+  }
   addColumn(database, 'app_settings', 'server_url', "TEXT NOT NULL DEFAULT 'http://localhost:7001'")
   addColumn(
     database,

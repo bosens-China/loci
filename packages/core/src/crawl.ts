@@ -171,7 +171,7 @@ export function parseSitemap(
 
 export async function fetchHttpPage(
   url: string,
-  options: Pick<FetchOptions, 'fetchImpl' | 'sleep'> = {}
+  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'> = {}
 ): Promise<CrawledPage> {
   const response = await fetchWithRetry(url, options)
   const finalUrl = normalizeUrl(response.url || url)
@@ -186,7 +186,7 @@ export async function discoverSitemapUrls(
   firstUrl: string,
   hostname: string,
   pageLimit: number,
-  options: Pick<FetchOptions, 'fetchImpl' | 'sleep'> = {},
+  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'> = {},
   scopePath = '/'
 ): Promise<string[]> {
   try {
@@ -204,7 +204,7 @@ export async function crawlHttpSource(options: HttpCrawlOptions): Promise<CrawlP
     options.firstUrl,
     options.hostname,
     options.pageLimit,
-    { fetchImpl: options.fetch, sleep: options.sleep },
+    { fetchImpl: options.fetch, maxRetries: options.maxRetries, sleep: options.sleep },
     options.scopePath
   )
   return runCrawlQueue({
@@ -212,7 +212,12 @@ export async function crawlHttpSource(options: HttpCrawlOptions): Promise<CrawlP
     concurrency: options.concurrency ?? 9,
     fetchMode: 'http',
     sitemapUrls,
-    fetchPage: (url) => fetchHttpPage(url, { fetchImpl: options.fetch, sleep: options.sleep })
+    fetchPage: (url) =>
+      fetchHttpPage(url, {
+        fetchImpl: options.fetch,
+        maxRetries: options.maxRetries,
+        sleep: options.sleep
+      })
   })
 }
 
@@ -343,11 +348,19 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
   }
 
   while (cursor < queue.length) {
+    await options.waitIfPaused?.()
     const batch = queue.slice(cursor, cursor + Math.max(1, options.concurrency))
     cursor += batch.length
     await Promise.all(batch.map(processPage))
+    if (cursor < queue.length && options.batchIntervalMs) {
+      await (options.sleep ?? defaultSleep)(options.batchIntervalMs)
+    }
   }
   const completed = failures.length ? { ...progress, failures } : progress
   options.onProgress?.(completed)
   return completed
+}
+
+function defaultSleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }

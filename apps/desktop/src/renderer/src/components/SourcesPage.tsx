@@ -73,7 +73,8 @@ function SourcesPage({
             progress: event.progress,
             nodes: mergeCrawlNode(previous?.nodes ?? [], event.progress.node),
             error: event.error,
-            running: event.running
+            running: event.running,
+            paused: event.paused
           }
         }
       })
@@ -151,7 +152,8 @@ function SourcesPage({
       },
       nodes: [initialNode],
       error: null,
-      running: true
+      running: true,
+      paused: false
     }
     setCrawlRuns((current) => ({ ...current, [source.id]: initialRun }))
     setOpenCrawlId(source.id)
@@ -162,8 +164,16 @@ function SourcesPage({
         else messageApi.success(content)
       })
       .catch((error: unknown) => {
+        if (error instanceof Error && error.message.includes('抓取已取消')) return
         messageApi.error(error instanceof Error ? error.message : '更新失败')
       })
+  }
+
+  const setPaused = (sourceId: string, paused: boolean): void => {
+    const action = paused ? window.api.pauseCrawl : window.api.resumeCrawl
+    void action(sourceId).catch((error: unknown) => {
+      messageApi.error(error instanceof Error ? error.message : '抓取状态更新失败')
+    })
   }
 
   const filteredSources = sources.filter((source) => {
@@ -304,6 +314,9 @@ function SourcesPage({
           nodes={crawlRuns[openCrawlId].nodes}
           error={crawlRuns[openCrawlId].error}
           running={crawlRuns[openCrawlId].running}
+          paused={crawlRuns[openCrawlId].paused}
+          onPause={() => setPaused(openCrawlId, true)}
+          onResume={() => setPaused(openCrawlId, false)}
           onClose={() => setOpenCrawlId(null)}
         />
       )}

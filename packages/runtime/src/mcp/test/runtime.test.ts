@@ -19,6 +19,8 @@ describe('MCP runtime', () => {
       theme: 'auto',
       httpConcurrency: 9,
       browserConcurrency: 2,
+      maxRetries: 3,
+      batchIntervalSeconds: 0,
       serverUrl: 'http://localhost:7001'
     }
     const previousClose = vi.fn(() => new Promise<void>(() => undefined))
@@ -45,6 +47,8 @@ describe('MCP runtime', () => {
       theme: 'auto',
       httpConcurrency: 9,
       browserConcurrency: 2,
+      maxRetries: 3,
+      batchIntervalSeconds: 0,
       serverUrl: 'http://localhost:7001'
     }
     vi.mocked(startMcpHttpServer).mockRejectedValueOnce(new Error('EADDRINUSE'))

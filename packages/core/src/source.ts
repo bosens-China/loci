@@ -23,7 +23,6 @@ export interface SourceCrawlOptions extends Omit<HttpCrawlOptions, 'concurrency'
   fetchMode: SourceFetchMode
   httpConcurrency?: number
   browserConcurrency?: number
-  browserMaxRetries?: number
   crawler?: RenderedCrawler
   onResolved?: (resolution: SourceResolution) => Promise<void> | void
 }
@@ -36,7 +35,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
     options.hostname,
     scopePath,
     options.pageLimit,
-    { fetchImpl: options.fetch, sleep: options.sleep }
+    { fetchImpl: options.fetch, maxRetries: options.maxRetries, sleep: options.sleep }
   )
   if (llmsEntries.length) {
     const resolution: SourceResolution = {
@@ -71,7 +70,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
     concurrency:
       selected.fetchMode === 'http'
         ? (options.httpConcurrency ?? 9)
-        : (options.browserConcurrency ?? 2),
+        : (options.browserConcurrency ?? 5),
     firstNodeId: options.firstNodeId ?? options.firstUrl,
     seedPage: selected.firstPage
   })
@@ -81,7 +80,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
       : await crawlRenderedSource({
           ...crawlOptions,
           crawler: requireCrawler(options),
-          maxRetries: options.browserMaxRetries
+          maxRetries: options.maxRetries
         })
   return { progress, resolution }
 }
@@ -96,6 +95,7 @@ async function readFirstPage(options: SourceCrawlOptions): Promise<{
       fetchMode: 'http',
       firstPage: await fetchHttpPage(options.firstUrl, {
         fetchImpl: options.fetch,
+        maxRetries: options.maxRetries,
         sleep: options.sleep
       })
     }
@@ -108,7 +108,11 @@ async function readFirstPage(options: SourceCrawlOptions): Promise<{
   }
 
   const [httpResult, browserResult] = await Promise.allSettled([
-    fetchHttpPage(options.firstUrl, { fetchImpl: options.fetch, sleep: options.sleep }),
+    fetchHttpPage(options.firstUrl, {
+      fetchImpl: options.fetch,
+      maxRetries: options.maxRetries,
+      sleep: options.sleep
+    }),
     fetchBrowserEntry(options)
   ])
   return selectAutoResult(httpResult, browserResult)
@@ -144,7 +148,7 @@ function fetchBrowserEntry(options: SourceCrawlOptions): Promise<CrawledPage> {
     options.firstUrl,
     {},
     {
-      maxRetries: options.browserMaxRetries,
+      maxRetries: options.maxRetries,
       sleep: options.sleep
     }
   )
@@ -172,6 +176,9 @@ function toCrawlOptions(
     concurrency: overrides.concurrency,
     fetch: options.fetch,
     sleep: options.sleep,
+    maxRetries: options.maxRetries,
+    batchIntervalMs: options.batchIntervalMs,
+    waitIfPaused: options.waitIfPaused,
     onDocument: options.onDocument,
     onError: options.onError,
     onProgress: options.onProgress

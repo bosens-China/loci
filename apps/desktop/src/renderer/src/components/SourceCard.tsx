@@ -6,6 +6,7 @@ import {
   InfoCircleOutlined,
   LinkOutlined,
   LoadingOutlined,
+  PauseCircleOutlined,
   ReloadOutlined
 } from '@ant-design/icons'
 import { Avatar, Button, Card, Popconfirm, Space, Tag, Tooltip, Typography } from 'antd'
@@ -33,6 +34,7 @@ function SourceCard({
   onDelete
 }: SourceCardProps): React.JSX.Element {
   const running = crawlRun?.running ?? false
+  const paused = crawlRun?.paused ?? false
   const status = running
     ? 'syncing'
     : crawlRun?.error || crawlRun?.progress.failed
@@ -72,13 +74,27 @@ function SourceCard({
               color={
                 status === 'healthy' ? 'success' : status === 'syncing' ? 'processing' : 'warning'
               }
-              icon={status === 'syncing' ? <LoadingOutlined spin /> : undefined}
+              icon={
+                status === 'syncing' ? (
+                  paused ? (
+                    <PauseCircleOutlined />
+                  ) : (
+                    <LoadingOutlined spin />
+                  )
+                ) : undefined
+              }
               className={`m-0 shrink-0 ${hasHistoryRun ? 'cursor-pointer' : ''}`}
               onClick={() => {
                 if (hasHistoryRun) onOpenCrawlProgress(source.id)
               }}
             >
-              {status === 'healthy' ? '正常' : status === 'syncing' ? '更新中' : '需检查'}
+              {status === 'healthy'
+                ? '正常'
+                : status === 'syncing'
+                  ? paused
+                    ? '已暂停'
+                    : '更新中'
+                  : '需检查'}
             </Tag>
           </div>
           <Typography.Text ellipsis type="secondary" className="mt-0.5 block font-mono text-xs">
@@ -161,9 +177,13 @@ function SourceCard({
                 />
               </Tooltip>
               <Popconfirm
-                disabled={running}
+                disabled={running && !paused}
                 title="删除这个文档源？"
-                description="已收录的页面也会从本地索引中移除。"
+                description={
+                  paused
+                    ? '将取消当前抓取，并删除已收录页面和本地索引。'
+                    : '已收录的页面也会从本地索引中移除。'
+                }
                 okText="删除"
                 cancelText="取消"
                 okButtonProps={{ danger: true }}
@@ -175,7 +195,7 @@ function SourceCard({
                   size="small"
                   icon={<DeleteOutlined />}
                   aria-label="删除文档源"
-                  disabled={running}
+                  disabled={running && !paused}
                 />
               </Popconfirm>
             </Space>

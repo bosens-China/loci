@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ParsedPage } from '../content'
 import { runCrawlQueue } from '../runner'
 
@@ -85,5 +85,49 @@ describe('runCrawlQueue', () => {
         redirectUrl: 'https://other.example.com/login'
       }
     ])
+  })
+
+  it('pauses before the next batch and waits between batches', async () => {
+    let resume = (): void => undefined
+    let waitCount = 0
+    const paused = new Promise<void>((resolve) => {
+      resume = resolve
+    })
+    const sleep = vi.fn(async () => undefined)
+    const fetchPage = vi.fn(async (url: string) => ({
+      url,
+      status: 200,
+      page: {
+        ...page,
+        links:
+          url === 'https://docs.example.com/start'
+            ? ['https://docs.example.com/a', 'https://docs.example.com/b']
+            : []
+      }
+    }))
+    const task = runCrawlQueue({
+      firstUrl: 'https://docs.example.com/start',
+      hostname: 'docs.example.com',
+      pageLimit: 3,
+      concurrency: 1,
+      fetchMode: 'http',
+      batchIntervalMs: 100_000,
+      sleep,
+      waitIfPaused: async () => {
+        waitCount += 1
+        if (waitCount === 2) await paused
+      },
+      fetchPage,
+      onDocument: () => undefined
+    })
+
+    await vi.waitFor(() => expect(waitCount).toBe(2))
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+    resume()
+    await task
+
+    expect(fetchPage).toHaveBeenCalledTimes(3)
+    expect(sleep).toHaveBeenCalledTimes(2)
+    expect(sleep).toHaveBeenCalledWith(100_000)
   })
 })

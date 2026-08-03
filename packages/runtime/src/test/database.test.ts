@@ -74,7 +74,9 @@ describe('createDatabase', () => {
         mcpPort: 37373,
         theme: 'auto',
         httpConcurrency: 9,
-        browserConcurrency: 2,
+        browserConcurrency: 5,
+        maxRetries: 3,
+        batchIntervalSeconds: 0,
         serverUrl: 'http://localhost:7001'
       })
       expect(
@@ -83,6 +85,8 @@ describe('createDatabase', () => {
           theme: 'dark',
           httpConcurrency: 12,
           browserConcurrency: 3,
+          maxRetries: 4,
+          batchIntervalSeconds: 100,
           serverUrl: 'https://docs.example.com/'
         })
       ).toEqual({
@@ -90,6 +94,8 @@ describe('createDatabase', () => {
         theme: 'dark',
         httpConcurrency: 12,
         browserConcurrency: 3,
+        maxRetries: 4,
+        batchIntervalSeconds: 100,
         serverUrl: 'https://docs.example.com'
       })
       expect(database.getSettings()).toEqual({
@@ -97,6 +103,8 @@ describe('createDatabase', () => {
         theme: 'dark',
         httpConcurrency: 12,
         browserConcurrency: 3,
+        maxRetries: 4,
+        batchIntervalSeconds: 100,
         serverUrl: 'https://docs.example.com'
       })
       database.deleteSource(source.id)
@@ -106,7 +114,9 @@ describe('createDatabase', () => {
           mcpPort: 80,
           theme: 'auto',
           httpConcurrency: 9,
-          browserConcurrency: 2,
+          browserConcurrency: 5,
+          maxRetries: 3,
+          batchIntervalSeconds: 0,
           serverUrl: 'http://localhost:7001'
         })
       ).toThrow('MCP 端口必须是 1024 到 65535 之间的整数')
@@ -183,9 +193,10 @@ describe('createDatabase', () => {
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       ) STRICT;
       CREATE TABLE app_settings (
-        id INTEGER PRIMARY KEY, mcp_port INTEGER NOT NULL, theme TEXT NOT NULL
+        id INTEGER PRIMARY KEY, mcp_port INTEGER NOT NULL, theme TEXT NOT NULL,
+        http_concurrency INTEGER NOT NULL, browser_concurrency INTEGER NOT NULL
       ) STRICT;
-      INSERT INTO app_settings VALUES (1, 37373, 'auto');
+      INSERT INTO app_settings VALUES (1, 37373, 'auto', 9, 2);
       INSERT INTO document_sources VALUES (
         'legacy-source', 'Legacy', 'https://example.com', 'example.com', 'auto', 1000, NULL, 5,
         '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
@@ -195,7 +206,12 @@ describe('createDatabase', () => {
 
     const database = createDatabase(filename)
     try {
-      expect(database.getSettings()).toMatchObject({ httpConcurrency: 9, browserConcurrency: 2 })
+      expect(database.getSettings()).toMatchObject({
+        httpConcurrency: 9,
+        browserConcurrency: 5,
+        maxRetries: 3,
+        batchIntervalSeconds: 0
+      })
       expect(
         database.createSource({
           name: 'Vue',

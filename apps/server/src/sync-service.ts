@@ -97,7 +97,7 @@ export class SyncService {
         initialUrls: this.database.listDocumentUrls(library.id),
         fetchMode: 'auto',
         httpConcurrency: 9,
-        browserConcurrency: 2,
+        browserConcurrency: 5,
         crawler: this.browserEndpoint ? createBrowserlessCrawler(this.browserEndpoint) : undefined,
         fetch: this.fetchImpl,
         onDocument: (document) => this.database.saveDocument(library.id, document),

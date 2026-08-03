@@ -3,7 +3,13 @@ import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { askSelect, askText, printTable } from '../ui.js'
 
-type ConfigKey = 'mcp-port' | 'http-concurrency' | 'browser-concurrency' | 'server-url'
+type ConfigKey =
+  | 'mcp-port'
+  | 'http-concurrency'
+  | 'browser-concurrency'
+  | 'max-retries'
+  | 'batch-interval-seconds'
+  | 'server-url'
 
 export function registerConfigCommands(program: Command): void {
   const config = program.command('config').description('查看和修改桌面端与 CLI 共享设置')
@@ -20,6 +26,8 @@ export function registerConfigCommands(program: Command): void {
             ['mcp-port', settings.mcpPort],
             ['http-concurrency', settings.httpConcurrency],
             ['browser-concurrency', settings.browserConcurrency],
+            ['max-retries', settings.maxRetries],
+            ['batch-interval-seconds', settings.batchIntervalSeconds],
             ['server-url', settings.serverUrl]
           ]
         )
@@ -39,6 +47,8 @@ export function registerConfigCommands(program: Command): void {
             { value: 'mcp-port', label: 'MCP 端口' },
             { value: 'http-concurrency', label: 'HTTP 默认并发' },
             { value: 'browser-concurrency', label: '浏览器默认并发' },
+            { value: 'max-retries', label: '失败重试次数' },
+            { value: 'batch-interval-seconds', label: '抓取批次间隔（秒）' },
             { value: 'server-url', label: 'Loci Server 地址' }
           ]))
         if (!isConfigKey(selected)) throw new CliError(`不支持的设置：${selected}`, 2)
@@ -51,6 +61,8 @@ export function registerConfigCommands(program: Command): void {
           if (selected === 'mcp-port') settings.mcpPort = number
           if (selected === 'http-concurrency') settings.httpConcurrency = number
           if (selected === 'browser-concurrency') settings.browserConcurrency = number
+          if (selected === 'max-retries') settings.maxRetries = number
+          if (selected === 'batch-interval-seconds') settings.batchIntervalSeconds = number
         }
         runtime.database.saveSettings(settings)
         return `已将 ${selected} 设置为 ${input}`
@@ -59,5 +71,12 @@ export function registerConfigCommands(program: Command): void {
 }
 
 function isConfigKey(value: string): value is ConfigKey {
-  return ['mcp-port', 'http-concurrency', 'browser-concurrency', 'server-url'].includes(value)
+  return [
+    'mcp-port',
+    'http-concurrency',
+    'browser-concurrency',
+    'max-retries',
+    'batch-interval-seconds',
+    'server-url'
+  ].includes(value)
 }

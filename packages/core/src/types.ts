@@ -72,6 +72,9 @@ export interface HttpCrawlOptions {
   concurrency?: number
   fetch?: FetchOptions['fetchImpl']
   sleep?: FetchOptions['sleep']
+  maxRetries?: number
+  batchIntervalMs?: number
+  waitIfPaused?: () => Promise<void>
   onDocument: (document: CrawledDocument) => Promise<void> | void
   onError?: (error: CrawlFailure & { missing?: boolean }) => Promise<void> | void
   onProgress?: (progress: CrawlProgress) => void

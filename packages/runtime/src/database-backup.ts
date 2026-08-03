@@ -60,6 +60,12 @@ const settingsSchema = z
     theme: z.enum(['auto', 'light', 'dark']),
     http_concurrency: z.number().int().min(1).max(32),
     browser_concurrency: z.number().int().min(1).max(32),
+    max_retries: z.number().int().min(0).max(10).optional(),
+    batch_interval_seconds: z
+      .number()
+      .int()
+      .refine((value) => value === 0 || (value >= 100 && value <= 3000))
+      .optional(),
     server_url: z.string().url().optional()
   })
   .strict()
@@ -129,7 +135,8 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
       crawlRuns: database.prepare('SELECT * FROM crawl_runs ORDER BY rowid').all(),
       settings: database
         .prepare(
-          'SELECT mcp_port, theme, http_concurrency, browser_concurrency, server_url FROM app_settings WHERE id = 1'
+          `SELECT mcp_port, theme, http_concurrency, browser_concurrency, max_retries,
+             batch_interval_seconds, server_url FROM app_settings WHERE id = 1`
         )
         .get()
     }
@@ -230,7 +237,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
     database
       .prepare(
         `UPDATE app_settings
-         SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?, server_url = ?
+         SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?,
+             max_retries = ?, batch_interval_seconds = ?, server_url = ?
          WHERE id = 1`
       )
       .run(
@@ -238,6 +246,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         settings.theme,
         settings.http_concurrency,
         settings.browser_concurrency,
+        settings.max_retries ?? DEFAULT_APP_SETTINGS.maxRetries,
+        settings.batch_interval_seconds ?? DEFAULT_APP_SETTINGS.batchIntervalSeconds,
         normalizeServerUrl(settings.server_url ?? DEFAULT_APP_SETTINGS.serverUrl)
       )
     database.exec('COMMIT')

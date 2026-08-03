@@ -5,24 +5,40 @@ import { useEffect } from 'react'
 interface CrawlSettingsCardProps {
   httpConcurrency: number
   browserConcurrency: number
+  maxRetries: number
+  batchIntervalSeconds: number
   saving: boolean
-  onSave: (concurrency: { httpConcurrency: number; browserConcurrency: number }) => void
+  onSave: (settings: CrawlSettingsForm) => void
+}
+
+interface CrawlSettingsForm {
+  httpConcurrency: number
+  browserConcurrency: number
+  maxRetries: number
+  batchIntervalSeconds: number
 }
 
 /**
- * 抓取默认并发设置卡片
+ * 抓取默认参数设置卡片
  */
 export function CrawlSettingsCard({
   httpConcurrency,
   browserConcurrency,
+  maxRetries,
+  batchIntervalSeconds,
   saving,
   onSave
 }: CrawlSettingsCardProps): React.JSX.Element {
-  const [form] = Form.useForm<{ httpConcurrency: number; browserConcurrency: number }>()
+  const [form] = Form.useForm<CrawlSettingsForm>()
 
   useEffect(() => {
-    form.setFieldsValue({ httpConcurrency, browserConcurrency })
-  }, [browserConcurrency, form, httpConcurrency])
+    form.setFieldsValue({
+      httpConcurrency,
+      browserConcurrency,
+      maxRetries,
+      batchIntervalSeconds
+    })
+  }, [batchIntervalSeconds, browserConcurrency, form, httpConcurrency, maxRetries])
 
   return (
     <Card
@@ -30,21 +46,21 @@ export function CrawlSettingsCard({
       title={
         <Space>
           <DashboardOutlined className="text-primary" />
-          <span>抓取默认并发</span>
+          <span>抓取默认参数</span>
         </Space>
       }
     >
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ httpConcurrency, browserConcurrency }}
+        initialValues={{ httpConcurrency, browserConcurrency, maxRetries, batchIntervalSeconds }}
         onFinish={onSave}
       >
         <Typography.Paragraph type="secondary" className="text-xs">
-          当单个文档源没有独立设置并发上限时，系统将默认采用此处设定的全局并发配置。
+          文档源未单独覆盖并发时使用这里的全局参数；重试和批次间隔对所有抓取生效。
         </Typography.Paragraph>
 
-        <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2 mb-4">
+        <div className="mb-4 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
           <Form.Item
             name="httpConcurrency"
             label="HTTP 直取并发上限"
@@ -60,11 +76,35 @@ export function CrawlSettingsCard({
           >
             <InputNumber min={1} max={32} className="w-full" addonAfter="页" />
           </Form.Item>
+
+          <Form.Item
+            name="maxRetries"
+            label="失败重试次数"
+            rules={[{ required: true, type: 'number', min: 0, max: 10 }]}
+          >
+            <InputNumber min={0} max={10} className="w-full" suffix="次" />
+          </Form.Item>
+
+          <Form.Item
+            name="batchIntervalSeconds"
+            label="批次间隔"
+            extra="每批并发请求结束后等待；0 表示不等待"
+            rules={[
+              {
+                validator: (_, value: number | undefined) =>
+                  value === 0 || (value !== undefined && value >= 100 && value <= 3000)
+                    ? Promise.resolve()
+                    : Promise.reject(new Error('请输入 0，或 100-3000 秒'))
+              }
+            ]}
+          >
+            <InputNumber min={0} max={3000} className="w-full" suffix="秒" />
+          </Form.Item>
         </div>
 
         <div className="flex justify-end">
           <Button type="primary" htmlType="submit" loading={saving}>
-            保存抓取并发配置
+            保存抓取默认值
           </Button>
         </div>
       </Form>

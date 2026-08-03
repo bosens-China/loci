@@ -361,7 +361,8 @@ function runningState(): CrawlRunState {
     progress: { ...completedProgress, processed: 0, succeeded: 0 },
     nodes: [],
     error: null,
-    running: true
+    running: true,
+    paused: false
   }
 }
 

@@ -1,4 +1,10 @@
-import { CheckCircleOutlined, ExclamationCircleOutlined, LoadingOutlined } from '@ant-design/icons'
+import {
+  CheckCircleOutlined,
+  ExclamationCircleOutlined,
+  LoadingOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined
+} from '@ant-design/icons'
 import { Button, Modal, Progress, Space, Tag, Typography } from 'antd'
 import type { ECharts, EChartsOption } from 'echarts'
 import * as echarts from 'echarts/core'
@@ -18,6 +24,9 @@ interface CrawlProgressModalProps {
   nodes: CrawlNode[]
   error: string | null
   running: boolean
+  paused: boolean
+  onPause: () => void
+  onResume: () => void
   onClose: () => void
 }
 
@@ -42,6 +51,9 @@ function CrawlProgressModal({
   nodes,
   error,
   running,
+  paused,
+  onPause,
+  onResume,
   onClose
 }: CrawlProgressModalProps): React.JSX.Element {
   const currentNode = progress.node ?? nodes[nodes.length - 1]
@@ -63,12 +75,26 @@ function CrawlProgressModal({
       width={920}
       title={`同步文档源 · ${sourceName}`}
       onCancel={onClose}
-      footer={<Button onClick={onClose}>{running ? '后台运行' : '关闭'}</Button>}
+      footer={
+        <Space>
+          {running &&
+            (paused ? (
+              <Button type="primary" icon={<PlayCircleOutlined />} onClick={onResume}>
+                恢复
+              </Button>
+            ) : (
+              <Button icon={<PauseCircleOutlined />} onClick={onPause}>
+                暂停
+              </Button>
+            ))}
+          <Button onClick={onClose}>{running ? '后台运行' : '关闭'}</Button>
+        </Space>
+      }
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <Space orientation="vertical" size={2} className="min-w-0">
           <Space size={8}>
-            {status === 'running' && <LoadingOutlined spin />}
+            {status === 'running' && (paused ? <PauseCircleOutlined /> : <LoadingOutlined spin />)}
             {status === 'success' && <CheckCircleOutlined />}
             {(status === 'failed' || status === 'warning') && <ExclamationCircleOutlined />}
             <Typography.Text strong>{currentNode?.title ?? '等待首页响应'}</Typography.Text>
@@ -78,15 +104,17 @@ function CrawlProgressModal({
             {currentNode?.url ?? '正在建立抓取任务'}
           </Typography.Text>
         </Space>
-        <div className="min-w-[220px]">
-          <div className="mb-1 flex justify-between text-xs">
-            <span>
+        <div className="min-w-[280px]">
+          <div className="mb-1 flex items-center justify-between gap-3 whitespace-nowrap text-xs">
+            <span className="min-w-0">
               {error ??
-                (running
-                  ? '正在发现并整理页面'
-                  : progress.failed > 0
-                    ? '抓取完成，部分页面失败'
-                    : '抓取完成')}
+                (paused
+                  ? '已暂停，恢复后继续抓取'
+                  : running
+                    ? '正在发现并整理页面'
+                    : progress.failed > 0
+                      ? '抓取完成，部分页面失败'
+                      : '抓取完成')}
             </span>
             <span>
               {progress.processed} / {progress.queued} 页
