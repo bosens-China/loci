@@ -1,0 +1,149 @@
+# MCP 与数据管理
+
+本页介绍 Agent 接入和本地数据维护。
+
+## MCP 与 Agent
+
+### `loci mcp stdio`
+
+通过标准输入输出启动 Loci MCP 服务，供支持 stdio MCP 的 Agent 调用。这是 CLI 默认推荐的接入方式，通常由 Agent 客户端按需启动。
+
+示例：
+
+```bash
+loci mcp stdio
+```
+
+### `loci mcp serve`
+
+以前台方式启动 HTTP MCP 服务，适用于没有桌面应用的服务器环境。服务地址为 `http://127.0.0.1:<mcp-port>/mcp`；按 `Ctrl+C` 停止服务。
+
+示例：
+
+```bash
+loci mcp serve
+```
+
+### `loci mcp status`
+
+显示默认 stdio 接入方式、HTTP 服务地址、运行状态和当前服务宿主。
+
+示例：
+
+```bash
+loci mcp status
+```
+
+### `loci mcp config`
+
+向标准输出打印兼容 Cursor `mcpServers` 结构的配置片段，不修改任何客户端文件。默认输出 stdio 配置，也是 [Kimi Code](https://moonshotai.github.io/kimi-code/en/customization/mcp.html) 等没有内置一键写入能力的客户端的推荐接入方式。
+
+示例：
+
+```bash
+loci mcp config
+```
+
+输出内容可以复制到 Cursor 的 `mcp.json`。Kimi Code 读取用户级 `~/.kimi-code/mcp.json`（设置 `KIMI_CODE_HOME` 时为 `$KIMI_CODE_HOME/mcp.json`）和项目级 `.kimi-code/mcp.json`，项目级的同名服务优先。如果目标文件已有其他服务，只合并下面的 `mcpServers.loci` 字段，不要覆盖整个文件。
+
+示例输出：
+
+```json
+{
+  "mcpServers": {
+    "loci": {
+      "command": "loci",
+      "args": ["mcp", "stdio"]
+    }
+  }
+}
+```
+
+项目级 stdio 配置可以启动本地命令，只应在信任该项目时使用。
+
+需要 HTTP 时使用 `--transport http`。此时应先启动桌面应用或 `loci mcp serve`；输出中的 `127.0.0.1` 只能由本机客户端访问。
+
+示例：
+
+```bash
+loci mcp config --transport http
+```
+
+### `loci mcp configure [client]`
+
+将 Loci MCP 写入 Agent 客户端配置。`[client]` 支持 `codex`、`cursor`、`vscode`、`claude-code` 和 `gemini-cli`；交互终端中省略时 CLI 会提示选择，并提供“其他客户端（复制通用配置）”。非交互环境省略客户端时直接输出通用配置。显式输入不支持的客户端会提示改用 `loci mcp config`，避免把拼写错误当成有效客户端。
+
+| 参数                        | 用途                                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------------ |
+| `--transport <stdio\|http>` | 选择连接方式，默认使用 `stdio`。选择 `http` 前应先启动 `loci mcp serve` 或桌面应用。 |
+
+示例：
+
+```bash
+loci mcp configure codex
+```
+
+## 数据备份与清理
+
+数据命令会操作与桌面应用共用的本地数据。导入和清理前建议先执行导出备份。
+
+### `loci data export [file]`
+
+导出一个与桌面应用兼容的 JSON 备份。省略文件路径时，会在当前目录生成带 UTC 毫秒时间的文件，例如 `loci-backup-2026-08-04T01-02-03-456Z.json`，并拒绝覆盖同名文件。显式传入 `[file]` 表示由用户指定目标；如果该文件已存在，CLI 会直接覆盖，不再二次确认。
+
+示例：
+
+```bash
+loci data export
+```
+
+### `loci data import [file]`
+
+从 JSON 备份恢复数据，并覆盖当前本地数据。默认会展示备份摘要后要求确认；`--yes` 可跳过确认。
+
+示例：
+
+```bash
+loci data import ./backups/loci-2026-08-04.json
+```
+
+### `loci data clear-documents`
+
+清空全部文档和全文索引，但保留文档源配置。之后可以通过 `loci source sync <source>` 重新收录内容。`--yes` 可跳过确认。
+
+示例：
+
+```bash
+loci data clear-documents
+```
+
+### `loci data clear-sources`
+
+清空全部文档源、文档、全文索引和抓取历史。`--yes` 可跳过确认。
+
+示例：
+
+```bash
+loci data clear-sources
+```
+
+## 运行环境
+
+### 临时数据目录
+
+设置 `LOCI_DATA_DIR` 可以让 CLI 使用独立数据目录，适合测试或隔离环境。日常使用不建议设置该变量，因为默认数据目录与桌面应用共用。
+
+示例：
+
+```bash
+LOCI_DATA_DIR=./.loci-test loci status
+```
+
+### 退出码
+
+| 退出码 | 含义                                 |
+| ------ | ------------------------------------ |
+| `0`    | 成功或用户主动取消。                 |
+| `1`    | 认证、网络、运行时或内部错误。       |
+| `2`    | 参数或用户输入错误。                 |
+| `3`    | 操作完成，但存在页面失败或诊断异常。 |

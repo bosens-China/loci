@@ -1,0 +1,128 @@
+# 基础、浏览器与设置
+
+本页介绍通用命令、无头浏览器和 CLI 与桌面应用共用的设置。
+
+## 参数约定
+
+命令用法中的 `<参数>` 为必填参数，`[参数]` 为可选参数。例如，`loci source sync [source]` 可以指定文档源，也可以省略后在终端中选择。
+
+`[source]` 可以使用文档源名称、完整 ID 或唯一的短 ID。`[document]` 还可以使用文档标题或文档 URL。涉及删除、导入或清空数据的命令会要求确认；仅在自动化脚本中确认目标无误后，才使用 `--yes` 跳过确认。
+
+## 基础命令
+
+### `loci --help`
+
+显示 CLI 的总帮助和可用命令分类。要查看某个子命令的参数，可在命令后追加 `--help`。
+
+示例：
+
+```bash
+loci source add --help
+```
+
+### `loci --version`
+
+显示当前安装的 CLI 版本。`-V` 是它的简写。
+
+示例：
+
+```bash
+loci --version
+```
+
+### `loci status`
+
+汇总本地文档源、云端副本、已收录文档、最近同步记录、MCP 状态和 Loci Server 地址。
+
+示例：
+
+```bash
+loci status
+```
+
+### `loci update`
+
+立即检查 npm 上是否存在更新的 Loci CLI 稳定版本，并显示当前版本和最新版本。
+
+示例：
+
+```bash
+loci update
+```
+
+### `loci doctor`
+
+检查数据目录、数据库、跨进程锁、无头浏览器、Loci Server 和 MCP 服务，并在发现问题时给出修复建议。
+
+示例：
+
+```bash
+loci doctor
+```
+
+## 无头浏览器
+
+当文档站需要 JavaScript 渲染时，使用以下命令安装和维护 CLI 使用的 Chromium headless shell。
+
+### `loci browser status`
+
+检查无头浏览器是否已安装、是否可以启动，并输出可执行文件路径。
+
+示例：
+
+```bash
+loci browser status
+```
+
+### `loci browser install`
+
+安装与当前 CLI 版本匹配的 Chromium headless shell。
+
+示例：
+
+```bash
+loci browser install
+```
+
+### `loci browser uninstall`
+
+删除由 CLI 管理的无头浏览器。默认会要求确认；`--yes` 可跳过确认。
+
+示例：
+
+```bash
+loci browser uninstall
+```
+
+## 共享设置
+
+设置保存在与桌面应用共用的本地数据目录中。修改设置会同时影响 CLI 和桌面应用。
+
+### `loci config list`
+
+显示当前全部共享设置。
+
+示例：
+
+```bash
+loci config list
+```
+
+### `loci config set [key] [value]`
+
+修改一个共享设置。省略参数时，CLI 会在交互终端中选择设置项并要求输入新值。
+
+| 设置项                   | 用途                           |
+| ------------------------ | ------------------------------ |
+| `mcp-port`               | HTTP MCP 服务监听端口。        |
+| `http-concurrency`       | HTTP 抓取的默认并发数。        |
+| `browser-concurrency`    | 浏览器抓取的默认并发数。       |
+| `max-retries`            | 页面抓取失败后的默认重试次数。 |
+| `batch-interval-seconds` | 抓取批次之间的默认等待秒数。   |
+| `server-url`             | Loci Server 地址。             |
+
+示例：将 HTTP 抓取默认并发数设为 8。
+
+```bash
+loci config set http-concurrency 8
+```

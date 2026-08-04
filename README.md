@@ -26,10 +26,11 @@ loci --help
 常用命令：
 
 ```bash
-loci source add
+loci source add https://rspress.rs/guide/introduction.html
 loci source sync
 loci document search React
 loci mcp configure codex
+loci mcp config # 为 Kimi Code 等客户端输出可复制配置
 ```
 
 需要抓取依赖客户端渲染的文档站时，安装浏览器运行时：
@@ -38,7 +39,7 @@ loci mcp configure codex
 loci browser install
 ```
 
-更多命令请查看 [CLI 文档](./apps/cli/README.md)。
+更多命令请查看 [CLI 使用文档](./apps/docs/docs/cli/getting-started.mdx)。
 
 ## 开源协议
 

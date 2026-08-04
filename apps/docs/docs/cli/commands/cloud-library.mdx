@@ -1,0 +1,72 @@
+# 云端文档库
+
+云端文档库是 Loci Server 上预先发布的公开文档快照。CLI 可以将快照下载为本地副本，之后即可离线浏览，也可以通过本机 MCP 读取。
+
+## 修改默认的云端文档库地址
+
+CLI 默认连接 `http://localhost:7001`。如果文档库由团队或其他服务提供方部署，需要将 `server-url` 改为对方提供的 Loci Server 地址。
+
+示例：
+
+```bash
+loci config set server-url https://loci.example.com
+```
+
+使用以下命令可以确认当前地址并检查 Server 是否可以访问：
+
+```bash
+loci config list
+loci doctor
+```
+
+`server-url` 是 CLI 与桌面应用共用的设置。这里修改的是云端文档库的 Server 地址，不会改变本地文档源的网页 URL。
+
+已经下载的云端副本会记录原 Server 地址。切换 `server-url` 后，如果需要更新旧副本，应先将地址切回该副本的来源 Server。
+
+如果你希望自己在服务器上搭建 Loci Server，并向其他人发布文档库，请阅读 [Admin：部署与管理 Server](/cli/commands/admin)。
+
+## 浏览和下载文档库
+
+### `loci cloud list`
+
+读取 Server 上公开的文档库目录，显示页面数、内容大小和短 ID，并标记每个文档库在本地是否已经存在或有可用更新。
+
+示例：
+
+```bash
+loci cloud list
+```
+
+### `loci cloud pull [library]`
+
+将一个公开文档库下载为本地副本。`[library]` 可以是云端文档库名称、完整 ID 或唯一短 ID；在交互终端中省略时可以从云端目录选择。
+
+示例：
+
+```bash
+loci cloud pull "React 文档"
+```
+
+下载后可以使用 `loci document list`、`loci document tree`、`loci document search` 和 `loci document read` 浏览副本内容。
+
+### `loci cloud update [library]`
+
+从最初下载快照的 Server 更新本地云端副本。该命令只适用于已经下载的云端文档库；在交互终端中省略 `[library]` 时可以从本地云端副本中选择。
+
+示例：
+
+```bash
+loci cloud update "React 文档"
+```
+
+### `loci cloud remove [library]`
+
+删除一个本地云端副本，不会影响 Server 上的原始文档库。CLI 默认会再次确认；只有在脚本中确认目标无误时才应使用 `--yes` 跳过确认。
+
+示例：
+
+```bash
+loci cloud remove "React 文档"
+```
+
+需要自己从公开网站创建和抓取文档时，查看[本地文档库](/cli/commands/local-library)。
