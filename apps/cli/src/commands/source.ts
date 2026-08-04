@@ -1,5 +1,5 @@
 import { Option, type Command } from 'commander'
-import { formatBytes, type FetchMode } from '@loci/shared'
+import { deriveSourceName, formatBytes, type FetchMode } from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { resolveSource } from '../resources.js'
@@ -46,33 +46,35 @@ export function registerSourceCommands(program: Command): void {
     )
 
   source
-    .command('add')
+    .command('add [url]')
     .description('添加本地文档源')
-    .option('--name <name>', '文档源名称')
+    .option('--name <name>', '文档源名称，默认根据域名生成')
     .option('--url <url>', '第一个公开文档页面 URL')
-    .addOption(new Option('--mode <mode>', '抓取方式').choices(['auto', 'http', 'browser']))
-    .option('--page-limit <number>', '页面上限', numberValue)
-    .option('--scope <path>', '收录路径')
-    .option('--http-concurrency <number>', 'HTTP 并发覆盖值', numberValue)
-    .option('--browser-concurrency <number>', '浏览器并发覆盖值', numberValue)
-    .action((options: SourceOptions) =>
+    .addOption(
+      new Option('--mode <mode>', '抓取方式，默认 auto').choices(['auto', 'http', 'browser'])
+    )
+    .option('--page-limit <number>', '页面上限，默认 1000', numberValue)
+    .option('--scope <path>', '收录路径，默认 /')
+    .option('--http-concurrency <number>', 'HTTP 并发覆盖值，默认继承共享设置', numberValue)
+    .option('--browser-concurrency <number>', '浏览器并发覆盖值，默认继承共享设置', numberValue)
+    .action((urlArgument: string | undefined, options: SourceOptions) =>
       runWithRuntime('添加文档源', async (runtime) => {
-        const url = options.url ?? (await askText('第一个文档页面 URL', { required: true }))
+        const guided = process.stdin.isTTY && !urlArgument && !options.url
+        const url =
+          options.url ?? urlArgument ?? (await askText('第一个文档页面 URL', { required: true }))
         const hostname = new URL(url).hostname
         const input = {
           name:
             options.name ??
-            (process.stdin.isTTY
-              ? await askText('文档源名称', { initialValue: hostname })
-              : hostname),
+            (guided
+              ? await askText('文档源名称', { initialValue: deriveSourceName(url) || hostname })
+              : deriveSourceName(url) || hostname),
           url,
-          mode: options.mode ?? (process.stdin.isTTY ? await askMode('抓取方式', 'auto') : 'auto'),
+          mode: options.mode ?? (guided ? await askMode('抓取方式', 'auto') : 'auto'),
           pageLimit:
-            options.pageLimit ??
-            (process.stdin.isTTY ? await askInteger('页面上限', 1000, 1, 10_000) : 1000),
+            options.pageLimit ?? (guided ? await askInteger('页面上限', 1000, 1, 10_000) : 1000),
           scopePath:
-            options.scope ??
-            (process.stdin.isTTY ? await askText('收录路径', { initialValue: '/' }) : '/'),
+            options.scope ?? (guided ? await askText('收录路径', { initialValue: '/' }) : '/'),
           schedule: null,
           httpConcurrency: options.httpConcurrency ?? null,
           browserConcurrency: options.browserConcurrency ?? null
@@ -84,7 +86,7 @@ export function registerSourceCommands(program: Command): void {
 
   source
     .command('update [source]')
-    .description('修改本地文档源，不改变桌面端定时计划')
+    .description('只修改显式提供的字段，不改变桌面端定时计划')
     .option('--name <name>', '文档源名称')
     .option('--url <url>', '第一个页面 URL')
     .addOption(new Option('--mode <mode>', '抓取方式').choices(['auto', 'http', 'browser']))
@@ -95,28 +97,29 @@ export function registerSourceCommands(program: Command): void {
     .action((reference: string | undefined, options: SourceOptions) =>
       runWithRuntime('修改文档源', async (runtime) => {
         const current = await resolveSource(runtime, reference, { localOnly: true })
+        const hasUpdates = hasSourceUpdates(options)
+        if (!process.stdin.isTTY && !hasUpdates) {
+          throw new CliError('当前终端不可交互，请至少提供一个文档源修改选项', 2)
+        }
+        const editAll = process.stdin.isTTY && !hasUpdates
         const input = {
           name:
             options.name ??
-            (process.stdin.isTTY
-              ? await askText('文档源名称', { initialValue: current.name })
-              : current.name),
+            (editAll ? await askText('文档源名称', { initialValue: current.name }) : current.name),
           url:
             options.url ??
-            (process.stdin.isTTY
+            (editAll
               ? await askText('第一个页面 URL', { initialValue: current.url })
               : current.url),
-          mode:
-            options.mode ??
-            (process.stdin.isTTY ? await askMode('抓取方式', current.mode) : current.mode),
+          mode: options.mode ?? (editAll ? await askMode('抓取方式', current.mode) : current.mode),
           pageLimit:
             options.pageLimit ??
-            (process.stdin.isTTY
+            (editAll
               ? await askInteger('页面上限', current.pageLimit, 1, 10_000)
               : current.pageLimit),
           scopePath:
             options.scope ??
-            (process.stdin.isTTY
+            (editAll
               ? await askText('收录路径', { initialValue: current.scopePath })
               : current.scopePath),
           httpConcurrency: options.httpConcurrency ?? current.httpConcurrency,
@@ -198,6 +201,10 @@ export function registerSourceCommands(program: Command): void {
         return `已显示 ${runs.length} 条抓取记录`
       })
     )
+}
+
+function hasSourceUpdates(options: SourceOptions): boolean {
+  return Object.values(options).some((value) => value !== undefined)
 }
 
 async function askMode(message: string, initial: FetchMode): Promise<FetchMode> {

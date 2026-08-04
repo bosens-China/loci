@@ -3,25 +3,34 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import {
   acquireRuntimeLock,
   createHttpMcpConnection,
+  importAgentClient,
   createLociMcpServer,
   LOCI_CLI_STDIO_CONNECTION,
   readRuntimeLock,
   startMcpHttpServer,
-  type LociMcpServices
+  type LociMcpServices,
+  type McpAgentConnection
 } from '@loci/runtime'
-import type { AgentClient } from '@loci/shared'
-import { importAgentClient } from '@loci/runtime'
+import { createCursorMcpConfig, type AgentClient } from '@loci/shared'
 import { createCliRuntime } from '../runtime.js'
 import { runWithRuntime } from '../command-runtime.js'
+import { CliError } from '../errors.js'
 import { askSelect, finishUi, info, startUi, success } from '../ui.js'
 import { canConnect } from './status.js'
 
-const clients: ReadonlyArray<{ value: AgentClient; label: string }> = [
+const agentClients = [
   { value: 'codex', label: 'Codex' },
   { value: 'cursor', label: 'Cursor' },
   { value: 'vscode', label: 'VS Code' },
   { value: 'claude-code', label: 'Claude Code' },
   { value: 'gemini-cli', label: 'Gemini CLI' }
+] as const satisfies ReadonlyArray<{ value: AgentClient; label: string }>
+
+type AgentSelection = AgentClient | 'manual'
+
+const clients: ReadonlyArray<{ value: AgentSelection; label: string }> = [
+  ...agentClients,
+  { value: 'manual', label: '其他客户端（复制通用配置）' }
 ]
 
 type McpTransport = 'stdio' | 'http'
@@ -91,6 +100,16 @@ export function registerMcpCommands(program: Command): void {
     )
 
   mcp
+    .command('config')
+    .description('输出兼容 Cursor 的通用 MCP 配置，不修改客户端文件')
+    .addOption(
+      new Option('--transport <transport>', '选择 MCP 传输方式')
+        .choices(['stdio', 'http'])
+        .default('stdio')
+    )
+    .action((options: { transport: McpTransport }) => printManualMcpConfig(options.transport))
+
+  mcp
     .command('configure [client]')
     .description('把唯一的 Loci MCP 写入 Agent 客户端配置，默认使用 CLI stdio')
     .addOption(
@@ -98,12 +117,20 @@ export function registerMcpCommands(program: Command): void {
         .choices(['stdio', 'http'])
         .default('stdio')
     )
-    .action((client: AgentClient | undefined, options: { transport: McpTransport }) =>
-      runWithRuntime('配置 Agent 客户端', async (runtime) => {
-        const selected = client ?? (await askSelect<AgentClient>('请选择 Agent 客户端', clients))
-        if (!clients.some((item) => item.value === selected)) {
-          throw new Error(`不支持的 Agent 客户端：${selected}`)
-        }
+    .action(async (client: string | undefined, options: { transport: McpTransport }) => {
+      const selected =
+        client ??
+        (process.stdin.isTTY
+          ? await askSelect<AgentSelection>('请选择 Agent 客户端', clients)
+          : 'manual')
+      if (selected === 'manual') {
+        await printManualMcpConfig(options.transport)
+        return
+      }
+      if (!isAgentClient(selected)) {
+        throw new CliError(`不支持的 Agent 客户端：${selected}；请运行 loci mcp config 复制配置`, 2)
+      }
+      await runWithRuntime('配置 Agent 客户端', async (runtime) => {
         const connection =
           options.transport === 'stdio'
             ? LOCI_CLI_STDIO_CONNECTION
@@ -113,7 +140,27 @@ export function registerMcpCommands(program: Command): void {
         const result = await importAgentClient(selected, connection)
         return result.message
       })
-    )
+    })
+}
+
+function isAgentClient(value: string): value is AgentClient {
+  return agentClients.some((client) => client.value === value)
+}
+
+async function printManualMcpConfig(transport: McpTransport): Promise<void> {
+  let connection: McpAgentConnection = LOCI_CLI_STDIO_CONNECTION
+  if (transport === 'http') {
+    const runtime = createCliRuntime()
+    try {
+      connection = createHttpMcpConnection(
+        `http://127.0.0.1:${runtime.database.getSettings().mcpPort}/mcp`
+      )
+    } finally {
+      await runtime.close()
+    }
+  }
+  process.stderr.write('请将下面的 Cursor 风格配置复制到客户端的 MCP 配置文件中。\n')
+  process.stdout.write(`${createCursorMcpConfig(connection)}\n`)
 }
 
 function createMcpServices(runtime: ReturnType<typeof createCliRuntime>): LociMcpServices {

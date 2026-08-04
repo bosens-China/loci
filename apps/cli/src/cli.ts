@@ -21,7 +21,12 @@ import { warning } from './ui.js'
 
 export async function runCli(args: readonly string[]): Promise<void> {
   const cachedUpdate = readCachedUpdate()
-  if (cachedUpdate && args[0] !== 'update' && !isVersionOrHelp(args)) {
+  if (
+    cachedUpdate &&
+    args[0] !== 'update' &&
+    !isVersionOrHelp(args) &&
+    !requiresCleanStdout(args)
+  ) {
     warning(formatUpdateMessage(cachedUpdate))
   }
   startDailyUpdateCheck(args)
@@ -80,6 +85,12 @@ export function createProgram(): Command {
 
 function isVersionOrHelp(args: readonly string[]): boolean {
   return ['-V', '--version', '-h', '--help', 'help'].includes(args[0] ?? '')
+}
+
+function requiresCleanStdout(args: readonly string[]): boolean {
+  return (
+    args[0] === 'mcp' && (args[1] === 'stdio' || args[1] === 'config' || args[1] === 'configure')
+  )
 }
 
 function translateCommanderError(message: string): string {
