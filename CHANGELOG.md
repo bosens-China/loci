@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.6.0](https://github.com/bosens-China/loci/compare/loci-v1.5.1...loci-v1.6.0) (2026-08-04)
+
+
+### Features
+
+* 优化 CLI 文档源与 MCP 配置 ([65465bb](https://github.com/bosens-China/loci/commit/65465bbce669dbdd9bd3195367bddff8be64da8e))
+* 完善抓取配置与任务控制 ([b76ee7a](https://github.com/bosens-China/loci/commit/b76ee7a117517757fabf9ae6a316948c555ab6d7))
+
+
+### Bug Fixes
+
+* 优化云端资源错误提示 ([0d2269a](https://github.com/bosens-China/loci/commit/0d2269ae6236f42847e5cc3ae7480f279c9c6762))
+* 修复深色模式收录范围配色 ([0f7d64b](https://github.com/bosens-China/loci/commit/0f7d64be6e9294e288c8a93e8f5e52dcccef3fe5))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.3.0
+    * @loci/runtime bumped to 1.2.0
+    * @loci/shared bumped to 1.7.0
+
 ## [1.5.1](https://github.com/bosens-China/loci/compare/loci-v1.5.0...loci-v1.5.1) (2026-08-03)
 
 

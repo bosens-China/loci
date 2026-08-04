@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.5.0](https://github.com/bosens-China/loci/compare/cli-v1.4.1...cli-v1.5.0) (2026-08-04)
+
+
+### Features
+
+* 优化 CLI 文档源与 MCP 配置 ([65465bb](https://github.com/bosens-China/loci/commit/65465bbce669dbdd9bd3195367bddff8be64da8e))
+* 完善抓取配置与任务控制 ([b76ee7a](https://github.com/bosens-China/loci/commit/b76ee7a117517757fabf9ae6a316948c555ab6d7))
+
+
+### Bug Fixes
+
+* 避免默认备份文件互相覆盖 ([1090f66](https://github.com/bosens-China/loci/commit/1090f66da799c7daa4f2108d4e5ee96a38672f70))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.3.0
+    * @loci/runtime bumped to 1.2.0
+    * @loci/shared bumped to 1.7.0
+
 ## [1.4.1](https://github.com/bosens-China/loci/compare/cli-v1.4.0...cli-v1.4.1) (2026-08-03)
 
 
