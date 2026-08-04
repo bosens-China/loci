@@ -11,11 +11,15 @@ export function registerDataCommands(program: Command): void {
 
   data
     .command('export [file]')
-    .description('导出与桌面端兼容的 Loci 备份')
+    .description('导出 Loci 备份，省略路径时使用带时间的文件名')
     .action((file: string | undefined) =>
       runWithRuntime('导出 Loci 数据', async (runtime) => {
-        const target = resolve(file ?? `loci-backup-${new Date().toISOString().slice(0, 10)}.json`)
-        await writeFile(target, JSON.stringify(runtime.database.exportBackup(), null, 2), 'utf8')
+        const target = resolve(file ?? defaultBackupFilename())
+        await writeFile(
+          target,
+          JSON.stringify(runtime.database.exportBackup(), null, 2),
+          file ? 'utf8' : { encoding: 'utf8', flag: 'wx' }
+        )
         return `数据已导出到 ${target}`
       })
     )
@@ -86,6 +90,10 @@ export function registerDataCommands(program: Command): void {
         }
       })
     )
+}
+
+export function defaultBackupFilename(now: Date = new Date()): string {
+  return `loci-backup-${now.toISOString().replace(/[:.]/g, '-')}.json`
 }
 
 function backupCounts(input: unknown): { sources: number; documents: number } {
