@@ -16,7 +16,7 @@
     "check:release-versions": "node --experimental-strip-types scripts/check-release-versions.mts",
     "test": "vitest run scripts/test && pnpm --filter @loci/core test && pnpm --filter @loci/shared test && pnpm --filter @loci/runtime test && pnpm --filter @boses/cli test && pnpm --filter @loci/server test && pnpm --filter @loci/desktop test",
     "test:watch": "pnpm --parallel --filter @loci/core --filter @loci/shared --filter @boses/cli --filter @loci/server --filter @loci/desktop test:watch",
-    "typecheck": "tsc --noEmit -p tsconfig.scripts.json && pnpm --filter @loci/core typecheck && pnpm --filter @loci/shared typecheck && pnpm --filter @loci/runtime typecheck && pnpm --filter @loci/docs typecheck && pnpm --filter @loci/desktop typecheck && pnpm --filter @loci/server typecheck && pnpm --filter @boses/cli typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.scripts.json && pnpm -r typecheck",
     "cli:build": "pnpm --filter @boses/cli build",
     "cli:test": "pnpm --filter @boses/cli test",
     "docs:dev": "pnpm --filter @loci/docs dev",
@@ -42,6 +42,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-ts": "^3.1.0",
+    "@types/node": "^22.19.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "electron": "^39.2.6",
