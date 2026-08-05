@@ -14,6 +14,7 @@ import { CliError } from './errors.js'
 
 type PlaywrightModule = typeof import('playwright-core')
 type Browser = Awaited<ReturnType<PlaywrightModule['chromium']['launch']>>
+export type BrowserInstallPrompt = (install: () => Promise<void>) => Promise<void>
 
 export class CliBrowserCrawler {
   private browser: Browser | undefined
@@ -69,6 +70,10 @@ export class CliBrowserCrawler {
     this.browser = undefined
   }
 
+  async ensureInstalled(onMissing?: BrowserInstallPrompt): Promise<void> {
+    await ensureBrowserInstalled(this.browsersPath, onMissing)
+  }
+
   private async getBrowser(): Promise<Browser> {
     if (this.browser) return this.browser
     configureBrowserPath(this.browsersPath)
@@ -84,6 +89,25 @@ export class CliBrowserCrawler {
   }
 }
 
+/** 只负责 CLI 浏览器运行时，安装决策由命令层的交互回调处理。 */
+export async function ensureBrowserInstalled(
+  browsersPath: string,
+  onMissing?: BrowserInstallPrompt,
+  installBrowser: () => Promise<void> = () => runBrowserCommand(browsersPath, 'install')
+): Promise<void> {
+  configureBrowserPath(browsersPath)
+  const { chromium } = await import('playwright-core')
+  const executable = chromium.executablePath()
+  if (isExecutable(executable)) return
+  if (!onMissing) {
+    throw new CliError('未安装 Chromium headless shell，请先运行 loci browser install。')
+  }
+  await onMissing(installBrowser)
+  if (!isExecutable(executable)) {
+    throw new CliError('浏览器安装完成，但没有找到 Chromium headless shell 可执行文件。')
+  }
+}
+
 export async function browserStatus(browsersPath: string): Promise<{
   installed: boolean
   executable: string
@@ -93,12 +117,7 @@ export async function browserStatus(browsersPath: string): Promise<{
   configureBrowserPath(browsersPath)
   const { chromium } = await import('playwright-core')
   const executable = chromium.executablePath()
-  let installed = true
-  try {
-    accessSync(executable, constants.X_OK)
-  } catch {
-    installed = false
-  }
+  const installed = isExecutable(executable)
   if (!installed) return { installed, executable, launchable: false, error: null }
   try {
     const browser = await chromium.launch({ headless: true })
@@ -139,4 +158,13 @@ export async function runBrowserCommand(
 
 function configureBrowserPath(path: string): void {
   process.env.PLAYWRIGHT_BROWSERS_PATH = path
+}
+
+function isExecutable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
 }

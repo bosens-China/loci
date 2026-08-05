@@ -19,7 +19,7 @@ import type {
   DocumentSource,
   UpdateSourceInput
 } from '@loci/shared'
-import { CliBrowserCrawler } from './browser.js'
+import { CliBrowserCrawler, type BrowserInstallPrompt } from './browser.js'
 
 export interface CliRuntime {
   dataDir: string
@@ -29,7 +29,8 @@ export interface CliRuntime {
   admin: CloudAdminClient
   crawlSource: (
     sourceId: string,
-    onProgress?: (progress: CrawlProgress) => void
+    onProgress?: (progress: CrawlProgress) => void,
+    onBrowserMissing?: BrowserInstallPrompt
   ) => Promise<CrawlProgress>
   createSource: (input: CreateSourceInput) => DocumentSource
   deleteSource: (sourceId: string) => void
@@ -67,7 +68,8 @@ export function createCliRuntime(): CliRuntime {
 
   const run = async (
     sourceId: string,
-    onProgress?: (progress: CrawlProgress) => void
+    onProgress?: (progress: CrawlProgress) => void,
+    onBrowserMissing?: BrowserInstallPrompt
   ): Promise<CrawlProgress> => {
     const source = database.getSourceConfig(sourceId)
     const lock = acquireCrawlRuntimeLock(dataDir, sourceId, 'CLI')
@@ -108,6 +110,7 @@ export function createCliRuntime(): CliRuntime {
         maxRetries: settings.maxRetries,
         batchIntervalMs: settings.batchIntervalSeconds * 1000,
         crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
+        beforeBrowserCrawl: () => browser.ensureInstalled(onBrowserMissing),
         onDocument: (document) => database.saveDocument({ ...document, sourceId }),
         onError: ({ url, missing }) => {
           if (missing) database.deleteDocument(sourceId, url)

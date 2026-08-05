@@ -24,12 +24,14 @@ export interface SourceCrawlOptions extends Omit<HttpCrawlOptions, 'concurrency'
   httpConcurrency?: number
   browserConcurrency?: number
   crawler?: RenderedCrawler
+  beforeBrowserCrawl?: () => Promise<void>
   onResolved?: (resolution: SourceResolution) => Promise<void> | void
 }
 
 /** 文档源抓取的通用编排；桌面端和服务端只注入不同的浏览器实现。 */
 export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCrawlResult> {
   const scopePath = options.scopePath ?? '/'
+  if (options.fetchMode === 'browser') await options.beforeBrowserCrawl?.()
   const llmsEntries = await discoverLlmsEntries(
     options.firstUrl,
     options.hostname,
@@ -107,6 +109,7 @@ async function readFirstPage(options: SourceCrawlOptions): Promise<{
     }
   }
 
+  await options.beforeBrowserCrawl?.()
   const [httpResult, browserResult] = await Promise.allSettled([
     fetchHttpPage(options.firstUrl, {
       fetchImpl: options.fetch,
