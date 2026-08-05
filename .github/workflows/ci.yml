@@ -55,7 +55,7 @@ jobs:
                 # 文档由 docs-pages.yml 独立验证，避免触发应用构建。
                 apps/docs/*|docs/*|*.md|.github/workflows/docs-pages.yml)
                   ;;
-                package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|*.config.*|.release-please-manifest.json|release-please-config.json|.github/workflows/ci.yml|.github/workflows/release.yml|.github/actions/*)
+                package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|*.config.*|scripts/*|.release-please-manifest.json|release-please-config.json|.github/workflows/ci.yml|.github/workflows/release.yml|.github/actions/*)
                   code=true
                   cli=true
                   desktop=true

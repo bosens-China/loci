@@ -25,6 +25,14 @@ jobs:
       server_tag: ${{ steps.release.outputs['apps/server--tag_name'] }}
       server_version: ${{ steps.release.outputs['apps/server--version'] }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+      # 私有 workspace 包不创建 GitHub Release，但 release-please 仍依赖组件 tag 定位边界。
+      - name: Sync private workspace release tags
+        run: node --experimental-strip-types scripts/sync-skipped-release-tags.mts
       - id: release
         uses: googleapis/release-please-action@v4
         with:
