@@ -1,10 +1,11 @@
 import { readFile, writeFile } from 'node:fs/promises'
+import { existsSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { Command } from 'commander'
 import { acquireMaintenanceRuntimeLock } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
-import { askConfirm, askText } from '../ui.js'
+import { askConfirm, askPath } from '../ui.js'
 
 export function registerDataCommands(program: Command): void {
   const data = program.command('data').description('备份、恢复和清理本地数据')
@@ -30,7 +31,13 @@ export function registerDataCommands(program: Command): void {
     .option('--yes', '跳过确认')
     .action((file: string | undefined, options: { yes?: boolean }) =>
       runWithRuntime('导入 Loci 数据', async (runtime) => {
-        const source = resolve(file ?? (await askText('备份文件路径')))
+        const source = resolve(
+          file ??
+            (await askPath('选择 Loci 备份文件', {
+              root: process.cwd(),
+              validate: validateBackupPath
+            }))
+        )
         const input = JSON.parse(await readFile(source, 'utf8')) as unknown
         const preview = backupCounts(input)
         if (
@@ -90,6 +97,16 @@ export function registerDataCommands(program: Command): void {
         }
       })
     )
+}
+
+function validateBackupPath(value: string | undefined): string | undefined {
+  const target = resolve(value ?? '')
+  if (!existsSync(target)) return '文件不存在，请重新选择'
+  try {
+    return statSync(target).isFile() ? undefined : '请选择一个备份文件，而不是目录'
+  } catch {
+    return '无法读取这个文件，请检查权限'
+  }
 }
 
 export function defaultBackupFilename(now: Date = new Date()): string {

@@ -2,6 +2,7 @@ import { Option, type Command } from 'commander'
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import {
   acquireRuntimeLock,
+  createAgentImportCommand,
   createHttpMcpConnection,
   importAgentClient,
   createLociMcpServer,
@@ -15,7 +16,7 @@ import { createCursorMcpConfig, type AgentClient } from '@loci/shared'
 import { createCliRuntime } from '../runtime.js'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
-import { askSelect, finishUi, info, startUi, success } from '../ui.js'
+import { askConfirm, askSelect, finishUi, info, note, startUi, success } from '../ui.js'
 import { canConnect } from './status.js'
 
 const agentClients = [
@@ -117,30 +118,54 @@ export function registerMcpCommands(program: Command): void {
         .choices(['stdio', 'http'])
         .default('stdio')
     )
-    .action(async (client: string | undefined, options: { transport: McpTransport }) => {
-      const selected =
-        client ??
-        (process.stdin.isTTY
-          ? await askSelect<AgentSelection>('请选择 Agent 客户端', clients)
-          : 'manual')
-      if (selected === 'manual') {
-        await printManualMcpConfig(options.transport)
-        return
+    .option('--yes', '跳过写入前确认')
+    .action(
+      async (client: string | undefined, options: { transport: McpTransport; yes?: boolean }) => {
+        const selected =
+          client ??
+          (process.stdin.isTTY
+            ? await askSelect<AgentSelection>('请选择 Agent 客户端', clients)
+            : 'manual')
+        if (selected === 'manual') {
+          await printManualMcpConfig(options.transport)
+          return
+        }
+        if (!isAgentClient(selected)) {
+          throw new CliError(
+            `不支持的 Agent 客户端：${selected}；请运行 loci mcp config 复制配置`,
+            2
+          )
+        }
+        await runWithRuntime('配置 Agent 客户端', async (runtime) => {
+          const connection =
+            options.transport === 'stdio'
+              ? LOCI_CLI_STDIO_CONNECTION
+              : createHttpMcpConnection(
+                  `http://127.0.0.1:${runtime.database.getSettings().mcpPort}/mcp`
+                )
+          if (process.stdin.isTTY && !options.yes) {
+            const command = createAgentImportCommand(selected, connection)
+            note(
+              [
+                `客户端：${command.label}`,
+                `传输方式：${options.transport === 'stdio' ? 'CLI stdio' : '本地 HTTP'}`,
+                `将执行：${formatCommand(command.command, command.args)}`
+              ].join('\n'),
+              'MCP 配置写入预览'
+            )
+            if (!(await askConfirm('确认写入这个客户端的用户配置吗？', true))) {
+              return '客户端配置未修改'
+            }
+          }
+          const result = await importAgentClient(selected, connection)
+          return result.message
+        })
       }
-      if (!isAgentClient(selected)) {
-        throw new CliError(`不支持的 Agent 客户端：${selected}；请运行 loci mcp config 复制配置`, 2)
-      }
-      await runWithRuntime('配置 Agent 客户端', async (runtime) => {
-        const connection =
-          options.transport === 'stdio'
-            ? LOCI_CLI_STDIO_CONNECTION
-            : createHttpMcpConnection(
-                `http://127.0.0.1:${runtime.database.getSettings().mcpPort}/mcp`
-              )
-        const result = await importAgentClient(selected, connection)
-        return result.message
-      })
-    })
+    )
+}
+
+function formatCommand(command: string, args: readonly string[]): string {
+  return [command, ...args.map((argument) => JSON.stringify(argument))].join(' ')
 }
 
 function isAgentClient(value: string): value is AgentClient {

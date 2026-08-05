@@ -1,7 +1,7 @@
 import type { DocumentRecord, DocumentSource } from '@loci/shared'
 import type { CliRuntime } from './runtime.js'
 import { CliError } from './errors.js'
-import { askSelect } from './ui.js'
+import { askSearch, askSelect } from './ui.js'
 
 export async function resolveSource(
   runtime: CliRuntime,
@@ -49,13 +49,14 @@ export async function resolveDocument(
     if (matches.length === 1) return matches[0]!
     if (matches.length === 0) throw new CliError(`找不到文档：${reference}`, 2)
   }
-  const id = await askSelect(
-    '请选择文档',
-    documents.slice(0, 200).map((document) => ({
+  const id = await askSearch(
+    '搜索并选择文档',
+    documents.map((document) => ({
       value: document.id,
       label: document.title,
-      hint: document.sourceName
-    }))
+      hint: `${document.sourceName} · ${new URL(document.url).pathname}`
+    })),
+    '输入标题、文档源或路径'
   )
   return documents.find((document) => document.id === id)!
 }

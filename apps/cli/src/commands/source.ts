@@ -1,10 +1,29 @@
 import { Option, type Command } from 'commander'
-import { deriveSourceName, formatBytes, type FetchMode } from '@loci/shared'
+import {
+  deriveSourceName,
+  formatBytes,
+  getSourceScopeOptions,
+  type CreateSourceInput,
+  type DocumentSource,
+  type FetchMode,
+  type UpdateSourceInput
+} from '@loci/shared'
 import type { BrowserInstallPrompt } from '../browser.js'
-import { runWithRuntime } from '../command-runtime.js'
-import { CliError } from '../errors.js'
+import { runWithRuntime, type CommandResult } from '../command-runtime.js'
+import { CliCanceledError, CliError } from '../errors.js'
+import { validatePublicUrl } from '../input.js'
 import { resolveSource } from '../resources.js'
-import { askConfirm, askSelect, askText, createSpinner, printTable } from '../ui.js'
+import type { CliRuntime } from '../runtime.js'
+import {
+  askConfirm,
+  askInteger,
+  askSelect,
+  askText,
+  createSpinner,
+  note,
+  printTable,
+  warning
+} from '../ui.js'
 
 interface SourceOptions {
   name?: string
@@ -62,7 +81,12 @@ export function registerSourceCommands(program: Command): void {
       runWithRuntime('添加文档源', async (runtime) => {
         const guided = process.stdin.isTTY && !urlArgument && !options.url
         const url =
-          options.url ?? urlArgument ?? (await askText('第一个文档页面 URL', { required: true }))
+          options.url ??
+          urlArgument ??
+          (await askText('起始页面 URL', {
+            placeholder: 'https://example.com/docs/start',
+            validate: validatePublicUrl
+          }))
         const hostname = new URL(url).hostname
         const input = {
           name:
@@ -73,14 +97,27 @@ export function registerSourceCommands(program: Command): void {
           url,
           mode: options.mode ?? (guided ? await askMode('抓取方式', 'auto') : 'auto'),
           pageLimit:
-            options.pageLimit ?? (guided ? await askInteger('页面上限', 1000, 1, 10_000) : 1000),
-          scopePath:
-            options.scope ?? (guided ? await askText('收录路径', { initialValue: '/' }) : '/'),
+            options.pageLimit ??
+            (guided
+              ? await askInteger('页面上限', {
+                  initialValue: 1000,
+                  minimum: 1,
+                  maximum: 10_000
+                })
+              : 1000),
+          scopePath: options.scope ?? (guided ? await askScope(url, '/') : '/'),
           schedule: null,
           httpConcurrency: options.httpConcurrency ?? null,
           browserConcurrency: options.browserConcurrency ?? null
         }
+        let syncAfterSave = false
+        if (guided) {
+          note(formatSourceSummary(input), '请确认文档源配置')
+          if (!(await askConfirm('确认添加这个文档源吗？', true))) throw new CliCanceledError()
+          syncAfterSave = await askConfirm('创建后是否立即开始第一次同步？', true)
+        }
         const saved = runtime.createSource(input)
+        if (syncAfterSave) return syncSource(runtime, saved)
         return `已添加文档源“${saved.name}”；运行 loci source sync ${saved.id.slice(0, 8)} 开始同步`
       })
     )
@@ -103,30 +140,48 @@ export function registerSourceCommands(program: Command): void {
           throw new CliError('当前终端不可交互，请至少提供一个文档源修改选项', 2)
         }
         const editAll = process.stdin.isTTY && !hasUpdates
+        const url =
+          options.url ??
+          (editAll
+            ? await askText('起始页面 URL', {
+                initialValue: current.url,
+                validate: validatePublicUrl
+              })
+            : current.url)
         const input = {
+          url,
           name:
             options.name ??
             (editAll ? await askText('文档源名称', { initialValue: current.name }) : current.name),
-          url:
-            options.url ??
-            (editAll
-              ? await askText('第一个页面 URL', { initialValue: current.url })
-              : current.url),
           mode: options.mode ?? (editAll ? await askMode('抓取方式', current.mode) : current.mode),
           pageLimit:
             options.pageLimit ??
             (editAll
-              ? await askInteger('页面上限', current.pageLimit, 1, 10_000)
+              ? await askInteger('页面上限', {
+                  initialValue: current.pageLimit,
+                  minimum: 1,
+                  maximum: 10_000
+                })
               : current.pageLimit),
           scopePath:
-            options.scope ??
-            (editAll
-              ? await askText('收录路径', { initialValue: current.scopePath })
-              : current.scopePath),
+            options.scope ?? (editAll ? await askScope(url, current.scopePath) : current.scopePath),
           httpConcurrency: options.httpConcurrency ?? current.httpConcurrency,
           browserConcurrency: options.browserConcurrency ?? current.browserConcurrency
         }
+        if (editAll && sameSourceInput(current, input)) return `文档源“${current.name}”没有变化`
+        let syncAfterSave = false
+        if (editAll) {
+          if (current.url !== input.url) {
+            warning('起始 URL 已变化，现有文档会被清空，需要重新同步')
+          }
+          note(formatSourceChanges(current, input), '请确认文档源变更')
+          if (!(await askConfirm('确认保存这些修改吗？', true))) throw new CliCanceledError()
+          if (current.url !== input.url) {
+            syncAfterSave = await askConfirm('保存后是否立即重新同步？', true)
+          }
+        }
         const saved = runtime.updateSourcePreservingDesktopFields(current, input)
+        if (syncAfterSave) return syncSource(runtime, saved)
         return `已更新文档源“${saved.name}”`
       })
     )
@@ -156,30 +211,7 @@ export function registerSourceCommands(program: Command): void {
     .action((reference: string | undefined) =>
       runWithRuntime('同步文档源', async (runtime) => {
         const target = await resolveSource(runtime, reference, { localOnly: true })
-        const spinner = createSpinner()
-        spinner.start(`正在同步“${target.name}”`)
-        try {
-          const progress = await runtime.crawlSource(
-            target.id,
-            (current) => {
-              spinner.message(
-                `已处理 ${current.processed}/${current.queued}，成功 ${current.succeeded}，失败 ${current.failed}`
-              )
-            },
-            createBrowserInstallPrompt(spinner, target.name)
-          )
-          const summary = `同步完成：成功 ${progress.succeeded}，失败 ${progress.failed}${progress.limitReached ? '，已达到页面上限' : ''}`
-          spinner.stop(summary)
-          return progress.failed > 0
-            ? {
-                message: `文档源“${target.name}”已同步，但有 ${progress.failed} 个页面失败`,
-                tone: 'warning'
-              }
-            : `文档源“${target.name}”同步成功`
-        } catch (error) {
-          spinner.error('同步失败')
-          throw error
-        }
+        return syncSource(runtime, target)
       })
     )
 
@@ -206,6 +238,36 @@ export function registerSourceCommands(program: Command): void {
         return `已显示 ${runs.length} 条抓取记录`
       })
     )
+}
+
+async function syncSource(
+  runtime: CliRuntime,
+  target: DocumentSource
+): Promise<string | CommandResult> {
+  const spinner = createSpinner()
+  spinner.start(`正在同步“${target.name}”`)
+  try {
+    const progress = await runtime.crawlSource(
+      target.id,
+      (current) => {
+        spinner.message(
+          `已处理 ${current.processed}/${current.queued}，成功 ${current.succeeded}，失败 ${current.failed}`
+        )
+      },
+      createBrowserInstallPrompt(spinner, target.name)
+    )
+    const summary = `同步完成：成功 ${progress.succeeded}，失败 ${progress.failed}${progress.limitReached ? '，已达到页面上限' : ''}`
+    spinner.stop(summary)
+    return progress.failed > 0
+      ? {
+          message: `文档源“${target.name}”已同步，但有 ${progress.failed} 个页面失败`,
+          tone: 'warning'
+        }
+      : `文档源“${target.name}”同步成功`
+  } catch (error) {
+    spinner.error('同步失败')
+    throw error
+  }
 }
 
 function createBrowserInstallPrompt(
@@ -244,17 +306,71 @@ async function askMode(message: string, initial: FetchMode): Promise<FetchMode> 
   )
 }
 
-async function askInteger(
-  message: string,
-  initial: number,
-  minimum: number,
-  maximum: number
-): Promise<number> {
-  const value = Number(await askText(message, { initialValue: String(initial) }))
-  if (!Number.isInteger(value) || value < minimum || value > maximum) {
-    throw new CliError(`${message}必须是 ${minimum} 到 ${maximum} 之间的整数`, 2)
-  }
-  return value
+async function askScope(url: string, current: string): Promise<string> {
+  const options = getSourceScopeOptions(url)
+  const initialValue = options.some((option) => option.value === current) ? current : '/'
+  return askSelect(
+    '收录范围',
+    options.map((option) => ({
+      value: option.value,
+      label: option.label,
+      hint: option.value === '/' ? '收录整个站点' : '只收录该路径及其子路径'
+    })),
+    initialValue
+  )
+}
+
+function formatSourceSummary(input: CreateSourceInput): string {
+  return [
+    `名称：${input.name}`,
+    `URL：${input.url}`,
+    `抓取方式：${modeLabel(input.mode)}`,
+    `页面上限：${input.pageLimit}`,
+    `收录范围：${input.scopePath}`,
+    `HTTP 并发：${input.httpConcurrency ?? '继承全局设置'}`,
+    `浏览器并发：${input.browserConcurrency ?? '继承全局设置'}`
+  ].join('\n')
+}
+
+function formatSourceChanges(
+  current: DocumentSource,
+  input: Omit<UpdateSourceInput, 'schedule'>
+): string {
+  const changes = [
+    current.url === input.url ? null : `URL：${current.url} → ${input.url}`,
+    current.name === input.name ? null : `名称：${current.name} → ${input.name}`,
+    current.mode === input.mode
+      ? null
+      : `抓取方式：${modeLabel(current.mode)} → ${modeLabel(input.mode)}`,
+    current.pageLimit === input.pageLimit
+      ? null
+      : `页面上限：${current.pageLimit} → ${input.pageLimit}`,
+    current.scopePath === input.scopePath
+      ? null
+      : `收录范围：${current.scopePath} → ${input.scopePath}`,
+    current.httpConcurrency === input.httpConcurrency
+      ? null
+      : `HTTP 并发：${current.httpConcurrency ?? '继承全局'} → ${input.httpConcurrency ?? '继承全局'}`,
+    current.browserConcurrency === input.browserConcurrency
+      ? null
+      : `浏览器并发：${current.browserConcurrency ?? '继承全局'} → ${input.browserConcurrency ?? '继承全局'}`
+  ].filter((change): change is string => Boolean(change))
+  return changes.join('\n')
+}
+
+function sameSourceInput(
+  current: DocumentSource,
+  input: Omit<UpdateSourceInput, 'schedule'>
+): boolean {
+  return (
+    current.name === input.name &&
+    current.url === input.url &&
+    current.mode === input.mode &&
+    current.pageLimit === input.pageLimit &&
+    current.scopePath === input.scopePath &&
+    current.httpConcurrency === input.httpConcurrency &&
+    current.browserConcurrency === input.browserConcurrency
+  )
 }
 
 function numberValue(value: string): number {
