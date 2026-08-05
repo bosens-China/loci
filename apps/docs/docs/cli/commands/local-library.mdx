@@ -33,6 +33,8 @@ loci source add https://rspress.rs/guide/introduction.html
 
 以前台方式同步一个本地文档源，并显示已处理、成功和失败的页面数。`[source]` 可以是名称、完整 ID 或唯一短 ID；在交互终端中省略时可以从列表选择。
 
+`browser` 模式会在同步开始时检查无头浏览器；`auto` 模式会在确实需要比较 HTTP 与浏览器页面时检查。交互终端可以确认并自动安装，脚本环境则需要提前运行 `loci browser install`。
+
 示例：
 
 ```bash

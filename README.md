@@ -33,7 +33,7 @@ loci mcp configure codex
 loci mcp config # 为 Kimi Code 等客户端输出可复制配置
 ```
 
-需要抓取依赖客户端渲染的文档站时，安装浏览器运行时：
+需要抓取依赖客户端渲染的文档站时，CLI 会在 `auto` 检测或 `browser` 抓取前提示安装浏览器运行时；也可以提前手动安装：
 
 ```bash
 loci browser install

@@ -12,7 +12,7 @@ Loci Server 不接收用户的本地文档。它只抓取无需登录即可访�
 
 ## 部署 Loci Server
 
-仓库根目录提供了生产环境使用的 `compose.yaml` 和环境变量示例。服务器需要安装 Git、Docker 和 Docker Compose。
+仓库根目录提供了生产环境使用的 `compose.yaml` 和环境变量示例。Compose 会同时启动 GHCR 发布的 Loci Server 与官方 Browserless Chromium。服务器需要安装 Git、Docker 和 Docker Compose。
 
 克隆仓库后，复制环境变量示例：
 
@@ -27,12 +27,14 @@ cp .env.example .env
 | `LOCI_ADMIN_PASSWORD` | Admin 登录密码，应替换为足够长的随机值。        |
 | `LOCI_ADMIN_USERNAME` | Admin 登录账号，默认是 `admin`。                |
 | `LOCI_BROWSER_TOKEN`  | Loci Server 连接 Browserless 时使用的随机令牌。 |
+| `LOCI_SERVER_IMAGE`   | 后端镜像，默认使用 GHCR 上的 `latest`。         |
 | `LOCI_SERVER_PORT`    | 发布到宿主机的端口，默认是 `3000`。             |
 
 保存配置后启动服务：
 
 ```bash
-docker compose up --build -d
+docker compose pull
+docker compose up -d
 ```
 
 确认健康检查可以访问：
@@ -45,10 +47,10 @@ curl http://127.0.0.1:3000/health
 
 ## 连接部署后的 Server
 
-在管理员使用的电脑上安装 Loci CLI，然后将默认 Server 地址改为部署后的 HTTPS 地址：
+正式版 CLI 默认连接 `https://loci.xiaowo.live`。管理官方 Server 时可以直接运行检查；管理自行部署的 Server 时，先改为部署后的 HTTPS 地址：
 
 ```bash
-loci config set server-url https://loci.example.com
+loci config set server-url https://your-loci.example.com
 loci doctor
 ```
 
@@ -79,7 +81,7 @@ CLI 会读取管理员账号和隐藏输入的密码。登录后可以执行以�
 Server 完成首次同步后，其他用户可以下载只读快照：
 
 ```bash
-loci config set server-url https://loci.example.com
+loci config set server-url https://your-loci.example.com
 loci cloud list
 loci cloud pull <文档库名称或 ID>
 ```

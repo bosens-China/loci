@@ -16,4 +16,10 @@ pnpm --filter @boses/cli typecheck
 node dist/index.js --help
 ```
 
+正式版默认连接 `https://loci.xiaowo.live`。联调本地 Server 时显式覆盖地址：
+
+```bash
+LOCI_SERVER_URL=http://localhost:7001 node dist/index.js doctor
+```
+
 CLI 入口为 `src/index.ts`。发布前由根目录的 Release 工作流创建版本和发布 npm 包；`prepack` 会自动执行构建。

@@ -16,6 +16,10 @@ docker compose -f compose.local.yaml up --build -d
 - 管理员账号：`admin`
 - 本地默认密码：`loci-local-admin-password`
 
+桌面开发版的全新数据默认连接该地址。复用已有数据或使用 CLI 联调时，可设置
+`LOCI_SERVER_URL=http://localhost:7001`；该覆盖只用于开发启动，正式版默认地址仍为
+`https://loci.xiaowo.live`。
+
 可以通过 `LOCI_LOCAL_SERVER_PORT`、`LOCI_LOCAL_ADMIN_PASSWORD` 和
 `LOCI_LOCAL_BROWSER_TOKEN` 覆盖本地默认值。默认凭据只用于本机开发，不得用于部署。
 
@@ -29,10 +33,12 @@ docker compose -f compose.local.yaml down
 
 ```bash
 cp .env.example .env
-docker compose up --build -d
+docker compose pull
+docker compose up -d
 ```
 
-Compose 只向宿主机发布 Hono 的 `3000` 端口。Browserless Chromium 仅在 Compose
+Compose 默认拉取 GHCR 发布的 Loci Server 镜像，并只向宿主机发布 Hono 的 `3000`
+端口。可通过 `LOCI_SERVER_IMAGE` 固定后端版本。Browserless Chromium 仅在 Compose
 内部网络提供 Playwright WebSocket，并使用独立令牌、两个并发会话和 `2 GB`
 共享内存。SQLite 位于命名卷 `loci-data`，重建容器不会删除数据。
 
