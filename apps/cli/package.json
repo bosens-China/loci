@@ -1,6 +1,6 @@
 {
   "name": "@boses/cli",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "description": "面向终端用户的 Loci 本地文档知识库。",
   "author": "yliu",
   "license": "MIT",
