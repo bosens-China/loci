@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.6.0](https://github.com/bosens-China/loci/compare/cli-v1.5.0...cli-v1.6.0) (2026-08-05)
+
+
+### Features
+
+* 支持 CLI 自动安装无头浏览器 ([d37e6ad](https://github.com/bosens-China/loci/commit/d37e6ad0eda2279bbceb11f5eee0ba851e90c20a))
+* 更新默认云端 Server 地址 ([495da96](https://github.com/bosens-China/loci/commit/495da96e465f264bbb93b126f313791a70e4762d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.4.0
+    * @loci/runtime bumped to 1.3.0
+    * @loci/shared bumped to 1.8.0
+
 ## [1.5.0](https://github.com/bosens-China/loci/compare/cli-v1.4.1...cli-v1.5.0) (2026-08-04)
 
 
