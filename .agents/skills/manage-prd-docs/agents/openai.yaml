@@ -1,4 +1,4 @@
 interface:
-  display_name: 'Manage PRD Docs'
-  short_description: 'Maintain current PRDs and active product work'
-  default_prompt: 'Use $manage-prd-docs to discuss this product requirement and maintain current decisions plus temporary work documents once confirmed.'
+  display_name: "Manage PRD Docs"
+  short_description: "Maintain current, planned, and active PRDs"
+  default_prompt: "Use $manage-prd-docs to manage this requirement across current decisions, future plans, implementation, and completion."

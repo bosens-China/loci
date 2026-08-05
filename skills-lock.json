@@ -35,7 +35,7 @@
       "source": "bosens-China/my-skills",
       "sourceType": "github",
       "skillPath": "skills/manage-prd-docs/SKILL.md",
-      "computedHash": "4f049f5259fd3aa1f903804dc79d447999eb709572b28e31433a2bd44b335ace"
+      "computedHash": "44f36df488557580b3958fc10cfe1b1859018e9759364033c5da58cc52a6cc85"
     },
     "mcp-builder": {
       "source": "anthropics/skills",
