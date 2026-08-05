@@ -1,6 +1,29 @@
 import * as p from '@clack/prompts'
+import { TextPrompt } from '@clack/core'
+import { styleText } from 'node:util'
 import Table from 'cli-table3'
 import { CliCanceledError, CliError } from './errors.js'
+
+interface AskTextOptions {
+  initialValue?: string
+  placeholder?: string
+  required?: boolean
+  validate?: (value: string | undefined) => string | Error | undefined
+  liveHint?: (value: string) => string | undefined
+}
+
+interface AskIntegerOptions {
+  initialValue: number
+  minimum: number
+  maximum: number
+}
+
+interface AskPathOptions {
+  root?: string
+  initialValue?: string
+  directory?: boolean
+  validate?: (value: string | undefined) => string | Error | undefined
+}
 
 export function startUi(title = 'Loci CLI'): void {
   if (process.stdout.isTTY) p.intro(title)
@@ -28,20 +51,20 @@ export function failure(message: string): void {
   p.log.error(message)
 }
 
-export async function askText(
-  message: string,
-  options: { initialValue?: string; placeholder?: string; required?: boolean } = {}
-): Promise<string> {
+export async function askText(message: string, options: AskTextOptions = {}): Promise<string> {
   requireInteractive()
-  const result = await p.text({
-    message,
-    initialValue: options.initialValue,
-    placeholder: options.placeholder,
-    validate:
-      options.required === false
-        ? undefined
-        : (value) => (!value?.trim() ? '请输入内容' : undefined)
-  })
+  const validate = (value: string | undefined): string | Error | undefined => {
+    if (options.required !== false && !value?.trim()) return '请输入内容'
+    return options.validate?.(value)
+  }
+  const result = options.liveHint
+    ? await dynamicText(message, options, validate)
+    : await p.text({
+        message,
+        initialValue: options.initialValue,
+        placeholder: options.placeholder,
+        validate
+      })
   return unwrap(result).trim()
 }
 
@@ -52,6 +75,19 @@ export async function askPassword(message: string): Promise<string> {
     validate: (value) => (!value?.length ? '请输入密码' : undefined)
   })
   return unwrap(result)
+}
+
+export async function askInteger(message: string, options: AskIntegerOptions): Promise<number> {
+  const value = await askText(message, {
+    initialValue: String(options.initialValue),
+    validate: (input) => {
+      const number = Number(input)
+      return Number.isInteger(number) && number >= options.minimum && number <= options.maximum
+        ? undefined
+        : `${message}必须是 ${options.minimum} 到 ${options.maximum} 之间的整数`
+    }
+  })
+  return Number(value)
 }
 
 export async function askConfirm(message: string, initialValue = false): Promise<boolean> {
@@ -74,6 +110,33 @@ export async function askSelect<T extends string>(
   return unwrap(await p.select<string>({ message, options: normalized, initialValue })) as T
 }
 
+export async function askSearch<T extends string>(
+  message: string,
+  options: ReadonlyArray<{ value: T; label: string; hint?: string }>,
+  placeholder = '输入关键词筛选'
+): Promise<T> {
+  requireInteractive()
+  const normalized: Array<{ value: string; label: string; hint?: string }> = options.map(
+    (option) =>
+      option.hint
+        ? { value: option.value, label: option.label, hint: option.hint }
+        : { value: option.value, label: option.label }
+  )
+  return unwrap(await p.autocomplete<string>({ message, options: normalized, placeholder })) as T
+}
+
+export async function askPath(message: string, options: AskPathOptions = {}): Promise<string> {
+  requireInteractive()
+  const result = await p.path({
+    message,
+    root: options.root,
+    initialValue: options.initialValue,
+    directory: options.directory,
+    validate: options.validate
+  })
+  return unwrap(result)
+}
+
 export function createSpinner(): ReturnType<typeof p.spinner> {
   return p.spinner()
 }
@@ -93,6 +156,49 @@ export function printTable(
 
 export function printList(lines: readonly string[]): void {
   process.stdout.write(lines.map((line) => `• ${line}`).join('\n') + '\n')
+}
+
+export function note(message: string, title?: string): void {
+  p.note(message, title)
+}
+
+/** 支持随输入内容变化的底部提示，适合时间表达式等需要即时解释的字段。 */
+async function dynamicText(
+  message: string,
+  options: AskTextOptions,
+  validate: (value: string | undefined) => string | Error | undefined
+): Promise<string | symbol> {
+  const prompt = new TextPrompt({
+    initialValue: options.initialValue,
+    placeholder: options.placeholder,
+    validate,
+    render() {
+      const withGuide = p.settings.withGuide
+      const header = `${p.symbol(this.state)}  ${message}\n`
+      const placeholder = options.placeholder
+        ? styleText('inverse', options.placeholder[0] ?? '_') +
+          styleText('dim', options.placeholder.slice(1))
+        : styleText(['inverse', 'hidden'], '_')
+      const value = this.userInput ? this.userInputWithCursor : placeholder
+      const bar = withGuide ? `${styleText('cyan', p.S_BAR)}  ` : ''
+      if (this.state === 'submit') {
+        const submitted = this.value ? `  ${styleText('dim', this.value)}` : ''
+        return `${header}${withGuide ? styleText('gray', p.S_BAR) : ''}${submitted}`
+      }
+      if (this.state === 'cancel') {
+        const canceled = this.value ? `  ${styleText(['strikethrough', 'dim'], this.value)}` : ''
+        return `${header}${withGuide ? styleText('gray', p.S_BAR) : ''}${canceled}`
+      }
+      if (this.state === 'error') {
+        const error = this.error ? `  ${styleText('yellow', this.error)}` : ''
+        return `${header.trim()}\n${bar}${value}\n${withGuide ? styleText('yellow', p.S_BAR_END) : ''}${error}\n`
+      }
+      const hint = options.liveHint?.(this.userInput)
+      const footer = hint ? `  ${styleText('dim', hint)}` : ''
+      return `${header}${bar}${value}\n${withGuide ? styleText('cyan', p.S_BAR_END) : ''}${footer}\n`
+    }
+  })
+  return (await prompt.prompt()) ?? ''
 }
 
 function unwrap<T>(value: T | symbol): T {

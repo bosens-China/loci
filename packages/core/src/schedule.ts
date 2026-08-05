@@ -34,6 +34,17 @@ export function getNextScheduledRun(value: string | null | undefined): Date | nu
   }
 }
 
+/** 计算接下来的执行时间，供桌面和 CLI 实时解释自定义计划。 */
+export function getUpcomingScheduleRuns(
+  value: string | null | undefined,
+  count = 2,
+  previous = new Date()
+): Date[] {
+  const expression = normalizeCronSchedule(value)
+  if (!expression || count < 1) return []
+  return new Cron(expression, { paused: true }).nextRuns(count, previous)
+}
+
 export function getSchedulePreset(expression: string): (typeof SCHEDULE_PRESETS)[number] | null {
   return SCHEDULE_PRESETS.find((preset) => preset.expression === expression) ?? null
 }

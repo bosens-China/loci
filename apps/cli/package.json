@@ -45,6 +45,7 @@
     "prepack": "pnpm build"
   },
   "dependencies": {
+    "@clack/core": "1.4.3",
     "@clack/prompts": "^1.7.0",
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
