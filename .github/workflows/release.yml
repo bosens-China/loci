@@ -86,7 +86,7 @@ jobs:
           path: ${{ matrix.cache_path }}
           key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-electron-
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --filter @loci/desktop...
       - run: pnpm build:${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
@@ -117,7 +117,7 @@ jobs:
           node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --filter @boses/cli...
       - run: npm publish
         working-directory: apps/cli
 
@@ -139,7 +139,6 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
         run: echo "name=ghcr.io/${OWNER,,}/loci-server" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v4
         with:
@@ -158,12 +157,12 @@ jobs:
         with:
           context: .
           file: apps/server/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha,scope=loci-server
-          cache-to: type=gha,scope=loci-server,mode=max
+          cache-from: type=gha,scope=loci-server-amd64
+          cache-to: type=gha,scope=loci-server-amd64,mode=min
           provenance: mode=max
           sbom: true
 
