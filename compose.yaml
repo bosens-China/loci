@@ -1,8 +1,7 @@
 services:
   server:
-    build:
-      context: .
-      dockerfile: apps/server/Dockerfile
+    image: ${LOCI_SERVER_IMAGE:-ghcr.io/bosens-china/loci-server:latest}
+    pull_policy: always
     environment:
       LOCI_ADMIN_PASSWORD: ${LOCI_ADMIN_PASSWORD:?请设置管理员密码}
       LOCI_ADMIN_USERNAME: ${LOCI_ADMIN_USERNAME:-admin}
