@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.7.1](https://github.com/bosens-China/loci/compare/loci-v1.7.0...loci-v1.7.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* 绕过 llms.txt 的网页抓取限速策略 ([4c7edcd](https://github.com/bosens-China/loci/commit/4c7edcd62cc9849b6ff8b3c9ff04c1a6d1e0937c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.5.0
+    * @loci/runtime bumped to 1.3.1
+    * @loci/shared bumped to 1.8.1
+
 ## [1.7.0](https://github.com/bosens-China/loci/compare/loci-v1.6.0...loci-v1.7.0) (2026-08-05)
 
 
