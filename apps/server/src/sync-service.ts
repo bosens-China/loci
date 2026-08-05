@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { Cron } from 'croner'
 import { crawlSource, normalizeCronSchedule } from '@loci/core'
 import type { CrawlProgress } from '@loci/core'
-import { createBrowserlessCrawler } from './browser-crawl.js'
+import { createBrowserCrawler } from './browser-crawl.js'
+import type { BrowserConfig } from './browser-config.js'
 import { ConflictError, ServerDatabase } from './database.js'
 import type { SyncJob } from './types.js'
 
@@ -16,7 +17,7 @@ export class SyncService {
   constructor(
     private readonly database: ServerDatabase,
     private readonly fetchImpl: typeof fetch = fetch,
-    private readonly browserEndpoint?: string
+    private readonly browserConfig?: BrowserConfig
   ) {}
 
   restoreSchedules(): void {
@@ -98,7 +99,7 @@ export class SyncService {
         fetchMode: 'auto',
         httpConcurrency: 9,
         browserConcurrency: 5,
-        crawler: this.browserEndpoint ? createBrowserlessCrawler(this.browserEndpoint) : undefined,
+        crawler: this.browserConfig ? createBrowserCrawler(this.browserConfig) : undefined,
         fetch: this.fetchImpl,
         onDocument: (document) => this.database.saveDocument(library.id, document),
         onError: ({ url, missing }) => {

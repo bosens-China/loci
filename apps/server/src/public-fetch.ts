@@ -1,7 +1,8 @@
 import { lookup } from 'node:dns/promises'
+import type { LookupAddress, LookupAllOptions } from 'node:dns'
 import { isIP } from 'node:net'
 
-export type DnsLookup = typeof lookup
+export type DnsLookup = (hostname: string, options: LookupAllOptions) => Promise<LookupAddress[]>
 
 /** 阻止云端抓取访问回环、局域网和链路本地地址。 */
 export function createPublicFetch(lookupImpl: DnsLookup = lookup): typeof fetch {

@@ -19,11 +19,19 @@ FROM node:24-bookworm-slim
 
 ENV NODE_ENV=production
 ENV LOCI_DATA_DIR=/data
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /app
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/server ./apps/server
 COPY --from=build /app/packages/core ./packages/core
+
+# 依赖与浏览器分层，下载中断后重建可直接复用系统依赖层。
+RUN node /app/apps/server/node_modules/playwright-core/cli.js install-deps chromium
+
+# 只安装无界面的 Chromium shell；服务端仅执行 JavaScript 并读取 HTML。
+RUN node /app/apps/server/node_modules/playwright-core/cli.js install --only-shell chromium \
+    && chmod -R 755 /ms-playwright
 
 WORKDIR /app/apps/server
 EXPOSE 3000

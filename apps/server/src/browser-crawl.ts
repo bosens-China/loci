@@ -3,36 +3,28 @@ import { isAllowedNavigation, normalizeUrl, parsePage, waitForStableContent } fr
 import type { CrawledPage, RenderedCrawler, RenderedPageRequest } from '@loci/core'
 import { chromium } from 'playwright-core'
 import type { BrowserContext, Request, Route } from 'playwright-core'
+import type { BrowserConfig } from './browser-config.js'
 import { assertPublicUrl } from './public-fetch.js'
 import type { DnsLookup } from './public-fetch.js'
 
 interface BrowserOptions {
-  endpoint: string
   lookup?: DnsLookup
 }
 
-/** Browserless 适配器复用一个抓取会话，核心包负责模式选择、重试和队列。 */
-export function createBrowserlessCrawler(
-  endpoint: string,
+/** 浏览器适配器复用一个抓取会话，核心包负责模式选择、重试和队列。 */
+export function createBrowserCrawler(
+  config: BrowserConfig,
   lookupImpl: DnsLookup = lookup
 ): RenderedCrawler {
-  const options = { endpoint, lookup: lookupImpl }
+  const options = { lookup: lookupImpl }
   const sessionCrawler = (context: BrowserContext): RenderedCrawler => ({
     fetchPage: (url, request) => fetchPage(context, url, request, options)
   })
   return {
     fetchPage: (url, request) =>
-      withBrowser(endpoint, (context) => fetchPage(context, url, request, options)),
-    withSession: (action) => withBrowser(endpoint, (context) => action(sessionCrawler(context)))
+      withBrowser(config, (context) => fetchPage(context, url, request, options)),
+    withSession: (action) => withBrowser(config, (context) => action(sessionCrawler(context)))
   }
-}
-
-/** 使用独立 Browserless 会话抓取一个渲染后的页面。 */
-export async function fetchRenderedPage(
-  url: string,
-  options: BrowserOptions & RenderedPageRequest
-): Promise<CrawledPage> {
-  return createBrowserlessCrawler(options.endpoint, options.lookup).fetchPage(url, options)
 }
 
 export async function assertAllowedBrowserRequest(
@@ -51,10 +43,14 @@ export async function assertAllowedBrowserRequest(
 }
 
 async function withBrowser<T>(
-  endpoint: string,
+  config: BrowserConfig,
   action: (context: BrowserContext) => Promise<T>
 ): Promise<T> {
-  const browser = await chromium.connect(endpoint, { timeout: 30_000 }).catch(() => {
+  const connection =
+    config.provider === 'local'
+      ? chromium.launch({ headless: true })
+      : chromium.connect(config.endpoint, { timeout: 30_000 })
+  const browser = await connection.catch(() => {
     throw new Error('无法连接浏览器服务')
   })
   const context = await browser.newContext({ acceptDownloads: false })

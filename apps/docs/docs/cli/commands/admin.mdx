@@ -12,7 +12,7 @@ Loci Server 不接收用户的本地文档。它只抓取无需登录即可访�
 
 ## 部署 Loci Server
 
-仓库根目录提供了生产环境使用的 `compose.yaml` 和环境变量示例。Compose 会同时启动 GHCR 发布的 Loci Server 与官方 Browserless Chromium。服务器需要安装 Git、Docker 和 Docker Compose。
+仓库根目录提供了生产环境使用的 `compose.yaml` 和环境变量示例。GHCR 发布的 Loci Server 镜像内置轻量的 Chromium headless shell，只执行 JavaScript、生成 DOM 并把 HTML 交给现有 Markdown 转换链路，不需要额外启动 Browserless 容器。服务器需要安装 Git、Docker 和 Docker Compose。
 
 克隆仓库后，复制环境变量示例：
 
@@ -22,13 +22,12 @@ cp .env.example .env
 
 至少需要在 `.env` 中设置以下值：
 
-| 环境变量              | 用途                                            |
-| --------------------- | ----------------------------------------------- |
-| `LOCI_ADMIN_PASSWORD` | Admin 登录密码，应替换为足够长的随机值。        |
-| `LOCI_ADMIN_USERNAME` | Admin 登录账号，默认是 `admin`。                |
-| `LOCI_BROWSER_TOKEN`  | Loci Server 连接 Browserless 时使用的随机令牌。 |
-| `LOCI_SERVER_IMAGE`   | 后端镜像，默认使用 GHCR 上的 `latest`。         |
-| `LOCI_SERVER_PORT`    | 发布到宿主机的端口，默认是 `3000`。             |
+| 环境变量              | 用途                                     |
+| --------------------- | ---------------------------------------- |
+| `LOCI_ADMIN_PASSWORD` | Admin 登录密码，应替换为足够长的随机值。 |
+| `LOCI_ADMIN_USERNAME` | Admin 登录账号，默认是 `admin`。         |
+| `LOCI_SERVER_IMAGE`   | 后端镜像，默认使用 GHCR 上的 `latest`。  |
+| `LOCI_SERVER_PORT`    | 发布到宿主机的端口，默认是 `3000`。      |
 
 保存配置后启动服务：
 
@@ -93,6 +92,7 @@ loci cloud pull <文档库名称或 ID>
 - 只添加公开且无需登录的文档页面，不要填写 Cookie、Token 或其他站点凭据。
 - Hash Router 文档站依赖 `#` 区分页面，当前不适合作为文档源。
 - 生产机还应通过防火墙或云网络策略阻止容器访问内网和云元数据地址。
-- Browserless 只在 Compose 内部网络提供浏览器能力，不应直接暴露到公网。
+- Chromium headless shell 只在 Server 容器内部启动，不对公网暴露调试端口。
+- Server 仍兼容远程 Browserless，但默认不需要额外的浏览器容器。
 
 如果只需要使用别人已经发布的文档库，请返回[云端文档库](/cli/commands/cloud-library)，无需阅读或执行本页的部署步骤。
