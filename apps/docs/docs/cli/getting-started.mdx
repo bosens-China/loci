@@ -78,6 +78,8 @@ loci mcp config
 loci mcp status
 ```
 
+如果希望 Codex 在所有仓库中优先查询 Loci，并在 Loci 无法解决问题时才使用 Context7，请继续完成 [Codex 全局接入](/agent/codex)。
+
 需要以前台 HTTP 服务接入时，先在一个终端运行服务，再在另一个终端使用 HTTP 传输写入 Agent 配置：
 
 终端 1：
@@ -97,5 +99,6 @@ loci mcp configure codex --transport http
 - 查看[基础、浏览器与设置](/cli/commands/basics)。
 - 查看[本地文档库](/cli/commands/local-library)和[云端文档库](/cli/commands/cloud-library)。
 - 查看 [MCP 与数据管理](/cli/commands/integrations)。
+- 查看 [Codex 全局接入](/agent/codex)，根据是否使用 Context7 选择全局 `AGENTS.md` 模板。
 - 如果需要为其他人提供云端文档库，可选阅读 [Admin：部署与管理 Server](/cli/commands/admin)。
 - 遇到环境或浏览器问题，运行 `loci doctor`；浏览器不可用时运行 `loci browser install`。

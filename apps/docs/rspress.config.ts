@@ -9,15 +9,21 @@ export default defineConfig({
   logoText: 'Loci',
   lang: 'zh',
   base: '/loci/',
+  i18nSource: {
+    editLinkText: {
+      zh: '在 GitHub 上编辑此页',
+      en: 'Edit this page on GitHub'
+    }
+  },
   themeConfig: {
     lastUpdated: true,
     editLink: {
-      docRepoBaseUrl: 'https://github.com/bosens-China/loci/tree/master/apps/docs/docs',
-      text: '在 GitHub 上编辑此页'
+      docRepoBaseUrl: 'https://github.com/bosens-China/loci/tree/master/apps/docs/docs'
     },
     nav: [
       { text: '桌面应用', link: '/desktop/getting-started' },
-      { text: 'CLI', link: '/cli/getting-started' }
+      { text: 'CLI', link: '/cli/getting-started' },
+      { text: 'Agent 接入', link: '/agent/codex' }
     ],
     sidebar: {
       '/desktop/': [
@@ -45,6 +51,12 @@ export default defineConfig({
               ]
             }
           ]
+        }
+      ],
+      '/agent/': [
+        {
+          text: 'Agent 接入',
+          items: [{ text: 'Codex 全局接入', link: '/agent/codex' }]
         }
       ]
     },

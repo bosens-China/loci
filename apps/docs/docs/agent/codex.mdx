@@ -1,0 +1,165 @@
+# 配置 Codex 全局 AGENTS.md
+
+Loci MCP 为 Codex 提供文档库、目录、搜索和读取工具。为了让 Codex 在不同仓库中采用一致的查询流程，可以把 Loci 使用规范写入用户级 `~/.codex/AGENTS.md`。
+
+这套配置不依赖任何 Skill。用户已经安装的 Skill 仍按自身的触发条件工作；全局 `AGENTS.md` 只强化技术文档的查询时机、工具顺序和安全边界。
+
+## 配置 Loci MCP
+
+先安装 Loci CLI，并把名为 `loci` 的 MCP 写入 Codex 配置：
+
+```bash
+npm install --global @boses/cli
+loci mcp configure codex
+loci mcp status
+```
+
+配置完成后，新建 Agent 会话，使 Codex 重新加载 MCP 和全局指令。
+
+如果同时安装了 Loci 桌面应用和 CLI，推荐使用 CLI 提供的 stdio 接入。一个 Codex 客户端中只保留一个名为 `loci` 的 MCP，避免重复注册 stdio 和 HTTP 工具。
+
+## 选择 AGENTS.md 模板
+
+根据当前环境选择一份模板：
+
+- 已经安装 Context7，或者现有全局指令包含 Context7 规则：使用“Loci 优先，Context7 备用”模板。
+- 没有使用 Context7：使用“仅使用 Loci”模板。
+
+如果 `~/.codex/AGENTS.md` 已经存在，请合并对应模板，不要覆盖其中的其他个人规则。模板使用注释标记配置范围，方便以后整体替换。
+
+## 已有 Context7
+
+如果现有 `AGENTS.md` 要求所有技术文档问题优先使用 Context7，请删除原来的 Context7 区块，再复制下面的组合模板。不能同时保留两套相互冲突的优先级。
+
+这份模板先查询 Loci。只有 Loci 无法提供足够证据时，才调用 Context7，并且只查询尚未解决的概念。
+
+```md
+<!-- loci-context7:start -->
+
+# Technical Documentation: Loci First, Context7 Fallback
+
+Use documentation tools whenever a task depends on current information about a
+library, framework, SDK, API, CLI, configuration, version difference, migration,
+setup process, or library-specific error. Do not rely only on model memory.
+
+Do not use this workflow for ordinary refactoring, business-logic debugging,
+general programming concepts, or code review that does not depend on an external
+technology's current behavior.
+
+## Loci workflow
+
+1. Identify the relevant technology and the version used by the current project.
+2. Call `loci_list_libraries` to look for an existing local documentation library.
+3. When a local library exists, call `loci_get_library_tree` to inspect one or two
+   directory levels and record its `languages`.
+4. Read clearly relevant files directly. Otherwise call `loci_search_files` with
+   precise terms in the documented language, then call `loci_read_files` for the
+   matched files or complete sections.
+5. If local evidence is sufficient, answer from it, include the relevant
+   `source_url` values, and stop. Do not query Context7 for the same concepts.
+6. If no suitable local library exists, call `loci_list_cloud_libraries`. This is
+   read-only and does not require confirmation.
+7. When a matching cloud library exists, explain its source and request confirmation
+   before calling `loci_pull_cloud_library`.
+8. When no matching cloud library exists, confirm the official documentation entry
+   with the user before calling `loci_add_library`.
+9. Treat cloud pulls, source additions, active synchronization, and deletion as
+   state-changing operations. Perform them only when explicitly requested or after
+   user confirmation.
+10. After Loci obtains the required library, repeat the local tree, search, and read
+    steps. Do not treat `updated_at` alone as proof of version compatibility.
+
+## Context7 fallback
+
+Use Context7 only when Loci is unavailable, fails, has no suitable documentation,
+remains insufficient after a reasonable search, or the user declines the required
+Loci data change. If the user explicitly requests Context7, follow that request
+directly.
+
+When falling back:
+
+1. State briefly why Loci was insufficient and query only the unresolved concepts.
+2. Resolve the library with
+   `npx ctx7@latest library <name> "<user's question>"` unless the user already
+   supplied a valid Context7 library ID.
+3. Choose the closest official or high-reputation match. Prefer a version-specific
+   library ID when the project version is known.
+4. Fetch documentation with
+   `npx ctx7@latest docs <libraryId> "<user's question>"`.
+5. Run a separate `docs` request for distinct concepts, but do not exceed three
+   Context7 CLI requests for one user question.
+6. Never include API keys, passwords, tokens, or other credentials in a query.
+7. If Context7 fails because of quota, report the failure instead of silently
+   answering from memory.
+
+<!-- loci-context7:end -->
+```
+
+Context7 只作为备用来源。Loci 已经回答的内容不再交给 Context7 重复核验，从而减少额度消耗。
+
+## 没有 Context7
+
+如果没有安装 Context7，也没有相关全局规则，复制下面的纯 Loci 模板：
+
+```md
+<!-- loci:start -->
+
+# Technical Documentation with Loci
+
+Use the `loci` MCP server whenever a task depends on current information about a
+library, framework, SDK, API, CLI, configuration, version difference, migration,
+setup process, or library-specific error. Do not rely only on model memory.
+
+Do not use this workflow for ordinary refactoring, business-logic debugging,
+general programming concepts, or code review that does not depend on an external
+technology's current behavior.
+
+## Workflow
+
+1. Identify the relevant technology and the version used by the current project.
+2. Call `loci_list_libraries` to look for an existing local documentation library.
+3. When a local library exists, call `loci_get_library_tree` to inspect one or two
+   directory levels and record its `languages`.
+4. Read clearly relevant files directly. Otherwise call `loci_search_files` with
+   precise terms in the documented language, then call `loci_read_files` for the
+   matched files or complete sections.
+5. If local evidence is sufficient, answer from it, include the relevant
+   `source_url` values, and stop.
+6. If no suitable local library exists, call `loci_list_cloud_libraries`. This is
+   read-only and does not require confirmation.
+7. When a matching cloud library exists, explain its source and request confirmation
+   before calling `loci_pull_cloud_library`.
+8. When no matching cloud library exists, confirm the official documentation entry
+   with the user before calling `loci_add_library`.
+9. Treat cloud pulls, source additions, active synchronization, and deletion as
+   state-changing operations. Perform them only when explicitly requested or after
+   user confirmation.
+10. After Loci obtains the required library, repeat the local tree, search, and read
+    steps. Do not treat `updated_at` alone as proof of version compatibility.
+
+If Loci is unavailable or remains insufficient, explain the limitation. Use another
+official documentation source only when the current project or user instructions
+allow it, and state that a fallback occurred.
+
+<!-- loci:end -->
+```
+
+## 与 Skill 的关系
+
+这两份模板都可以只依赖 Loci MCP，不要求用户安装 `use-loci` Skill，也不负责安装或更新任何 Skill。
+
+如果用户已经安装了适用于当前任务的 Skill，Codex 在用户显式调用或任务与 Skill 描述匹配时，会读取对应的 `SKILL.md` 并执行更具体的工作流。全局 `AGENTS.md` 继续提供稳定的文档查询顺序，两者不需要互相绑定。
+
+## 检查覆盖规则
+
+如果存在 `~/.codex/AGENTS.override.md`，Codex 会优先读取它，并忽略同目录下的普通 `AGENTS.md`。此时应把选定的模板放进 override 文件，或者移除不再需要的 override 文件。
+
+新建 Codex 会话后，可以检查当前规则：
+
+```bash
+codex --ask-for-approval never "说明技术文档的查询流程，以及什么情况下使用 Context7。"
+```
+
+使用组合模板时，预期顺序是 Loci 本地库、Loci 云端发现和获取、Context7 兜底。使用纯 Loci 模板时，不应出现 Context7 步骤。
+
+更多 MCP 命令请查看 [MCP 与数据管理](/cli/commands/integrations)。Codex 对全局与仓库级指令的加载方式，请查看 [Codex AGENTS.md 文档](https://learn.chatgpt.com/docs/agent-configuration/agents-md.md)。
