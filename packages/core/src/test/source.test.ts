@@ -52,7 +52,10 @@ describe('crawlSource', () => {
       }
     })
 
-    expect(result.resolution.discovery).toBe('llms')
+    expect(result.resolution).toMatchObject({
+      discovery: 'llms',
+      iconUrl: 'https://docs.example.com/favicon.ico'
+    })
     expect(beforeBrowserCrawl).not.toHaveBeenCalled()
     expect(fetchPage).not.toHaveBeenCalled()
     expect(documents[0]?.markdown).toBe('# Guide')
