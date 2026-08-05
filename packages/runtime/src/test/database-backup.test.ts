@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createDatabase } from '../database'
+import { createDatabase } from '../database.js'
 
 describe('database backup', () => {
   it('validates and restores all searchable data', () => {

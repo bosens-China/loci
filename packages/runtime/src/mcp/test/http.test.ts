@@ -8,8 +8,8 @@ import type {
   DocumentRecord,
   DocumentSource
 } from '@loci/shared'
-import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from '../http'
-import type { LociMcpServices } from '../server'
+import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from '../http.js'
+import type { LociMcpServices } from '../server.js'
 
 const source: DocumentSource = {
   id: 'lib-vue',

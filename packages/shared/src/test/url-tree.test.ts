@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildUrlTree, getUrlTreeSlice } from '../url-tree'
+import { buildUrlTree, getUrlTreeSlice } from '../url-tree.js'
 
 describe('buildUrlTree', () => {
   it('builds stable folders while keeping database IDs on readable files', () => {

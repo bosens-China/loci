@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CloudAdminClient } from '../cloud-admin-client'
+import { CloudAdminClient } from '../cloud-admin-client.js'
 
 describe('CloudAdminClient', () => {
   it('只向渲染进程返回脱敏会话，并为管理请求附加令牌', async () => {

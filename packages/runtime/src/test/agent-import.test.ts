@@ -4,7 +4,7 @@ import {
   createHttpMcpConnection,
   LOCI_CLI_STDIO_CONNECTION,
   resolvePreferredMcpConnection
-} from '../agent-import'
+} from '../agent-import.js'
 
 describe('Agent MCP 导入命令', () => {
   it('为五种客户端生成本机 HTTP 配置', () => {

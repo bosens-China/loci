@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { resolveLociDataDir } from '../data-path'
+import { resolveLociDataDir } from '../data-path.js'
 
 const originalDataDir = process.env.LOCI_DATA_DIR
 

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppSettings } from '@loci/shared'
 import type { LociDatabase } from '@loci/runtime'
-import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from '../http'
-import { createMcpRuntime } from '../runtime'
-import type { LociMcpServices } from '../server'
+import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from '../http.js'
+import { createMcpRuntime } from '../runtime.js'
+import type { LociMcpServices } from '../server.js'
 
-vi.mock('../http', () => ({
+vi.mock('../http.js', () => ({
   startMcpHttpServer: vi.fn(),
   isLociMcpAvailable: vi.fn().mockResolvedValue(false)
 }))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getNextScheduledRun, normalizeCronSchedule } from '../schedule'
+import { getNextScheduledRun, normalizeCronSchedule } from '../schedule.js'
 
 describe('normalizeCronSchedule', () => {
   it('normalizes five-field Linux Cron schedules and exposes the next run', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findBestPassage, readMarkdownSection, sliceContent } from '../content'
+import { findBestPassage, readMarkdownSection, sliceContent } from '../content.js'
 
 describe('findBestPassage', () => {
   it('returns the best matching paragraph with its nearest heading', () => {

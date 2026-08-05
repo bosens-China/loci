@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CloudLibraryService } from '../cloud-library-service'
-import { createDatabase, type LociDatabase } from '../database'
+import { CloudLibraryService } from '../cloud-library-service.js'
+import { createDatabase, type LociDatabase } from '../database.js'
 
 describe('CloudLibraryService', () => {
   let database: LociDatabase | undefined

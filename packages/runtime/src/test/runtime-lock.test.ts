@@ -8,7 +8,7 @@ import {
   acquireRuntimeLock,
   readRuntimeLock,
   RuntimeLockedError
-} from '../runtime-lock'
+} from '../runtime-lock.js'
 
 const directories: string[] = []
 

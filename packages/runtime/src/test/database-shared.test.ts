@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createDatabase } from '../database'
+import { createDatabase } from '../database.js'
 
 describe('shared database', () => {
   it('makes CLI writes visible to an already-open desktop connection', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeServerUrl } from '../server-url'
+import { normalizeServerUrl } from '../server-url.js'
 
 describe('normalizeServerUrl', () => {
   it('生成可稳定比较的 HTTP 后端地址', () => {
