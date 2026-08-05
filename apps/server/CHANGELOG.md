@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.1](https://github.com/bosens-China/loci/compare/server-v1.3.0...server-v1.3.1) (2026-08-05)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.5.0
+
 ## [1.3.0](https://github.com/bosens-China/loci/compare/server-v1.2.1...server-v1.3.0) (2026-08-05)
 
 
