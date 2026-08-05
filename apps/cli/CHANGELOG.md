@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.7.0](https://github.com/bosens-China/loci/compare/cli-v1.6.1...cli-v1.7.0) (2026-08-05)
+
+
+### Features
+
+* 优化 CLI Admin 与共享设置交互 ([9f0fdb6](https://github.com/bosens-China/loci/commit/9f0fdb651e7c3fa0a6fcaa21043902e2b160057a))
+* 优化 CLI 文档源与工具交互 ([baa5283](https://github.com/bosens-China/loci/commit/baa5283ac799d36544df999ffb3a9bdf057c14d9))
+* 扩展 CLI 交互基础能力 ([bea06ed](https://github.com/bosens-China/loci/commit/bea06ed471d9316b6a181fd0b3ea20890a710a6b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.6.0
+    * @loci/runtime bumped to 1.3.2
+    * @loci/shared bumped to 1.9.0
+
 ## [1.6.1](https://github.com/bosens-China/loci/compare/cli-v1.6.0...cli-v1.6.1) (2026-08-05)
 
 
