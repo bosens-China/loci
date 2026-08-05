@@ -77,7 +77,7 @@ describe('createDatabase', () => {
         browserConcurrency: 5,
         maxRetries: 3,
         batchIntervalSeconds: 0,
-        serverUrl: 'http://localhost:7001'
+        serverUrl: 'https://loci.xiaowo.live'
       })
       expect(
         database.saveSettings({
@@ -139,6 +139,39 @@ describe('createDatabase', () => {
     future.close()
 
     expect(() => createDatabase(filename)).toThrow('请升级 Loci 后重试')
+    rmSync(directory, { recursive: true, force: true })
+  })
+
+  it('区分生产默认地址、开发覆盖与用户自定义地址', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-server-url-'))
+    const filename = join(directory, 'loci.sqlite')
+    const development = createDatabase(filename, {
+      serverUrl: 'http://localhost:7001',
+      overrideServerUrl: true
+    })
+    expect(development.getSettings().serverUrl).toBe('http://localhost:7001')
+    development.close()
+
+    const production = createDatabase(filename)
+    expect(production.getSettings().serverUrl).toBe('https://loci.xiaowo.live')
+    production.saveSettings({
+      ...production.getSettings(),
+      serverUrl: 'https://custom.example.com'
+    })
+    production.close()
+
+    const overridden = createDatabase(filename, {
+      serverUrl: 'http://localhost:7001',
+      overrideServerUrl: true
+    })
+    expect(overridden.getSettings().serverUrl).toBe('http://localhost:7001')
+    overridden.saveSettings({ ...overridden.getSettings(), theme: 'dark' })
+    overridden.close()
+
+    const reopened = createDatabase(filename)
+    expect(reopened.getSettings().serverUrl).toBe('https://custom.example.com')
+    expect(reopened.getSettings().theme).toBe('dark')
+    reopened.close()
     rmSync(directory, { recursive: true, force: true })
   })
 
@@ -210,7 +243,8 @@ describe('createDatabase', () => {
         httpConcurrency: 9,
         browserConcurrency: 5,
         maxRetries: 3,
-        batchIntervalSeconds: 0
+        batchIntervalSeconds: 0,
+        serverUrl: 'https://loci.xiaowo.live'
       })
       expect(
         database.createSource({

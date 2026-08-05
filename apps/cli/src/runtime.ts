@@ -55,7 +55,8 @@ export function createCliRuntime(): CliRuntime {
     : undefined
   let database: LociDatabase
   try {
-    database = createDatabase(databasePath)
+    const serverUrl = process.env.LOCI_SERVER_URL?.trim()
+    database = createDatabase(databasePath, serverUrl ? { serverUrl, overrideServerUrl: true } : {})
   } finally {
     migrationLock?.release()
   }

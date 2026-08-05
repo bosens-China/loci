@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { normalizeCronSchedule } from '@loci/shared'
+import { normalizeCronSchedule, PRODUCTION_SERVER_URL } from '@loci/shared'
 import type { AppSettings, CreateSourceInput, DocumentRecord, DocumentSource } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
 import { normalizeScopePath } from '@loci/core'
@@ -154,7 +154,18 @@ export function migrateDatabase(database: DatabaseSync): void {
   if (addedCrawlDefaults) {
     database.exec('UPDATE app_settings SET browser_concurrency = 5 WHERE browser_concurrency = 2')
   }
-  addColumn(database, 'app_settings', 'server_url', "TEXT NOT NULL DEFAULT 'http://localhost:7001'")
+  addColumn(
+    database,
+    'app_settings',
+    'server_url',
+    `TEXT NOT NULL DEFAULT '${PRODUCTION_SERVER_URL}'`
+  )
+  addColumn(
+    database,
+    'app_settings',
+    'server_url_customized',
+    'INTEGER NOT NULL DEFAULT 0 CHECK (server_url_customized IN (0, 1))'
+  )
   addColumn(
     database,
     'document_sources',

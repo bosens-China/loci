@@ -7,6 +7,7 @@ import { CliError } from '../../errors.js'
 import { createCliRuntime } from '../../runtime.js'
 
 const originalDataDir = process.env.LOCI_DATA_DIR
+const originalServerUrl = process.env.LOCI_SERVER_URL
 let dataDir = ''
 
 beforeEach(() => {
@@ -20,9 +21,18 @@ afterEach(() => {
   rmSync(dataDir, { recursive: true, force: true })
   if (originalDataDir === undefined) delete process.env.LOCI_DATA_DIR
   else process.env.LOCI_DATA_DIR = originalDataDir
+  if (originalServerUrl === undefined) delete process.env.LOCI_SERVER_URL
+  else process.env.LOCI_SERVER_URL = originalServerUrl
 })
 
 describe('文档源最短输入', () => {
+  it('允许本地开发覆盖默认 Server 地址', async () => {
+    process.env.LOCI_SERVER_URL = 'http://localhost:7001'
+    const runtime = createCliRuntime()
+    expect(runtime.database.getSettings().serverUrl).toBe('http://localhost:7001')
+    await runtime.close()
+  })
+
   it('只提供 URL 时采用共享名称和抓取默认值', async () => {
     await createProgram().parseAsync(
       ['source', 'add', 'https://rspress.rs/guide/introduction.html'],

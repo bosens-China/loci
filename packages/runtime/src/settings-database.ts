@@ -1,5 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite'
-import type { AppSettings } from '@loci/shared'
+import {
+  DEFAULT_APP_SETTINGS,
+  DEVELOPMENT_SERVER_URL,
+  normalizeServerUrl,
+  PRODUCTION_SERVER_URL,
+  type AppSettings
+} from '@loci/shared'
 import { validateSettings } from './database-values.js'
 
 export interface SettingsDatabase {
@@ -7,7 +13,47 @@ export interface SettingsDatabase {
   saveSettings: (settings: AppSettings) => AppSettings
 }
 
-export function createSettingsDatabase(database: DatabaseSync): SettingsDatabase {
+export interface SettingsInitializationOptions {
+  serverUrl?: string
+  overrideServerUrl?: boolean
+}
+
+/** 初始化新设置，并将旧正式版的本地默认地址迁移到生产域名。 */
+export function initializeSettings(
+  database: DatabaseSync,
+  options: SettingsInitializationOptions = {}
+): void {
+  const serverUrl = normalizeServerUrl(options.serverUrl ?? DEFAULT_APP_SETTINGS.serverUrl)
+  database
+    .prepare(
+      `INSERT OR IGNORE INTO app_settings
+       (id, mcp_port, theme, http_concurrency, browser_concurrency, max_retries,
+        batch_interval_seconds, server_url, server_url_customized)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, 0)`
+    )
+    .run(
+      DEFAULT_APP_SETTINGS.mcpPort,
+      DEFAULT_APP_SETTINGS.theme,
+      DEFAULT_APP_SETTINGS.httpConcurrency,
+      DEFAULT_APP_SETTINGS.browserConcurrency,
+      DEFAULT_APP_SETTINGS.maxRetries,
+      DEFAULT_APP_SETTINGS.batchIntervalSeconds,
+      serverUrl
+    )
+  if (!options.overrideServerUrl && serverUrl === PRODUCTION_SERVER_URL) {
+    database
+      .prepare(
+        `UPDATE app_settings SET server_url = ?
+         WHERE id = 1 AND server_url = ? AND server_url_customized = 0`
+      )
+      .run(PRODUCTION_SERVER_URL, DEVELOPMENT_SERVER_URL)
+  }
+}
+
+export function createSettingsDatabase(
+  database: DatabaseSync,
+  serverUrlOverride?: string
+): SettingsDatabase {
   return {
     getSettings: () => {
       const row = database
@@ -23,16 +69,27 @@ export function createSettingsDatabase(database: DatabaseSync): SettingsDatabase
         browserConcurrency: Number(row.browser_concurrency),
         maxRetries: Number(row.max_retries),
         batchIntervalSeconds: Number(row.batch_interval_seconds),
-        serverUrl: row.server_url
+        serverUrl: serverUrlOverride ?? row.server_url
       }
     },
     saveSettings: (settings) => {
       const normalized = validateSettings(settings)
+      const persistedServerUrl = serverUrlOverride
+        ? (
+            database
+              .prepare('SELECT server_url FROM app_settings WHERE id = 1')
+              .get() as unknown as {
+              server_url: string
+            }
+          ).server_url
+        : normalized.serverUrl
       database
         .prepare(
           `UPDATE app_settings
            SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?,
-               max_retries = ?, batch_interval_seconds = ?, server_url = ?
+               max_retries = ?, batch_interval_seconds = ?,
+               server_url_customized = CASE WHEN server_url = ? THEN server_url_customized ELSE 1 END,
+               server_url = ?
            WHERE id = 1`
         )
         .run(
@@ -42,7 +99,8 @@ export function createSettingsDatabase(database: DatabaseSync): SettingsDatabase
           normalized.browserConcurrency,
           normalized.maxRetries,
           normalized.batchIntervalSeconds,
-          normalized.serverUrl
+          persistedServerUrl,
+          persistedServerUrl
         )
       return normalized
     }

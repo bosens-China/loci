@@ -111,6 +111,9 @@ export interface CloudSyncJob {
   error: string | null
 }
 
+export const PRODUCTION_SERVER_URL = 'https://loci.xiaowo.live'
+export const DEVELOPMENT_SERVER_URL = 'http://localhost:7001'
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   mcpPort: 37373,
   theme: 'auto',
@@ -118,7 +121,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   browserConcurrency: 5,
   maxRetries: 3,
   batchIntervalSeconds: 0,
-  serverUrl: 'http://localhost:7001'
+  serverUrl: PRODUCTION_SERVER_URL
 }
 
 export type SourceStatus = 'healthy' | 'syncing' | 'attention'

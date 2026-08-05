@@ -28,7 +28,7 @@ import type {
   DocumentSource,
   UpdateSourceInput
 } from '@loci/shared'
-import { normalizeCronSchedule } from '@loci/shared'
+import { DEVELOPMENT_SERVER_URL, normalizeCronSchedule } from '@loci/shared'
 import { runSourceCrawl } from './crawl/source'
 import { CrawlControl } from './crawl/control'
 import type { LociMcpServices } from '@loci/runtime'
@@ -74,7 +74,15 @@ if (isPrimaryInstance)
       ? acquireMigrationLock('桌面端')
       : undefined
     try {
-      database = createDatabase(databasePath)
+      const serverUrl = process.env.LOCI_SERVER_URL?.trim()
+      database = createDatabase(
+        databasePath,
+        serverUrl
+          ? { serverUrl, overrideServerUrl: true }
+          : app.isPackaged
+            ? {}
+            : { serverUrl: DEVELOPMENT_SERVER_URL }
+      )
     } finally {
       migrationLock?.release()
     }

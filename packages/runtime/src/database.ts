@@ -18,9 +18,14 @@ import type {
   DocumentSource,
   UpdateSourceInput
 } from '@loci/shared'
-import { DEFAULT_APP_SETTINGS } from '@loci/shared'
+import { DEFAULT_APP_SETTINGS, normalizeServerUrl, PRODUCTION_SERVER_URL } from '@loci/shared'
 import { createCloudLibraryDatabase, type CloudLibraryDatabase } from './cloud-library-database.js'
-import { createSettingsDatabase, type SettingsDatabase } from './settings-database.js'
+import {
+  createSettingsDatabase,
+  initializeSettings,
+  type SettingsDatabase,
+  type SettingsInitializationOptions
+} from './settings-database.js'
 import {
   exportDatabaseBackup,
   importDatabaseBackup,
@@ -94,7 +99,7 @@ export interface LociDatabase extends CloudLibraryDatabase, SettingsDatabase {
   close: () => void
 }
 
-export const LOCI_SCHEMA_VERSION = 1
+export const LOCI_SCHEMA_VERSION = 2
 
 export function databaseNeedsMigration(filename: string): boolean {
   if (filename === ':memory:' || !existsSync(filename)) return true
@@ -174,14 +179,20 @@ const schema = `
     batch_interval_seconds INTEGER NOT NULL DEFAULT 0 CHECK (
       batch_interval_seconds = 0 OR batch_interval_seconds BETWEEN 100 AND 3000
     ),
-    server_url TEXT NOT NULL DEFAULT 'http://localhost:7001'
+    server_url TEXT NOT NULL DEFAULT '${PRODUCTION_SERVER_URL}',
+    server_url_customized INTEGER NOT NULL DEFAULT 0 CHECK (server_url_customized IN (0, 1))
   ) STRICT;
-
-  INSERT OR IGNORE INTO app_settings (id, mcp_port, theme)
-  VALUES (1, ${DEFAULT_APP_SETTINGS.mcpPort}, '${DEFAULT_APP_SETTINGS.theme}');
 `
 
-export function createDatabase(filename: string): LociDatabase {
+export type CreateDatabaseOptions = SettingsInitializationOptions
+
+export function createDatabase(
+  filename: string,
+  options: CreateDatabaseOptions = {}
+): LociDatabase {
+  const serverUrlOverride = options.overrideServerUrl
+    ? normalizeServerUrl(options.serverUrl ?? DEFAULT_APP_SETTINGS.serverUrl)
+    : undefined
   const database = new DatabaseSync(filename, {
     timeout: 5000,
     enableForeignKeyConstraints: true
@@ -198,6 +209,7 @@ export function createDatabase(filename: string): LociDatabase {
     }
     database.exec(schema)
     migrateDatabase(database)
+    initializeSettings(database, options)
     database.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION}`)
   } catch (error) {
     database.close()
@@ -207,7 +219,7 @@ export function createDatabase(filename: string): LociDatabase {
   return {
     schemaVersion: LOCI_SCHEMA_VERSION,
     ...createCloudLibraryDatabase(database),
-    ...createSettingsDatabase(database),
+    ...createSettingsDatabase(database, serverUrlOverride),
     listSources: () => {
       const rows = database
         .prepare(

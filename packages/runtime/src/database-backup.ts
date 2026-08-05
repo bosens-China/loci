@@ -238,7 +238,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
       .prepare(
         `UPDATE app_settings
          SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?,
-             max_retries = ?, batch_interval_seconds = ?, server_url = ?
+             max_retries = ?, batch_interval_seconds = ?, server_url = ?,
+             server_url_customized = ?
          WHERE id = 1`
       )
       .run(
@@ -248,7 +249,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         settings.browser_concurrency,
         settings.max_retries ?? DEFAULT_APP_SETTINGS.maxRetries,
         settings.batch_interval_seconds ?? DEFAULT_APP_SETTINGS.batchIntervalSeconds,
-        normalizeServerUrl(settings.server_url ?? DEFAULT_APP_SETTINGS.serverUrl)
+        normalizeServerUrl(settings.server_url ?? DEFAULT_APP_SETTINGS.serverUrl),
+        settings.server_url ? 1 : 0
       )
     database.exec('COMMIT')
     return { sources: sources.length, documents: documents.length }
