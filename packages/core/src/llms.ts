@@ -1,5 +1,5 @@
 import { fromMarkdown } from 'mdast-util-from-markdown'
-import { fetchWithRetry, normalizeUrl, runCrawlQueue } from './crawl.js'
+import { fetchWithRetry, normalizeUrl, parsePage, runCrawlQueue } from './crawl.js'
 import { isUrlInScope } from './scope.js'
 import type { CrawledPage, CrawlProgress, FetchOptions, HttpCrawlOptions } from './types.js'
 
@@ -75,16 +75,78 @@ export async function discoverLlmsEntries(
     const llmsUrl = new URL('/llms.txt', firstUrl).toString()
     const response = await fetchWithRetry(llmsUrl, options)
     if (!response.ok) return []
-    return parseLlmsTxt(
-      await response.text(),
-      response.url || llmsUrl,
-      hostname,
-      scopePath,
-      pageLimit
-    )
+    const manifestUrl = normalizeUrl(response.url || llmsUrl)
+    const entries = parseLlmsTxt(await response.text(), manifestUrl, hostname, scopePath, pageLimit)
+    return expandLlmsManifests(entries, hostname, scopePath, pageLimit, options, {
+      depth: 0,
+      visited: new Set([manifestUrl])
+    })
   } catch {
     return []
   }
+}
+
+interface ManifestExpansionState {
+  depth: number
+  visited: Set<string>
+}
+
+/** 展开站点级 llms.txt 指向的库级清单，避免把清单本身误存成正文。 */
+async function expandLlmsManifests(
+  entries: readonly LlmsEntry[],
+  hostname: string,
+  scopePath: string,
+  limit: number,
+  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'>,
+  state: ManifestExpansionState
+): Promise<LlmsEntry[]> {
+  const expanded: LlmsEntry[] = []
+  for (const entry of entries) {
+    if (expanded.length >= limit) break
+    if (!isLlmsManifest(entry.url) || state.depth >= 3 || state.visited.has(entry.url)) {
+      if (!state.visited.has(entry.url)) expanded.push(entry)
+      continue
+    }
+
+    state.visited.add(entry.url)
+    try {
+      const response = await fetchWithRetry(entry.url, options)
+      if (!response.ok) {
+        expanded.push(entry)
+        continue
+      }
+      const manifestUrl = normalizeUrl(response.url || entry.url)
+      state.visited.add(manifestUrl)
+      const nestedEntries = parseLlmsTxt(
+        await response.text(),
+        manifestUrl,
+        hostname,
+        scopePath,
+        Number.POSITIVE_INFINITY
+      )
+      if (!nestedEntries.length) {
+        expanded.push(entry)
+        continue
+      }
+      expanded.push(
+        ...(await expandLlmsManifests(
+          nestedEntries,
+          hostname,
+          scopePath,
+          limit - expanded.length,
+          options,
+          { depth: state.depth + 1, visited: state.visited }
+        ))
+      )
+    } catch {
+      expanded.push(entry)
+    }
+  }
+  return expanded.slice(0, limit)
+}
+
+function isLlmsManifest(input: string): boolean {
+  return new URL(input).pathname.endsWith('/llms.txt')
 }
 
 function normalizeMarkdown(markdown: string): string {
@@ -104,7 +166,7 @@ export async function fetchMarkdownPage(
   const body = await response.text()
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
   if (contentType.includes('text/html') && /^\s*<!?(?:doctype|html)\b/iu.test(body)) {
-    return { url, status: response.status }
+    return { url, status: response.status, page: parsePage(body, url) }
   }
   return {
     url,

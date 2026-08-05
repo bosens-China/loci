@@ -1,6 +1,14 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, type Mock } from 'vitest'
 import { crawlSource } from '../source.js'
 import type { CrawledDocument, CrawledPage } from '../types.js'
+
+type FetchMock = Mock<typeof fetch> & typeof fetch
+
+function createFetchMock(
+  implementation?: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>
+): FetchMock {
+  return vi.fn(implementation) as unknown as FetchMock
+}
 
 function renderedPage(markdown: string): CrawledPage {
   return {
@@ -20,7 +28,7 @@ describe('crawlSource', () => {
     const documents: CrawledDocument[] = []
     const fetchPage = vi.fn(async () => renderedPage('browser'))
     const beforeBrowserCrawl = vi.fn(async () => undefined)
-    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+    const fetchImpl = createFetchMock(async (input) => {
       const url = String(input)
       if (url.endsWith('/llms.txt')) {
         return new Response('- [Guide](/guide.md)', { status: 200 })
@@ -50,9 +58,75 @@ describe('crawlSource', () => {
     expect(documents[0]?.markdown).toBe('# Guide')
   })
 
+  it('展开站点清单中的库级 llms.txt', async () => {
+    const documents: CrawledDocument[] = []
+    const fetchImpl = createFetchMock(async (input) => {
+      const url = String(input)
+      if (url === 'https://docs.example.com/llms.txt') {
+        return new Response('- [Router](/router/latest/llms.txt)\n- [Other](/query/llms.txt)')
+      }
+      if (url === 'https://docs.example.com/router/latest/llms.txt') {
+        return new Response(
+          '- [Self](/router/latest/llms.txt)\n- [Overview](/router/latest/overview.md)\n- [Guide](/router/latest/guide.md)'
+        )
+      }
+      return new Response(`# ${url.endsWith('overview.md') ? 'Overview' : 'Guide'}`, {
+        headers: { 'content-type': 'text/markdown' }
+      })
+    })
+
+    await crawlSource({
+      firstUrl: 'https://docs.example.com/router/latest/start',
+      hostname: 'docs.example.com',
+      scopePath: '/router',
+      pageLimit: 10,
+      fetchMode: 'auto',
+      fetch: fetchImpl,
+      onDocument: (document) => {
+        documents.push(document)
+      }
+    })
+
+    expect(documents.map((document) => document.url)).toEqual([
+      'https://docs.example.com/router/latest/overview.md',
+      'https://docs.example.com/router/latest/guide.md'
+    ])
+    expect(documents.map((document) => document.markdown)).toEqual(['# Overview', '# Guide'])
+  })
+
+  it('把清单中的 HTML 页面继续转换为 Markdown', async () => {
+    const documents: CrawledDocument[] = []
+    const fetchImpl = createFetchMock(async (input) => {
+      if (String(input).endsWith('/llms.txt')) return new Response('- [Home](/home)')
+      return new Response(
+        '<html lang="zh"><title>首页</title><main><h1>文档首页</h1></main></html>',
+        {
+          headers: { 'content-type': 'text/html; charset=utf-8' }
+        }
+      )
+    })
+
+    await crawlSource({
+      firstUrl: 'https://docs.example.com/start',
+      hostname: 'docs.example.com',
+      pageLimit: 10,
+      fetchMode: 'auto',
+      fetch: fetchImpl,
+      onDocument: (document) => {
+        documents.push(document)
+      }
+    })
+
+    expect(documents[0]).toMatchObject({
+      title: '首页',
+      language: 'zh',
+      markdown: '# 文档首页'
+    })
+  })
+
   it('自动模式允许 HTTP 失败后继续使用浏览器结果', async () => {
     const documents: CrawledDocument[] = []
-    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+    const fetchImpl = createFetchMock(async (input) => {
       const url = String(input)
       if (url.endsWith('/llms.txt') || url.endsWith('/sitemap.xml')) {
         return new Response('', { status: 404 })
@@ -82,7 +156,7 @@ describe('crawlSource', () => {
   })
 
   it('浏览器模式在发起网络请求前检查浏览器运行时', async () => {
-    const fetchImpl = vi.fn<typeof fetch>()
+    const fetchImpl = createFetchMock()
     const beforeBrowserCrawl = vi.fn(async () => {
       throw new Error('Browser missing')
     })
@@ -104,7 +178,7 @@ describe('crawlSource', () => {
   })
 
   it('双路均失败时保留各自的底层原因', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+    const fetchImpl = createFetchMock(async (input) => {
       if (String(input).endsWith('/llms.txt')) return new Response('', { status: 404 })
       throw new Error('HTTP blocked')
     })
