@@ -28,11 +28,11 @@ describe('llms.txt', () => {
     )
     await expect(
       discoverLlmsEntries('https://docs.example.com/guide/start', 'docs.example.com', '/', 10, {
-        fetchImpl,
-        sleep: async () => undefined
+        fetchImpl
       })
     ).resolves.toEqual([{ title: 'Guide', url: 'https://docs.example.com/guide/index.md' }])
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://docs.example.com/llms.txt')
+    expect(fetchImpl.mock.calls[0]?.[1]).toEqual({ redirect: 'follow' })
   })
 
   it('直接保存 Markdown，不执行 HTML 转换', async () => {
@@ -42,7 +42,7 @@ describe('llms.txt', () => {
     )
     const page = await fetchMarkdownPage(
       { title: 'Guide', url: 'https://docs.example.com/guide.md' },
-      { fetchImpl, sleep: async () => undefined }
+      { fetchImpl }
     )
     expect(page.page).toEqual({
       title: 'Guide',
@@ -52,24 +52,28 @@ describe('llms.txt', () => {
     })
   })
 
-  it('把清单作为权威页面集合', async () => {
+  it('忽略通用限速配置，一次性请求清单内的全部页面', async () => {
     const documents: string[] = []
+    const pending = new Map<string, (response: Response) => void>()
     const fetchImpl = vi.fn<typeof fetch>(
-      async (input) =>
-        new Response(`# ${String(input)}`, {
-          status: 200,
-          headers: { 'content-type': 'text/markdown' }
+      (input) =>
+        new Promise<Response>((resolve) => {
+          pending.set(String(input), resolve)
         })
     )
-    const progress = await crawlLlmsSource(
+    const sleep = vi.fn(async () => undefined)
+    const waitIfPaused = vi.fn(async () => undefined)
+    const crawlPromise = crawlLlmsSource(
       {
         firstUrl: 'https://docs.example.com/start',
         hostname: 'docs.example.com',
         scopePath: '/guide',
         pageLimit: 2,
         concurrency: 1,
+        batchIntervalMs: 100_000,
         fetch: fetchImpl,
-        sleep: async () => undefined,
+        sleep,
+        waitIfPaused,
         onDocument: (document) => {
           documents.push(document.url)
         }
@@ -79,11 +83,28 @@ describe('llms.txt', () => {
         { title: 'Two', url: 'https://docs.example.com/guide/two.md' }
       ]
     )
+
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2))
+    for (const [url, resolve] of pending) {
+      resolve(
+        new Response(`# ${url}`, {
+          status: 200,
+          headers: { 'content-type': 'text/markdown' }
+        })
+      )
+    }
+    const progress = await crawlPromise
+
     expect(documents).toEqual([
       'https://docs.example.com/guide/one.md',
       'https://docs.example.com/guide/two.md'
     ])
     expect(progress).toMatchObject({ queued: 2, succeeded: 2, failed: 0 })
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(fetchImpl.mock.calls.map((call) => call[1])).toEqual([
+      { redirect: 'follow' },
+      { redirect: 'follow' }
+    ])
+    expect(sleep).not.toHaveBeenCalled()
+    expect(waitIfPaused).not.toHaveBeenCalled()
   })
 })

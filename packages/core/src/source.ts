@@ -37,7 +37,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
     options.hostname,
     scopePath,
     options.pageLimit,
-    { fetchImpl: options.fetch, maxRetries: options.maxRetries, sleep: options.sleep }
+    { fetchImpl: options.fetch }
   )
   if (llmsEntries.length) {
     const resolution: SourceResolution = {

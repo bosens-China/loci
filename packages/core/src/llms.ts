@@ -1,5 +1,5 @@
 import { fromMarkdown } from 'mdast-util-from-markdown'
-import { fetchWithRetry, normalizeUrl, parsePage, runCrawlQueue } from './crawl.js'
+import { normalizeUrl, parsePage, runCrawlQueue } from './crawl.js'
 import { isUrlInScope } from './scope.js'
 import type { CrawledPage, CrawlProgress, FetchOptions, HttpCrawlOptions } from './types.js'
 
@@ -7,6 +7,8 @@ export interface LlmsEntry {
   title: string
   url: string
 }
+
+type LlmsFetchOptions = Pick<FetchOptions, 'fetchImpl'>
 
 interface MarkdownNode {
   type: string
@@ -69,11 +71,11 @@ export async function discoverLlmsEntries(
   hostname: string,
   scopePath: string,
   pageLimit: number,
-  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'> = {}
+  options: LlmsFetchOptions = {}
 ): Promise<LlmsEntry[]> {
   try {
     const llmsUrl = new URL('/llms.txt', firstUrl).toString()
-    const response = await fetchWithRetry(llmsUrl, options)
+    const response = await fetchLlmsFile(llmsUrl, options)
     if (!response.ok) return []
     const manifestUrl = normalizeUrl(response.url || llmsUrl)
     const entries = parseLlmsTxt(await response.text(), manifestUrl, hostname, scopePath, pageLimit)
@@ -97,7 +99,7 @@ async function expandLlmsManifests(
   hostname: string,
   scopePath: string,
   limit: number,
-  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'>,
+  options: LlmsFetchOptions,
   state: ManifestExpansionState
 ): Promise<LlmsEntry[]> {
   const expanded: LlmsEntry[] = []
@@ -110,7 +112,7 @@ async function expandLlmsManifests(
 
     state.visited.add(entry.url)
     try {
-      const response = await fetchWithRetry(entry.url, options)
+      const response = await fetchLlmsFile(entry.url, options)
       if (!response.ok) {
         expanded.push(entry)
         continue
@@ -156,11 +158,16 @@ function normalizeMarkdown(markdown: string): string {
     .trim()
 }
 
+/** llms.txt 及其静态资源直接请求，不应用网页抓取的超时、重试和退避策略。 */
+function fetchLlmsFile(url: string, options: LlmsFetchOptions): Promise<Response> {
+  return (options.fetchImpl ?? fetch)(url, { redirect: 'follow' })
+}
+
 export async function fetchMarkdownPage(
   entry: LlmsEntry,
-  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'> = {}
+  options: LlmsFetchOptions = {}
 ): Promise<CrawledPage> {
-  const response = await fetchWithRetry(entry.url, options)
+  const response = await fetchLlmsFile(entry.url, options)
   const url = normalizeUrl(response.url || entry.url)
   if (!response.ok) return { url, status: response.status }
   const body = await response.text()
@@ -194,14 +201,14 @@ export function crawlLlmsSource(
     firstUrl: first.url,
     firstNodeId: options.firstNodeId ?? options.firstUrl,
     initialUrls: [],
-    concurrency: options.concurrency ?? 9,
+    concurrency: selectedEntries.length,
+    batchIntervalMs: undefined,
+    waitIfPaused: undefined,
     fetchMode: 'http',
     sitemapUrls: selectedEntries.slice(1).map((entry) => entry.url),
     fetchPage: (url) =>
       fetchMarkdownPage(entryByUrl.get(url) ?? { title: new URL(url).pathname, url }, {
-        fetchImpl: options.fetch,
-        maxRetries: options.maxRetries,
-        sleep: options.sleep
+        fetchImpl: options.fetch
       })
   })
 }
