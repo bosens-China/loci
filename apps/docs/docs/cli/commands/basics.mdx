@@ -126,3 +126,5 @@ loci config list
 ```bash
 loci config set http-concurrency 8
 ```
+
+省略设置名和值时，CLI 会显示每项当前值；输入时会带入当前值，并在字段内校验端口、并发数、重试次数和批次间隔的合法范围。批次间隔输入过程中会实时换算为分钟。

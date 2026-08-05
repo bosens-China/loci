@@ -83,6 +83,8 @@ loci mcp config --transport http
 loci mcp configure codex
 ```
 
+交互终端会在写入前展示目标客户端、传输方式和即将执行的配置命令。确认后才会修改客户端用户配置；可信的自动化环境可以使用 `--yes` 跳过确认。
+
 ## 数据备份与清理
 
 数据命令会操作与桌面应用共用的本地数据。导入和清理前建议先执行导出备份。
@@ -106,6 +108,8 @@ loci data export
 ```bash
 loci data import ./backups/loci-2026-08-04.json
 ```
+
+省略文件参数时会打开带补全的路径选择器，并只接受实际存在的文件。读取成功后仍会先展示备份中的文档源和文档数量，再确认覆盖本地数据。
 
 ### `loci data clear-documents`
 

@@ -27,7 +27,7 @@ loci source add https://rspress.rs/guide/introduction.html
 | `--http-concurrency <number>`    | 默认继承共享的 HTTP 并发设置。                                     |
 | `--browser-concurrency <number>` | 默认继承共享的浏览器并发设置。                                     |
 
-只运行 `loci source add` 时，CLI 会在交互终端中打开向导；非交互环境应显式提供 URL。创建命令只保存配置，不会自动开始抓取。
+只运行 `loci source add` 时，CLI 会在交互终端中打开向导：先输入 URL，再确认自动生成的名称、抓取方式、页面上限和收录范围。提交前会展示配置摘要，并询问是否立即开始第一次同步。非交互环境应显式提供 URL，且只保存配置，不自动抓取。
 
 ### `loci source sync [source]`
 
@@ -60,6 +60,8 @@ loci source list
 ```bash
 loci source update rspress --page-limit 300
 ```
+
+交互式更新同样从 URL 开始，只展示可用的收录路径，并在保存前列出实际变化。修改 URL 时会提示现有文档需要重新同步，并可选择保存后立即同步。
 
 ### `loci source runs [source]`
 
@@ -122,5 +124,7 @@ loci document search "部署配置"
 ```bash
 loci document read a1b2c3d4
 ```
+
+省略文档参数时会打开可搜索选择器，可以按标题、文档源或 URL 路径筛选全部文档。
 
 需要使用 Server 上预先发布的公开文档时，查看[云端文档库](/cli/commands/cloud-library)。
