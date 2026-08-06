@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.8.1](https://github.com/bosens-China/loci/compare/cli-v1.8.0...cli-v1.8.1) (2026-08-06)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.8.0
+    * @loci/runtime bumped to 1.4.1
+    * @loci/shared bumped to 1.10.1
+
 ## [1.8.0](https://github.com/bosens-China/loci/compare/cli-v1.7.0...cli-v1.8.0) (2026-08-06)
 
 
