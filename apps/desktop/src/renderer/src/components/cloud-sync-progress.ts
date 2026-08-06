@@ -1,7 +1,7 @@
 import type { CloudSyncJob } from '@loci/shared'
 
 export function isCloudSyncJobActive(job: CloudSyncJob): boolean {
-  return job.status === 'queued' || job.status === 'running'
+  return job.status === 'queued' || job.status === 'running' || job.status === 'canceling'
 }
 
 export function getCloudSyncPercent(job: CloudSyncJob): number {

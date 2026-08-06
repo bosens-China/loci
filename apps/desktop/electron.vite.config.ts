@@ -12,7 +12,7 @@ export default defineConfig({
     },
     build: {
       externalizeDeps: {
-        exclude: ['@loci/core', '@loci/runtime', '@loci/shared']
+        exclude: ['@loci/core', '@loci/runtime', '@loci/shared', 'semver']
       }
     }
   },

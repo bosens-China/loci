@@ -1,5 +1,6 @@
 import type { Command } from 'commander'
 import { runWithRuntime } from '../command-runtime.js'
+import { saveRecentResource } from '../preferences.js'
 import { resolveDocument, resolveSource } from '../resources.js'
 import { askText, printTable } from '../ui.js'
 
@@ -34,7 +35,7 @@ export function registerDocumentCommands(program: Command): void {
     .description('按 URL 路径展示文档目录')
     .action((reference: string | undefined) =>
       runWithRuntime('文档目录', async (runtime) => {
-        const source = await resolveSource(runtime, reference)
+        const source = await resolveSource(runtime, reference, { preferenceKey: 'document-tree' })
         const documents = runtime.database
           .listDocuments()
           .filter((item) => item.sourceId === source.id)
@@ -44,6 +45,7 @@ export function registerDocumentCommands(program: Command): void {
           const path = new URL(item.url).pathname || '/'
           process.stdout.write(`  └─ ${path}  ${item.title}\n`)
         }
+        saveRecentResource(runtime.database, 'document-tree', source.id)
         return `目录中有 ${documents.length} 篇文档`
       })
     )
@@ -70,6 +72,7 @@ export function registerDocumentCommands(program: Command): void {
       runWithRuntime('读取文档', async (runtime) => {
         const item = await resolveDocument(runtime, reference)
         process.stdout.write(`\n# ${item.title}\n\n来源：${item.url}\n\n${item.content}\n`)
+        saveRecentResource(runtime.database, 'document-read', item.id)
         return `已读取“${item.title}”`
       })
     )

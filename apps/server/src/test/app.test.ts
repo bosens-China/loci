@@ -9,7 +9,7 @@ interface LoginResponse {
 }
 
 interface LibraryResponse {
-  library: { id: string }
+  library: { id: string; scopePath: string }
 }
 
 interface JobResponse {
@@ -61,6 +61,7 @@ describe('Loci Server API', () => {
     })
     expect(created.status).toBe(201)
     const { library } = (await created.json()) as LibraryResponse
+    expect(library.scopePath).toBe('/')
 
     const started = await app.request(`/api/v1/admin/libraries/${library.id}/sync`, {
       method: 'POST',
@@ -69,6 +70,21 @@ describe('Loci Server API', () => {
     expect(started.status).toBe(202)
     const { job } = (await started.json()) as JobResponse
     expect((await sync.wait(job.id))?.status).toBe('completed')
+
+    const batch = await app.request('/api/v1/admin/libraries/sync', {
+      method: 'POST',
+      headers: { Authorization: authorization, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ libraryIds: [library.id] })
+    })
+    expect(batch.status).toBe(202)
+    const batchBody = (await batch.json()) as { jobs: Array<{ id: string }> }
+    expect(batchBody.jobs).toHaveLength(1)
+    expect((await sync.wait(batchBody.jobs[0]!.id))?.status).toBe('completed')
+
+    const jobsResponse = await app.request('/api/v1/admin/jobs', {
+      headers: { Authorization: authorization }
+    })
+    expect(((await jobsResponse.json()) as { jobs: unknown[] }).jobs).toHaveLength(2)
 
     const catalog = await app.request('/api/v1/libraries')
     const catalogBody = (await catalog.json()) as {
@@ -94,5 +110,71 @@ describe('Loci Server API', () => {
         })
       ).status
     ).toBe(304)
+  })
+
+  it('请求正文解析期间启动同步时拒绝修改文档库', async () => {
+    let releaseFetch!: () => void
+    const fetchGate = new Promise<void>((resolve) => {
+      releaseFetch = resolve
+    })
+    const database = new ServerDatabase(':memory:')
+    const sync = new SyncService(database, async () => {
+      await fetchGate
+      return new Response('', { status: 404 })
+    })
+    const auth = new AdminAuth('admin', 'secret')
+    const app = createApp({ database, sync, auth })
+    cleanup.push(() => {
+      void sync.close()
+      database.close()
+    })
+    const library = database.createLibrary({
+      name: 'Vite',
+      url: 'https://vite.dev/guide',
+      scopePath: '/',
+      pageLimit: 10,
+      schedule: null
+    })
+    const token = auth.login('admin', 'secret')!
+    let bodyRequested = false
+    let releaseBody!: () => void
+    const bodyGate = new Promise<void>((resolve) => {
+      releaseBody = resolve
+    })
+    const updatePayload = JSON.stringify({
+      name: 'Vite changed',
+      url: 'https://vite.dev/api',
+      scopePath: '/',
+      pageLimit: 10,
+      schedule: null
+    })
+    const requestBody = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        bodyRequested = true
+        await bodyGate
+        controller.enqueue(new TextEncoder().encode(updatePayload))
+        controller.close()
+      }
+    })
+    const requestInit: RequestInit & { duplex: 'half' } = {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: requestBody,
+      duplex: 'half'
+    }
+    const request = new Request(
+      `http://localhost/api/v1/admin/libraries/${library.id}`,
+      requestInit
+    )
+
+    const update = app.request(request)
+    await vi.waitFor(() => expect(bodyRequested).toBe(true))
+    const job = sync.start(library.id)
+    releaseBody()
+
+    expect((await update).status).toBe(409)
+    expect(database.getLibrary(library.id).url).toBe('https://vite.dev/guide')
+    releaseFetch()
+    await sync.wait(job.id)
   })
 })

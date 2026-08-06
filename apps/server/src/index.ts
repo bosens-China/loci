@@ -26,17 +26,20 @@ sync.restoreSchedules()
 const server = serve({ fetch: app.fetch, port })
 console.log(`Loci Server 已启动：http://0.0.0.0:${port}`)
 
-function shutdown(): void {
-  sync.close()
-  server.close((error) => {
-    database.close()
-    if (error) {
-      console.error(error)
-      process.exit(1)
-    }
-    process.exit(0)
+let shuttingDown = false
+
+async function shutdown(): Promise<void> {
+  if (shuttingDown) return
+  shuttingDown = true
+  const syncClosed = sync.close()
+  const closeError = await new Promise<Error | undefined>((resolveClose) => {
+    server.close((error) => resolveClose(error))
   })
+  await syncClosed
+  database.close()
+  if (closeError) console.error(closeError)
+  process.exit(closeError ? 1 : 0)
 }
 
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+process.on('SIGINT', () => void shutdown())
+process.on('SIGTERM', () => void shutdown())

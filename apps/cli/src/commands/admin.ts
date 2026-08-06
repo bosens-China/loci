@@ -8,10 +8,24 @@ import {
   type CloudLibrary,
   type CloudLibraryInput
 } from '@loci/shared'
-import type { CloudAdminClient } from '@loci/runtime'
+import type { CloudAdminClient, LociDatabase } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError, errorMessage } from '../errors.js'
 import { validatePublicUrl } from '../input.js'
+import {
+  readAdminCreatePreference,
+  readAdminSyncSelection,
+  readAdminUsername,
+  saveAdminCreatePreference,
+  saveAdminSyncSelection,
+  saveAdminUsername,
+  scopeAtDepth,
+  scopeDepth,
+  type AdminCreatePreference
+} from '../preferences.js'
+import { askScope } from './source.js'
+import { registerAdminSubcommands } from './admin-script.js'
+import { selectLibraries, syncLibraries } from './admin-sync.js'
 import {
   askConfirm,
   askInteger,
@@ -40,35 +54,43 @@ const dateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
 })
 
 export function registerAdminCommand(program: Command): void {
-  program
+  const admin = program
     .command('admin')
-    .description('进入 Loci Server 管理员交互会话')
-    .action(() =>
-      runWithRuntime('Loci Server 管理员', async (runtime) => {
-        const settings = runtime.database.getSettings()
-        const username = await askText('管理员账号')
-        const password = await askPassword('管理员密码')
-        const spinner = createSpinner()
-        spinner.start(`正在登录 ${settings.serverUrl}`)
-        try {
-          await runtime.admin.login(settings.serverUrl, { username, password })
-          spinner.stop(`已登录：${username}`)
-        } catch (error) {
-          spinner.error('登录失败')
-          throw error
-        }
-
-        try {
-          await adminLoop(runtime.admin)
-        } finally {
-          await runtime.admin.logout().catch(() => undefined)
-        }
-        return '管理员会话已结束，登录信息已清除'
+    .description('管理 Loci Server 文档库；不带子命令进入交互会话')
+  admin.action(() =>
+    runWithRuntime('Loci Server 管理员', async (runtime) => {
+      const settings = runtime.database.getSettings()
+      const username = await askText('管理员账号', {
+        initialValue: readAdminUsername(runtime.database, settings.serverUrl)
       })
-    )
+      const password = await askPassword('管理员密码')
+      const spinner = createSpinner()
+      spinner.start(`正在登录 ${settings.serverUrl}`)
+      try {
+        await runtime.admin.login(settings.serverUrl, { username, password })
+        saveAdminUsername(runtime.database, settings.serverUrl, username)
+        spinner.stop(`已登录：${username}`)
+      } catch (error) {
+        spinner.error('登录失败')
+        throw error
+      }
+
+      try {
+        await adminLoop(runtime.admin, runtime.database, settings.serverUrl)
+      } finally {
+        await runtime.admin.logout().catch(() => undefined)
+      }
+      return '管理员会话已结束，登录信息已清除'
+    })
+  )
+  registerAdminSubcommands(admin, syncLibraries)
 }
 
-async function adminLoop(client: CloudAdminClient): Promise<void> {
+async function adminLoop(
+  client: CloudAdminClient,
+  database: LociDatabase,
+  serverUrl: string
+): Promise<void> {
   let running = true
   while (running) {
     const action = await askSelect<AdminAction>('请选择管理操作', [
@@ -87,13 +109,18 @@ async function adminLoop(client: CloudAdminClient): Promise<void> {
     try {
       if (action === 'list') printLibraries(await client.listLibraries())
       if (action === 'create') {
-        const input = await askLibraryInput()
+        const input = await askLibraryInput(readAdminCreatePreference(database, serverUrl))
         note(formatLibrarySummary(input), '请确认创建配置')
         if (!(await askConfirm('确认创建这个 Server 文档库吗？', true))) {
           warning('已取消创建')
           continue
         }
         const library = await client.createLibrary(input)
+        saveAdminCreatePreference(database, serverUrl, {
+          pageLimit: input.pageLimit,
+          scopeDepth: scopeDepth(input.url, input.scopePath),
+          schedule: input.schedule
+        })
         success(`已创建“${library.name}”；可选择手动同步进行首次发布`)
       }
       if (action === 'update') {
@@ -132,6 +159,7 @@ async function adminLoop(client: CloudAdminClient): Promise<void> {
         const library = await client.updateLibrary(current.id, {
           name: current.name,
           url: current.url,
+          scopePath: current.scopePath,
           pageLimit: current.pageLimit,
           schedule
         })
@@ -145,8 +173,16 @@ async function adminLoop(client: CloudAdminClient): Promise<void> {
         }
       }
       if (action === 'sync') {
-        const current = await selectLibrary(await client.listLibraries())
-        await syncLibrary(client, current)
+        const selected = await selectLibraries(
+          await client.listLibraries(),
+          readAdminSyncSelection(database, serverUrl)
+        )
+        await syncLibraries(client, selected)
+        saveAdminSyncSelection(
+          database,
+          serverUrl,
+          selected.map((library) => library.id)
+        )
       }
     } catch (error) {
       if (error instanceof CliCanceledError) continue
@@ -155,35 +191,21 @@ async function adminLoop(client: CloudAdminClient): Promise<void> {
   }
 }
 
-async function syncLibrary(client: CloudAdminClient, library: CloudLibrary): Promise<void> {
-  let job = await client.syncLibrary(library.id)
-  const spinner = createSpinner()
-  spinner.start(`正在同步“${library.name}”`)
-  while (job.status === 'queued' || job.status === 'running') {
-    if (job.progress) {
-      spinner.message(
-        `已处理 ${job.progress.processed}/${job.progress.queued}，成功 ${job.progress.succeeded}，失败 ${job.progress.failed}`
-      )
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    job = await client.getSyncJob(job.id)
+export async function askLibraryInput(
+  preference: AdminCreatePreference = { pageLimit: 1000, scopeDepth: 0, schedule: null }
+): Promise<CloudLibraryInput> {
+  return {
+    ...(await askLibraryBasics(undefined, preference)),
+    schedule: await askSchedule(preference.schedule)
   }
-  if (job.status === 'completed') spinner.stop('同步成功')
-  else if (job.status === 'completed_with_errors') {
-    spinner.stop('同步完成')
-    warning(`${job.failures.length} 个页面失败，请检查 Server 任务记录`)
-  } else {
-    spinner.error('同步失败')
-    throw new CliError(job.error ?? 'Server 同步失败')
-  }
-}
-
-export async function askLibraryInput(): Promise<CloudLibraryInput> {
-  return { ...(await askLibraryBasics()), schedule: await askSchedule(null) }
 }
 
 async function askLibraryBasics(
-  current?: CloudLibrary
+  current?: CloudLibrary,
+  preference: Pick<AdminCreatePreference, 'pageLimit' | 'scopeDepth'> = {
+    pageLimit: 1000,
+    scopeDepth: 0
+  }
 ): Promise<Omit<CloudLibraryInput, 'schedule'>> {
   const url = await askText('起始页面 URL', {
     initialValue: current?.url,
@@ -196,12 +218,16 @@ async function askLibraryBasics(
     validate: (value) =>
       (value?.trim().length ?? 0) <= 100 ? undefined : '文档源名称不能超过 100 个字符'
   })
+  const scopePath = await askScope(
+    url,
+    current?.scopePath ?? scopeAtDepth(url, preference.scopeDepth)
+  )
   const pageLimit = await askInteger('收录页面上限', {
-    initialValue: current?.pageLimit ?? 1000,
+    initialValue: current?.pageLimit ?? preference.pageLimit,
     minimum: 1,
     maximum: 10_000
   })
-  return { name, url, pageLimit }
+  return { name, url, scopePath, pageLimit }
 }
 
 export async function askSchedule(current: string | null): Promise<string | null> {
@@ -233,6 +259,7 @@ export async function askSchedule(current: string | null): Promise<string | null
 
 async function selectLibrary(libraries: CloudLibrary[]): Promise<CloudLibrary> {
   if (libraries.length === 0) throw new CliError('Server 还没有文档库')
+  if (libraries.length === 1) return libraries[0]!
   const id = await askSelect(
     '请选择 Server 文档库',
     libraries.map((library) => ({
@@ -250,12 +277,15 @@ function printLibraries(libraries: CloudLibrary[]): void {
     return
   }
   printTable(
-    ['名称', '页面', '计划', '发布状态', '短 ID'],
+    ['名称', '范围', '页面', '计划', '发布状态', '最近同步', '错误', '短 ID'],
     libraries.map((library) => [
       library.name,
+      library.scopePath,
       library.pages,
       formatScheduleLabel(library.schedule),
       library.publishedAt ? '已发布' : '未发布',
+      library.lastCrawledAt ?? '—',
+      library.lastError ?? '—',
       library.id.slice(0, 8)
     ])
   )
@@ -298,6 +328,7 @@ function formatLibrarySummary(input: CloudLibraryInput): string {
   return [
     `名称：${input.name}`,
     `URL：${input.url}`,
+    `收录范围：${input.scopePath}`,
     `页面上限：${input.pageLimit}`,
     `更新计划：${formatSchedulePreview(input.schedule)}`
   ].join('\n')
@@ -307,6 +338,9 @@ function formatLibraryChanges(current: CloudLibrary, input: CloudLibraryInput): 
   const changes = [
     current.name === input.name ? null : `名称：${current.name} → ${input.name}`,
     current.url === input.url ? null : `URL：${current.url} → ${input.url}`,
+    current.scopePath === input.scopePath
+      ? null
+      : `收录范围：${current.scopePath} → ${input.scopePath}`,
     current.pageLimit === input.pageLimit
       ? null
       : `页面上限：${current.pageLimit} → ${input.pageLimit}`
@@ -318,6 +352,7 @@ function sameLibraryInput(current: CloudLibrary, input: CloudLibraryInput): bool
   return (
     current.name === input.name &&
     current.url === input.url &&
+    current.scopePath === input.scopePath &&
     current.pageLimit === input.pageLimit &&
     current.schedule === input.schedule
   )

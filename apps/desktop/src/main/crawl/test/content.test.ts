@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePage } from '../content'
+import { parsePage } from '@loci/core'
 
 describe('parsePage', () => {
   it('extracts page metadata, readable markdown, and normalized links', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseSitemap } from '../sitemap'
+import { parseSitemap } from '@loci/core'
 
 describe('parseSitemap', () => {
   it('keeps normalized same-host URLs up to the limit', () => {

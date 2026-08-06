@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ParsedPage } from '../content'
-import { runCrawlQueue } from '../runner'
+import { runCrawlQueue, type ParsedPage } from '@loci/core'
 
 const page: ParsedPage = {
   title: 'Docs',

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { bearerAuth } from 'hono/bearer-auth'
 import { HTTPException } from 'hono/http-exception'
-import { normalizeCronSchedule } from '@loci/core'
+import { normalizeCronSchedule, normalizeScopePath } from '@loci/core'
 import { z } from 'zod'
 import { AdminAuth, readBearerToken } from './auth.js'
 import { ConflictError, NotFoundError, ServerDatabase } from './database.js'
@@ -16,8 +16,13 @@ const credentialsSchema = z.object({
 const librarySchema = z.object({
   name: z.string().trim().min(1).max(100),
   url: z.string().url(),
+  scopePath: z.string().default('/'),
   pageLimit: z.number().int().min(1).max(10_000),
   schedule: z.string().nullable()
+})
+
+const syncBatchSchema = z.object({
+  libraryIds: z.array(z.string().min(1)).min(1).max(100)
 })
 
 class InputError extends Error {}
@@ -88,8 +93,9 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
 
   app.put('/api/v1/admin/libraries/:id', async (c) => {
     const id = c.req.param('id')
+    const input = await readLibraryInput(c)
     if (sync.isRunning(id)) throw new ConflictError('同步期间不能修改文档库')
-    const library = database.updateLibrary(id, await readLibraryInput(c))
+    const library = database.updateLibrary(id, input)
     sync.reschedule(id)
     return c.json({ library })
   })
@@ -107,8 +113,21 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
     return c.json({ job }, 202)
   })
 
+  app.post('/api/v1/admin/libraries/sync', async (c) => {
+    const { libraryIds } = await parseJson(c, syncBatchSchema)
+    return c.json({ jobs: sync.startMany(libraryIds) }, 202)
+  })
+
+  app.get('/api/v1/admin/jobs', (c) => c.json({ jobs: sync.listJobs() }))
+
   app.get('/api/v1/admin/jobs/:id', (c) => {
     const job = sync.getJob(c.req.param('id'))
+    if (!job) throw new NotFoundError('同步任务不存在')
+    return c.json({ job })
+  })
+
+  app.post('/api/v1/admin/jobs/:id/cancel', (c) => {
+    const job = sync.cancel(c.req.param('id'))
     if (!job) throw new NotFoundError('同步任务不存在')
     return c.json({ job })
   })
@@ -119,7 +138,11 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
 async function readLibraryInput(c: Parameters<typeof parseJson>[0]): Promise<LibraryInput> {
   const input = await parseJson(c, librarySchema)
   try {
-    return { ...input, schedule: normalizeCronSchedule(input.schedule) }
+    return {
+      ...input,
+      scopePath: normalizeScopePath(input.scopePath),
+      schedule: normalizeCronSchedule(input.schedule)
+    }
   } catch (error) {
     throw new InputError(error instanceof Error ? error.message : '抓取计划无效')
   }

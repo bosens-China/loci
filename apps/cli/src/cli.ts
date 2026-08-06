@@ -9,6 +9,7 @@ import { registerDoctorCommand } from './commands/doctor.js'
 import { registerDocumentCommands } from './commands/document.js'
 import { registerMcpCommands } from './commands/mcp.js'
 import { registerSourceCommands } from './commands/source.js'
+import { registerScheduleCommands } from './commands/schedule.js'
 import { registerStatusCommand } from './commands/status.js'
 import { registerUpdateCommand } from './commands/update.js'
 import {
@@ -72,6 +73,7 @@ export function createProgram(): Command {
   registerStatusCommand(program)
   registerUpdateCommand(program)
   registerSourceCommands(program)
+  registerScheduleCommands(program)
   registerDocumentCommands(program)
   registerCloudCommands(program)
   registerAdminCommand(program)

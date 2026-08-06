@@ -1,7 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { app, shell } from 'electron'
+import { isNewerVersion } from '@loci/shared'
 import type { DesktopUpdateState } from '@loci/shared'
+
+export { isNewerVersion } from '@loci/shared'
 
 const CACHE_FILE = 'update-check.json'
 const RELEASES_URL = 'https://github.com/bosens-China/loci/releases'
@@ -85,23 +88,6 @@ export function findLatestDesktopVersion(value: unknown): string | null {
     if (version && draft !== true && prerelease !== true) return version
   }
   return null
-}
-
-export function isNewerVersion(latest: string, current: string): boolean {
-  const latestParts = parseVersion(latest)
-  const currentParts = parseVersion(current)
-  if (!latestParts || !currentParts) return false
-  for (let index = 0; index < latestParts.length; index += 1) {
-    if (latestParts[index] !== currentParts[index]) {
-      return latestParts[index]! > currentParts[index]!
-    }
-  }
-  return false
-}
-
-function parseVersion(version: string): [number, number, number] | null {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version)
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null
 }
 
 function readCache(path: string): UpdateCache {

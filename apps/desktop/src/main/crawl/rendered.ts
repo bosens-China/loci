@@ -1,7 +1,6 @@
 import type { CrawledPage, RenderedPageRequest } from '@loci/core'
 import { fetchRenderedPage } from './browser'
-import { parsePage } from './content'
-import { normalizeUrl } from './url'
+import { normalizeUrl, parsePage } from '@loci/core'
 
 /** Electron 适配器只负责把浏览器结果转换为核心包的统一页面格式。 */
 export async function fetchRenderedCrawlPage(

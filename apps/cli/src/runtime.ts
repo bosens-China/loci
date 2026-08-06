@@ -4,6 +4,7 @@ import { crawlSource, type CrawlNode, type CrawlProgress } from '@loci/core'
 import {
   CloudAdminClient,
   CloudLibraryService,
+  CrawlTaskCoordinator,
   acquireCrawlRuntimeLock,
   acquireMaintenanceRuntimeLock,
   createDatabase,
@@ -38,6 +39,7 @@ export interface CliRuntime {
     source: DocumentSource,
     input: Omit<UpdateSourceInput, 'schedule'>
   ) => DocumentSource
+  updateSourceSchedule: (source: DocumentSource, schedule: string | null) => DocumentSource
   isCrawling: (sourceId: string) => boolean
   getCrawlState: (sourceId: string) => CrawlRunState | undefined
   assertWritable: () => void
@@ -62,94 +64,116 @@ export function createCliRuntime(): CliRuntime {
   }
   const browser = new CliBrowserCrawler(join(cacheDir, 'playwright'))
   const states = new Map<string, CrawlRunState>()
+  const crawlTasks = new CrawlTaskCoordinator()
   const assertWritable = (): void => {
     const maintenance = readRuntimeLock(dataDir, 'maintenance')
     if (maintenance) throw new Error(`数据库正在由${maintenance.owner}维护，请稍后重试`)
   }
-
-  const run = async (
-    sourceId: string,
-    onProgress?: (progress: CrawlProgress) => void,
-    onBrowserMissing?: BrowserInstallPrompt
-  ): Promise<CrawlProgress> => {
-    const source = database.getSourceConfig(sourceId)
-    const lock = acquireCrawlRuntimeLock(dataDir, sourceId, 'CLI')
-    const initialNode: CrawlNode = {
-      id: source.firstUrl,
-      url: source.firstUrl,
-      title: source.fetchMode === 'auto' ? '正在检测抓取方式' : '正在读取第一个页面',
-      status: 'running'
-    }
-    states.set(sourceId, {
-      sourceId,
-      progress: {
-        queued: 1,
-        processed: 0,
-        succeeded: 0,
-        failed: 0,
-        limitReached: false,
-        node: initialNode
-      },
-      nodes: [initialNode],
-      error: null,
-      running: true,
-      paused: false
-    })
-    const runId = database.startCrawlRun(sourceId)
+  const mutateSource = <T>(sourceId: string, label: string, action: () => T): T => {
+    const lock = acquireCrawlRuntimeLock(dataDir, sourceId, `CLI ${label}`)
     try {
-      const settings = database.getSettings()
-      const result = await crawlSource({
-        firstUrl: source.firstUrl,
-        firstNodeId: source.firstUrl,
-        hostname: source.hostname,
-        scopePath: source.scopePath,
-        pageLimit: source.pageLimit,
-        initialUrls: database.listDocumentUrls(sourceId),
-        fetchMode: source.fetchMode,
-        httpConcurrency: source.httpConcurrency ?? settings.httpConcurrency,
-        browserConcurrency: source.browserConcurrency ?? settings.browserConcurrency,
-        maxRetries: settings.maxRetries,
-        batchIntervalMs: settings.batchIntervalSeconds * 1000,
-        crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
-        beforeBrowserCrawl: () => browser.ensureInstalled(onBrowserMissing),
-        onDocument: (document) => database.saveDocument({ ...document, sourceId }),
-        onError: ({ url, missing }) => {
-          if (missing) database.deleteDocument(sourceId, url)
-        },
-        onProgress: (progress) => {
-          updateState(states, sourceId, progress, null, true)
-          onProgress?.(progress)
-        },
-        onResolved: (resolution) =>
-          database.updateResolvedSource(
-            sourceId,
-            resolution.firstUrl,
-            resolution.fetchMode,
-            resolution.iconUrl
-          )
-      })
-      if (result.progress.succeeded === 0 && result.progress.failed > 0) {
-        throw new Error(`抓取失败：${result.progress.failed} 个页面均未成功`)
-      }
-      updateState(states, sourceId, result.progress, null, false)
-      database.finishCrawlRun(runId, 'completed', result.progress, null)
-      return result.progress
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '更新失败'
-      const current = states.get(sourceId)
-      if (current) {
-        states.set(sourceId, {
-          ...current,
-          running: false,
-          error: message
-        })
-      }
-      database.finishCrawlRun(runId, 'failed', current?.progress, message)
-      throw error
+      return action()
     } finally {
       lock.release()
     }
   }
+
+  const runOnce = async (
+    sourceId: string,
+    onProgress?: (progress: CrawlProgress) => void,
+    onBrowserMissing?: BrowserInstallPrompt
+  ): Promise<CrawlProgress> => {
+    const lock = acquireCrawlRuntimeLock(dataDir, sourceId, 'CLI')
+    try {
+      const source = database.getSourceConfig(sourceId)
+      const initialNode: CrawlNode = {
+        id: source.firstUrl,
+        url: source.firstUrl,
+        title: source.fetchMode === 'auto' ? '正在检测抓取方式' : '正在读取第一个页面',
+        status: 'running'
+      }
+      states.set(sourceId, {
+        sourceId,
+        progress: {
+          queued: 1,
+          processed: 0,
+          succeeded: 0,
+          failed: 0,
+          limitReached: false,
+          node: initialNode
+        },
+        nodes: [initialNode],
+        error: null,
+        running: true,
+        paused: false
+      })
+      const runId = database.startCrawlRun(sourceId)
+      try {
+        const settings = database.getSettings()
+        const result = await crawlSource({
+          firstUrl: source.firstUrl,
+          firstNodeId: source.firstUrl,
+          hostname: source.hostname,
+          scopePath: source.scopePath,
+          pageLimit: source.pageLimit,
+          initialUrls: database.listDocumentUrls(sourceId),
+          fetchMode: source.fetchMode,
+          httpConcurrency: source.httpConcurrency ?? settings.httpConcurrency,
+          browserConcurrency: source.browserConcurrency ?? settings.browserConcurrency,
+          maxRetries: settings.maxRetries,
+          batchIntervalMs: settings.batchIntervalSeconds * 1000,
+          crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
+          beforeBrowserCrawl: () => browser.ensureInstalled(onBrowserMissing),
+          onDocument: (document) => database.saveDocument({ ...document, sourceId }),
+          onError: ({ url, missing }) => {
+            if (missing) database.deleteDocument(sourceId, url)
+          },
+          onProgress: (progress) => {
+            updateState(states, sourceId, progress, null, true)
+            onProgress?.(progress)
+          },
+          onResolved: (resolution) =>
+            database.updateResolvedSource(
+              sourceId,
+              resolution.firstUrl,
+              resolution.fetchMode,
+              resolution.iconUrl
+            )
+        })
+        if (result.progress.succeeded === 0 && result.progress.failed > 0) {
+          throw new Error(`抓取失败：${result.progress.failed} 个页面均未成功`)
+        }
+        updateState(states, sourceId, result.progress, null, false)
+        database.finishCrawlRun(runId, 'completed', result.progress, null)
+        return result.progress
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '更新失败'
+        const current = states.get(sourceId)
+        if (current) {
+          states.set(sourceId, {
+            ...current,
+            running: false,
+            error: message
+          })
+        }
+        database.finishCrawlRun(runId, 'failed', current?.progress, message)
+        throw error
+      }
+    } finally {
+      lock.release()
+    }
+  }
+
+  const run = (
+    sourceId: string,
+    onProgress?: (progress: CrawlProgress) => void,
+    onBrowserMissing?: BrowserInstallPrompt
+  ): Promise<CrawlProgress> =>
+    crawlTasks.run(
+      sourceId,
+      (reportProgress) => runOnce(sourceId, reportProgress, onBrowserMissing),
+      onProgress
+    )
 
   return {
     dataDir,
@@ -160,24 +184,36 @@ export function createCliRuntime(): CliRuntime {
     crawlSource: run,
     createSource: (input) => {
       assertWritable()
-      return database.createSource({ ...input, schedule: null })
+      return database.createSource(input)
     },
     deleteSource: (sourceId) => {
-      assertWritable()
-      if (readRuntimeLock(dataDir, `crawl-${sourceId}`)) {
-        throw new Error('更新进行中，暂时不能删除文档源')
-      }
-      database.deleteSource(sourceId)
+      mutateSource(sourceId, '删除文档源', () => database.deleteSource(sourceId))
     },
-    updateSourcePreservingDesktopFields: (source, input) => {
-      assertWritable()
-      if (readRuntimeLock(dataDir, `crawl-${source.id}`)) {
-        throw new Error('更新进行中，暂时不能编辑文档源')
-      }
-      return database.updateSource(source.id, { ...input, schedule: source.schedule })
-    },
+    updateSourcePreservingDesktopFields: (source, input) =>
+      mutateSource(source.id, '编辑文档源', () => {
+        const current = requireSource(database, source.id)
+        return database.updateSource(source.id, { ...input, schedule: current.schedule })
+      }),
+    updateSourceSchedule: (source, schedule) =>
+      mutateSource(source.id, '修改定时计划', () => {
+        const current = requireSource(database, source.id)
+        return database.updateSource(source.id, {
+          name: current.name,
+          url: current.url,
+          mode: current.mode,
+          pageLimit: current.pageLimit,
+          scopePath: current.scopePath,
+          schedule: schedule,
+          httpConcurrency: current.httpConcurrency,
+          browserConcurrency: current.browserConcurrency
+        })
+      }),
     isCrawling: (sourceId) =>
-      Boolean(states.get(sourceId)?.running || readRuntimeLock(dataDir, `crawl-${sourceId}`)),
+      Boolean(
+        crawlTasks.isRunning(sourceId) ||
+        states.get(sourceId)?.running ||
+        readRuntimeLock(dataDir, `crawl-${sourceId}`)
+      ),
     getCrawlState: (sourceId) => states.get(sourceId),
     assertWritable,
     close: async () => {
@@ -185,6 +221,12 @@ export function createCliRuntime(): CliRuntime {
       database.close()
     }
   }
+}
+
+function requireSource(database: LociDatabase, sourceId: string): DocumentSource {
+  const source = database.listSources().find((item) => item.id === sourceId)
+  if (!source) throw new Error('文档源不存在')
+  return source
 }
 
 function updateState(

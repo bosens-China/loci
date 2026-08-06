@@ -1,106 +1,53 @@
 import {
   CloudSyncOutlined,
-  DeleteOutlined,
-  EditOutlined,
   PlusOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined
 } from '@ant-design/icons'
-import {
-  Alert,
-  Button,
-  Card,
-  Empty,
-  Popconfirm,
-  Space,
-  Table,
-  Tag,
-  Typography,
-  message
-} from 'antd'
-import type { TableColumnsType } from 'antd'
+import { Alert, Button, Card, Empty, Modal, Space, Table, Typography, message } from 'antd'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import type { CloudLibrary, CloudLibraryInput, CloudSyncJob } from '@loci/shared'
-import { getSchedulePreset } from '@loci/shared'
 import { useCloudAdmin } from '../cloud-admin-context'
 import CloudLibraryFormModal from './CloudLibraryFormModal'
-import { CloudSyncProgress } from './CloudSyncProgress'
 import { isCloudSyncJobActive } from './cloud-sync-progress'
+import { createCloudLibraryColumns } from './cloudLibraryColumns'
+import { useCloudSyncJobs } from './useCloudSyncJobs'
+import { queryKeys } from '../query-client'
 
 function CloudLibrariesPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { session, loading: sessionLoading, logout } = useCloudAdmin()
-  const [libraries, setLibraries] = useState<CloudLibrary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const client = useQueryClient()
   const [editingLibrary, setEditingLibrary] = useState<CloudLibrary | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [syncingId, setSyncingId] = useState<string | null>(null)
-  const [syncJobs, setSyncJobs] = useState<Record<string, CloudSyncJob>>({})
-  const [progressError, setProgressError] = useState<string | null>(null)
+  const [syncingIds, setSyncingIds] = useState<string[]>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [messageApi, contextHolder] = message.useMessage()
+  const [modalApi, modalContextHolder] = Modal.useModal()
 
-  const loadLibraries = useCallback(async () => {
-    if (!session) return
-    setLoading(true)
-    setError(null)
-    try {
-      setLibraries(await window.api.listCloudLibraries())
-    } catch (loadError) {
-      const text = errorMessage(loadError, '云文档列表读取失败')
-      setError(text)
-      if (text.includes('会话') || text.includes('登录')) await logout()
-    } finally {
-      setLoading(false)
-    }
-  }, [logout, session])
+  const librariesQuery = useQuery({
+    queryKey: queryKeys.cloudLibraries,
+    queryFn: window.api.listCloudLibraries,
+    enabled: Boolean(session)
+  })
+  const libraries = librariesQuery.data ?? []
+  const loading = librariesQuery.isPending || librariesQuery.isFetching
+  const error = librariesQuery.error
+    ? errorMessage(librariesQuery.error, '云文档列表读取失败')
+    : null
+  const loadLibraries = useCallback(
+    async () => void (await client.invalidateQueries({ queryKey: queryKeys.cloudLibraries })),
+    [client]
+  )
 
-  const activeJobIds = Object.values(syncJobs)
-    .filter(isCloudSyncJobActive)
-    .map((job) => job.id)
-    .sort()
-    .join(',')
-
-  useEffect(() => {
-    if (!activeJobIds) return
-    const jobIds = activeJobIds.split(',')
-    let mounted = true
-    let requesting = false
-    const poll = async (): Promise<void> => {
-      if (requesting) return
-      requesting = true
-      try {
-        const results = await Promise.allSettled(jobIds.map(window.api.getCloudSyncJob))
-        if (!mounted) return
-        const rejected = results.find((result) => result.status === 'rejected')
-        if (rejected?.status === 'rejected') {
-          const text = errorMessage(rejected.reason, '同步进度读取失败')
-          setProgressError(text)
-          if (text.includes('会话') || text.includes('登录')) void logout()
-          return
-        }
-        const jobs = results.flatMap((result) =>
-          result.status === 'fulfilled' ? [result.value] : []
-        )
-        setProgressError(null)
-        setSyncJobs((current) => ({
-          ...current,
-          ...Object.fromEntries(jobs.map((job) => [job.libraryId, job]))
-        }))
-        if (jobs.some((job) => !isCloudSyncJobActive(job))) void loadLibraries()
-      } finally {
-        requesting = false
-      }
-    }
-    void poll()
-    const timer = setInterval(() => void poll(), 1000)
-    return () => {
-      mounted = false
-      clearInterval(timer)
-    }
-  }, [activeJobIds, loadLibraries, logout])
+  const handleAuthError = useCallback((): void => void logout(), [logout])
+  const syncState = useCloudSyncJobs({
+    enabled: Boolean(session),
+    onSettled: loadLibraries,
+    onAuthError: handleAuthError
+  })
 
   useEffect(() => {
     if (sessionLoading) return
@@ -108,25 +55,44 @@ function CloudLibrariesPage(): React.JSX.Element {
       void navigate({ to: '/admin/login' })
       return
     }
-    let active = true
-    void window.api
-      .listCloudLibraries()
-      .then((items) => {
-        if (active) setLibraries(items)
-      })
-      .catch((loadError: unknown) => {
-        if (!active) return
-        const text = errorMessage(loadError, '云文档列表读取失败')
-        setError(text)
-        if (text.includes('会话') || text.includes('登录')) void logout()
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [logout, navigate, session, sessionLoading])
+    if (error?.includes('会话') || error?.includes('登录')) void logout()
+  }, [error, logout, navigate, session, sessionLoading])
+
+  const saveMutation = useMutation({
+    mutationFn: ({ library, input }: { library: CloudLibrary | null; input: CloudLibraryInput }) =>
+      library
+        ? window.api.updateCloudLibrary(library.id, input)
+        : window.api.createCloudLibrary(input),
+    onSuccess: async (saved, { library }) => {
+      client.setQueryData<CloudLibrary[]>(queryKeys.cloudLibraries, (current = []) =>
+        library ? current.map((item) => (item.id === saved.id ? saved : item)) : [saved, ...current]
+      )
+      setModalOpen(false)
+      if (library) {
+        messageApi.success('云文档源已更新')
+        return
+      }
+      try {
+        await syncState.submit([saved.id])
+        messageApi.success('云文档源已添加，首次发布任务已提交')
+      } catch (syncError) {
+        messageApi.warning(
+          `云文档源已添加，但首次发布未启动：${errorMessage(syncError, '同步失败')}`
+        )
+      }
+    },
+    onError: (saveError: unknown) => messageApi.error(errorMessage(saveError, '云文档源保存失败'))
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (library: CloudLibrary) => window.api.deleteCloudLibrary(library.id),
+    onSuccess: (_, library) => {
+      client.setQueryData<CloudLibrary[]>(queryKeys.cloudLibraries, (current = []) =>
+        current.filter((item) => item.id !== library.id)
+      )
+      messageApi.success(`已删除 ${library.name}`)
+    },
+    onError: (deleteError: unknown) => messageApi.error(errorMessage(deleteError, '删除失败'))
+  })
 
   const openCreate = (): void => {
     setEditingLibrary(null)
@@ -134,152 +100,77 @@ function CloudLibrariesPage(): React.JSX.Element {
   }
 
   const handleSubmit = (input: CloudLibraryInput): void => {
-    setSubmitting(true)
-    const request = editingLibrary
-      ? window.api.updateCloudLibrary(editingLibrary.id, input)
-      : window.api.createCloudLibrary(input)
-    void request
-      .then((saved) => {
-        setLibraries((current) =>
-          editingLibrary
-            ? current.map((item) => (item.id === saved.id ? saved : item))
-            : [saved, ...current]
-        )
-        setModalOpen(false)
-        messageApi.success(editingLibrary ? '云文档源已更新' : '云文档源已添加')
-      })
-      .catch((saveError: unknown) => messageApi.error(errorMessage(saveError, '云文档源保存失败')))
-      .finally(() => setSubmitting(false))
+    saveMutation.mutate({ library: editingLibrary, input })
   }
 
   const handleDelete = (library: CloudLibrary): void => {
-    void window.api
-      .deleteCloudLibrary(library.id)
-      .then(() => {
-        setLibraries((current) => current.filter((item) => item.id !== library.id))
-        messageApi.success(`已删除 ${library.name}`)
-      })
-      .catch((deleteError: unknown) => messageApi.error(errorMessage(deleteError, '删除失败')))
+    deleteMutation.mutate(library)
   }
 
-  const handleSync = (library: CloudLibrary): void => {
-    setSyncingId(library.id)
-    void window.api
-      .syncCloudLibrary(library.id)
-      .then((job) => {
-        setSyncJobs((current) => ({ ...current, [library.id]: job }))
-        messageApi.success(`${library.name} 的同步任务已提交`)
-      })
-      .catch((syncError: unknown) => messageApi.error(errorMessage(syncError, '同步任务提交失败')))
-      .finally(() => setSyncingId(null))
-  }
-
-  const columns: TableColumnsType<CloudLibrary> = [
-    {
-      title: '文档源',
-      dataIndex: 'name',
-      render: (_, library) => (
-        <div className="min-w-56">
-          <Typography.Text strong className="block">
-            {library.name}
-          </Typography.Text>
-          <Typography.Text type="secondary" className="block max-w-96 truncate text-xs">
-            {library.url}
-          </Typography.Text>
-        </div>
-      )
-    },
-    { title: '页面', dataIndex: 'pages', width: 90, render: (pages: number) => `${pages} 页` },
-    {
-      title: '更新计划',
-      dataIndex: 'schedule',
-      width: 130,
-      render: (schedule: string | null) =>
-        schedule ? (getSchedulePreset(schedule)?.label ?? schedule) : '仅手动'
-    },
-    {
-      title: '发布状态',
-      key: 'status',
-      width: 120,
-      render: (_, library) =>
-        library.lastError ? (
-          <Tag color="error">需检查</Tag>
-        ) : library.publishedAt ? (
-          <Tag color="success">已发布</Tag>
-        ) : (
-          <Tag>待首次同步</Tag>
-        )
-    },
-    {
-      title: '同步进度',
-      key: 'progress',
-      width: 190,
-      render: (_, library) => <CloudSyncProgress job={syncJobs[library.id]} />
-    },
-    {
-      title: '最近同步',
-      dataIndex: 'lastCrawledAt',
-      width: 170,
-      render: (value: string | null) =>
-        value
-          ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).format(
-              new Date(value)
-            )
-          : '—'
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      fixed: 'right',
-      width: 220,
-      render: (_, library) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<CloudSyncOutlined />}
-            loading={
-              syncingId === library.id || Boolean(syncJobs[library.id]?.status === 'running')
-            }
-            disabled={syncJobs[library.id]?.status === 'queued'}
-            onClick={() => handleSync(library)}
-          >
-            同步
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditingLibrary(library)
-              setModalOpen(true)
-            }}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title={`删除 ${library.name}？`}
-            description="服务器上的文档与发布快照会被永久删除。"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => handleDelete(library)}
-          >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      )
+  const submitSync = async (ids: string[]): Promise<void> => {
+    setSyncingIds(ids)
+    try {
+      await syncState.submit(ids)
+      setSelectedIds([])
+      messageApi.success(`已提交 ${ids.length} 个同步任务`)
+    } catch (syncError) {
+      messageApi.error(errorMessage(syncError, '同步任务提交失败'))
+    } finally {
+      setSyncingIds([])
     }
-  ]
+  }
+
+  const confirmBatchSync = (): void => {
+    const availableIds = libraries
+      .filter((library) => {
+        const job = syncState.jobs[library.id]
+        return !job || !isCloudSyncJobActive(job)
+      })
+      .map((library) => library.id)
+    const available = new Set(availableIds)
+    const selectedAvailableIds = selectedIds.filter((id) => available.has(id))
+    const ids = selectedAvailableIds.length ? selectedAvailableIds : availableIds
+    modalApi.confirm({
+      title: `同步 ${ids.length} 个云文档源？`,
+      content: '任务将进入服务器队列，同时最多运行 3 个文档源。',
+      okText: '提交同步',
+      cancelText: '取消',
+      onOk: () => submitSync(ids)
+    })
+  }
+
+  const handleCancel = (job: CloudSyncJob): void => {
+    void syncState
+      .cancel(job.id)
+      .then(() => messageApi.success('已提交取消请求'))
+      .catch((reason: unknown) => messageApi.error(errorMessage(reason, '取消同步失败')))
+  }
+
+  const columns = createCloudLibraryColumns({
+    jobs: syncState.jobs,
+    syncingIds,
+    onSync: (library) => void submitSync([library.id]),
+    onCancel: handleCancel,
+    onEdit: (library) => {
+      setEditingLibrary(library)
+      setModalOpen(true)
+    },
+    onDelete: handleDelete
+  })
 
   if (sessionLoading || !session) return <Card loading className="h-64" />
 
   const published = libraries.filter((item) => item.publishedAt).length
   const attention = libraries.filter((item) => item.lastError).length
+  const availableToSync = libraries.filter((library) => {
+    const job = syncState.jobs[library.id]
+    return !job || !isCloudSyncJobActive(job)
+  }).length
 
   return (
     <div className="mx-auto h-full w-full max-w-[1440px] overflow-x-hidden overflow-y-auto pr-1">
       {contextHolder}
+      {modalContextHolder}
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="mb-2 flex items-center gap-2">
@@ -294,6 +185,14 @@ function CloudLibrariesPage(): React.JSX.Element {
           </Typography.Paragraph>
         </div>
         <Space>
+          <Button
+            icon={<CloudSyncOutlined />}
+            disabled={availableToSync === 0 || syncingIds.length > 0}
+            loading={syncingIds.length > 1}
+            onClick={confirmBatchSync}
+          >
+            {selectedIds.length ? `同步所选（${selectedIds.length}）` : '同步全部'}
+          </Button>
           <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void loadLibraries()}>
             刷新
           </Button>
@@ -337,13 +236,24 @@ function CloudLibrariesPage(): React.JSX.Element {
           }
         />
       )}
-      {progressError && <Alert type="error" showIcon className="mb-4" message={progressError} />}
+      {syncState.error && (
+        <Alert type="error" showIcon className="mb-4" message={syncState.error} />
+      )}
       <Card className="overflow-hidden" styles={{ body: { padding: 0 } }}>
         <Table
           rowKey="id"
           loading={loading}
           columns={columns}
           dataSource={libraries}
+          rowSelection={{
+            selectedRowKeys: selectedIds,
+            onChange: (keys) => setSelectedIds(keys.map(String)),
+            getCheckboxProps: (library) => ({
+              disabled: Boolean(
+                syncState.jobs[library.id] && isCloudSyncJobActive(syncState.jobs[library.id]!)
+              )
+            })
+          }}
           pagination={false}
           scroll={{ x: 1240 }}
           locale={{
@@ -360,7 +270,7 @@ function CloudLibrariesPage(): React.JSX.Element {
       <CloudLibraryFormModal
         open={modalOpen}
         library={editingLibrary}
-        submitting={submitting}
+        submitting={saveMutation.isPending}
         onCancel={() => setModalOpen(false)}
         onSubmit={handleSubmit}
       />

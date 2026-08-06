@@ -6,7 +6,7 @@ import {
   isUrlInScope,
   normalizeScopePath,
   normalizeUrl
-} from '../url'
+} from '@loci/core'
 
 describe('normalizeUrl', () => {
   it('removes query parameters and fragments', () => {

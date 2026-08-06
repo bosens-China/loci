@@ -3,6 +3,7 @@ import type { CrawlFailure, CrawlProgress } from '@loci/core'
 export interface LibraryInput {
   name: string
   url: string
+  scopePath: string
   pageLimit: number
   schedule: string | null
 }
@@ -48,7 +49,8 @@ export interface LibrarySnapshot {
   documents: SnapshotDocument[]
 }
 
-export type SyncJobStatus = 'queued' | 'running' | 'completed' | 'completed_with_errors' | 'failed'
+export type SyncJobStatus =
+  'queued' | 'running' | 'canceling' | 'canceled' | 'completed' | 'completed_with_errors' | 'failed'
 
 export interface SyncJob {
   id: string

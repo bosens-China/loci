@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { getHostname, normalizeUrl } from '@loci/core'
+import { getHostname, isUrlInScope, normalizeScopePath, normalizeUrl } from '@loci/core'
 import type { CrawledDocument } from '@loci/core'
 import type {
   Library,
@@ -9,12 +9,14 @@ import type {
   PublicLibrary,
   SnapshotDocument
 } from './types.js'
+import { initializeServerDatabase } from './database-schema.js'
 
 interface LibraryRow {
   id: string
   name: string
   first_url: string
   hostname: string
+  scope_path: string
   page_limit: number
   schedule: string | null
   page_count: number
@@ -40,44 +42,6 @@ interface SnapshotRow {
   content: string
 }
 
-const schema = `
-  PRAGMA foreign_keys = ON;
-  PRAGMA journal_mode = WAL;
-
-  CREATE TABLE IF NOT EXISTS libraries (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    first_url TEXT NOT NULL,
-    hostname TEXT NOT NULL UNIQUE,
-    page_limit INTEGER NOT NULL CHECK (page_limit BETWEEN 1 AND 10000),
-    schedule TEXT,
-    last_crawled_at TEXT,
-    last_error TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  ) STRICT;
-
-  CREATE TABLE IF NOT EXISTS documents (
-    id TEXT PRIMARY KEY,
-    library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    url TEXT NOT NULL,
-    language TEXT NOT NULL,
-    markdown TEXT NOT NULL,
-    crawled_at TEXT NOT NULL,
-    UNIQUE(library_id, url)
-  ) STRICT;
-
-  CREATE TABLE IF NOT EXISTS library_snapshots (
-    library_id TEXT PRIMARY KEY REFERENCES libraries(id) ON DELETE CASCADE,
-    revision TEXT NOT NULL,
-    published_at TEXT NOT NULL,
-    page_count INTEGER NOT NULL,
-    byte_size INTEGER NOT NULL,
-    content TEXT NOT NULL
-  ) STRICT;
-`
-
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
 
@@ -90,13 +54,13 @@ export class ServerDatabase {
       timeout: 5000,
       enableForeignKeyConstraints: true
     })
-    this.#database.exec(schema)
+    initializeServerDatabase(this.#database)
   }
 
   listLibraries(): Library[] {
     const rows = this.#database
       .prepare(
-        `SELECT l.id, l.name, l.first_url, l.hostname, l.page_limit, l.schedule,
+        `SELECT l.id, l.name, l.first_url, l.hostname, l.scope_path, l.page_limit, l.schedule,
           COUNT(d.id) AS page_count, l.last_crawled_at, l.last_error,
           s.revision, s.published_at
         FROM libraries l
@@ -116,6 +80,7 @@ export class ServerDatabase {
           s.revision, s.published_at, s.page_count, s.byte_size
         FROM libraries l
         JOIN library_snapshots s ON s.library_id = l.id
+        WHERE s.page_count > 0
         ORDER BY l.name COLLATE NOCASE ASC`
       )
       .all() as unknown as PublicLibraryRow[]
@@ -140,18 +105,33 @@ export class ServerDatabase {
   createLibrary(input: LibraryInput): Library {
     const url = normalizeUrl(input.url)
     const hostname = getHostname(url)
-    if (this.#database.prepare('SELECT 1 FROM libraries WHERE hostname = ?').get(hostname)) {
-      throw new ConflictError('这个域名已经存在于服务器文档库中')
+    const scopePath = normalizeLibraryScope(url, hostname, input.scopePath)
+    if (
+      this.#database
+        .prepare('SELECT 1 FROM libraries WHERE hostname = ? AND scope_path = ?')
+        .get(hostname, scopePath)
+    ) {
+      throw new ConflictError('这个域名和收录范围已经存在于服务器文档库中')
     }
     const id = randomUUID()
     const now = new Date().toISOString()
     this.#database
       .prepare(
         `INSERT INTO libraries
-          (id, name, first_url, hostname, page_limit, schedule, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          (id, name, first_url, hostname, scope_path, page_limit, schedule, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, input.name.trim(), url, hostname, input.pageLimit, input.schedule, now, now)
+      .run(
+        id,
+        input.name.trim(),
+        url,
+        hostname,
+        scopePath,
+        input.pageLimit,
+        input.schedule,
+        now,
+        now
+      )
     return this.getLibrary(id)
   }
 
@@ -159,28 +139,32 @@ export class ServerDatabase {
     const current = this.getLibrary(id)
     const url = normalizeUrl(input.url)
     const hostname = getHostname(url)
+    const scopePath = normalizeLibraryScope(url, hostname, input.scopePath)
     const duplicate = this.#database
-      .prepare('SELECT id FROM libraries WHERE hostname = ? AND id <> ?')
-      .get(hostname, id)
-    if (duplicate) throw new ConflictError('这个域名已经存在于服务器文档库中')
+      .prepare('SELECT id FROM libraries WHERE hostname = ? AND scope_path = ? AND id <> ?')
+      .get(hostname, scopePath, id)
+    if (duplicate) throw new ConflictError('这个域名和收录范围已经存在于服务器文档库中')
 
     transaction(this.#database, () => {
       this.#database
         .prepare(
-          `UPDATE libraries SET name = ?, first_url = ?, hostname = ?, page_limit = ?,
-            schedule = ?, updated_at = ? WHERE id = ?`
+          `UPDATE libraries SET name = ?, first_url = ?, hostname = ?, scope_path = ?,
+            page_limit = ?, schedule = ?, updated_at = ? WHERE id = ?`
         )
         .run(
           input.name.trim(),
           url,
           hostname,
+          scopePath,
           input.pageLimit,
           input.schedule,
           new Date().toISOString(),
           id
         )
-      if (current.url !== url) {
+      if (current.url !== url || current.hostname !== hostname) {
         this.#database.prepare('DELETE FROM documents WHERE library_id = ?').run(id)
+      } else if (current.scopePath !== scopePath) {
+        this.deleteDocumentsOutsideScope(id, hostname, scopePath)
       }
     })
     return this.getLibrary(id)
@@ -228,6 +212,21 @@ export class ServerDatabase {
       .run(libraryId, url)
   }
 
+  deleteDocumentsOutsideScope(libraryId: string, hostname: string, scopePath: string): number {
+    const rows = this.#database
+      .prepare('SELECT url FROM documents WHERE library_id = ?')
+      .all(libraryId) as unknown as Array<{ url: string }>
+    const statement = this.#database.prepare(
+      'DELETE FROM documents WHERE library_id = ? AND url = ?'
+    )
+    let removed = 0
+    for (const row of rows) {
+      if (isUrlInScope(row.url, hostname, scopePath)) continue
+      removed += Number(statement.run(libraryId, row.url).changes)
+    }
+    return removed
+  }
+
   finishCrawl(libraryId: string, error: string | null): void {
     this.#database
       .prepare(
@@ -244,6 +243,7 @@ export class ServerDatabase {
         WHERE library_id = ? ORDER BY url`
       )
       .all(libraryId) as unknown as SnapshotDocument[]
+    if (!documents.length) throw new ConflictError('文档库没有可发布页面')
     const payload = {
       schemaVersion: 1 as const,
       library: { id: library.id, name: library.name, url: library.url },
@@ -306,6 +306,7 @@ function toLibrary(row: LibraryRow): Library {
     name: row.name,
     url: row.first_url,
     hostname: row.hostname,
+    scopePath: row.scope_path,
     pageLimit: Number(row.page_limit),
     schedule: row.schedule,
     pages: Number(row.page_count),
@@ -314,6 +315,14 @@ function toLibrary(row: LibraryRow): Library {
     revision: row.revision,
     publishedAt: row.published_at
   }
+}
+
+function normalizeLibraryScope(url: string, hostname: string, input: string): string {
+  const scopePath = normalizeScopePath(input)
+  if (!isUrlInScope(url, hostname, scopePath)) {
+    throw new ConflictError('收录范围必须包含第一个页面')
+  }
+  return scopePath
 }
 
 function transaction(database: DatabaseSync, action: () => void): void {

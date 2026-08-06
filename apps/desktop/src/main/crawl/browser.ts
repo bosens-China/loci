@@ -1,6 +1,6 @@
 import { BrowserWindow, session, type Session } from 'electron'
 import { waitForStableContent } from '@loci/core'
-import { isAllowedNavigation } from './url'
+import { isAllowedNavigation } from '@loci/core'
 
 export interface RenderedPage {
   url: string

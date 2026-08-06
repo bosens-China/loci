@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ParsedPage } from '../content'
-import { selectFetchMode } from '../mode'
+import { selectFetchMode, type ParsedPage } from '@loci/core'
 
 const page = (markdown: string, title = 'Docs'): ParsedPage => ({
   title,

@@ -2,11 +2,13 @@ import { ClockCircleOutlined, LinkOutlined } from '@ant-design/icons'
 import { AutoComplete, Form, Input, InputNumber, Modal } from 'antd'
 import { useEffect } from 'react'
 import type { CloudLibrary, CloudLibraryInput } from '@loci/shared'
-import { SCHEDULE_PRESETS, normalizeCronSchedule } from '@loci/shared'
+import { SCHEDULE_PRESETS, getSourceScopeOptions, normalizeCronSchedule } from '@loci/shared'
+import { SourceScopeSelector } from './SourceScopeSelector'
 
 interface CloudLibraryFormValues {
   name: string
   url: string
+  scopePath: string
   pageLimit: number
   schedule?: string
 }
@@ -27,13 +29,15 @@ function CloudLibraryFormModal({
   onSubmit
 }: CloudLibraryFormModalProps): React.JSX.Element {
   const [form] = Form.useForm<CloudLibraryFormValues>()
+  const url = Form.useWatch('url', form) ?? ''
 
   useEffect(() => {
     if (!open) return
     form.setFieldsValue({
       name: library?.name ?? '',
       url: library?.url ?? '',
-      pageLimit: library?.pageLimit ?? 500,
+      scopePath: library?.scopePath ?? '/',
+      pageLimit: library?.pageLimit ?? 1000,
       schedule: library?.schedule ?? undefined
     })
   }, [form, library, open])
@@ -42,6 +46,7 @@ function CloudLibraryFormModal({
     onSubmit({
       name: values.name.trim(),
       url: values.url.trim(),
+      scopePath: values.scopePath,
       pageLimit: values.pageLimit,
       schedule: normalizeCronSchedule(values.schedule?.trim() || null)
     })
@@ -74,7 +79,25 @@ function CloudLibraryFormModal({
             { type: 'url', message: '请输入有效 URL 地址' }
           ]}
         >
-          <Input prefix={<LinkOutlined />} placeholder="https://hono.dev/docs/" />
+          <Input
+            prefix={<LinkOutlined />}
+            placeholder="https://hono.dev/docs/"
+            onBlur={(event) => {
+              const options = getSourceScopeOptions(event.currentTarget.value)
+              const scopePath = form.getFieldValue('scopePath')
+              if (!options.some((option) => option.value === scopePath)) {
+                form.setFieldValue('scopePath', '/')
+              }
+            }}
+          />
+        </Form.Item>
+        <Form.Item
+          name="scopePath"
+          label="收录范围"
+          extra="只收录所选路径及其子路径。"
+          rules={[{ required: true, message: '请选择收录范围' }]}
+        >
+          <SourceScopeSelector url={url} />
         </Form.Item>
         <Form.Item
           name="pageLimit"

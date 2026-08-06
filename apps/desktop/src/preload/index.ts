@@ -72,7 +72,12 @@ const api: LociApi = {
     ipcRenderer.invoke('cloud-admin:libraries:delete', id) as Promise<void>,
   syncCloudLibrary: (id) =>
     ipcRenderer.invoke('cloud-admin:libraries:sync', id) as Promise<CloudSyncJob>,
+  syncCloudLibraries: (ids) =>
+    ipcRenderer.invoke('cloud-admin:libraries:sync-many', ids) as Promise<CloudSyncJob[]>,
+  listCloudSyncJobs: () => ipcRenderer.invoke('cloud-admin:jobs:list') as Promise<CloudSyncJob[]>,
   getCloudSyncJob: (id) => ipcRenderer.invoke('cloud-admin:jobs:get', id) as Promise<CloudSyncJob>,
+  cancelCloudSyncJob: (id) =>
+    ipcRenderer.invoke('cloud-admin:jobs:cancel', id) as Promise<CloudSyncJob>,
   listCloudCatalog: () => ipcRenderer.invoke('cloud-catalog:list') as Promise<CloudCatalogItem[]>,
   importCloudLibrary: (libraryId, autoSync) =>
     ipcRenderer.invoke('cloud-catalog:import', libraryId, autoSync) as Promise<CloudImportResult>,

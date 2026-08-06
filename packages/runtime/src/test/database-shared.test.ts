@@ -23,7 +23,12 @@ describe('shared database', () => {
       expect(desktop.listSources()).toEqual([source])
 
       const runId = cli.startCrawlRun(source.id)
-      cli.finishCrawlRun(runId, 'completed', { queued: 1, succeeded: 1, failed: 0 }, null)
+      cli.finishCrawlRun(
+        runId,
+        'completed',
+        { queued: 1, processed: 1, succeeded: 1, failed: 0, limitReached: false },
+        null
+      )
       expect(desktop.listCrawlHistory(source.id)[0]).toMatchObject({
         sourceId: source.id,
         status: 'completed',

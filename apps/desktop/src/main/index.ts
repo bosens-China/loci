@@ -7,6 +7,7 @@ import {
   CloudLibraryService,
   acquireCrawlRuntimeLock,
   acquireMaintenanceRuntimeLock,
+  acquireRuntimeLock,
   createDatabase,
   createMcpRuntime,
   databaseNeedsMigration,
@@ -21,16 +22,12 @@ import {
 import type {
   AppSettings,
   CreateSourceInput,
-  CrawlNode,
-  CrawlProgress,
-  CrawlRunState,
   DataTransferResult,
   DocumentSource,
   UpdateSourceInput
 } from '@loci/shared'
 import { DEVELOPMENT_SERVER_URL, normalizeCronSchedule } from '@loci/shared'
-import { runSourceCrawl } from './crawl/source'
-import { CrawlControl } from './crawl/control'
+import { createDesktopCrawlRuntime } from './crawl/runtime'
 import type { LociMcpServices } from '@loci/runtime'
 import { registerSingleInstance } from './single-instance'
 import { createAppTray } from './tray'
@@ -48,13 +45,24 @@ let mcpRuntime: McpRuntime | undefined
 let cloudLibraryService: CloudLibraryService | undefined
 let isQuitting = false
 let stopCloudLibraryRuntime = (): void => undefined
+let scheduleRuntimeLock: RuntimeLock | undefined
 let appUpdater: AppUpdater | undefined
 let dataDir = ''
-const runningCrawls = new Set<string>()
-const crawlStates = new Map<string, CrawlRunState>()
-const crawlControls = new Map<string, CrawlControl>()
 const scheduledCrawls = new Map<string, Cron>()
 const isPrimaryInstance = registerSingleInstance(() => mainWindow)
+const crawlRuntime = createDesktopCrawlRuntime({
+  getDatabase: requireDatabase,
+  getDataDir: () => dataDir,
+  publishState: (state) => {
+    mainWindow?.webContents.send('sources:crawl-progress', {
+      sourceId: state.sourceId,
+      progress: state.progress,
+      error: state.error,
+      running: state.running,
+      paused: state.paused
+    })
+  }
+})
 
 app.setName('Loci')
 
@@ -110,16 +118,18 @@ if (isPrimaryInstance)
     ipcMain.handle('sources:list', () => requireDatabase().listSources())
     ipcMain.handle('sources:create', (_event, input: CreateSourceInput) => createSource(input))
     ipcMain.handle('sources:update', (_event, id: string, input: UpdateSourceInput) => {
-      assertMaintenanceIdle()
-      if (isSourceCrawling(id)) throw new Error('更新进行中，暂时不能编辑文档源')
-      const source = requireDatabase().updateSource(id, input)
+      const source = mutateSource(id, '桌面端编辑文档源', () =>
+        requireDatabase().updateSource(id, input)
+      )
       scheduleSource(source)
       return source
     })
-    ipcMain.handle('sources:crawl', (_event, id: string) => crawlSource(id))
-    ipcMain.handle('sources:crawl-pause', (_event, id: string) => setCrawlPaused(id, true))
-    ipcMain.handle('sources:crawl-resume', (_event, id: string) => setCrawlPaused(id, false))
-    ipcMain.handle('sources:crawl-runs', () => [...crawlStates.values()])
+    ipcMain.handle('sources:crawl', (_event, id: string) => crawlRuntime.crawlSource(id))
+    ipcMain.handle('sources:crawl-pause', (_event, id: string) => crawlRuntime.setPaused(id, true))
+    ipcMain.handle('sources:crawl-resume', (_event, id: string) =>
+      crawlRuntime.setPaused(id, false)
+    )
+    ipcMain.handle('sources:crawl-runs', () => crawlRuntime.listStates())
     ipcMain.handle('documents:list', () => requireDatabase().listDocuments())
     ipcMain.handle('documents:search', (_event, query: string) =>
       requireDatabase().searchDocuments(query)
@@ -153,16 +163,21 @@ if (isPrimaryInstance)
     )
     ipcMain.handle('data:import', () => importLocalData())
     registerCloudAdminIpc(() => requireDatabase().getSettings().serverUrl)
-    stopCloudLibraryRuntime = registerCloudLibraryRuntime(
-      requireDatabase(),
-      requireCloudLibraryService()
-    )
+    try {
+      scheduleRuntimeLock = acquireRuntimeLock(dataDir, 'schedule', '桌面端计划运行器')
+      stopCloudLibraryRuntime = registerCloudLibraryRuntime(
+        requireDatabase(),
+        requireCloudLibraryService()
+      )
+    } catch (error) {
+      console.warn('计划任务已由其他 Loci 进程运行，桌面端跳过计划恢复', error)
+    }
     appUpdater = createAppUpdater()
     ipcMain.handle('app:update:get', () => requireAppUpdater().getState())
     ipcMain.handle('app:update:check', () => requireAppUpdater().check())
     ipcMain.handle('app:update:open-release', () => requireAppUpdater().openRelease())
 
-    restoreScheduledCrawls(requireDatabase().listSources())
+    if (scheduleRuntimeLock) restoreScheduledCrawls(requireDatabase().listSources())
     createWindow(!shouldStartHidden())
     if (app.isPackaged) void requireAppUpdater().check(false)
     mainWindow?.on('focus', () => mainWindow?.webContents.send('database:external-change'))
@@ -179,6 +194,7 @@ app.on('before-quit', () => {
   isQuitting = true
   stopScheduledCrawls()
   stopCloudLibraryRuntime()
+  scheduleRuntimeLock?.release()
   void mcpRuntime?.close()
   database?.close()
   tray?.destroy()
@@ -200,19 +216,26 @@ function createSource(input: CreateSourceInput): DocumentSource {
   return source
 }
 
+function mutateSource<T>(id: string, owner: string, action: () => T): T {
+  const lock = acquireCrawlRuntimeLock(dataDir, id, owner)
+  try {
+    return action()
+  } finally {
+    lock.release()
+  }
+}
+
 async function deleteSource(id: string): Promise<void> {
   assertMaintenanceIdle()
-  if (isSourceCrawling(id)) {
-    const control = crawlControls.get(id)
-    if (!control?.paused) throw new Error('更新进行中，请先暂停再删除文档源')
-    control.cancel()
-    setCrawlPaused(id, false, false)
-    await control.done
+  if (crawlRuntime.isCrawling(id)) {
+    await crawlRuntime.cancelPaused(id)
     assertMaintenanceIdle()
   }
-  crawlStates.delete(id)
-  stopScheduledCrawl(id)
-  requireDatabase().deleteSource(id)
+  mutateSource(id, '桌面端删除文档源', () => {
+    crawlRuntime.deleteState(id)
+    stopScheduledCrawl(id)
+    requireDatabase().deleteSource(id)
+  })
 }
 
 function createMcpServices(): LociMcpServices {
@@ -221,10 +244,10 @@ function createMcpServices(): LociMcpServices {
     listDocuments: () => requireDatabase().listDocuments(),
     searchDocuments: (query) => requireDatabase().searchDocuments(query),
     createSource,
-    crawlSource,
+    crawlSource: crawlRuntime.crawlSource,
     deleteSource,
-    isCrawling: isSourceCrawling,
-    getCrawlState: (id) => crawlStates.get(id),
+    isCrawling: crawlRuntime.isCrawling,
+    getCrawlState: crawlRuntime.getState,
     listCloudLibraries: () =>
       requireCloudLibraryService().listCatalog(requireDatabase().getSettings().serverUrl),
     pullCloudLibrary: (libraryId) => {
@@ -262,7 +285,7 @@ async function importLocalData(): Promise<DataTransferResult> {
   stopScheduledCrawls()
   try {
     const summary = currentDatabase.importBackup(selected.data)
-    crawlStates.clear()
+    crawlRuntime.clearStates()
     let mcpWarning = false
     try {
       await mcpRuntime?.close()
@@ -285,11 +308,13 @@ async function importLocalData(): Promise<DataTransferResult> {
 
 function restoreScheduledCrawls(sources: DocumentSource[]): void {
   stopScheduledCrawls()
+  if (!scheduleRuntimeLock) return
   sources.forEach(scheduleSource)
 }
 
 function scheduleSource(source: DocumentSource): void {
   stopScheduledCrawl(source.id)
+  if (!scheduleRuntimeLock) return
   const expression = source.schedule
   if (!expression) return
   try {
@@ -300,7 +325,7 @@ function scheduleSource(source: DocumentSource): void {
         catch: (error) => console.error(`定时抓取 ${source.name} 失败`, error)
       },
       async () => {
-        if (!isSourceCrawling(source.id)) await crawlSource(source.id)
+        if (!crawlRuntime.isCrawling(source.id)) await crawlRuntime.crawlSource(source.id)
       }
     )
     scheduledCrawls.set(source.id, job)
@@ -318,150 +343,9 @@ function stopScheduledCrawls(): void {
   for (const sourceId of scheduledCrawls.keys()) stopScheduledCrawl(sourceId)
 }
 
-async function crawlSource(
-  id: string,
-  onProgress?: (progress: CrawlProgress) => void
-): Promise<CrawlProgress> {
-  if (isSourceCrawling(id)) throw new Error('这个文档源已经在更新中')
-  const source = requireDatabase().getSourceConfig(id)
-  const lock = acquireCrawlRuntimeLock(dataDir, id, '桌面端')
-  const initialNode: CrawlNode = {
-    id: source.firstUrl,
-    url: source.firstUrl,
-    title: source.fetchMode === 'auto' ? '正在检测抓取方式' : '正在读取第一个页面',
-    status: 'running'
-  }
-  crawlControls.set(id, new CrawlControl())
-  publishCrawlState({
-    sourceId: id,
-    progress: {
-      queued: 1,
-      processed: 0,
-      succeeded: 0,
-      failed: 0,
-      limitReached: false,
-      node: initialNode
-    },
-    nodes: [initialNode],
-    error: null,
-    running: true,
-    paused: false
-  })
-  const runId = requireDatabase().startCrawlRun(id)
-  runningCrawls.add(id)
-  try {
-    const progress = await runSourceCrawl(
-      requireDatabase(),
-      id,
-      (progress) => {
-        emitCrawlProgress(id, progress)
-        onProgress?.(progress)
-      },
-      () => waitIfCrawlPaused(id),
-      (milliseconds) => waitForCrawlDelay(id, milliseconds)
-    )
-    if (progress.succeeded === 0 && progress.failed > 0) {
-      throw new Error(`抓取失败：${progress.failed} 个页面均未成功`)
-    }
-    finishCrawl(id, progress, null)
-    requireDatabase().finishCrawlRun(runId, 'completed', progress, null)
-    return progress
-  } catch (error) {
-    const message = errorMessage(error)
-    const progress = crawlStates.get(id)?.progress
-    finishCrawl(id, progress, message)
-    requireDatabase().finishCrawlRun(runId, 'failed', progress, message)
-    throw error
-  } finally {
-    const control = crawlControls.get(id)
-    setCrawlPaused(id, false, false)
-    crawlControls.delete(id)
-    runningCrawls.delete(id)
-    lock.release()
-    control?.finish()
-  }
-}
-
-function setCrawlPaused(sourceId: string, paused: boolean, required = true): void {
-  const control = crawlControls.get(sourceId)
-  if (!control) {
-    if (required) throw new Error('这个文档源当前没有正在运行的抓取任务')
-    return
-  }
-  if (paused) control.pause()
-  else control.resume()
-  const current = crawlStates.get(sourceId)
-  if (current) publishCrawlState({ ...current, paused })
-}
-
-async function waitIfCrawlPaused(sourceId: string): Promise<void> {
-  const control = crawlControls.get(sourceId)
-  if (!control) throw new Error('抓取任务不存在')
-  await control.waitIfPaused()
-}
-
-async function waitForCrawlDelay(sourceId: string, milliseconds: number): Promise<void> {
-  const control = crawlControls.get(sourceId)
-  if (!control) throw new Error('抓取任务不存在')
-  await control.waitForDelay(milliseconds)
-}
-
-function isSourceCrawling(sourceId: string): boolean {
-  return runningCrawls.has(sourceId) || Boolean(readRuntimeLock(dataDir, `crawl-${sourceId}`))
-}
-
 function assertMaintenanceIdle(): void {
   const lock = readRuntimeLock(dataDir, 'maintenance')
   if (lock) throw new Error(`数据库正在由${lock.owner}维护，请稍后重试`)
-}
-
-function emitCrawlProgress(sourceId: string, progress: CrawlProgress): void {
-  const current = crawlStates.get(sourceId)
-  if (!current) return
-  publishCrawlState({
-    ...current,
-    progress,
-    nodes: mergeNode(current.nodes, progress.node)
-  })
-}
-
-function finishCrawl(
-  sourceId: string,
-  progress: CrawlProgress | undefined,
-  error: string | null
-): void {
-  const current = crawlStates.get(sourceId)
-  if (!current) return
-  publishCrawlState({
-    ...current,
-    progress: progress ? { ...progress, node: current.progress.node } : current.progress,
-    error,
-    running: false,
-    paused: false
-  })
-}
-
-function publishCrawlState(state: CrawlRunState): void {
-  crawlStates.set(state.sourceId, state)
-  mainWindow?.webContents.send('sources:crawl-progress', {
-    sourceId: state.sourceId,
-    progress: state.progress,
-    error: state.error,
-    running: state.running,
-    paused: state.paused
-  })
-}
-
-function mergeNode(nodes: CrawlNode[], node: CrawlNode | undefined): CrawlNode[] {
-  if (!node) return nodes
-  const index = nodes.findIndex((item) => item.id === node.id)
-  return index < 0
-    ? [...nodes, node]
-    : nodes.map((item, itemIndex) => (itemIndex === index ? node : item))
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : '更新失败'
 }
 
 // In this file you can include the rest of your app's specific main process

@@ -1,44 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import type { CloudAdminLoginInput, CloudAdminSession } from '@loci/shared'
 import { CloudAdminContext, type CloudAdminContextValue } from './cloud-admin-context'
+import { queryKeys } from './query-client'
 
 export function CloudAdminProvider({ children }: { children: ReactNode }): React.JSX.Element {
-  const [session, setSession] = useState<CloudAdminSession | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let active = true
-    void window.api
-      .getCloudAdminSession()
-      .then((value) => {
-        if (active) setSession(value)
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
+  const client = useQueryClient()
+  const query = useQuery({
+    queryKey: queryKeys.cloudAdminSession,
+    queryFn: window.api.getCloudAdminSession
+  })
+  const loginMutation = useMutation({
+    mutationFn: (input: CloudAdminLoginInput) => window.api.cloudAdminLogin(input),
+    onSuccess: (session) => client.setQueryData(queryKeys.cloudAdminSession, session)
+  })
+  const logoutMutation = useMutation({
+    mutationFn: window.api.cloudAdminLogout,
+    onSettled: () => {
+      client.setQueryData<CloudAdminSession | null>(queryKeys.cloudAdminSession, null)
+      client.removeQueries({ queryKey: queryKeys.cloudSyncJobs })
     }
-  }, [])
-
-  const login = useCallback(async (input: CloudAdminLoginInput) => {
-    const value = await window.api.cloudAdminLogin(input)
-    setSession(value)
-    return value
-  }, [])
-
-  const logout = useCallback(async () => {
-    try {
-      await window.api.cloudAdminLogout()
-    } finally {
-      setSession(null)
-    }
-  }, [])
+  })
 
   const value = useMemo<CloudAdminContextValue>(
-    () => ({ session, loading, login, logout }),
-    [loading, login, logout, session]
+    () => ({
+      session: query.data ?? null,
+      loading: query.isPending,
+      login: (input) => loginMutation.mutateAsync(input),
+      logout: async () => void (await logoutMutation.mutateAsync())
+    }),
+    [loginMutation, logoutMutation, query.data, query.isPending]
   )
   return <CloudAdminContext.Provider value={value}>{children}</CloudAdminContext.Provider>
 }

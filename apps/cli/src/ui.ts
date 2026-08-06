@@ -110,10 +110,28 @@ export async function askSelect<T extends string>(
   return unwrap(await p.select<string>({ message, options: normalized, initialValue })) as T
 }
 
+export async function askMultiSelect<T extends string>(
+  message: string,
+  options: ReadonlyArray<{ value: T; label: string; hint?: string }>,
+  initialValues: T[] = []
+): Promise<T[]> {
+  requireInteractive()
+  const normalized: Array<{ value: string; label: string; hint?: string }> = options.map(
+    (option) =>
+      option.hint
+        ? { value: option.value, label: option.label, hint: option.hint }
+        : { value: option.value, label: option.label }
+  )
+  return unwrap(
+    await p.multiselect<string>({ message, options: normalized, initialValues, required: true })
+  ) as T[]
+}
+
 export async function askSearch<T extends string>(
   message: string,
   options: ReadonlyArray<{ value: T; label: string; hint?: string }>,
-  placeholder = '输入关键词筛选'
+  placeholder = '输入关键词筛选',
+  initialValue?: T
 ): Promise<T> {
   requireInteractive()
   const normalized: Array<{ value: string; label: string; hint?: string }> = options.map(
@@ -122,7 +140,9 @@ export async function askSearch<T extends string>(
         ? { value: option.value, label: option.label, hint: option.hint }
         : { value: option.value, label: option.label }
   )
-  return unwrap(await p.autocomplete<string>({ message, options: normalized, placeholder })) as T
+  return unwrap(
+    await p.autocomplete<string>({ message, options: normalized, placeholder, initialValue })
+  ) as T
 }
 
 export async function askPath(message: string, options: AskPathOptions = {}): Promise<string> {

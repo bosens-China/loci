@@ -2,6 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { resolveLociCacheDir } from '@loci/runtime'
+import { isNewerVersion } from '@loci/shared'
+
+export { isNewerVersion } from '@loci/shared'
 
 const UPDATE_CACHE_FILE = 'cli-update.json'
 const NPM_LATEST_URL = 'https://registry.npmjs.org/@boses%2fcli/latest'
@@ -77,18 +80,6 @@ export function formatUpdateMessage(update: CliUpdate): string {
   return `发现 Loci CLI v${update.latestVersion}，当前为 v${update.currentVersion}；运行 npm install --global @boses/cli@latest 更新。`
 }
 
-export function isNewerVersion(latest: string, current: string): boolean {
-  const latestParts = parseVersion(latest)
-  const currentParts = parseVersion(current)
-  if (!latestParts || !currentParts) return false
-  for (let index = 0; index < latestParts.length; index += 1) {
-    if (latestParts[index] !== currentParts[index]) {
-      return latestParts[index]! > currentParts[index]!
-    }
-  }
-  return false
-}
-
 function claimDailyUpdateCheck(): boolean {
   const cache = readCache()
   if (cache.checkedOn === today()) return false
@@ -106,11 +97,6 @@ function readCliVersion(): string {
   const version = (packageJson as { version?: unknown }).version
   if (typeof version !== 'string') throw new Error('无法读取 CLI 版本')
   return version
-}
-
-function parseVersion(version: string): [number, number, number] | null {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version)
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null
 }
 
 function isMcpStdio(args: readonly string[]): boolean {

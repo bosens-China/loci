@@ -18,6 +18,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   rmSync(dataDir, { recursive: true, force: true })
   if (originalDataDir === undefined) delete process.env.LOCI_DATA_DIR
   else process.env.LOCI_DATA_DIR = originalDataDir
@@ -35,7 +36,7 @@ describe('文档源最短输入', () => {
 
   it('只提供 URL 时采用共享名称和抓取默认值', async () => {
     await createProgram().parseAsync(
-      ['source', 'add', 'https://rspress.rs/guide/introduction.html'],
+      ['source', 'add', 'https://rspress.rs/guide/introduction.html', '--no-sync'],
       {
         from: 'user'
       }
@@ -60,7 +61,7 @@ describe('文档源最短输入', () => {
     Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true })
     try {
       await createProgram().parseAsync(
-        ['source', 'add', 'https://rspress.rs/guide/introduction.html'],
+        ['source', 'add', 'https://rspress.rs/guide/introduction.html', '--no-sync'],
         { from: 'user' }
       )
       await createProgram().parseAsync(['source', 'update', 'rspress', '--page-limit', '300'], {
@@ -85,7 +86,7 @@ describe('文档源最短输入', () => {
 
   it('非交互环境不接受没有修改项的空更新', async () => {
     await createProgram().parseAsync(
-      ['source', 'add', 'https://rspress.rs/guide/introduction.html'],
+      ['source', 'add', 'https://rspress.rs/guide/introduction.html', '--no-sync'],
       {
         from: 'user'
       }
@@ -97,5 +98,41 @@ describe('文档源最短输入', () => {
 
     expect(error).toBeInstanceOf(CliError)
     expect((error as CliError).message).toContain('至少提供一个')
+  })
+
+  it('可以用独立命令设置和关闭本地定时计划', async () => {
+    await createProgram().parseAsync(['source', 'add', 'https://rspress.rs/guide', '--no-sync'], {
+      from: 'user'
+    })
+    await createProgram().parseAsync(['schedule', 'set', 'rspress', '0 2 * * *'], {
+      from: 'user'
+    })
+    let runtime = createCliRuntime()
+    expect(runtime.database.listSources()[0]?.schedule).toBe('0 2 * * *')
+    await runtime.close()
+
+    await createProgram().parseAsync(['schedule', 'set', 'rspress', 'manual'], { from: 'user' })
+    runtime = createCliRuntime()
+    expect(runtime.database.listSources()[0]?.schedule).toBeNull()
+    await runtime.close()
+  })
+
+  it('带 URL 创建后默认执行一次首次同步', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input) =>
+        String(input).endsWith('/docs')
+          ? new Response('<html><title>Docs</title><main><h1>Docs</h1></main></html>')
+          : new Response('', { status: 404 })
+      )
+    )
+    await createProgram().parseAsync(
+      ['source', 'add', 'https://example.com/docs', '--mode', 'http', '--page-limit', '1'],
+      { from: 'user' }
+    )
+    const runtime = createCliRuntime()
+    expect(runtime.database.listSources()[0]).toMatchObject({ pages: 1, status: 'healthy' })
+    expect(runtime.database.listCrawlHistory()[0]).toMatchObject({ succeeded: 1 })
+    await runtime.close()
   })
 })

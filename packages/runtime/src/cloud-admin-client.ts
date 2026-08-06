@@ -15,6 +15,7 @@ const librarySchema = z.object({
   name: z.string(),
   url: z.string(),
   hostname: z.string(),
+  scopePath: z.string().default('/'),
   pageLimit: z.number(),
   schedule: z.string().nullable(),
   pages: z.number(),
@@ -26,7 +27,15 @@ const librarySchema = z.object({
 const syncJobSchema = z.object({
   id: z.string(),
   libraryId: z.string(),
-  status: z.enum(['queued', 'running', 'completed', 'completed_with_errors', 'failed']),
+  status: z.enum([
+    'queued',
+    'running',
+    'canceling',
+    'canceled',
+    'completed',
+    'completed_with_errors',
+    'failed'
+  ]),
   createdAt: z.string(),
   finishedAt: z.string().nullable(),
   progress: z
@@ -125,10 +134,36 @@ export class CloudAdminClient {
     return result.job as CloudSyncJob
   }
 
+  async syncLibraries(ids: readonly string[]): Promise<CloudSyncJob[]> {
+    const result = z.object({ jobs: z.array(syncJobSchema) }).parse(
+      await this.authRequest('/api/v1/admin/libraries/sync', {
+        method: 'POST',
+        body: JSON.stringify({ libraryIds: ids })
+      })
+    )
+    return result.jobs as CloudSyncJob[]
+  }
+
+  async listSyncJobs(): Promise<CloudSyncJob[]> {
+    const result = z
+      .object({ jobs: z.array(syncJobSchema) })
+      .parse(await this.authRequest('/api/v1/admin/jobs'))
+    return result.jobs as CloudSyncJob[]
+  }
+
   async getSyncJob(id: string): Promise<CloudSyncJob> {
     const result = z
       .object({ job: syncJobSchema })
       .parse(await this.authRequest(`/api/v1/admin/jobs/${encodeURIComponent(id)}`))
+    return result.job as CloudSyncJob
+  }
+
+  async cancelSyncJob(id: string): Promise<CloudSyncJob> {
+    const result = z.object({ job: syncJobSchema }).parse(
+      await this.authRequest(`/api/v1/admin/jobs/${encodeURIComponent(id)}/cancel`, {
+        method: 'POST'
+      })
+    )
     return result.job as CloudSyncJob
   }
 

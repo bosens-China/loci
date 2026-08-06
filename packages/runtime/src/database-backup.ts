@@ -54,6 +54,19 @@ const crawlRunSchema = z
   })
   .strict()
 
+const crawlFailureSchema = z
+  .object({
+    id: z.string().min(1),
+    run_id: z.string().min(1),
+    url: z.string().url(),
+    reason: z.enum(['not_found', 'out_of_scope_redirect', 'http_error', 'request_error']),
+    message: z.string(),
+    retryable: z.number().int().min(0).max(1),
+    status_code: z.number().int().nullable(),
+    redirect_url: z.string().url().nullable()
+  })
+  .strict()
+
 const settingsSchema = z
   .object({
     mcp_port: z.number().int().min(1024).max(65535),
@@ -80,6 +93,7 @@ export const lociBackupSchema = z
         sources: z.array(sourceSchema),
         documents: z.array(documentSchema),
         crawlRuns: z.array(crawlRunSchema),
+        crawlFailures: z.array(crawlFailureSchema).optional(),
         settings: settingsSchema
       })
       .strict()
@@ -90,6 +104,8 @@ export const lociBackupSchema = z
     validateUniqueIds(data.sources, ['data', 'sources'], context)
     validateUniqueIds(data.documents, ['data', 'documents'], context)
     validateUniqueIds(data.crawlRuns, ['data', 'crawlRuns'], context)
+    validateUniqueIds(data.crawlFailures ?? [], ['data', 'crawlFailures'], context)
+    const runIds = new Set(data.crawlRuns.map((run) => run.id))
     data.documents.forEach((document, index) => {
       if (!sourceIds.has(document.source_id)) {
         context.addIssue({
@@ -105,6 +121,15 @@ export const lociBackupSchema = z
           code: 'custom',
           path: ['data', 'crawlRuns', index, 'source_id'],
           message: '引用的文档源不存在'
+        })
+      }
+    })
+    ;(data.crawlFailures ?? []).forEach((failure, index) => {
+      if (!runIds.has(failure.run_id)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['data', 'crawlFailures', index, 'run_id'],
+          message: '引用的抓取记录不存在'
         })
       }
     })
@@ -133,6 +158,7 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
         .all(),
       documents: database.prepare('SELECT * FROM documents ORDER BY crawled_at').all(),
       crawlRuns: database.prepare('SELECT * FROM crawl_runs ORDER BY rowid').all(),
+      crawlFailures: database.prepare('SELECT * FROM crawl_failures ORDER BY rowid').all(),
       settings: database
         .prepare(
           `SELECT mcp_port, theme, http_concurrency, browser_concurrency, max_retries,
@@ -145,12 +171,13 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
 
 export function importDatabaseBackup(database: DatabaseSync, input: unknown): BackupImportSummary {
   const backup = parseLociBackup(input)
-  const { sources, documents, crawlRuns, settings } = backup.data
+  const { sources, documents, crawlRuns, crawlFailures = [], settings } = backup.data
 
   database.exec('BEGIN IMMEDIATE')
   try {
     database.exec(`
       DELETE FROM documents_fts;
+      DELETE FROM crawl_failures;
       DELETE FROM crawl_runs;
       DELETE FROM documents;
       DELETE FROM document_sources;
@@ -231,6 +258,24 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         run.success_count,
         run.failure_count,
         run.error_message
+      )
+    }
+
+    const insertFailure = database.prepare(
+      `INSERT INTO crawl_failures
+       (id, run_id, url, reason, message, retryable, status_code, redirect_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    for (const failure of crawlFailures) {
+      insertFailure.run(
+        failure.id,
+        failure.run_id,
+        failure.url,
+        failure.reason,
+        failure.message,
+        failure.retryable,
+        failure.status_code,
+        failure.redirect_url
       )
     }
 

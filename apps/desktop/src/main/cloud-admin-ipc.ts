@@ -19,5 +19,10 @@ export function registerCloudAdminIpc(getServerUrl: () => string): void {
   )
   ipcMain.handle('cloud-admin:libraries:delete', (_event, id: string) => client.deleteLibrary(id))
   ipcMain.handle('cloud-admin:libraries:sync', (_event, id: string) => client.syncLibrary(id))
+  ipcMain.handle('cloud-admin:libraries:sync-many', (_event, ids: string[]) =>
+    client.syncLibraries(ids)
+  )
+  ipcMain.handle('cloud-admin:jobs:list', () => client.listSyncJobs())
   ipcMain.handle('cloud-admin:jobs:get', (_event, id: string) => client.getSyncJob(id))
+  ipcMain.handle('cloud-admin:jobs:cancel', (_event, id: string) => client.cancelSyncJob(id))
 }

@@ -62,6 +62,7 @@ export interface CloudAdminSession {
 export interface CloudLibraryInput {
   name: string
   url: string
+  scopePath: string
   pageLimit: number
   schedule: string | null
 }
@@ -98,7 +99,7 @@ export interface CloudImportResult {
 }
 
 export type CloudSyncJobStatus =
-  'queued' | 'running' | 'completed' | 'completed_with_errors' | 'failed'
+  'queued' | 'running' | 'canceling' | 'canceled' | 'completed' | 'completed_with_errors' | 'failed'
 
 export interface CloudSyncJob {
   id: string
@@ -257,7 +258,10 @@ export interface LociApi {
   updateCloudLibrary: (id: string, input: CloudLibraryInput) => Promise<CloudLibrary>
   deleteCloudLibrary: (id: string) => Promise<void>
   syncCloudLibrary: (id: string) => Promise<CloudSyncJob>
+  syncCloudLibraries: (ids: string[]) => Promise<CloudSyncJob[]>
+  listCloudSyncJobs: () => Promise<CloudSyncJob[]>
   getCloudSyncJob: (id: string) => Promise<CloudSyncJob>
+  cancelCloudSyncJob: (id: string) => Promise<CloudSyncJob>
   listCloudCatalog: () => Promise<CloudCatalogItem[]>
   importCloudLibrary: (libraryId: string, autoSync: boolean) => Promise<CloudImportResult>
   updateCloudLibraryCopy: (sourceId: string) => Promise<CloudImportResult>

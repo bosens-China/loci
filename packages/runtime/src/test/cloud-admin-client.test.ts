@@ -42,6 +42,26 @@ describe('CloudAdminClient', () => {
     expect(client.getSession()).toBeNull()
   })
 
+  it('提交批量同步并支持任务列表与取消', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: 'secret-token', expiresIn: 3600 }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [syncJob()] }))
+      .mockResolvedValueOnce(jsonResponse({ jobs: [syncJob()] }))
+      .mockResolvedValueOnce(jsonResponse({ job: { ...syncJob(), status: 'canceling' } }))
+    const client = new CloudAdminClient(fetcher)
+    await client.login('https://docs.example.com', { username: 'admin', password: 'password' })
+
+    expect(await client.syncLibraries(['library-1'])).toHaveLength(1)
+    expect(await client.listSyncJobs()).toHaveLength(1)
+    expect((await client.cancelSyncJob('job-1')).status).toBe('canceling')
+    expect(fetcher.mock.calls[1]?.[0]).toBe('https://docs.example.com/api/v1/admin/libraries/sync')
+    expect(fetcher.mock.calls[1]?.[1]?.body).toBe('{"libraryIds":["library-1"]}')
+    expect(fetcher.mock.calls[3]?.[0]).toBe(
+      'https://docs.example.com/api/v1/admin/jobs/job-1/cancel'
+    )
+  })
+
   it('拒绝非 HTTP 服务器地址', async () => {
     const client = new CloudAdminClient(vi.fn<typeof fetch>())
     await expect(

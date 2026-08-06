@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { crawlLlmsSource, discoverLlmsEntries, fetchMarkdownPage, parseLlmsTxt } from '../llms'
+import { crawlLlmsSource, discoverLlmsEntries, fetchMarkdownPage, parseLlmsTxt } from '@loci/core'
 
 describe('llms.txt', () => {
   it('按 AST 提取列表链接并应用同域路径范围', () => {

@@ -13,6 +13,7 @@ describe('Loci CLI command surface', () => {
       'status',
       'update',
       'source',
+      'schedule',
       'document',
       'cloud',
       'admin',
@@ -25,6 +26,11 @@ describe('Loci CLI command surface', () => {
     expect(program.options.some((option) => option.long === '--json')).toBe(false)
     expect(
       program.commands
+        .find((command) => command.name() === 'source')
+        ?.commands.map((command) => command.name())
+    ).toEqual(['list', 'add', 'update', 'delete', 'sync', 'runs', 'logs'])
+    expect(
+      program.commands
         .find((command) => command.name() === 'mcp')
         ?.commands.map((command) => command.name())
     ).toEqual(['stdio', 'serve', 'status', 'config', 'configure'])
@@ -33,6 +39,11 @@ describe('Loci CLI command surface', () => {
         .find((command) => command.name() === 'data')
         ?.commands.map((command) => command.name())
     ).toEqual(['export', 'import', 'clear-documents', 'clear-sources'])
+    expect(
+      program.commands
+        .find((command) => command.name() === 'admin')
+        ?.commands.map((command) => command.name())
+    ).toEqual(['libraries', 'create', 'update', 'delete', 'sync', 'jobs', 'cancel'])
   })
 
   it('translates Commander failures into clear Chinese errors', async () => {

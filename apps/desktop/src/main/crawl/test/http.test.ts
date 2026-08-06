@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { crawlHttpSource } from '../http'
+import { crawlHttpSource } from '@loci/core'
 
 describe('crawlHttpSource', () => {
   it('follows same-host links until the page limit', async () => {

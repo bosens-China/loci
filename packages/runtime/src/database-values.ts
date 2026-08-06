@@ -186,6 +186,11 @@ export function migrateDatabase(database: DatabaseSync): void {
      ON document_sources(cloud_server_url, cloud_library_id)
      WHERE source_type = 'cloud'`
   )
+  database.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS document_sources_local_hostname
+     ON document_sources(hostname)
+     WHERE source_type = 'local'`
+  )
 }
 
 function addColumn(

@@ -18,6 +18,8 @@ export function CloudSyncProgress({ job }: { job?: CloudSyncJob }): React.JSX.El
       </div>
     )
   }
+  if (job.status === 'canceled') return <Tag>已取消</Tag>
+  if (job.status === 'canceling') return <Tag color="warning">正在取消</Tag>
   if (!job.progress) {
     return <Tag color="processing">等待开始</Tag>
   }

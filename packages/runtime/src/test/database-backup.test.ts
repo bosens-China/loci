@@ -34,6 +34,28 @@ describe('database backup', () => {
         batchIntervalSeconds: 100,
         serverUrl: 'https://docs.example.com'
       })
+      const runId = sourceDatabase.startCrawlRun(source.id)
+      sourceDatabase.finishCrawlRun(
+        runId,
+        'completed',
+        {
+          queued: 2,
+          processed: 2,
+          succeeded: 1,
+          failed: 1,
+          limitReached: false,
+          failures: [
+            {
+              url: 'https://react.dev/missing',
+              reason: 'http_error',
+              message: 'Service Unavailable',
+              retryable: true,
+              statusCode: 503
+            }
+          ]
+        },
+        null
+      )
       targetDatabase.createSource({
         name: 'Existing',
         url: 'https://example.com',
@@ -65,6 +87,9 @@ describe('database backup', () => {
         maxRetries: 4,
         batchIntervalSeconds: 100
       })
+      expect(targetDatabase.listCrawlFailures(runId)).toMatchObject([
+        { runId, reason: 'http_error', statusCode: 503, retryable: true }
+      ])
     } finally {
       sourceDatabase.close()
       targetDatabase.close()

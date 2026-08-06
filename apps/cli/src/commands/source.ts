@@ -1,29 +1,33 @@
 import { Option, type Command } from 'commander'
-import {
-  deriveSourceName,
-  formatBytes,
-  getSourceScopeOptions,
-  type CreateSourceInput,
-  type DocumentSource,
-  type FetchMode,
-  type UpdateSourceInput
-} from '@loci/shared'
+import { deriveSourceName, formatBytes, type DocumentSource, type FetchMode } from '@loci/shared'
 import type { BrowserInstallPrompt } from '../browser.js'
+import { startBackgroundSourceSync } from '../background-sync.js'
 import { runWithRuntime, type CommandResult } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
 import { validatePublicUrl } from '../input.js'
 import { resolveSource } from '../resources.js'
-import type { CliRuntime } from '../runtime.js'
 import {
-  askConfirm,
-  askInteger,
-  askSelect,
-  askText,
-  createSpinner,
-  note,
-  printTable,
-  warning
-} from '../ui.js'
+  readSourceCreatePreference,
+  saveRecentResource,
+  saveSourceCreatePreference,
+  scopeAtDepth,
+  scopeDepth
+} from '../preferences.js'
+import type { CliRuntime } from '../runtime.js'
+import { registerSourceHistoryCommands } from './source-history.js'
+import { askConfirm, askInteger, askText, createSpinner, note, printTable, warning } from '../ui.js'
+import {
+  askMode,
+  askScope,
+  formatSourceChanges,
+  formatSourceSummary,
+  hasSourceUpdates,
+  modeLabel,
+  numberValue,
+  sameSourceInput
+} from './source-prompts.js'
+
+export { askScope } from './source-prompts.js'
 
 interface SourceOptions {
   name?: string
@@ -34,6 +38,8 @@ interface SourceOptions {
   httpConcurrency?: number
   browserConcurrency?: number
   yes?: boolean
+  sync?: boolean
+  background?: boolean
 }
 
 export function registerSourceCommands(program: Command): void {
@@ -77,8 +83,16 @@ export function registerSourceCommands(program: Command): void {
     .option('--scope <path>', '收录路径，默认 /')
     .option('--http-concurrency <number>', 'HTTP 并发覆盖值，默认继承共享设置', numberValue)
     .option('--browser-concurrency <number>', '浏览器并发覆盖值，默认继承共享设置', numberValue)
+    .option('--no-sync', '创建后不执行首次同步')
+    .option('--background', '使用一次性后台进程执行首次同步')
     .action((urlArgument: string | undefined, options: SourceOptions) =>
       runWithRuntime('添加文档源', async (runtime) => {
+        if (options.background && options.sync === false) {
+          throw new CliError('--background 不能与 --no-sync 同时使用', 2)
+        }
+        const preference = process.stdin.isTTY
+          ? readSourceCreatePreference(runtime.database)
+          : { mode: 'auto' as const, pageLimit: 1000, scopeDepth: 0, syncAfterCreate: true }
         const guided = process.stdin.isTTY && !urlArgument && !options.url
         const url =
           options.url ??
@@ -95,28 +109,48 @@ export function registerSourceCommands(program: Command): void {
               ? await askText('文档源名称', { initialValue: deriveSourceName(url) || hostname })
               : deriveSourceName(url) || hostname),
           url,
-          mode: options.mode ?? (guided ? await askMode('抓取方式', 'auto') : 'auto'),
+          mode:
+            options.mode ?? (guided ? await askMode('抓取方式', preference.mode) : preference.mode),
           pageLimit:
             options.pageLimit ??
             (guided
               ? await askInteger('页面上限', {
-                  initialValue: 1000,
+                  initialValue: preference.pageLimit,
                   minimum: 1,
                   maximum: 10_000
                 })
-              : 1000),
-          scopePath: options.scope ?? (guided ? await askScope(url, '/') : '/'),
+              : preference.pageLimit),
+          scopePath:
+            options.scope ??
+            (guided
+              ? await askScope(url, scopeAtDepth(url, preference.scopeDepth))
+              : scopeAtDepth(url, preference.scopeDepth)),
           schedule: null,
           httpConcurrency: options.httpConcurrency ?? null,
           browserConcurrency: options.browserConcurrency ?? null
         }
-        let syncAfterSave = false
+        let syncAfterSave = options.sync !== false
         if (guided) {
           note(formatSourceSummary(input), '请确认文档源配置')
           if (!(await askConfirm('确认添加这个文档源吗？', true))) throw new CliCanceledError()
-          syncAfterSave = await askConfirm('创建后是否立即开始第一次同步？', true)
+          if (options.sync !== false) {
+            syncAfterSave = await askConfirm(
+              '创建后是否立即开始第一次同步？',
+              preference.syncAfterCreate
+            )
+          }
         }
         const saved = runtime.createSource(input)
+        saveSourceCreatePreference(runtime.database, {
+          mode: input.mode,
+          pageLimit: input.pageLimit,
+          scopeDepth: scopeDepth(input.url, input.scopePath),
+          syncAfterCreate: syncAfterSave
+        })
+        if (syncAfterSave && options.background) {
+          await startBackgroundSourceSync(saved.id)
+          return `已添加文档源“${saved.name}”并启动后台同步；运行 loci source runs ${saved.id.slice(0, 8)} 查看记录`
+        }
         if (syncAfterSave) return syncSource(runtime, saved)
         return `已添加文档源“${saved.name}”；运行 loci source sync ${saved.id.slice(0, 8)} 开始同步`
       })
@@ -134,7 +168,10 @@ export function registerSourceCommands(program: Command): void {
     .option('--browser-concurrency <number>', '浏览器并发覆盖值', numberValue)
     .action((reference: string | undefined, options: SourceOptions) =>
       runWithRuntime('修改文档源', async (runtime) => {
-        const current = await resolveSource(runtime, reference, { localOnly: true })
+        const current = await resolveSource(runtime, reference, {
+          localOnly: true,
+          preferenceKey: 'source-update'
+        })
         const hasUpdates = hasSourceUpdates(options)
         if (!process.stdin.isTTY && !hasUpdates) {
           throw new CliError('当前终端不可交互，请至少提供一个文档源修改选项', 2)
@@ -181,6 +218,7 @@ export function registerSourceCommands(program: Command): void {
           }
         }
         const saved = runtime.updateSourcePreservingDesktopFields(current, input)
+        saveRecentResource(runtime.database, 'source-update', saved.id)
         if (syncAfterSave) return syncSource(runtime, saved)
         return `已更新文档源“${saved.name}”`
       })
@@ -192,7 +230,10 @@ export function registerSourceCommands(program: Command): void {
     .option('--yes', '跳过确认')
     .action((reference: string | undefined, options: SourceOptions) =>
       runWithRuntime('删除文档源', async (runtime) => {
-        const target = await resolveSource(runtime, reference, { localOnly: true })
+        const target = await resolveSource(runtime, reference, {
+          localOnly: true,
+          preferenceKey: 'source-sync'
+        })
         if (!options.yes) {
           const confirmed = await askConfirm(
             `确定删除“${target.name}”及其 ${target.pages} 篇文档吗？`,
@@ -211,33 +252,12 @@ export function registerSourceCommands(program: Command): void {
     .action((reference: string | undefined) =>
       runWithRuntime('同步文档源', async (runtime) => {
         const target = await resolveSource(runtime, reference, { localOnly: true })
-        return syncSource(runtime, target)
+        const result = await syncSource(runtime, target)
+        saveRecentResource(runtime.database, 'source-sync', target.id)
+        return result
       })
     )
-
-  source
-    .command('runs [source]')
-    .description('查看最近抓取记录')
-    .action((reference: string | undefined) =>
-      runWithRuntime('抓取记录', async (runtime) => {
-        const target = reference
-          ? await resolveSource(runtime, reference, { localOnly: true })
-          : undefined
-        const runs = runtime.database.listCrawlHistory(target?.id)
-        printTable(
-          ['状态', '开始时间', '发现', '成功', '失败', '错误'],
-          runs.map((run) => [
-            statusLabel(run.status),
-            run.startedAt ? new Date(run.startedAt).toLocaleString('zh-CN') : '—',
-            run.discovered,
-            run.succeeded,
-            run.failed,
-            run.error ?? '—'
-          ])
-        )
-        return `已显示 ${runs.length} 条抓取记录`
-      })
-    )
+  registerSourceHistoryCommands(source)
 }
 
 async function syncSource(
@@ -288,101 +308,4 @@ function createBrowserInstallPrompt(
     await install()
     spinner.start(`继续同步“${sourceName}”`)
   }
-}
-
-function hasSourceUpdates(options: SourceOptions): boolean {
-  return Object.values(options).some((value) => value !== undefined)
-}
-
-async function askMode(message: string, initial: FetchMode): Promise<FetchMode> {
-  return askSelect(
-    message,
-    [
-      { value: 'auto', label: '自动判断' },
-      { value: 'http', label: 'HTTP' },
-      { value: 'browser', label: '浏览器' }
-    ],
-    initial
-  )
-}
-
-async function askScope(url: string, current: string): Promise<string> {
-  const options = getSourceScopeOptions(url)
-  const initialValue = options.some((option) => option.value === current) ? current : '/'
-  return askSelect(
-    '收录范围',
-    options.map((option) => ({
-      value: option.value,
-      label: option.label,
-      hint: option.value === '/' ? '收录整个站点' : '只收录该路径及其子路径'
-    })),
-    initialValue
-  )
-}
-
-function formatSourceSummary(input: CreateSourceInput): string {
-  return [
-    `名称：${input.name}`,
-    `URL：${input.url}`,
-    `抓取方式：${modeLabel(input.mode)}`,
-    `页面上限：${input.pageLimit}`,
-    `收录范围：${input.scopePath}`,
-    `HTTP 并发：${input.httpConcurrency ?? '继承全局设置'}`,
-    `浏览器并发：${input.browserConcurrency ?? '继承全局设置'}`
-  ].join('\n')
-}
-
-function formatSourceChanges(
-  current: DocumentSource,
-  input: Omit<UpdateSourceInput, 'schedule'>
-): string {
-  const changes = [
-    current.url === input.url ? null : `URL：${current.url} → ${input.url}`,
-    current.name === input.name ? null : `名称：${current.name} → ${input.name}`,
-    current.mode === input.mode
-      ? null
-      : `抓取方式：${modeLabel(current.mode)} → ${modeLabel(input.mode)}`,
-    current.pageLimit === input.pageLimit
-      ? null
-      : `页面上限：${current.pageLimit} → ${input.pageLimit}`,
-    current.scopePath === input.scopePath
-      ? null
-      : `收录范围：${current.scopePath} → ${input.scopePath}`,
-    current.httpConcurrency === input.httpConcurrency
-      ? null
-      : `HTTP 并发：${current.httpConcurrency ?? '继承全局'} → ${input.httpConcurrency ?? '继承全局'}`,
-    current.browserConcurrency === input.browserConcurrency
-      ? null
-      : `浏览器并发：${current.browserConcurrency ?? '继承全局'} → ${input.browserConcurrency ?? '继承全局'}`
-  ].filter((change): change is string => Boolean(change))
-  return changes.join('\n')
-}
-
-function sameSourceInput(
-  current: DocumentSource,
-  input: Omit<UpdateSourceInput, 'schedule'>
-): boolean {
-  return (
-    current.name === input.name &&
-    current.url === input.url &&
-    current.mode === input.mode &&
-    current.pageLimit === input.pageLimit &&
-    current.scopePath === input.scopePath &&
-    current.httpConcurrency === input.httpConcurrency &&
-    current.browserConcurrency === input.browserConcurrency
-  )
-}
-
-function numberValue(value: string): number {
-  const number = Number(value)
-  if (!Number.isInteger(number)) throw new CliError(`无效整数：${value}`, 2)
-  return number
-}
-
-function modeLabel(mode: FetchMode): string {
-  return { auto: '自动', http: 'HTTP', browser: '浏览器' }[mode]
-}
-
-function statusLabel(status: string): string {
-  return { queued: '等待', running: '进行中', completed: '成功', failed: '失败' }[status] ?? status
 }

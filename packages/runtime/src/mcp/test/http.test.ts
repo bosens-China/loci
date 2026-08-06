@@ -1,68 +1,18 @@
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
-import { afterEach, describe, expect, it } from 'vitest'
-import type {
-  CloudCatalogItem,
-  CreateSourceInput,
-  CrawlProgress,
-  CrawlRunState,
-  DocumentRecord,
-  DocumentSource
-} from '@loci/shared'
+import type { Client } from '@modelcontextprotocol/client'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { CreateSourceInput, CrawlProgress, DocumentSource } from '@loci/shared'
 import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from '../http.js'
 import type { LociMcpServices } from '../server.js'
-
-const source: DocumentSource = {
-  id: 'lib-vue',
-  name: 'Vue 中文文档',
-  url: 'https://cn.vuejs.org/guide/',
-  mode: 'http',
-  status: 'healthy',
-  pages: 1,
-  contentSize: Buffer.byteLength('# 响应式基础'),
-  pageLimit: 1000,
-  scopePath: '/',
-  lastUpdated: '刚刚',
-  schedule: null,
-  httpConcurrency: null,
-  browserConcurrency: null,
-  iconUrl: 'https://cn.vuejs.org/logo.svg',
-  cloud: null
-}
-
-const document: DocumentRecord = {
-  id: 'file-reactivity',
-  sourceId: source.id,
-  sourceName: source.name,
-  title: '响应式基础',
-  url: 'https://cn.vuejs.org/guide/essentials/reactivity-fundamentals',
-  folder: 'guide / essentials',
-  language: 'zh-CN',
-  updatedAt: '刚刚',
-  content: `# 响应式基础\n\n${'读取属性时进行依赖追踪。'.repeat(180)}\n\n## 注意事项\n\n避免直接替换对象。`
-}
-
-const completedProgress: CrawlProgress = {
-  queued: 1,
-  processed: 1,
-  succeeded: 1,
-  failed: 0,
-  limitReached: false
-}
-
-const cloudLibrary: CloudCatalogItem = {
-  id: 'cloud-vue',
-  name: 'Vue 云端文档',
-  url: source.url,
-  revision: 'revision-1',
-  pages: 1,
-  contentSize: 1024,
-  lastCrawledAt: '2026-08-03T00:00:00.000Z',
-  publishedAt: '2026-08-03T00:00:00.000Z',
-  localSourceId: null,
-  localRevision: null,
-  autoSync: false,
-  updateAvailable: false
-}
+import {
+  cloudLibrary,
+  completedProgress,
+  connect,
+  createServices,
+  document,
+  getFirstFile,
+  runningState,
+  source
+} from './http-fixtures.js'
 
 describe('MCP HTTP server', () => {
   let httpServer: McpHttpServer | undefined
@@ -210,14 +160,19 @@ describe('MCP HTTP server', () => {
     let crawlCalls = 0
     let active = false
     let resolveCrawl: ((progress: CrawlProgress) => void) | undefined
+    const progressListeners: Array<(progress: CrawlProgress) => void> = []
+    const crawlTask = new Promise<CrawlProgress>((resolve) => {
+      resolveCrawl = resolve
+    })
     const services: LociMcpServices = {
       ...createServices(),
-      crawlSource: async () => {
-        crawlCalls += 1
-        active = true
-        return new Promise((resolve) => {
-          resolveCrawl = resolve
-        })
+      crawlSource: (_id, onProgress) => {
+        if (!active) {
+          crawlCalls += 1
+          active = true
+        }
+        if (onProgress) progressListeners.push(onProgress)
+        return crawlTask
       },
       isCrawling: () => active,
       getCrawlState: () => (active ? runningState() : undefined)
@@ -237,14 +192,23 @@ describe('MCP HTTP server', () => {
       name: 'loci_get_sync_status',
       arguments: { library_ids: [source.id] }
     })
+    const waiting = client.callTool({
+      name: 'loci_sync_libraries',
+      arguments: { library_ids: [source.id], wait_for_completion: true }
+    })
 
     expect(first.structuredContent).toMatchObject({ items: [{ status: 'syncing' }] })
     expect(duplicate.structuredContent).toMatchObject({ items: [{ status: 'syncing' }] })
     expect(status.structuredContent).toMatchObject({ items: [{ status: 'syncing' }] })
     expect(crawlCalls).toBe(1)
+    await vi.waitFor(() => expect(progressListeners).toHaveLength(1))
+    progressListeners.forEach((listener) => listener(completedProgress))
     active = false
     resolveCrawl?.(completedProgress)
-    await Promise.resolve()
+    expect((await waiting).structuredContent).toMatchObject({
+      items: [{ status: 'completed' }]
+    })
+    expect(crawlCalls).toBe(1)
   })
 
   it('添加文档库时分别传递两种并发覆盖值', async () => {
@@ -274,6 +238,37 @@ describe('MCP HTTP server', () => {
     })
 
     expect(createdInput).toMatchObject({ httpConcurrency: 8, browserConcurrency: 2 })
+  })
+
+  it('云端同域副本不会阻止创建本地抓取回退', async () => {
+    let created = false
+    const cloudSource: DocumentSource = {
+      ...source,
+      id: 'cloud-copy',
+      cloud: {
+        serverUrl: 'https://cloud.example.com',
+        libraryId: 'cloud-vue',
+        revision: 'revision-1',
+        autoSync: false
+      }
+    }
+    httpServer = await startMcpHttpServer(0, {
+      ...createServices(),
+      listSources: () => [cloudSource, ...(created ? [source] : [])],
+      createSource: () => {
+        created = true
+        return source
+      }
+    })
+    client = await connect(httpServer)
+
+    const added = await client.callTool({
+      name: 'loci_add_library',
+      arguments: { url: source.url, wait_for_completion: true }
+    })
+
+    expect(created).toBe(true)
+    expect(added.structuredContent).toMatchObject({ created: true, status: 'completed' })
   })
 
   it('exposes structured failure details and retry guidance', async () => {
@@ -329,59 +324,3 @@ describe('MCP HTTP server', () => {
     expect(response.status).toBe(403)
   })
 })
-
-function createServices(): LociMcpServices {
-  return {
-    listSources: () => [source],
-    listDocuments: () => [document],
-    searchDocuments: () => [document],
-    createSource: () => source,
-    crawlSource: async (_id, onProgress) => {
-      onProgress?.({ ...completedProgress, processed: 0, succeeded: 0 })
-      onProgress?.(completedProgress)
-      return completedProgress
-    },
-    deleteSource: () => undefined,
-    isCrawling: () => false,
-    getCrawlState: () => ({ ...runningState(), progress: completedProgress, running: false }),
-    listCloudLibraries: async () => [cloudLibrary],
-    pullCloudLibrary: async () => ({ source, updated: true, documents: source.pages })
-  }
-}
-
-async function connect(server: McpHttpServer): Promise<Client> {
-  const connected = new Client({ name: 'loci-test', version: '1.0.0' })
-  await connected.connect(new StreamableHTTPClientTransport(new URL(server.endpoint)))
-  return connected
-}
-
-function runningState(): CrawlRunState {
-  return {
-    sourceId: source.id,
-    progress: { ...completedProgress, processed: 0, succeeded: 0 },
-    nodes: [],
-    error: null,
-    running: true,
-    paused: false
-  }
-}
-
-function getFirstFile(value: unknown): {
-  content: string
-  offset: number
-  next_offset: number
-} {
-  if (!value || typeof value !== 'object' || !('files' in value) || !Array.isArray(value.files)) {
-    throw new Error('missing files')
-  }
-  const file: unknown = value.files[0]
-  if (!file || typeof file !== 'object') throw new Error('missing first file')
-  const record = file as Record<string, unknown>
-  if (
-    typeof record.content !== 'string' ||
-    typeof record.offset !== 'number' ||
-    typeof record.next_offset !== 'number'
-  )
-    throw new Error('invalid first file')
-  return { content: record.content, offset: record.offset, next_offset: record.next_offset }
-}

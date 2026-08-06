@@ -1,5 +1,5 @@
 import type { Command } from 'commander'
-import { isLociMcpAvailable } from '@loci/runtime'
+import { isLociMcpAvailable, readRuntimeLock } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { printTable } from '../ui.js'
 
@@ -16,6 +16,7 @@ export function registerStatusCommand(program: Command): void {
         const runs = runtime.database.listCrawlHistory()
         const settings = runtime.database.getSettings()
         const mcpRunning = await canConnect(settings.mcpPort)
+        const scheduleHost = readRuntimeLock(runtime.dataDir, 'schedule')
         printTable(
           ['项目', '状态'],
           [
@@ -29,6 +30,7 @@ export function registerStatusCommand(program: Command): void {
                 : '暂无记录'
             ],
             ['MCP', mcpRunning ? `运行中，端口 ${settings.mcpPort}` : '未运行'],
+            ['计划运行器', scheduleHost?.owner ?? '未运行'],
             ['Server', settings.serverUrl]
           ]
         )

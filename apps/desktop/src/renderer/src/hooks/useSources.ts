@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '../query-client'
 import type { CreateSourceInput, CrawlProgress, DocumentSource, UpdateSourceInput } from '../types'
 
 interface SourcesState {
@@ -13,52 +14,44 @@ interface SourcesState {
 }
 
 export function useSources(): SourcesState {
-  const [sources, setSources] = useState<DocumentSource[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const client = useQueryClient()
+  const query = useQuery({ queryKey: queryKeys.sources, queryFn: window.api.listSources })
+  const createMutation = useMutation({
+    mutationFn: window.api.createSource,
+    onSuccess: (source) =>
+      client.setQueryData<DocumentSource[]>(queryKeys.sources, (current = []) => [
+        ...current,
+        source
+      ])
+  })
+  const updateMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateSourceInput }) =>
+      window.api.updateSource(id, input),
+    onSuccess: (source) =>
+      client.setQueryData<DocumentSource[]>(queryKeys.sources, (current = []) =>
+        current.map((item) => (item.id === source.id ? source : item))
+      )
+  })
+  const removeMutation = useMutation({
+    mutationFn: window.api.deleteSource,
+    onSuccess: (_, id) =>
+      client.setQueryData<DocumentSource[]>(queryKeys.sources, (current = []) =>
+        current.filter((source) => source.id !== id)
+      )
+  })
+  const crawlMutation = useMutation({
+    mutationFn: window.api.crawlSource,
+    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.localData })
+  })
 
-  const reload = useCallback(async (): Promise<void> => {
-    setLoading(true)
-    try {
-      setSources(await window.api.listSources())
-      setError(null)
-    } catch {
-      setError('本地文档源加载失败，请重试')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void Promise.resolve().then(reload)
-    return window.api.onExternalDataChange(() => void reload())
-  }, [reload])
-
-  const create = useCallback(async (input: CreateSourceInput): Promise<void> => {
-    const source = await window.api.createSource(input)
-    setSources((current) => [...current, source])
-  }, [])
-
-  const update = useCallback(async (id: string, input: UpdateSourceInput): Promise<void> => {
-    const source = await window.api.updateSource(id, input)
-    setSources((current) => current.map((item) => (item.id === id ? source : item)))
-  }, [])
-
-  const remove = useCallback(async (id: string): Promise<void> => {
-    await window.api.deleteSource(id)
-    setSources((current) => current.filter((source) => source.id !== id))
-  }, [])
-
-  const crawl = useCallback(
-    async (id: string): Promise<CrawlProgress> => {
-      try {
-        return await window.api.crawlSource(id)
-      } finally {
-        await reload()
-      }
-    },
-    [reload]
-  )
-
-  return { sources, loading, error, reload, create, update, remove, crawl }
+  return {
+    sources: query.data ?? [],
+    loading: query.isPending,
+    error: query.isError ? '本地文档源加载失败，请重试' : null,
+    reload: async () => void (await query.refetch()),
+    create: async (input) => void (await createMutation.mutateAsync(input)),
+    update: async (id, input) => void (await updateMutation.mutateAsync({ id, input })),
+    remove: async (id) => void (await removeMutation.mutateAsync(id)),
+    crawl: (id) => crawlMutation.mutateAsync(id)
+  }
 }

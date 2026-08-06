@@ -111,20 +111,16 @@ export async function fetchWithRetry(url: string, options: FetchOptions = {}): P
   const timeoutMs = options.timeoutMs ?? 30_000
   const maxRetries = options.maxRetries ?? 3
   const fetchImpl = options.fetchImpl ?? fetch
-  const sleep =
-    options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
+  const sleep = options.sleep ?? defaultSleep
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeoutMs)
-      try {
-        const response = await fetchImpl(url, { signal: controller.signal, redirect: 'follow' })
-        if (!isRetryableStatus(response.status) || attempt === maxRetries) return response
-        await sleep(retryAfterMs(response.headers.get('retry-after')))
-      } finally {
-        clearTimeout(timer)
-      }
+      const response = await fetchImpl(url, {
+        signal: AbortSignal.timeout(timeoutMs),
+        redirect: 'follow'
+      })
+      if (!isRetryableStatus(response.status) || attempt === maxRetries) return response
+      await sleep(retryAfterMs(response.headers.get('retry-after')))
     } catch (error) {
       if (attempt === maxRetries) throw error
       await sleep(0)

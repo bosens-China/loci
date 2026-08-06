@@ -34,6 +34,7 @@ const snapshotSchema = z.object({
         markdown: z.string()
       })
     )
+    .min(1)
     .max(10_000)
 })
 
@@ -52,16 +53,18 @@ export class CloudLibraryService {
       .safeParse(await this.request(normalized, '/api/v1/libraries'))
     if (!parsed.success) throw new Error('云端后端版本不兼容，请更新后端服务')
     const payload = parsed.data
-    return payload.libraries.map((library) => {
-      const local = this.database.findCloudSource(normalized, library.id)
-      return {
-        ...library,
-        localSourceId: local?.sourceId ?? null,
-        localRevision: local?.revision ?? null,
-        autoSync: local?.autoSync ?? false,
-        updateAvailable: Boolean(local && local.revision !== library.revision)
-      }
-    })
+    return payload.libraries
+      .filter((library) => library.pages > 0)
+      .map((library) => {
+        const local = this.database.findCloudSource(normalized, library.id)
+        return {
+          ...library,
+          localSourceId: local?.sourceId ?? null,
+          localRevision: local?.revision ?? null,
+          autoSync: local?.autoSync ?? false,
+          updateAvailable: Boolean(local && local.revision !== library.revision)
+        }
+      })
   }
 
   async importLibrary(
@@ -144,6 +147,9 @@ export class CloudLibraryService {
     const body = await response.json().catch(() => null)
     if (!response.ok) throw requestError(response.status, body)
     const parsed = snapshotSchema.safeParse(body)
+    if (z.object({ documents: z.array(z.unknown()).length(0) }).safeParse(body).success) {
+      throw new Error('云端快照没有可用文档，未修改本地数据')
+    }
     if (!parsed.success) throw new Error('云端后端版本不兼容，请更新后端服务')
     return parsed.data
   }

@@ -17,43 +17,47 @@ import {
   Typography,
   message
 } from 'antd'
-import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { formatBytes, type CloudCatalogItem } from '@loci/shared'
 import { useAppSettings } from '../settings-context'
+import { queryKeys } from '../query-client'
+
+interface CatalogAction {
+  item: CloudCatalogItem
+  action: () => Promise<unknown>
+  success: string
+}
 
 function CloudCatalogPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { state: settingsState, loading: settingsLoading } = useAppSettings()
-  const [items, setItems] = useState<CloudCatalogItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null)
+  const client = useQueryClient()
   const [messageApi, contextHolder] = message.useMessage()
-
-  const reload = useCallback(async (): Promise<void> => {
-    setLoading(true)
-    try {
-      setItems(await window.api.listCloudCatalog())
-      setError(null)
-    } catch (loadError) {
-      setError(errorMessage(loadError, '云端目录读取失败'))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!settingsLoading) void Promise.resolve().then(reload)
-  }, [reload, settingsLoading, settingsState.settings.serverUrl])
+  const catalogKey = queryKeys.cloudCatalog(settingsState.settings.serverUrl)
+  const query = useQuery({
+    queryKey: catalogKey,
+    queryFn: window.api.listCloudCatalog,
+    enabled: !settingsLoading
+  })
+  const actionMutation = useMutation({
+    mutationFn: ({ action }: CatalogAction) => action(),
+    onSuccess: async (_, { success }) => {
+      messageApi.success(success)
+      await Promise.all([
+        client.invalidateQueries({ queryKey: catalogKey }),
+        client.invalidateQueries({ queryKey: queryKeys.localData })
+      ])
+    },
+    onError: (actionError: unknown) => messageApi.error(errorMessage(actionError, '操作失败'))
+  })
+  const items = query.data ?? []
+  const loading = query.isPending || query.isFetching
+  const error = query.error ? errorMessage(query.error, '云端目录读取失败') : null
+  const busyId = actionMutation.isPending ? actionMutation.variables?.item.id : null
 
   const run = (item: CloudCatalogItem, action: () => Promise<unknown>, success: string): void => {
-    setBusyId(item.id)
-    void action()
-      .then(() => messageApi.success(success))
-      .then(reload)
-      .catch((actionError: unknown) => messageApi.error(errorMessage(actionError, '操作失败')))
-      .finally(() => setBusyId(null))
+    actionMutation.mutate({ item, action, success })
   }
 
   const remove = (item: CloudCatalogItem): void => {
@@ -73,7 +77,7 @@ function CloudCatalogPage(): React.JSX.Element {
             从 {settingsState.settings.serverUrl} 保存公开文档到本地知识库。
           </Typography.Paragraph>
         </div>
-        <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void reload()}>
+        <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void query.refetch()}>
           检查更新
         </Button>
       </div>
@@ -92,7 +96,7 @@ function CloudCatalogPage(): React.JSX.Element {
           showIcon
           message={error}
           action={
-            <Button size="small" onClick={() => void reload()}>
+            <Button size="small" onClick={() => void query.refetch()}>
               重试
             </Button>
           }

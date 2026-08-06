@@ -14,8 +14,10 @@ import {
 } from '@loci/runtime'
 import { createCursorMcpConfig, type AgentClient } from '@loci/shared'
 import { createCliRuntime } from '../runtime.js'
+import { waitForTermination } from '../process-lifecycle.js'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
+import { readMcpConfigurePreference, saveMcpConfigurePreference } from '../preferences.js'
 import { askConfirm, askSelect, finishUi, info, note, startUi, success } from '../ui.js'
 import { canConnect } from './status.js'
 
@@ -114,20 +116,29 @@ export function registerMcpCommands(program: Command): void {
     .command('configure [client]')
     .description('把唯一的 Loci MCP 写入 Agent 客户端配置，默认使用 CLI stdio')
     .addOption(
-      new Option('--transport <transport>', '选择 MCP 传输方式')
-        .choices(['stdio', 'http'])
-        .default('stdio')
+      new Option('--transport <transport>', '选择 MCP 传输方式').choices(['stdio', 'http'])
     )
     .option('--yes', '跳过写入前确认')
     .action(
-      async (client: string | undefined, options: { transport: McpTransport; yes?: boolean }) => {
+      async (client: string | undefined, options: { transport?: McpTransport; yes?: boolean }) => {
+        let remembered = { client: 'codex' as AgentClient, transport: 'stdio' as McpTransport }
+        if (process.stdin.isTTY && (!client || !options.transport)) {
+          const preferenceRuntime = createCliRuntime()
+          try {
+            remembered = readMcpConfigurePreference(preferenceRuntime.database)
+          } finally {
+            await preferenceRuntime.close()
+          }
+        }
         const selected =
           client ??
           (process.stdin.isTTY
-            ? await askSelect<AgentSelection>('请选择 Agent 客户端', clients)
+            ? await askSelect<AgentSelection>('请选择 Agent 客户端', clients, remembered.client)
             : 'manual')
+        const transport =
+          options.transport ?? (process.stdin.isTTY ? remembered.transport : 'stdio')
         if (selected === 'manual') {
-          await printManualMcpConfig(options.transport)
+          await printManualMcpConfig(transport)
           return
         }
         if (!isAgentClient(selected)) {
@@ -138,7 +149,7 @@ export function registerMcpCommands(program: Command): void {
         }
         await runWithRuntime('配置 Agent 客户端', async (runtime) => {
           const connection =
-            options.transport === 'stdio'
+            transport === 'stdio'
               ? LOCI_CLI_STDIO_CONNECTION
               : createHttpMcpConnection(
                   `http://127.0.0.1:${runtime.database.getSettings().mcpPort}/mcp`
@@ -148,7 +159,7 @@ export function registerMcpCommands(program: Command): void {
             note(
               [
                 `客户端：${command.label}`,
-                `传输方式：${options.transport === 'stdio' ? 'CLI stdio' : '本地 HTTP'}`,
+                `传输方式：${transport === 'stdio' ? 'CLI stdio' : '本地 HTTP'}`,
                 `将执行：${formatCommand(command.command, command.args)}`
               ].join('\n'),
               'MCP 配置写入预览'
@@ -158,6 +169,7 @@ export function registerMcpCommands(program: Command): void {
             }
           }
           const result = await importAgentClient(selected, connection)
+          saveMcpConfigurePreference(runtime.database, { client: selected, transport })
           return result.message
         })
       }
@@ -204,14 +216,6 @@ function createMcpServices(runtime: ReturnType<typeof createCliRuntime>): LociMc
       return runtime.cloud.importLibrary(runtime.database.getSettings().serverUrl, libraryId, false)
     }
   }
-}
-
-function waitForTermination(): Promise<void> {
-  return new Promise((resolve) => {
-    const stop = (): void => resolve()
-    process.once('SIGINT', stop)
-    process.once('SIGTERM', stop)
-  })
 }
 
 function waitForStdioTermination(): Promise<void> {

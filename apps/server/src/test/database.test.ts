@@ -1,11 +1,19 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ServerDatabase } from '../database.js'
 
 describe('ServerDatabase', () => {
   const databases: ServerDatabase[] = []
+  const directories: string[] = []
 
   afterEach(() => {
     databases.splice(0).forEach((database) => database.close())
+    directories
+      .splice(0)
+      .forEach((directory) => rmSync(directory, { recursive: true, force: true }))
   })
 
   it('只在文档内容变化时发布新 revision', () => {
@@ -14,6 +22,7 @@ describe('ServerDatabase', () => {
     const library = database.createLibrary({
       name: 'Hono',
       url: 'https://hono.dev/docs',
+      scopePath: '/docs',
       pageLimit: 1000,
       schedule: null
     })
@@ -53,5 +62,90 @@ describe('ServerDatabase', () => {
       fetchMode: 'http'
     })
     expect(database.publishSnapshot(library.id).library.revision).not.toBe(first.library.revision)
+  })
+
+  it('不公开也不发布零页面文档库', () => {
+    const database = new ServerDatabase(':memory:')
+    databases.push(database)
+    const library = database.createLibrary({
+      name: '空文档库',
+      url: 'https://empty.example.com/docs',
+      scopePath: '/docs',
+      pageLimit: 100,
+      schedule: null
+    })
+
+    expect(database.listPublishedLibraries()).toEqual([])
+    expect(() => database.publishSnapshot(library.id)).toThrow('没有可发布页面')
+  })
+
+  it('缩小收录范围时删除范围外文档，并允许同域名不同范围', () => {
+    const database = new ServerDatabase(':memory:')
+    databases.push(database)
+    const library = database.createLibrary({
+      name: 'Hono 全站',
+      url: 'https://hono.dev/docs',
+      scopePath: '/',
+      pageLimit: 1000,
+      schedule: null
+    })
+    for (const url of ['https://hono.dev/docs/start', 'https://hono.dev/blog/news']) {
+      database.saveDocument(library.id, {
+        title: url,
+        url,
+        language: 'en',
+        markdown: url,
+        crawledAt: '2026-08-06T00:00:00.000Z',
+        fetchMode: 'http'
+      })
+    }
+    database.updateLibrary(library.id, {
+      name: library.name,
+      url: library.url,
+      scopePath: '/docs',
+      pageLimit: library.pageLimit,
+      schedule: null
+    })
+    expect(database.listDocumentUrls(library.id)).toEqual(['https://hono.dev/docs/start'])
+    expect(() =>
+      database.createLibrary({
+        name: 'Hono 博客',
+        url: 'https://hono.dev/blog',
+        scopePath: '/blog',
+        pageLimit: 100,
+        schedule: null
+      })
+    ).not.toThrow()
+  })
+
+  it('把旧版 hostname 唯一表无损迁移为默认全站范围', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-server-migration-'))
+    directories.push(directory)
+    const filename = join(directory, 'server.sqlite')
+    const legacy = new DatabaseSync(filename)
+    legacy.exec(`
+      CREATE TABLE libraries (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, first_url TEXT NOT NULL,
+        hostname TEXT NOT NULL UNIQUE, page_limit INTEGER NOT NULL, schedule TEXT,
+        last_crawled_at TEXT, last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      ) STRICT;
+      INSERT INTO libraries VALUES
+        ('one', '旧文档库', 'https://example.com/docs', 'example.com', 100, NULL,
+          NULL, NULL, '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z');
+    `)
+    legacy.close()
+
+    const database = new ServerDatabase(filename)
+    databases.push(database)
+    expect(database.getLibrary('one').scopePath).toBe('/')
+    expect(
+      database.createLibrary({
+        name: '子路径',
+        url: 'https://example.com/guide',
+        scopePath: '/guide',
+        pageLimit: 100,
+        schedule: null
+      }).scopePath
+    ).toBe('/guide')
   })
 })

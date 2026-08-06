@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchWithRetry, isRetryableStatus } from '../fetch'
+import { fetchWithRetry, isRetryableStatus } from '@loci/core'
 
 describe('fetchWithRetry', () => {
   it('retries transient responses and returns the eventual response', async () => {

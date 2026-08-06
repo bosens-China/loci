@@ -11,6 +11,6 @@ export default defineConfig({
   sourcemap: true,
   deps: {
     neverBundle: true,
-    alwaysBundle: ['@loci/core', '@loci/runtime', '@loci/shared']
+    alwaysBundle: ['@loci/core', '@loci/runtime', '@loci/shared', 'semver']
   }
 })

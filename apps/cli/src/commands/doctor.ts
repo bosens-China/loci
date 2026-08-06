@@ -18,6 +18,7 @@ export function registerDoctorCommand(program: Command): void {
         const server = await checkServer(settings.serverUrl)
         const mcp = await canConnect(settings.mcpPort)
         const maintenance = readRuntimeLock(runtime.dataDir, 'maintenance')
+        const scheduleHost = readRuntimeLock(runtime.dataDir, 'schedule')
         const crawling = hasActiveCrawlLocks(runtime.dataDir)
         let writable = true
         try {
@@ -51,6 +52,11 @@ export function registerDoctorCommand(program: Command): void {
             'MCP',
             mcp ? '运行中' : '未运行',
             mcp ? `端口 ${settings.mcpPort}` : '桌面端会自动启动，或运行 loci mcp serve'
+          ],
+          [
+            '计划运行器',
+            scheduleHost ? '运行中' : '未运行',
+            scheduleHost?.owner ?? '运行 loci schedule run'
           ]
         ]
         printTable(['检查项', '结果', '说明'], rows)

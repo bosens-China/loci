@@ -69,6 +69,36 @@ describe('CloudLibraryService', () => {
       '云端后端版本不兼容，请更新后端服务'
     )
   })
+
+  it('忽略云端空文档库，并拒绝用空快照覆盖本地可用副本', async () => {
+    database = createDatabase(':memory:')
+    let emptySnapshot = false
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/libraries')) {
+        return jsonResponse({
+          libraries: [library('sha256:v1'), { ...library('sha256:empty'), id: 'empty', pages: 0 }]
+        })
+      }
+      return jsonResponse(
+        emptySnapshot ? { ...snapshot('sha256:v2'), documents: [] } : snapshot('sha256:v1')
+      )
+    })
+    const service = new CloudLibraryService(database, fetcher)
+
+    expect((await service.listCatalog('http://localhost:7001')).map((item) => item.id)).toEqual([
+      'library-1'
+    ])
+    const imported = await service.importLibrary('http://localhost:7001', 'library-1', false)
+    expect(imported.documents).toBe(1)
+
+    emptySnapshot = true
+    await expect(
+      service.updateLibrary(imported.source.id, 'http://localhost:7001')
+    ).rejects.toThrow('没有可用文档')
+    expect(database.searchDocuments('version-v1')).toHaveLength(1)
+    expect(database.listSources().find((item) => item.id === imported.source.id)?.pages).toBe(1)
+  })
 })
 
 function library(revision: string): Record<string, unknown> {

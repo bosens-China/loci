@@ -1,10 +1,11 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { existsSync, statSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import type { Command } from 'commander'
 import { acquireMaintenanceRuntimeLock } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
+import { readRecentResource, saveRecentResource } from '../preferences.js'
 import { askConfirm, askPath } from '../ui.js'
 
 export function registerDataCommands(program: Command): void {
@@ -15,12 +16,14 @@ export function registerDataCommands(program: Command): void {
     .description('导出 Loci 备份，省略路径时使用带时间的文件名')
     .action((file: string | undefined) =>
       runWithRuntime('导出 Loci 数据', async (runtime) => {
-        const target = resolve(file ?? defaultBackupFilename())
+        const directory = readRecentResource(runtime.database, 'data-directory') ?? process.cwd()
+        const target = resolve(file ?? join(directory, defaultBackupFilename()))
         await writeFile(
           target,
           JSON.stringify(runtime.database.exportBackup(), null, 2),
           file ? 'utf8' : { encoding: 'utf8', flag: 'wx' }
         )
+        saveRecentResource(runtime.database, 'data-directory', dirname(target))
         return `数据已导出到 ${target}`
       })
     )
@@ -34,7 +37,7 @@ export function registerDataCommands(program: Command): void {
         const source = resolve(
           file ??
             (await askPath('选择 Loci 备份文件', {
-              root: process.cwd(),
+              root: readRecentResource(runtime.database, 'data-directory') ?? process.cwd(),
               validate: validateBackupPath
             }))
         )
@@ -51,6 +54,7 @@ export function registerDataCommands(program: Command): void {
         const lock = acquireMaintenanceRuntimeLock(runtime.dataDir, 'CLI 数据导入')
         try {
           const summary = runtime.database.importBackup(input)
+          saveRecentResource(runtime.database, 'data-directory', dirname(source))
           return `已导入 ${summary.sources} 个文档源和 ${summary.documents} 篇文档`
         } finally {
           lock.release()

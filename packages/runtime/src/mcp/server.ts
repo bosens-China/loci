@@ -1,21 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
 import { buildUrlTree, getUrlTreeSlice } from '@loci/shared'
-import type {
-  CreateSourceInput,
-  CloudCatalogItem,
-  CloudImportResult,
-  CrawlProgress,
-  CrawlRunState,
-  DocumentRecord,
-  DocumentSource,
-  UrlTreeNode
-} from '@loci/shared'
+import type { UrlTreeNode } from '@loci/shared'
 import { registerCloudTools } from './cloud-tools.js'
+import { registerDeleteLibraryTool } from './delete-tool.js'
 import { findBestPassage, readMarkdownSection, sliceContent } from './content.js'
 import {
   addLibraryOutputSchema,
-  deleteLibraryOutputSchema,
   listLibrariesOutputSchema,
   paginationInput,
   readFilesOutputSchema,
@@ -38,22 +29,9 @@ import {
   waitForSync,
   writeAnnotations
 } from './server-support.js'
+import type { LociMcpServices } from './services.js'
 
-export interface LociMcpServices {
-  listSources: () => DocumentSource[]
-  listDocuments: () => DocumentRecord[]
-  searchDocuments: (query: string) => DocumentRecord[]
-  createSource: (input: CreateSourceInput) => DocumentSource
-  crawlSource: (
-    id: string,
-    onProgress?: (progress: CrawlProgress) => void
-  ) => Promise<CrawlProgress>
-  deleteSource: (id: string) => void
-  isCrawling: (id: string) => boolean
-  getCrawlState: (id: string) => CrawlRunState | undefined
-  listCloudLibraries: () => Promise<CloudCatalogItem[]>
-  pullCloudLibrary: (libraryId: string) => Promise<CloudImportResult>
-}
+export type { LociMcpServices } from './services.js'
 
 const WAIT_DESCRIPTION =
   '默认立即返回 syncing；需要在单次调用内等待结果时传 wait_for_completion=true，并设置客户端进度回调。'
@@ -79,7 +57,7 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
     'loci_add_library',
     {
       title: '添加网页文档库',
-      description: `创建文档库并抓取同 hostname 页面。相同 hostname 只返回已有文档库。${WAIT_DESCRIPTION}`,
+      description: `创建本地文档库并抓取同 hostname 页面。相同 hostname 的本地文档库会复用；云端副本不会阻止本地抓取回退。${WAIT_DESCRIPTION}`,
       inputSchema: z.object({
         url: z.url().describe('任意公开文档页面 URL'),
         name: z.string().trim().min(1).max(100).optional().describe('默认使用 hostname'),
@@ -106,18 +84,59 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
       const hostname = new URL(url).hostname
       const existing = services
         .listSources()
-        .find((item) => new URL(item.url).hostname === hostname)
+        .find((item) => item.cloud === null && new URL(item.url).hostname === hostname)
       if (existing) {
+        const crawling = services.isCrawling(existing.id)
+        if (crawling) {
+          const runningState = services.getCrawlState(existing.id)
+          const item =
+            wait_for_completion && runningState?.running
+              ? await waitForSync(services, existing.id, context)
+              : stateToSyncItem(existing.id, runningState, true)
+          const sync = { ...item }
+          delete sync.library_id
+          const library =
+            services.listSources().find((entry) => entry.id === existing.id) ?? existing
+          return result(
+            {
+              created: false,
+              ...sync,
+              library: serializeLibrary(library, item.status === 'syncing' ? 'syncing' : undefined)
+            },
+            wait_for_completion && runningState?.running
+              ? `已有文档库同步状态：${item.status}`
+              : '文档库正在同步'
+          )
+        }
+        if (existing.pages === 0) {
+          if (!wait_for_completion) {
+            startInBackground(services, existing.id)
+            return result(
+              {
+                created: false,
+                status: 'syncing',
+                library: serializeLibrary(existing, 'syncing')
+              },
+              '空文档库已存在并开始重新同步；请调用 loci_get_sync_status 查询进度'
+            )
+          }
+          const item = await waitForSync(services, existing.id, context)
+          const sync = { ...item }
+          delete sync.library_id
+          const library =
+            services.listSources().find((entry) => entry.id === existing.id) ?? existing
+          return result(
+            { created: false, ...sync, library: serializeLibrary(library) },
+            `已有空文档库重新同步状态：${item.status}`
+          )
+        }
         return result(
           {
             created: false,
-            status: services.isCrawling(existing.id) ? 'syncing' : 'idle',
-            library: serializeLibrary(
-              existing,
-              services.isCrawling(existing.id) ? 'syncing' : undefined
-            )
+            status: 'idle',
+            library: serializeLibrary(existing)
           },
-          services.isCrawling(existing.id) ? '文档库正在同步' : '文档库已存在'
+          '文档库已存在'
         )
       }
 
@@ -167,7 +186,12 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
         if (!available.has(id)) {
           items.push({ library_id: id, status: 'not_found' })
         } else if (services.isCrawling(id)) {
-          items.push({ library_id: id, status: 'syncing' })
+          const state = services.getCrawlState(id)
+          items.push(
+            wait_for_completion && state?.running
+              ? await waitForSync(services, id, context)
+              : stateToSyncItem(id, state, true)
+          )
         } else if (wait_for_completion) {
           items.push(await waitForSync(services, id, context))
         } else {
@@ -364,28 +388,7 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
     }
   )
 
-  server.registerTool(
-    'loci_delete_library',
-    {
-      title: '删除本地文档库',
-      description: '永久删除整个文档库及文件和搜索索引；仅在用户明确要求时调用。',
-      inputSchema: z.object({ library_id: z.string().min(1) }),
-      outputSchema: deleteLibraryOutputSchema,
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: true,
-        openWorldHint: false
-      }
-    },
-    ({ library_id }) => {
-      const source = services.listSources().find((item) => item.id === library_id)
-      if (!source) return result({ deleted: false, library_id }, '文档库已经不存在')
-      if (services.isCrawling(library_id)) return failure('文档库正在同步，完成后才能删除')
-      services.deleteSource(library_id)
-      return result({ deleted: true, library_id }, `已删除 ${source.name}`)
-    }
-  )
+  registerDeleteLibraryTool(server, services)
 
   return server
 }

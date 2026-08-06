@@ -9,6 +9,14 @@ const ui = vi.hoisted(() => ({
         options: { initialValue: number; minimum: number; maximum: number }
       ) => Promise<number>
     >(),
+  askMultiSelect:
+    vi.fn<
+      (
+        message: string,
+        options: readonly unknown[],
+        initialValues?: readonly string[]
+      ) => Promise<string[]>
+    >(),
   askPassword: vi.fn<(message: string) => Promise<string>>(),
   askSelect:
     vi.fn<
@@ -32,6 +40,7 @@ const ui = vi.hoisted(() => ({
 vi.mock('../../ui.js', () => ui)
 
 import { askLibraryInput, askSchedule, formatScheduleLiveHint } from '../admin.js'
+import { selectLibraries } from '../admin-sync.js'
 
 describe('CLI Admin 文档库交互', () => {
   beforeEach(() => {
@@ -42,11 +51,12 @@ describe('CLI Admin 文档库交互', () => {
     ui.askText.mockResolvedValueOnce('https://docs.rsbuild.dev/guide')
     ui.askText.mockResolvedValueOnce('rsbuild')
     ui.askInteger.mockResolvedValueOnce(1000)
-    ui.askSelect.mockResolvedValueOnce('manual')
+    ui.askSelect.mockResolvedValueOnce('/guide').mockResolvedValueOnce('manual')
 
     await expect(askLibraryInput()).resolves.toEqual({
       name: 'rsbuild',
       url: 'https://docs.rsbuild.dev/guide',
+      scopePath: '/guide',
       pageLimit: 1000,
       schedule: null
     })
@@ -72,5 +82,30 @@ describe('CLI Admin 文档库交互', () => {
   it('实时解释有效计划，并引导尚未写完的表达式', () => {
     expect(formatScheduleLiveHint('*/15 * * * *')).toContain('预计下次')
     expect(formatScheduleLiveHint('0 2')).toContain('继续输入有效的 5 段 Cron')
+  })
+
+  it('单库默认勾选，记住全选时直接保持全选', async () => {
+    const first = {
+      id: 'one',
+      name: 'One',
+      url: 'https://one.example.com',
+      hostname: 'one.example.com',
+      scopePath: '/',
+      pageLimit: 100,
+      schedule: null,
+      pages: 1,
+      lastCrawledAt: null,
+      lastError: null,
+      revision: null,
+      publishedAt: null
+    }
+    ui.askMultiSelect.mockResolvedValueOnce(['one'])
+    await expect(selectLibraries([first], [])).resolves.toEqual([first])
+    expect(ui.askMultiSelect.mock.calls[0]?.[2]).toEqual(['one'])
+
+    const second = { ...first, id: 'two', name: 'Two', hostname: 'two.example.com' }
+    ui.askMultiSelect.mockResolvedValueOnce(['__all__'])
+    await expect(selectLibraries([first, second], ['one', 'two'])).resolves.toEqual([first, second])
+    expect(ui.askMultiSelect.mock.calls[1]?.[2]).toEqual(['__all__'])
   })
 })
