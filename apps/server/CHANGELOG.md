@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0](https://github.com/bosens-China/loci/compare/server-v1.4.1...server-v1.5.0) (2026-08-06)
+
+
+### Features
+
+* 加固跨端同步与共享运行时 ([389db77](https://github.com/bosens-China/loci/commit/389db77ac0c6fb6bf230e8cd260ee6d709fa99e2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.7.0
+
 ## [1.4.1](https://github.com/bosens-China/loci/compare/server-v1.4.0...server-v1.4.1) (2026-08-05)
 
 
