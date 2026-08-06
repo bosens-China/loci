@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.8.0](https://github.com/bosens-China/loci/compare/loci-v1.7.2...loci-v1.8.0) (2026-08-06)
+
+
+### Features
+
+* 加固跨端同步与共享运行时 ([389db77](https://github.com/bosens-China/loci/commit/389db77ac0c6fb6bf230e8cd260ee6d709fa99e2))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.7.0
+    * @loci/runtime bumped to 1.4.0
+    * @loci/shared bumped to 1.10.0
+
 ## [1.7.2](https://github.com/bosens-China/loci/compare/loci-v1.7.1...loci-v1.7.2) (2026-08-05)
 
 
