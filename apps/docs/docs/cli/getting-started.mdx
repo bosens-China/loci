@@ -50,6 +50,13 @@ loci status
 loci source list
 ```
 
+需要在没有桌面端的服务器上执行定时更新时，先设置计划，再显式运行前台计划宿主：
+
+```bash
+loci schedule set rspress '0 2 * * *'
+loci schedule run
+```
+
 ## 接入 MCP
 
 Loci 通过 MCP 让 Agent 发现、搜索和读取本地文档。CLI 默认使用 stdio：Agent 需要使用时才会启动 Loci，不需要手动常驻运行服务。

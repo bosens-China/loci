@@ -70,6 +70,7 @@ pnpm server:start
 - `GET /api/v1/libraries/:id/snapshot`：下载完整 JSON 快照。
 
 快照响应提供 `ETag`。客户端再次请求时传入 `If-None-Match`，内容未变化会返回 `304 Not Modified`。
+只有至少包含一个页面的快照才会发布和出现在公开目录中；同步结果为 0 页时保留旧快照，首次同步为 0 页时不产生可下载快照。
 
 ```ts
 interface LibrarySnapshot {
@@ -100,7 +101,10 @@ interface LibrarySnapshot {
 - `PUT /api/v1/admin/libraries/:id`：更新文档库和抓取计划。
 - `DELETE /api/v1/admin/libraries/:id`：删除文档库及已发布快照。
 - `POST /api/v1/admin/libraries/:id/sync`：启动后台同步，返回 `202` 和任务 ID。
+- `POST /api/v1/admin/libraries/sync`：使用 `{ libraryIds: string[] }` 批量提交同步任务。
+- `GET /api/v1/admin/jobs`：列出活动和最近的同步任务。
 - `GET /api/v1/admin/jobs/:id`：查询同步状态和失败页面。
+- `POST /api/v1/admin/jobs/:id/cancel`：取消排队或运行中的同步任务。
 
 创建和更新文档库的请求正文：
 
@@ -108,12 +112,18 @@ interface LibrarySnapshot {
 {
   "name": "Hono",
   "url": "https://hono.dev/docs",
+  "scopePath": "/docs",
   "pageLimit": 1000,
   "schedule": "0 2 * * *"
 }
 ```
 
-`schedule` 使用五段 Linux Cron，传 `null` 表示关闭定时同步。配置浏览器
+`scopePath` 默认是 `/`，只收录该路径及其子路径；同一域名可以按不同范围建立多个文档库，
+但同一域名与范围组合不能重复。缩小范围会立即删除范围外的旧文档。
+
+`schedule` 使用五段 Linux Cron，传 `null` 表示关闭定时同步。批量同步任务由 Server
+统一排队，最多同时抓取 3 个文档库。取消运行任务会在当前页面批次结束后停止，不发布
+不完整快照。同一文档库只保留一个活动任务；重复提交会返回已有任务。配置浏览器
 后，服务端会比较入口页的 HTTP 与浏览器渲染结果，再为整个文档库选择一种抓取方式；
 后续页面不会重复双通道抓取。
 

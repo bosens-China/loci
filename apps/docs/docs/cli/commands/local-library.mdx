@@ -26,14 +26,20 @@ loci source add https://rspress.rs/guide/introduction.html
 | `--scope <path>`                 | 默认 `/`，表示收录整个 `rspress.rs` 站点；可用 `/guide` 收窄范围。 |
 | `--http-concurrency <number>`    | 默认继承共享的 HTTP 并发设置。                                     |
 | `--browser-concurrency <number>` | 默认继承共享的浏览器并发设置。                                     |
+| `--no-sync`                      | 只保存配置，不执行首次同步。                                       |
+| `--background`                   | 用一次性后台进程执行首次同步，完成后自动退出。                     |
 
-只运行 `loci source add` 时，CLI 会在交互终端中打开向导：先输入 URL，再确认自动生成的名称、抓取方式、页面上限和收录范围。提交前会展示配置摘要，并询问是否立即开始第一次同步。非交互环境应显式提供 URL，且只保存配置，不自动抓取。
+创建成功后默认立即执行一次前台同步，因此脚本与交互终端的语义一致。只运行 `loci source add` 时，CLI 会在交互终端中打开向导：先输入 URL，再确认自动生成的名称、抓取方式、页面上限和收录范围。提交前会展示配置摘要，并询问是否立即开始第一次同步。需要先批量建库时使用 `--no-sync`；希望当前终端立即返回时使用 `--background`，随后通过 `source runs` 和 `source logs` 审查结果。
+
+CLI 会记住上一次成功创建时的抓取方式、页面上限、收录路径层级和首次同步选择。下次向导会直接填入这些安全偏好；显式命令参数始终优先。密码、删除目标和危险确认不会被记住。
 
 ### `loci source sync [source]`
 
 以前台方式同步一个本地文档源，并显示已处理、成功和失败的页面数。`[source]` 可以是名称、完整 ID 或唯一短 ID；在交互终端中省略时可以从列表选择。
 
 `browser` 模式会在同步开始时检查无头浏览器；`auto` 模式会在确实需要比较 HTTP 与浏览器页面时检查。交互终端可以确认并自动安装，脚本环境则需要提前运行 `loci browser install`。
+
+同一进程内重复请求同一个文档源时，Loci 会复用正在运行的抓取和进度。桌面应用或另一个 CLI 进程已经同步该文档源时，跨进程锁会阻止当前命令重复写入。不同文档源可以独立同步。
 
 示例：
 
@@ -65,13 +71,40 @@ loci source update rspress --page-limit 300
 
 ### `loci source runs [source]`
 
-显示最近抓取记录，包括开始时间、发现页面数、成功数、失败数和错误信息。省略 `[source]` 时显示所有本地文档源的记录。
+显示最近抓取记录，包括来源、开始时间、发现页面数、成功数、失败数、短运行 ID 和错误信息。交互终端省略 `[source]` 时先选择文档源；脚本环境省略时显示所有文档源，显式 `--all` 也会显示全部记录。
 
 示例：
 
 ```bash
 loci source runs rspress
 ```
+
+### `loci source logs [run]`
+
+查看一次抓取的汇总和页面级失败明细，包括失败 URL、原因、HTTP 状态码和是否可重试。`[run]` 可以使用 `source runs` 中显示的短运行 ID；交互终端省略时会先选择文档源和最近一次运行。
+
+```bash
+loci source logs a1b2c3d4
+```
+
+### `loci schedule set [source] [cron]`
+
+设置本地文档源的五段 Linux Cron 更新计划。省略 Cron 时在交互终端选择常用预设；传
+`manual` 可以关闭计划。
+
+```bash
+loci schedule set rspress '0 2 * * *'
+loci schedule list
+```
+
+计划只有在桌面端运行，或显式启动 CLI 前台计划运行器时才会执行：
+
+```bash
+loci schedule run
+```
+
+计划运行器同时负责已开启的云端副本每日同步，按 Ctrl+C 停止。桌面端和 CLI 通过共享锁
+保证同一时间只有一个计划宿主。
 
 ### `loci source delete [source]`
 

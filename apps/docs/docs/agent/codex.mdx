@@ -50,24 +50,33 @@ technology's current behavior.
 
 1. Identify the relevant technology and the version used by the current project.
 2. Call `loci_list_libraries` to look for an existing local documentation library.
-3. When a local library exists, call `loci_get_library_tree` to inspect one or two
+3. Treat only a local library with `pages > 0` as usable. For a zero-page match,
+   inspect or retry its sync only when authorized; if it remains empty, continue.
+4. For a usable local library, call `loci_get_library_tree` to inspect one or two
    directory levels and record its `languages`.
-4. Read clearly relevant files directly. Otherwise call `loci_search_files` with
+5. Read clearly relevant files directly. Otherwise call `loci_search_files` with
    precise terms in the documented language, then call `loci_read_files` for the
    matched files or complete sections.
-5. If local evidence is sufficient, answer from it, include the relevant
+6. If local evidence is sufficient, answer from it, include the relevant
    `source_url` values, and stop. Do not query Context7 for the same concepts.
-6. If no suitable local library exists, call `loci_list_cloud_libraries`. This is
+7. If no suitable local library exists, call `loci_list_cloud_libraries`. This is
    read-only and does not require confirmation.
-7. When a matching cloud library exists, explain its source and request confirmation
+8. Use only cloud matches with `pages > 0`. Explain the source and request confirmation
    before calling `loci_pull_cloud_library`.
-8. When no matching cloud library exists, confirm the official documentation entry
-   with the user before calling `loci_add_library`.
-9. Treat cloud pulls, source additions, active synchronization, and deletion as
-   state-changing operations. Perform them only when explicitly requested or after
-   user confirmation.
-10. After Loci obtains the required library, repeat the local tree, search, and read
+9. If no usable cloud match exists, cloud lookup or pull fails, or a pull yields no
+   files, confirm the official documentation entry and separately request permission
+   before calling `loci_add_library`. A cloud copy does not replace this local fallback.
+10. Treat cloud pulls, source additions, active synchronization, and deletion as
+    state-changing operations. Perform them only when explicitly requested or after
+    user confirmation.
+11. Before an authorized sync, call `loci_get_sync_status` when another tool or agent
+    may already have started it. Follow a `syncing` task instead of launching a
+    competing request; use `wait_for_completion: true` only when the caller should wait.
+12. After Loci obtains the required library, repeat the local tree, search, and read
     steps. Do not treat `updated_at` alone as proof of version compatibility.
+
+Keep an existing local library with files when cloud lookup or update is unavailable;
+continue using it with a freshness caveat instead of deleting or replacing it.
 
 ## Context7 fallback
 
@@ -118,24 +127,33 @@ technology's current behavior.
 
 1. Identify the relevant technology and the version used by the current project.
 2. Call `loci_list_libraries` to look for an existing local documentation library.
-3. When a local library exists, call `loci_get_library_tree` to inspect one or two
+3. Treat only a local library with `pages > 0` as usable. For a zero-page match,
+   inspect or retry its sync only when authorized; if it remains empty, continue.
+4. For a usable local library, call `loci_get_library_tree` to inspect one or two
    directory levels and record its `languages`.
-4. Read clearly relevant files directly. Otherwise call `loci_search_files` with
+5. Read clearly relevant files directly. Otherwise call `loci_search_files` with
    precise terms in the documented language, then call `loci_read_files` for the
    matched files or complete sections.
-5. If local evidence is sufficient, answer from it, include the relevant
+6. If local evidence is sufficient, answer from it, include the relevant
    `source_url` values, and stop.
-6. If no suitable local library exists, call `loci_list_cloud_libraries`. This is
+7. If no suitable local library exists, call `loci_list_cloud_libraries`. This is
    read-only and does not require confirmation.
-7. When a matching cloud library exists, explain its source and request confirmation
+8. Use only cloud matches with `pages > 0`. Explain the source and request confirmation
    before calling `loci_pull_cloud_library`.
-8. When no matching cloud library exists, confirm the official documentation entry
-   with the user before calling `loci_add_library`.
-9. Treat cloud pulls, source additions, active synchronization, and deletion as
-   state-changing operations. Perform them only when explicitly requested or after
-   user confirmation.
-10. After Loci obtains the required library, repeat the local tree, search, and read
+9. If no usable cloud match exists, cloud lookup or pull fails, or a pull yields no
+   files, confirm the official documentation entry and separately request permission
+   before calling `loci_add_library`. A cloud copy does not replace this local fallback.
+10. Treat cloud pulls, source additions, active synchronization, and deletion as
+    state-changing operations. Perform them only when explicitly requested or after
+    user confirmation.
+11. Before an authorized sync, call `loci_get_sync_status` when another tool or agent
+    may already have started it. Follow a `syncing` task instead of launching a
+    competing request; use `wait_for_completion: true` only when the caller should wait.
+12. After Loci obtains the required library, repeat the local tree, search, and read
     steps. Do not treat `updated_at` alone as proof of version compatibility.
+
+Keep an existing local library with files when cloud lookup or update is unavailable;
+continue using it with a freshness caveat instead of deleting or replacing it.
 
 If Loci is unavailable or remains insufficient, explain the limitation. Use another
 official documentation source only when the current project or user instructions

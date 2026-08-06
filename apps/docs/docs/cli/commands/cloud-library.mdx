@@ -33,6 +33,8 @@ loci doctor
 
 读取 Server 上公开的文档库目录，显示页面数、内容大小和短 ID，并标记每个文档库在本地是否已经存在或有可用更新。
 
+公开目录不会显示 0 页文档库。旧版或异常 Server 如果返回空快照，CLI 会拒绝导入并保留已有本地副本；Server 暂时不可访问时，已经下载的内容仍可离线读取，不会被清空。
+
 示例：
 
 ```bash
@@ -49,7 +51,15 @@ loci cloud list
 loci cloud pull "React 文档"
 ```
 
+下载时添加 `--auto-sync` 会同时开启每日自动同步：
+
+```bash
+loci cloud pull "React 文档" --auto-sync
+```
+
 下载后可以使用 `loci document list`、`loci document tree`、`loci document search` 和 `loci document read` 浏览副本内容。
+
+当云端没有可用内容或拉取失败时，可以改用 `loci source add <官方文档 URL>` 创建本地抓取库。云端副本不会占用同域名的本地文档源位置，因此两者可以并存；Agent 工作流会先说明失败并在得到确认后执行这个回退。
 
 ### `loci cloud update [library]`
 
@@ -70,5 +80,17 @@ loci cloud update "React 文档"
 ```bash
 loci cloud remove "React 文档"
 ```
+
+### `loci cloud auto-sync [library] [state]`
+
+为已经下载的云端副本开启或关闭每日同步。脚本中使用 `on` 或 `off`；交互终端省略状态时会询问。
+
+```bash
+loci cloud auto-sync "React 文档" on
+loci schedule run
+```
+
+CLI 不会在普通命令结束后偷偷驻留。只有显式运行 `loci schedule run` 时，才会以前台常驻
+方式执行云端每日检查；按 Ctrl+C 可停止。桌面端已经运行计划任务时，CLI 会拒绝启动第二个运行器。
 
 需要自己从公开网站创建和抓取文档时，查看[本地文档库](/cli/commands/local-library)。
