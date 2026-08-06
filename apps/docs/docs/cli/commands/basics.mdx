@@ -121,6 +121,8 @@ loci config list
 | `batch-interval-seconds` | 抓取批次之间的默认等待秒数。   |
 | `server-url`             | Loci Server 地址。             |
 
+HTTP 并发数和批次间隔适用于普通网页抓取。有效 `llms.txt`、GitHub Pages 和 GitLab Pages 使用整批并发策略，详见[本地文档库](./local-library)。
+
 示例：将 HTTP 抓取默认并发数设为 8。
 
 ```bash

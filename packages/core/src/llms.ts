@@ -1,5 +1,5 @@
 import { fromMarkdown } from 'mdast-util-from-markdown'
-import { normalizeUrl, parsePage, runCrawlQueue } from './crawl.js'
+import { immediateCrawlOptions, normalizeUrl, parsePage, runCrawlQueue } from './crawl.js'
 import { isUrlInScope } from './scope.js'
 import type { CrawledPage, CrawlProgress, FetchOptions, HttpCrawlOptions } from './types.js'
 
@@ -198,12 +198,10 @@ export function crawlLlmsSource(
   const entryByUrl = new Map(selectedEntries.map((entry) => [entry.url, entry]))
   return runCrawlQueue({
     ...options,
+    ...immediateCrawlOptions(selectedEntries.length),
     firstUrl: first.url,
     firstNodeId: options.firstNodeId ?? options.firstUrl,
     initialUrls: [],
-    concurrency: selectedEntries.length,
-    batchIntervalMs: undefined,
-    waitIfPaused: undefined,
     fetchMode: 'http',
     sitemapUrls: selectedEntries.slice(1).map((entry) => entry.url),
     fetchPage: (url) =>

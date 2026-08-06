@@ -37,6 +37,27 @@ interface QueueItem {
 }
 
 const allowedProtocols = new Set(['http:', 'https:'])
+const immediateStaticHostnameSuffixes = ['.github.io', '.gitlab.io'] as const
+
+interface ImmediateCrawlOptions {
+  concurrency: number
+  batchIntervalMs: undefined
+  waitIfPaused: undefined
+}
+
+/** 已知可整批直取的静态页面不受用户批次节流配置影响。 */
+export function immediateCrawlOptions(pageCount: number): ImmediateCrawlOptions {
+  return {
+    concurrency: Math.max(1, pageCount),
+    batchIntervalMs: undefined,
+    waitIfPaused: undefined
+  }
+}
+
+export function isImmediateStaticHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase().replace(/\.$/u, '')
+  return immediateStaticHostnameSuffixes.some((suffix) => normalized.endsWith(suffix))
+}
 
 export function normalizeUrl(input: string): string {
   const url = new URL(input.trim())
@@ -203,9 +224,12 @@ export async function crawlHttpSource(options: HttpCrawlOptions): Promise<CrawlP
     { fetchImpl: options.fetch, maxRetries: options.maxRetries, sleep: options.sleep },
     options.scopePath
   )
+  const requestPolicy = isImmediateStaticHostname(options.hostname)
+    ? immediateCrawlOptions(options.pageLimit)
+    : { concurrency: options.concurrency ?? 9 }
   return runCrawlQueue({
     ...options,
-    concurrency: options.concurrency ?? 9,
+    ...requestPolicy,
     fetchMode: 'http',
     sitemapUrls,
     fetchPage: (url) =>
