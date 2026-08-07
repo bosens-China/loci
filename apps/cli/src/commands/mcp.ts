@@ -12,7 +12,18 @@ import {
   type LociMcpServices,
   type McpAgentConnection
 } from '@loci/runtime'
-import { createCursorMcpConfig, type AgentClient } from '@loci/shared'
+import {
+  GENERIC_MCP_CONFIG_TARGET,
+  createMcpClientConfig,
+  getMcpClientDefinition,
+  isAgentClient,
+  isMcpClient,
+  listImportableAgentClients,
+  supportsMcpTransport,
+  type AgentClient,
+  type McpConfigTarget,
+  type McpTransport
+} from '@loci/shared'
 import { createCliRuntime } from '../runtime.js'
 import { waitForTermination } from '../process-lifecycle.js'
 import { runWithRuntime } from '../command-runtime.js'
@@ -21,13 +32,8 @@ import { readMcpConfigurePreference, saveMcpConfigurePreference } from '../prefe
 import { askConfirm, askSelect, finishUi, info, note, startUi, success } from '../ui.js'
 import { canConnect } from './status.js'
 
-const agentClients = [
-  { value: 'codex', label: 'Codex' },
-  { value: 'cursor', label: 'Cursor' },
-  { value: 'vscode', label: 'VS Code' },
-  { value: 'claude-code', label: 'Claude Code' },
-  { value: 'gemini-cli', label: 'Gemini CLI' }
-] as const satisfies ReadonlyArray<{ value: AgentClient; label: string }>
+const agentClients: ReadonlyArray<{ value: AgentClient; label: string }> =
+  listImportableAgentClients().map((client) => ({ value: client.id, label: client.label }))
 
 type AgentSelection = AgentClient | 'manual'
 
@@ -35,8 +41,6 @@ const clients: ReadonlyArray<{ value: AgentSelection; label: string }> = [
   ...agentClients,
   { value: 'manual', label: '其他客户端（复制通用配置）' }
 ]
-
-type McpTransport = 'stdio' | 'http'
 
 export function registerMcpCommands(program: Command): void {
   const mcp = program.command('mcp').description('管理唯一的 Loci MCP 服务')
@@ -103,14 +107,16 @@ export function registerMcpCommands(program: Command): void {
     )
 
   mcp
-    .command('config')
-    .description('输出兼容 Cursor 的通用 MCP 配置，不修改客户端文件')
+    .command('config [client]')
+    .description('输出指定客户端或通用 MCP 配置，不修改客户端文件')
     .addOption(
-      new Option('--transport <transport>', '选择 MCP 传输方式')
-        .choices(['stdio', 'http'])
-        .default('stdio')
+      new Option('--transport <transport>', '选择 MCP 传输方式').choices(['stdio', 'http'])
     )
-    .action((options: { transport: McpTransport }) => printManualMcpConfig(options.transport))
+    .action((client: string | undefined, options: { transport?: McpTransport }) => {
+      const target = resolveMcpConfigTarget(client)
+      const transport = options.transport ?? (target === 'antigravity' ? 'http' : 'stdio')
+      return printManualMcpConfig(transport, target)
+    })
 
   mcp
     .command('configure [client]')
@@ -138,7 +144,7 @@ export function registerMcpCommands(program: Command): void {
         const transport =
           options.transport ?? (process.stdin.isTTY ? remembered.transport : 'stdio')
         if (selected === 'manual') {
-          await printManualMcpConfig(transport)
+          await printManualMcpConfig(transport, GENERIC_MCP_CONFIG_TARGET.id)
           return
         }
         if (!isAgentClient(selected)) {
@@ -180,11 +186,22 @@ function formatCommand(command: string, args: readonly string[]): string {
   return [command, ...args.map((argument) => JSON.stringify(argument))].join(' ')
 }
 
-function isAgentClient(value: string): value is AgentClient {
-  return agentClients.some((client) => client.value === value)
+function resolveMcpConfigTarget(value: string | undefined): McpConfigTarget {
+  if (value === undefined || value === GENERIC_MCP_CONFIG_TARGET.id) {
+    return GENERIC_MCP_CONFIG_TARGET.id
+  }
+  if (isMcpClient(value)) return value
+  throw new CliError(`不支持的 MCP 配置目标：${value}`, 2)
 }
 
-async function printManualMcpConfig(transport: McpTransport): Promise<void> {
+async function printManualMcpConfig(
+  transport: McpTransport,
+  target: McpConfigTarget
+): Promise<void> {
+  if (target !== GENERIC_MCP_CONFIG_TARGET.id && !supportsMcpTransport(target, transport)) {
+    const definition = getMcpClientDefinition(target)
+    throw new CliError(`${definition.label} 不支持 ${transport} 传输`, 2)
+  }
   let connection: McpAgentConnection = LOCI_CLI_STDIO_CONNECTION
   if (transport === 'http') {
     const runtime = createCliRuntime()
@@ -196,8 +213,14 @@ async function printManualMcpConfig(transport: McpTransport): Promise<void> {
       await runtime.close()
     }
   }
-  process.stderr.write('请将下面的 Cursor 风格配置复制到客户端的 MCP 配置文件中。\n')
-  process.stdout.write(`${createCursorMcpConfig(connection)}\n`)
+  const targetDefinition =
+    target === GENERIC_MCP_CONFIG_TARGET.id
+      ? GENERIC_MCP_CONFIG_TARGET
+      : getMcpClientDefinition(target)
+  process.stderr.write(
+    `请将下面的 ${targetDefinition.label} 配置复制到 ${targetDefinition.configPath}。\n`
+  )
+  process.stdout.write(`${createMcpClientConfig(target, connection)}\n`)
 }
 
 function createMcpServices(runtime: ReturnType<typeof createCliRuntime>): LociMcpServices {

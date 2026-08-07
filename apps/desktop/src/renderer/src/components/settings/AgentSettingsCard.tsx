@@ -1,61 +1,40 @@
 import { CheckCircleOutlined, CloudServerOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Divider, Form, InputNumber, Space, Tabs, Typography } from 'antd'
+import { Alert, Button, Card, Divider, Form, InputNumber, Space, Tag, Typography } from 'antd'
 import { useEffect } from 'react'
-import { createCursorMcpConfig, type AgentClient, type McpServerStatus } from '@loci/shared'
+import {
+  GENERIC_MCP_CONFIG_TARGET,
+  createMcpClientConfig,
+  isAgentClient,
+  listMcpClients,
+  type AgentClient,
+  type McpConfigTarget,
+  type McpServerStatus
+} from '@loci/shared'
 
 const SKILL_INSTALL_COMMAND = 'npx skills add bosens-China/dochub-mcp --skill use-loci -y'
 
 function createAgentConfigs(endpoint: string): Array<{
-  key: string
+  key: McpConfigTarget
   label: string
   path: string
   content: string
   client?: AgentClient
 }> {
-  const json = (server: Record<string, string>): string =>
-    JSON.stringify({ mcpServers: { loci: server } }, null, 2)
-
+  const connection = { type: 'http', endpoint } as const
+  const clients = listMcpClients().map((definition) => ({
+    key: definition.id,
+    label: definition.label,
+    path: definition.configPath,
+    content: createMcpClientConfig(definition.id, connection),
+    client: isAgentClient(definition.id) ? definition.id : undefined
+  }))
   return [
+    ...clients,
     {
-      key: 'codex',
-      label: 'Codex',
-      path: '~/.codex/config.toml',
-      content: `[mcp_servers.loci]\nurl = "${endpoint}"`,
-      client: 'codex'
-    },
-    {
-      key: 'cursor',
-      label: 'Cursor',
-      path: '~/.cursor/mcp.json',
-      content: createCursorMcpConfig({ type: 'http', endpoint }),
-      client: 'cursor'
-    },
-    {
-      key: 'vscode',
-      label: 'VS Code',
-      path: '用户配置 mcp.json',
-      content: JSON.stringify({ servers: { loci: { type: 'http', url: endpoint } } }, null, 2),
-      client: 'vscode'
-    },
-    {
-      key: 'claude-code',
-      label: 'Claude Code',
-      path: '.mcp.json',
-      content: json({ type: 'http', url: endpoint }),
-      client: 'claude-code'
-    },
-    {
-      key: 'gemini-cli',
-      label: 'Gemini CLI',
-      path: '~/.gemini/settings.json',
-      content: json({ httpUrl: endpoint }),
-      client: 'gemini-cli'
-    },
-    {
-      key: 'antigravity',
-      label: 'Google Antigravity',
-      path: '~/.gemini/config/mcp_config.json',
-      content: json({ serverUrl: endpoint })
+      key: GENERIC_MCP_CONFIG_TARGET.id,
+      label: GENERIC_MCP_CONFIG_TARGET.label,
+      path: GENERIC_MCP_CONFIG_TARGET.configPath,
+      content: createMcpClientConfig(GENERIC_MCP_CONFIG_TARGET.id, connection)
     }
   ]
 }
@@ -162,59 +141,70 @@ export function AgentSettingsCard({
           集成到 Agent 编辑器
         </Typography.Title>
         <Typography.Paragraph type="secondary" className="text-xs mb-3">
-          支持向常用 AI 编程编辑器一键写入 MCP 配置文件，或手动复制片段。
+          桌面端统一使用上方 HTTP Endpoint；支持的客户端可一键写入，也可以只复制配置片段。
         </Typography.Paragraph>
 
-        <Tabs
-          size="small"
-          type="card"
-          items={agentConfigs.map((config) => {
+        <div className="overflow-hidden rounded-lg border border-solid border-[var(--ant-color-border-secondary)]">
+          {agentConfigs.map((config) => {
             const client = config.client
-            return {
-              key: config.key,
-              label: config.label,
-              children: (
-                <div className="rounded-lg border border-solid border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <Typography.Text type="secondary" className="font-mono text-xs truncate">
+            return (
+              <div
+                key={config.key}
+                className="border-0 border-b border-solid border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] p-4 last:border-b-0"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <Space size="small" wrap>
+                      <Typography.Text strong>{config.label}</Typography.Text>
+                      <Tag color={client ? 'blue' : 'default'} bordered={false} className="m-0!">
+                        {client ? '一键配置' : '手动复制'}
+                      </Tag>
+                      <Tag bordered={false} className="m-0!">
+                        HTTP
+                      </Tag>
+                    </Space>
+                    <Typography.Text
+                      type="secondary"
+                      className="mt-1 block truncate font-mono text-xs"
+                    >
                       {config.path}
                     </Typography.Text>
-                    <Space size="small">
-                      {client && (
-                        <Button
-                          size="small"
-                          type="primary"
-                          loading={importingClient === client}
-                          disabled={importingClient !== null && importingClient !== client}
-                          onClick={() => onImportAgent(client)}
-                        >
-                          一键写入配置
-                        </Button>
-                      )}
-                      {!client && (
-                        <Typography.Text type="secondary" className="text-xs">
-                          手动配置
-                        </Typography.Text>
-                      )}
-                      <Typography.Text
-                        className="text-xs text-primary cursor-pointer"
-                        copyable={{
-                          text: config.content,
-                          tooltips: ['复制片段', '已复制']
-                        }}
-                      >
-                        复制
-                      </Typography.Text>
-                    </Space>
                   </div>
-                  <pre className="m-0 overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs leading-6 text-[var(--ant-color-text)]">
+                  <Space size="small" wrap>
+                    {client && (
+                      <Button
+                        size="small"
+                        type="primary"
+                        loading={importingClient === client}
+                        disabled={importingClient !== null && importingClient !== client}
+                        onClick={() => onImportAgent(client)}
+                      >
+                        一键写入
+                      </Button>
+                    )}
+                    <Typography.Text
+                      className="cursor-pointer text-xs text-primary"
+                      copyable={{
+                        text: config.content,
+                        tooltips: ['复制配置', '已复制']
+                      }}
+                    >
+                      复制配置
+                    </Typography.Text>
+                  </Space>
+                </div>
+                <details className="mt-3 text-xs">
+                  <summary className="w-fit cursor-pointer text-[var(--ant-color-text-secondary)]">
+                    查看配置片段
+                  </summary>
+                  <pre className="mb-0 mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-[var(--ant-color-fill-secondary)] p-3 font-mono text-xs leading-6 text-[var(--ant-color-text)]">
                     {config.content}
                   </pre>
-                </div>
-              )
-            }
+                </details>
+              </div>
+            )
           })}
-        />
+        </div>
 
         <Divider />
 

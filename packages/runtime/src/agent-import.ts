@@ -1,7 +1,14 @@
 import { spawn } from 'node:child_process'
 import { stripVTControlCharacters } from 'node:util'
 import which from 'which'
-import type { AgentClient, AgentImportResult, McpAgentConnection } from '@loci/shared'
+import {
+  getMcpClientDefinition,
+  isAgentClient,
+  type AgentClient,
+  type AgentImportResult,
+  type McpAgentConnection,
+  type McpImportStrategy
+} from '@loci/shared'
 
 export type { McpAgentConnection } from '@loci/shared'
 
@@ -16,38 +23,64 @@ interface CommandResult {
   output: string
 }
 
-type ConnectionArgs = (connection: McpAgentConnection) => string[]
-
 export const LOCI_CLI_STDIO_CONNECTION: McpAgentConnection = {
   type: 'stdio',
   command: 'loci',
   args: ['mcp', 'stdio']
 }
 
-const clients: Record<AgentClient, { command: string; label: string; args: ConnectionArgs }> = {
-  codex: {
-    command: 'codex',
-    label: 'Codex',
-    args: (connection) =>
-      connection.type === 'http'
+export function createHttpMcpConnection(endpoint: string): McpAgentConnection {
+  return { type: 'http', endpoint }
+}
+
+export async function importAgentClient(
+  client: unknown,
+  connection: McpAgentConnection
+): Promise<AgentImportResult> {
+  const selected = requireAgentClient(client)
+  const command = createAgentImportCommand(selected, connection)
+  const executable = await resolveExecutable(command)
+  await runCommand(executable, command.args, command.label)
+  const transport = connection.type === 'stdio' ? 'CLI stdio' : '桌面 HTTP'
+  return {
+    client: selected,
+    message: `已将 ${transport} MCP 导入到 ${command.label} 的用户配置`
+  }
+}
+
+export function createAgentImportCommand(
+  client: unknown,
+  connection: McpAgentConnection
+): AgentImportCommand {
+  const selected = requireAgentClient(client)
+  validateConnection(connection)
+  const definition = getMcpClientDefinition(selected)
+  if (!definition.executable || !definition.quickImport) {
+    throw new Error('这个 Agent 客户端不支持自动写入')
+  }
+  return {
+    command: definition.executable,
+    args: createImportArgs(definition.importStrategy, connection),
+    label: definition.label
+  }
+}
+
+function requireAgentClient(client: unknown): AgentClient {
+  if (!isAgentClient(client)) throw new Error('不支持这个 Agent 客户端')
+  return client
+}
+
+function createImportArgs(strategy: McpImportStrategy, connection: McpAgentConnection): string[] {
+  switch (strategy) {
+    case 'codex-cli':
+      return connection.type === 'http'
         ? ['mcp', 'add', 'loci', '--url', connection.endpoint]
         : ['mcp', 'add', 'loci', '--', connection.command, ...connection.args]
-  },
-  cursor: {
-    command: 'cursor',
-    label: 'Cursor',
-    args: (connection) => ['--add-mcp', createEditorConfig(connection)]
-  },
-  vscode: {
-    command: 'code',
-    label: 'VS Code',
-    args: (connection) => ['--add-mcp', createEditorConfig(connection)]
-  },
-  'claude-code': {
-    command: 'claude',
-    label: 'Claude Code',
-    args: (connection) =>
-      connection.type === 'http'
+    case 'cursor-cli':
+    case 'vscode-cli':
+      return ['--add-mcp', createEditorConfig(connection)]
+    case 'claude-cli':
+      return connection.type === 'http'
         ? ['mcp', 'add', '--transport', 'http', '--scope', 'user', 'loci', connection.endpoint]
         : [
             'mcp',
@@ -61,76 +94,9 @@ const clients: Record<AgentClient, { command: string; label: string; args: Conne
             connection.command,
             ...connection.args
           ]
-  },
-  'gemini-cli': {
-    command: 'gemini',
-    label: 'Gemini CLI',
-    args: (connection) =>
-      connection.type === 'http'
-        ? ['mcp', 'add', '--transport', 'http', '--scope', 'user', 'loci', connection.endpoint]
-        : [
-            'mcp',
-            'add',
-            '--transport',
-            'stdio',
-            '--scope',
-            'user',
-            'loci',
-            connection.command,
-            ...connection.args
-          ]
+    case 'manual':
+      throw new Error('这个 Agent 客户端不支持自动写入')
   }
-}
-
-export function createHttpMcpConnection(endpoint: string): McpAgentConnection {
-  return { type: 'http', endpoint }
-}
-
-export async function resolvePreferredMcpConnection(
-  endpoint: string,
-  findCli: () => Promise<string | null> = findLociCliExecutable
-): Promise<McpAgentConnection> {
-  const executable = await findCli()
-  return executable
-    ? { type: 'stdio', command: executable, args: ['mcp', 'stdio'] }
-    : createHttpMcpConnection(endpoint)
-}
-
-export async function findLociCliExecutable(): Promise<string | null> {
-  const executable = await which('loci', { nothrow: true })
-  if (!executable) return null
-  try {
-    const result = await executeCommand(executable, ['mcp', 'stdio', '--help'], 3_000)
-    return result.code === 0 && result.output.includes('Loci MCP stdio') ? executable : null
-  } catch {
-    return null
-  }
-}
-
-export async function importAgentClient(
-  client: unknown,
-  connection: McpAgentConnection
-): Promise<AgentImportResult> {
-  const command = createAgentImportCommand(client, connection)
-  const executable = await resolveExecutable(command)
-  await runCommand(executable, command.args, command.label)
-  const transport = connection.type === 'stdio' ? 'CLI stdio' : '桌面 HTTP'
-  return {
-    client: client as AgentClient,
-    message: `已将 ${transport} MCP 导入到 ${command.label} 的用户配置`
-  }
-}
-
-export function createAgentImportCommand(
-  client: unknown,
-  connection: McpAgentConnection
-): AgentImportCommand {
-  if (typeof client !== 'string' || !Object.hasOwn(clients, client)) {
-    throw new Error('不支持这个 Agent 客户端')
-  }
-  validateConnection(connection)
-  const definition = clients[client as AgentClient]
-  return { command: definition.command, args: definition.args(connection), label: definition.label }
 }
 
 function createEditorConfig(connection: McpAgentConnection): string {

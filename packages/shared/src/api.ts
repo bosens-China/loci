@@ -1,3 +1,5 @@
+import type { AgentClient } from './mcp-clients.js'
+
 export type FetchMode = 'auto' | 'http' | 'browser'
 
 export type ThemeMode = 'auto' | 'light' | 'dark'
@@ -35,8 +37,6 @@ export interface DesktopUpdateState {
   checkedAt: string | null
   manualInstallHint: string | null
 }
-
-export type AgentClient = 'codex' | 'cursor' | 'vscode' | 'claude-code' | 'gemini-cli'
 
 export interface AgentImportResult {
   client: AgentClient

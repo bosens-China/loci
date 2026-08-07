@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   createAgentImportCommand,
   createHttpMcpConnection,
-  LOCI_CLI_STDIO_CONNECTION,
-  resolvePreferredMcpConnection
+  LOCI_CLI_STDIO_CONNECTION
 } from '../agent-import.js'
 
 describe('Agent MCP 导入命令', () => {
-  it('为五种客户端生成本机 HTTP 配置', () => {
+  it('为四种客户端生成本机 HTTP 配置', () => {
     const endpoint = 'http://127.0.0.1:37373/mcp'
     const connection = createHttpMcpConnection(endpoint)
 
@@ -20,14 +19,13 @@ describe('Agent MCP 导入命令', () => {
     )
     expect(createAgentImportCommand('cursor', connection).command).toBe('cursor')
     expect(createAgentImportCommand('claude-code', connection).args).toContain('--scope')
-    expect(createAgentImportCommand('gemini-cli', connection).args).toContain('--transport')
     expect(() => createAgentImportCommand('unknown', connection)).toThrow('不支持')
     expect(() =>
       createAgentImportCommand('codex', createHttpMcpConnection('https://example.com/mcp'))
     ).toThrow('本机地址')
   })
 
-  it('为五种客户端生成同名 loci 的 CLI stdio 配置', () => {
+  it('为四种客户端生成同名 loci 的 CLI stdio 配置', () => {
     expect(createAgentImportCommand('codex', LOCI_CLI_STDIO_CONNECTION).args).toEqual([
       'mcp',
       'add',
@@ -61,33 +59,14 @@ describe('Agent MCP 导入命令', () => {
       'mcp',
       'stdio'
     ])
-    expect(createAgentImportCommand('gemini-cli', LOCI_CLI_STDIO_CONNECTION).args).toEqual([
-      'mcp',
-      'add',
-      '--transport',
-      'stdio',
-      '--scope',
-      'user',
-      'loci',
-      'loci',
-      'mcp',
-      'stdio'
-    ])
   })
 
-  it('桌面端检测到 CLI 时优先 stdio，否则使用桌面 HTTP', async () => {
-    const endpoint = 'http://127.0.0.1:37373/mcp'
-
-    await expect(
-      resolvePreferredMcpConnection(endpoint, async () => '/usr/local/bin/loci')
-    ).resolves.toEqual({
-      type: 'stdio',
-      command: '/usr/local/bin/loci',
-      args: ['mcp', 'stdio']
-    })
-    await expect(resolvePreferredMcpConnection(endpoint, async () => null)).resolves.toEqual({
-      type: 'http',
-      endpoint
-    })
+  it('拒绝只支持手动配置的客户端', () => {
+    expect(() => createAgentImportCommand('antigravity', LOCI_CLI_STDIO_CONNECTION)).toThrow(
+      '不支持这个 Agent 客户端'
+    )
+    expect(() => createAgentImportCommand('gemini-cli', LOCI_CLI_STDIO_CONNECTION)).toThrow(
+      '不支持这个 Agent 客户端'
+    )
   })
 })

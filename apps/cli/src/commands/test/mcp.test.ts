@@ -63,6 +63,56 @@ describe('MCP 手动配置', () => {
     })
   })
 
+  it('按客户端输出对应配置，并让 Antigravity 默认使用 HTTP', async () => {
+    let output = ''
+    let hint = ''
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      output += String(chunk)
+      return true
+    })
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      hint += String(chunk)
+      return true
+    })
+
+    await createProgram().parseAsync(['mcp', 'config', 'antigravity'], { from: 'user' })
+
+    expect(JSON.parse(output)).toEqual({
+      mcpServers: {
+        loci: { serverUrl: 'http://127.0.0.1:37373/mcp' }
+      }
+    })
+    expect(hint).toContain('Google Antigravity')
+    expect(hint).toContain('~/.gemini/config/mcp_config.json')
+  })
+
+  it('Codex 配置默认输出 CLI stdio TOML', async () => {
+    let output = ''
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      output += String(chunk)
+      return true
+    })
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    await createProgram().parseAsync(['mcp', 'config', 'codex'], { from: 'user' })
+
+    expect(output.trim()).toBe('[mcp_servers.loci]\ncommand = "loci"\nargs = ["mcp", "stdio"]')
+  })
+
+  it('拒绝客户端不支持的传输方式', async () => {
+    await expect(
+      createProgram().parseAsync(['mcp', 'config', 'antigravity', '--transport', 'stdio'], {
+        from: 'user'
+      })
+    ).rejects.toThrow('Google Antigravity 不支持 stdio 传输')
+  })
+
+  it('不再接受 Gemini CLI 配置目标', async () => {
+    await expect(
+      createProgram().parseAsync(['mcp', 'config', 'gemini-cli'], { from: 'user' })
+    ).rejects.toThrow('不支持的 MCP 配置目标：gemini-cli')
+  })
+
   it('存在更新提示缓存时仍保持标准输出为纯 JSON', async () => {
     writeFileSync(
       join(dataDir, 'cli-update.json'),

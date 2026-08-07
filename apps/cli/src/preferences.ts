@@ -21,7 +21,7 @@ const adminCreateSchema = z.object({
 })
 
 const mcpConfigureSchema = z.object({
-  client: z.enum(['codex', 'cursor', 'vscode', 'claude-code', 'gemini-cli']),
+  client: z.enum(['codex', 'cursor', 'vscode', 'claude-code']),
   transport: z.enum(['stdio', 'http'])
 })
 
