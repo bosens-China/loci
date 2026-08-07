@@ -140,7 +140,6 @@ export class GitReleaseTagRepository implements ReleaseTagRepository {
   async listManifestCommits(): Promise<string[]> {
     const output = await this.git([
       'log',
-      '--first-parent',
       '--format=%H',
       '--',
       '.release-please-manifest.json'
