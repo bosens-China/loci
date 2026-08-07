@@ -23,7 +23,13 @@ Skill 不保存文档，也不维护第二份同步状态。CLI、桌面应用�
 
 ## 获取 Skill
 
-Loci 仓库内的 Skill 位于 `.agents/skills/use-loci/`。将整个 `use-loci` 目录安装到 AI 客户端支持的 Skills 目录，并保留其中的 `SKILL.md`。
+可以使用 Skills CLI 从 GitHub 仓库安装：
+
+```bash
+npx skills add bosens-China/loci
+```
+
+按照命令提示选择 `use-loci` Skill 和目标 AI 客户端。也可以手动安装：Loci 仓库内的 Skill 位于 `.agents/skills/use-loci/`，将整个 `use-loci` 目录安装到客户端支持的 Skills 目录，并保留其中的 `SKILL.md`。
 
 不同客户端的安装方式可能不同。安装后应确认客户端能够发现名为 `use-loci` 的 Skill；配置 MCP 的方法请查看[配置 MCP](/agent/mcp)。
 
