@@ -2,9 +2,23 @@
   "name": "loci",
   "version": "1.2.1",
   "private": true,
-  "description": "Loci monorepo workspace.",
+  "description": "Local-first documentation knowledge base for AI agents.",
   "author": "yliu",
   "license": "MIT",
+  "homepage": "https://bosens-china.github.io/loci/",
+  "bugs": {
+    "url": "https://github.com/bosens-China/loci/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "documentation",
+    "knowledge-base",
+    "local-first",
+    "mcp",
+    "model-context-protocol",
+    "openapi",
+    "web-crawling"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bosens-China/loci.git"

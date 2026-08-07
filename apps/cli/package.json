@@ -1,7 +1,7 @@
 {
   "name": "@boses/cli",
   "version": "1.9.0",
-  "description": "面向终端用户的 Loci 本地文档知识库。",
+  "description": "CLI and MCP server for Loci, a local-first documentation knowledge base for AI agents.",
   "author": "yliu",
   "license": "MIT",
   "homepage": "https://github.com/bosens-China/loci#readme",
@@ -15,9 +15,14 @@
   },
   "keywords": [
     "loci",
+    "ai-agents",
     "documentation",
     "knowledge-base",
+    "local-first",
     "mcp",
+    "model-context-protocol",
+    "openapi",
+    "web-crawling",
     "cli"
   ],
   "type": "module",
