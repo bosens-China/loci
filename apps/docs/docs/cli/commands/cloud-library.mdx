@@ -1,6 +1,6 @@
 # 云端文档库
 
-云端文档库是 Loci Server 上预先发布的公开文档快照。CLI 可以将快照下载为本地副本，之后即可离线浏览，也可以通过本机 MCP 读取。
+云端文档库是 Loci Server 上预先发布的公开文档快照。CLI 可以将快照下载为本地副本，之后即可离线浏览、搜索和读取。
 
 ## 修改默认的云端文档库地址
 
@@ -59,7 +59,7 @@ loci cloud pull "React 文档" --auto-sync
 
 下载后可以使用 `loci document list`、`loci document tree`、`loci document search` 和 `loci document read` 浏览副本内容。
 
-当云端没有可用内容或拉取失败时，可以改用 `loci source add <官方文档 URL>` 创建本地抓取库。云端副本不会占用同域名的本地文档源位置，因此两者可以并存；Agent 工作流会先说明失败并在得到确认后执行这个回退。
+当云端没有可用内容或拉取失败时，可以改用 `loci source add <官方文档 URL>` 创建本地抓取库。云端副本不会占用同域名的本地文档源位置，因此两者可以并存。
 
 ### `loci cloud update [library]`
 

@@ -112,14 +112,16 @@ loci config list
 
 修改一个共享设置。省略参数时，CLI 会在交互终端中选择设置项并要求输入新值。
 
-| 设置项                   | 用途                           |
-| ------------------------ | ------------------------------ |
-| `mcp-port`               | HTTP MCP 服务监听端口。        |
-| `http-concurrency`       | HTTP 抓取的默认并发数。        |
-| `browser-concurrency`    | 浏览器抓取的默认并发数。       |
-| `max-retries`            | 页面抓取失败后的默认重试次数。 |
-| `batch-interval-seconds` | 抓取批次之间的默认等待秒数。   |
-| `server-url`             | Loci Server 地址。             |
+| 设置项                     | 用途                           |
+| -------------------------- | ------------------------------ |
+| `mcp-port`                 | HTTP MCP 服务监听端口。        |
+| `http-concurrency`         | HTTP 抓取的默认并发数。        |
+| `browser-concurrency`      | 浏览器抓取的默认并发数。       |
+| `max-retries`              | 页面抓取失败后的默认重试次数。 |
+| `batch-interval-seconds`   | 抓取批次之间的默认等待秒数。   |
+| `github-archive-limit-mb`  | GitHub ZIP 默认下载上限。      |
+| `github-markdown-limit-mb` | GitHub Markdown 默认总量上限。 |
+| `server-url`               | Loci Server 地址。             |
 
 HTTP 并发数和批次间隔适用于普通网页抓取。有效 `llms.txt`、GitHub Pages 和 GitLab Pages 使用整批并发策略，详见[本地文档库](./local-library)。
 
@@ -127,6 +129,7 @@ HTTP 并发数和批次间隔适用于普通网页抓取。有效 `llms.txt`、G
 
 ```bash
 loci config set http-concurrency 8
+loci config set github-archive-limit-mb 300
 ```
 
 省略设置名和值时，CLI 会显示每项当前值；输入时会带入当前值，并在字段内校验端口、并发数、重试次数和批次间隔的合法范围。批次间隔输入过程中会实时换算为分钟。

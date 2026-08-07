@@ -3,7 +3,7 @@ import { defineConfig } from '@rspress/core'
 export default defineConfig({
   root: 'docs',
   title: 'Loci',
-  description: '面向 AI Agent 的本地文档知识库',
+  description: '桌面应用与 CLI 共享的本地技术文档库',
   icon: '/icon.svg',
   logo: '/icon.svg',
   logoText: 'Loci',
@@ -23,9 +23,16 @@ export default defineConfig({
     nav: [
       { text: '桌面应用', link: '/desktop/getting-started' },
       { text: 'CLI', link: '/cli/getting-started' },
-      { text: 'Agent 接入', link: '/agent/codex' }
+      { text: '收录规则', link: '/guide/crawling' },
+      { text: 'AI 接入', link: '/agent/overview' }
     ],
     sidebar: {
+      '/guide/': [
+        {
+          text: '收录与抓取',
+          items: [{ text: '页面发现与优先级', link: '/guide/crawling' }]
+        }
+      ],
       '/desktop/': [
         {
           text: '桌面应用',
@@ -43,7 +50,7 @@ export default defineConfig({
                 { text: '基础、浏览器与设置', link: '/cli/commands/basics' },
                 { text: '本地文档库', link: '/cli/commands/local-library' },
                 { text: '云端文档库', link: '/cli/commands/cloud-library' },
-                { text: 'MCP 与数据管理', link: '/cli/commands/integrations' },
+                { text: '数据备份与运行环境', link: '/cli/commands/integrations' },
                 {
                   text: 'Admin：Server 管理',
                   link: '/cli/commands/admin'
@@ -55,8 +62,13 @@ export default defineConfig({
       ],
       '/agent/': [
         {
-          text: 'Agent 接入',
-          items: [{ text: 'Codex 全局接入', link: '/agent/codex' }]
+          text: 'AI 接入',
+          items: [
+            { text: '接入方式概览', link: '/agent/overview' },
+            { text: '配置 MCP', link: '/agent/mcp' },
+            { text: '使用 Loci Skill', link: '/agent/skill' },
+            { text: '配置 Codex AGENTS.md', link: '/agent/codex' }
+          ]
         }
       ]
     },

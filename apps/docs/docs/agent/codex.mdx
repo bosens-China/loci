@@ -4,6 +4,8 @@ Loci MCP 为 Codex 提供文档库、目录、搜索和读取工具。为了让 
 
 这套配置不依赖任何 Skill。用户已经安装的 Skill 仍按自身的触发条件工作；全局 `AGENTS.md` 只强化技术文档的查询时机、工具顺序和安全边界。
 
+如果还不熟悉 MCP、Skill 和 `AGENTS.md` 的分工，请先阅读 [AI 接入概览](/agent/overview)。
+
 ## 配置 Loci MCP
 
 先安装 Loci CLI，并把名为 `loci` 的 MCP 写入 Codex 配置：
@@ -180,4 +182,4 @@ codex --ask-for-approval never "说明技术文档的查询流程，以及什么
 
 使用组合模板时，预期顺序是 Loci 本地库、Loci 云端发现和获取、Context7 兜底。使用纯 Loci 模板时，不应出现 Context7 步骤。
 
-更多 MCP 命令请查看 [MCP 与数据管理](/cli/commands/integrations)。Codex 对全局与仓库级指令的加载方式，请查看 [Codex AGENTS.md 文档](https://learn.chatgpt.com/docs/agent-configuration/agents-md.md)。
+配置入口请查看[配置 MCP](/agent/mcp)，具体检索流程请查看[使用 Loci Skill](/agent/skill)。Codex 对全局与仓库级指令的加载方式，请查看 [Codex AGENTS.md 文档](https://learn.chatgpt.com/docs/agent-configuration/agents-md.md)。

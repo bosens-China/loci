@@ -26,12 +26,24 @@ loci source add https://rspress.rs/guide/introduction.html
 | `--scope <path>`                 | 默认 `/`，表示收录整个 `rspress.rs` 站点；可用 `/guide` 收窄范围。 |
 | `--http-concurrency <number>`    | 默认继承共享的 HTTP 并发设置。                                     |
 | `--browser-concurrency <number>` | 默认继承共享的浏览器并发设置。                                     |
+| `--archive-limit <size>`         | GitHub ZIP 上限，可使用 `250mb`；默认继承共享设置。                |
+| `--markdown-limit <size>`        | GitHub Markdown 总量上限；默认继承共享设置。                       |
 | `--no-sync`                      | 只保存配置，不执行首次同步。                                       |
 | `--background`                   | 用一次性后台进程执行首次同步，完成后自动退出。                     |
 
 创建成功后默认立即执行一次前台同步，因此脚本与交互终端的语义一致。只运行 `loci source add` 时，CLI 会在交互终端中打开向导：先输入 URL，再确认自动生成的名称、抓取方式、页面上限和收录范围。提交前会展示配置摘要，并询问是否立即开始第一次同步。需要先批量建库时使用 `--no-sync`；希望当前终端立即返回时使用 `--background`，随后通过 `source runs` 和 `source logs` 审查结果。
 
 CLI 会记住上一次成功创建时的抓取方式、页面上限、收录路径层级和首次同步选择。下次向导会直接填入这些安全偏好；显式命令参数始终优先。密码、删除目标和危险确认不会被记住。
+
+#### GitHub 仓库 Markdown
+
+公开 `github.com/<owner>/<repo>` 仓库会自动切换为 GitHub 文档源，不需要手动选择类型。名称默认使用仓库名，`--page-limit` 表示最多收录的 Markdown 数量；网页抓取方式、路径范围和并发设置不参与 GitHub 同步。
+
+Loci 会先读取默认分支与当前提交 SHA，再把 ZIP 流式写入临时文件，只逐项解压 `.md` 文件。文件名直接作为标题，仓库相对路径作为知识库目录。相对图片改写为固定提交的 `raw.githubusercontent.com` 地址，相对链接改写为固定提交的 GitHub Blob 地址；不会下载图片到本地。
+
+全局 ZIP 和 Markdown 默认上限分别为 200 MB 与 100 MB，单个 Markdown 最多 5 MB。可以通过 `loci config set github-archive-limit-mb` 和 `loci config set github-markdown-limit-mb` 修改全局值，也可以通过 `--archive-limit` 与 `--markdown-limit` 覆盖单个仓库。提交没有变化时跳过 ZIP 下载；某个提交超限后，在对应上限提高前也不会反复下载。
+
+每次成功同步会以新快照替换旧文档，因此仓库中已经删除的 Markdown 会从本地知识库和全文索引中删除。下载、解析或安全校验失败时保留旧快照。当前只支持公开仓库和默认分支，不支持凭据、私有仓库、Git LFS、Git clone、子目录范围、MDX 或 Markdown 内原始 HTML/组件属性的链接改写。
 
 ### `loci source sync [source]`
 
@@ -45,7 +57,7 @@ Loci 会将 `*.github.io` 和 `*.gitlab.io` 识别为已知静态 Pages 域名�
 
 `browser` 模式会在同步开始时检查无头浏览器；`auto` 模式会在确实需要比较 HTTP 与浏览器页面时检查。交互终端可以确认并自动安装，脚本环境则需要提前运行 `loci browser install`。
 
-同一进程内重复请求同一个文档源时，Loci 会复用正在运行的抓取和进度。桌面应用或另一个 CLI 进程已经同步该文档源时，跨进程锁会阻止当前命令重复写入。不同文档源可以独立同步。
+同一进程内重复请求同一个文档源时，Loci 会复用正在运行的抓取和进度。桌面应用或另一个 Loci 进程已经同步该文档源时，当前命令会连接对应的持久抓取记录，并继续显示进度。不同文档源可以独立同步；失败或取消完成后可以重新执行。
 
 示例：
 
@@ -65,7 +77,7 @@ loci source list
 
 ### `loci source update [source]`
 
-修改已有文档源的名称、入口 URL、抓取方式、页面上限、收录范围或并发覆盖值，不改变桌面端的定时同步计划。只要提供任一修改选项，CLI 就只更新该字段，不会继续询问其他字段。完全省略修改选项时，交互终端会进入编辑向导。
+修改已有文档源的名称、入口 URL、抓取方式、页面上限、收录范围、并发覆盖值或 GitHub 大小覆盖值，不改变桌面端的定时同步计划。只要提供任一修改选项，CLI 就只更新该字段，不会继续询问其他字段。完全省略修改选项时，交互终端会进入编辑向导。
 
 示例：
 

@@ -1,0 +1,120 @@
+# 配置 MCP
+
+模型上下文协议（Model Context Protocol，MCP）让 AI 客户端调用 Loci 工具。配置完成后，AI 可以发现文档库、查看目录、搜索正文、读取小节，并在获得授权后拉取或同步内容。
+
+## 选择连接方式
+
+| 入口 | 适用场景 | 运行方式 |
+| ---- | -------- | -------- |
+| CLI stdio | Codex、Cursor、VS Code、Claude Code 等本机客户端 | 客户端按需启动，推荐使用。 |
+| 桌面 HTTP | 已经常驻运行 Loci 桌面应用 | 连接本机 HTTP 地址。 |
+| CLI HTTP | 没有桌面应用的服务器或前台服务环境 | 先运行 `loci mcp serve`。 |
+
+传输方式不会改变工具名称和能力。个人开发环境优先选择 stdio，因为它不需要管理常驻端口。
+
+## 配置客户端
+
+先安装 Loci CLI：
+
+```bash
+npm install --global @boses/cli
+```
+
+Codex、Cursor、VS Code 和 Claude Code 可以自动写入配置。以下命令以 Codex 为例：
+
+```bash
+loci mcp configure codex
+loci mcp status
+```
+
+交互终端会在写入前展示目标客户端、传输方式和配置命令。可信的自动化环境可以使用 `--yes` 跳过确认。
+
+Google Antigravity 需要复制 HTTP 配置：
+
+```bash
+loci mcp config antigravity
+```
+
+Kimi Code 或其他未内置的客户端可以打印通用 `mcpServers` 配置：
+
+```bash
+loci mcp config
+```
+
+通用 stdio 配置如下：
+
+```json
+{
+  "mcpServers": {
+    "loci": {
+      "command": "loci",
+      "args": ["mcp", "stdio"]
+    }
+  }
+}
+```
+
+如果目标配置已经包含其他 MCP 服务，只合并 `mcpServers.loci`，不要覆盖整个文件。项目级配置可以启动本地命令，只应在信任该项目时使用。
+
+## 使用 HTTP
+
+桌面应用运行期间会自动提供本机 HTTP MCP。没有桌面应用时，可以在一个终端启动 CLI 服务：
+
+```bash
+loci mcp serve
+```
+
+再在另一个终端配置客户端：
+
+```bash
+loci mcp configure codex --transport http
+```
+
+默认服务地址为 `http://127.0.0.1:<mcp-port>/mcp`。该地址只供本机客户端使用；停止桌面应用或按 `Ctrl+C` 结束 CLI 服务后，HTTP MCP 将不可用。
+
+## MCP 提供的能力
+
+Loci 工具可以分为四组：
+
+- 发现：列出本地文档库和云端公开库。
+- 定位：查看目录树，或按一组关键词搜索正文。
+- 阅读：批量读取 Markdown 文件或搜索命中的完整小节。
+- 管理：添加、拉取、同步、查询同步状态和删除文档库。
+
+只读工具可以直接调用。管理工具可能访问网络或修改本地状态，应由用户当前请求或明确确认授权。
+
+## 检查配置
+
+写入配置后，新建 AI 会话，使客户端重新加载 MCP。然后执行：
+
+```bash
+loci mcp status
+```
+
+如果客户端没有显示 Loci 工具，继续运行：
+
+```bash
+loci doctor
+```
+
+重点检查 CLI 是否位于客户端的 `PATH`、配置中是否存在名为 `loci` 的服务，以及 HTTP 模式对应的宿主是否正在运行。
+
+同一个客户端不要同时保留 stdio 和 HTTP 两个 Loci 入口。两种入口共享能力，重复注册只会让 AI 看到重名或重复工具。
+
+## 重复调用与并发安全
+
+`loci_sync_libraries` 会去重同一次请求中的文档库 ID。目标文档库正在同步时，后发调用会复用已有任务和进度。传入 `wait_for_completion: true` 可以等待该任务；无需等待时，使用 `loci_get_sync_status` 查询状态。
+
+桌面应用、CLI 和 MCP 共享数据目录时，跨进程锁和持久抓取记录会保护同一文档源。重复调用不会同时写入 SQLite；不同文档源仍可独立执行。
+
+## CLI 命令速查
+
+| 命令 | 用途 |
+| ---- | ---- |
+| `loci mcp stdio` | 通过标准输入输出启动 MCP。 |
+| `loci mcp serve` | 在前台启动本机 HTTP MCP。 |
+| `loci mcp status` | 显示传输方式、HTTP 地址和当前宿主。 |
+| `loci mcp config [client]` | 打印客户端配置，不修改文件。 |
+| `loci mcp configure [client]` | 确认后写入支持的客户端配置。 |
+
+需要让 AI 遵循固定检索流程时，继续阅读[使用 Loci Skill](/agent/skill)。CLI 数据导入、导出和清理命令请查看[数据备份与运行环境](/cli/commands/integrations)。

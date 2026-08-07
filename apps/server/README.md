@@ -4,6 +4,8 @@ Loci Server 是单机 Hono 服务，负责抓取公开文档、定时更新并�
 
 服务端只支持无需登录即可访问的公开 HTTP/HTTPS 文档，不保存登录态，也不处理验证码、Cloudflare 挑战、代理或其他反爬绕过能力。URL 会移除 Query 和 Fragment，因此不支持使用 `#` 区分页面的 Hash Router 文档站。
 
+公开 GitHub 仓库 URL 会进入默认分支 ZIP 流程，收录 `.md` 并保留仓库相对路径。同一 `github.com` 下的不同仓库按仓库根路径区分；私有仓库、非默认分支和 Git LFS 不受支持。
+
 ## 本地 Docker 环境
 
 仓库提供独立的本地 Compose 环境，默认监听端口 `7001`：
@@ -88,6 +90,7 @@ interface LibrarySnapshot {
     url: string
     language: string
     markdown: string
+    relativePath?: string
   }>
 }
 ```
@@ -122,8 +125,10 @@ interface LibrarySnapshot {
 但同一域名与范围组合不能重复。缩小范围会立即删除范围外的旧文档。
 
 `schedule` 使用五段 Linux Cron，传 `null` 表示关闭定时同步。批量同步任务由 Server
-统一排队，最多同时抓取 3 个文档库。取消运行任务会在当前页面批次结束后停止，不发布
-不完整快照。同一文档库只保留一个活动任务；重复提交会返回已有任务。配置浏览器
+统一排队，最多同时抓取 3 个文档库。任务、进度、所有者和租约保存在 SQLite；共享同一
+数据库的多个 Server 进程同时提交同一文档库时会返回同一个活动任务，不同文档库仍可
+并行。取消会传递到 HTTP、浏览器、GitHub 下载和 ZIP 解析，取消后不会提交工作文档、
+成功 revision 或公开快照。进程异常退出后的过期租约会失败收口，后续请求可以重试。配置浏览器
 后，服务端会比较入口页的 HTTP 与浏览器渲染结果，再为整个文档库选择一种抓取方式；
 后续页面不会重复双通道抓取。
 

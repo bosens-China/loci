@@ -1,6 +1,6 @@
 # CLI 安装与使用
 
-Loci CLI 适合终端、服务器和 Agent 环境。CLI 与桌面应用使用同一份本地数据。
+Loci CLI 适合终端、自动化脚本和服务器环境。CLI 与桌面应用使用同一份本地数据。
 
 ## 安装 CLI
 
@@ -32,6 +32,22 @@ loci source add https://rspress.rs/guide/introduction.html
 loci source sync rspress
 ```
 
+接口文档同样只需提供正在阅读的地址。输入 Swagger UI、Knife4j、ReDoc、FastAPI `/docs` 或常见 OpenAPI JSON 地址时，Loci 会自动发现同站的 OpenAPI/Swagger JSON，并直接整理接口、参数、响应、认证和数据模型；没有发现规范时继续按普通网页收录。
+
+示例：
+
+```bash
+loci source add http://localhost:8000/docs
+```
+
+公开 GitHub 仓库也可以直接作为文档源。Loci 会读取默认分支当前提交的 ZIP，保留 Markdown 的仓库相对目录；不需要安装 Git 或浏览器。
+
+示例：
+
+```bash
+loci source add https://github.com/vuejs/docs
+```
+
 同步完成后，使用关键词查找文档。命令会显示每篇文档的短 ID；可用短 ID 读取全文。
 
 示例：
@@ -41,7 +57,7 @@ loci document search "Quick start"
 loci document read <短 ID>
 ```
 
-可以随时查看本地数据和 MCP 状态：
+可以随时查看本地数据和文档源：
 
 示例：
 
@@ -57,55 +73,11 @@ loci schedule set rspress '0 2 * * *'
 loci schedule run
 ```
 
-## 接入 MCP
-
-Loci 通过 MCP 让 Agent 发现、搜索和读取本地文档。CLI 默认使用 stdio：Agent 需要使用时才会启动 Loci，不需要手动常驻运行服务。
-
-目前可自动配置的客户端包括 Codex、Cursor、VS Code、Claude Code 和 Gemini CLI。以 Codex 为例：
-
-示例：
-
-```bash
-loci mcp configure codex
-```
-
-Kimi Code 或其他未内置一键写入的客户端，可以打印并复制 Cursor 风格的 `mcpServers` 配置：
-
-示例：
-
-```bash
-loci mcp config
-```
-
-配置完成后，重启或新建 Agent 会话即可使用 `loci` MCP。检查配置和服务状态：
-
-示例：
-
-```bash
-loci mcp status
-```
-
-如果希望 Codex 在所有仓库中优先查询 Loci，并在 Loci 无法解决问题时才使用 Context7，请继续完成 [Codex 全局接入](/agent/codex)。
-
-需要以前台 HTTP 服务接入时，先在一个终端运行服务，再在另一个终端使用 HTTP 传输写入 Agent 配置：
-
-终端 1：
-
-```bash
-loci mcp serve
-```
-
-终端 2：
-
-```bash
-loci mcp configure codex --transport http
-```
-
 ## 下一步
 
 - 查看[基础、浏览器与设置](/cli/commands/basics)。
 - 查看[本地文档库](/cli/commands/local-library)和[云端文档库](/cli/commands/cloud-library)。
-- 查看 [MCP 与数据管理](/cli/commands/integrations)。
-- 查看 [Codex 全局接入](/agent/codex)，根据是否使用 Context7 选择全局 `AGENTS.md` 模板。
+- 查看[页面发现与抓取优先级](/guide/crawling)。
+- 查看[数据备份与运行环境](/cli/commands/integrations)。
 - 如果需要为其他人提供云端文档库，可选阅读 [Admin：部署与管理 Server](/cli/commands/admin)。
 - 遇到环境或浏览器问题，运行 `loci doctor`；浏览器不可用时运行 `loci browser install`。
