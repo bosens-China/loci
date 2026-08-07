@@ -78,23 +78,27 @@ describe('planSkippedReleaseTags', () => {
     version: '1.4.0'
   }
   const manifests = {
-    newest: { 'packages/core': '1.4.0' },
+    followUpRelease: { 'packages/core': '1.4.0' },
+    releaseCommit: { 'packages/core': '1.4.0' },
     previous: { 'packages/core': '1.3.0' }
   }
 
   it('使用 first-parent manifest 历史中的版本提交', async () => {
-    const repository = new MemoryReleaseTagRepository(['newest', 'previous'], manifests)
+    const repository = new MemoryReleaseTagRepository(
+      ['followUpRelease', 'releaseCommit', 'previous'],
+      manifests
+    )
 
     await expect(planSkippedReleaseTags(repository, [releaseTag])).resolves.toEqual([
-      { ...releaseTag, targetSha: 'newest' }
+      { ...releaseTag, targetSha: 'releaseCommit' }
     ])
   })
 
-  it('标签已经指向正确提交时保持幂等', async () => {
+  it('后续仅发布其他包时，既有标签保持幂等', async () => {
     const repository = new MemoryReleaseTagRepository(
-      ['newest', 'previous'],
+      ['followUpRelease', 'releaseCommit', 'previous'],
       manifests,
-      new Map([['core-v1.4.0', 'newest']])
+      new Map([['core-v1.4.0', 'releaseCommit']])
     )
 
     await expect(planSkippedReleaseTags(repository, [releaseTag])).resolves.toEqual([])
@@ -102,13 +106,13 @@ describe('planSkippedReleaseTags', () => {
 
   it('拒绝覆盖指向其他提交的既有标签', async () => {
     const repository = new MemoryReleaseTagRepository(
-      ['newest', 'previous'],
+      ['followUpRelease', 'releaseCommit', 'previous'],
       manifests,
       new Map([['core-v1.4.0', 'unexpected']])
     )
 
     await expect(planSkippedReleaseTags(repository, [releaseTag])).rejects.toThrow(
-      'core-v1.4.0 已指向 unexpected，预期为 newest'
+      'core-v1.4.0 已指向 unexpected，预期为 releaseCommit'
     )
   })
 

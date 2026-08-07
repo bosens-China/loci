@@ -86,10 +86,19 @@ async function findReleaseCommit(
   commits: readonly string[],
   tag: SkippedReleaseTag
 ): Promise<string> {
+  let releaseCommit: string | null = null
+
   for (const commitSha of commits) {
     const manifest = await repository.readManifestAt(commitSha)
-    if (manifest[tag.packagePath] === tag.version) return commitSha
+    if (manifest[tag.packagePath] === tag.version) {
+      // manifest 历史从新到旧；保留同一版本连续区间的最早提交，避免后续其他包发布时移动标签。
+      releaseCommit = commitSha
+      continue
+    }
+    if (releaseCommit) return releaseCommit
   }
+
+  if (releaseCommit) return releaseCommit
   throw new Error(`找不到 ${tag.packagePath} ${tag.version} 对应的 manifest 提交`)
 }
 
