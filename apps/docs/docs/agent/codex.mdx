@@ -2,7 +2,7 @@
 
 Loci MCP 为 Codex 提供文档库、目录、搜索和读取工具。为了让 Codex 在不同仓库中采用一致的查询流程，可以把 Loci 使用规范写入用户级 `~/.codex/AGENTS.md`。
 
-这套配置不依赖任何 Skill。用户已经安装的 Skill 仍按自身的触发条件工作；全局 `AGENTS.md` 只强化技术文档的查询时机、工具顺序和安全边界。
+这套配置不依赖任何 Skill。用户已经安装的 Skill 仍按自身的触发条件加载；全局 `AGENTS.md` 统一规定文档来源的执行顺序、查询时机和安全边界。Skill 被匹配或加载不代表其中的文档工具可以立即执行。
 
 如果还不熟悉 MCP、Skill 和 `AGENTS.md` 的分工，请先阅读 [AI 接入概览](/agent/overview)。
 
@@ -31,9 +31,9 @@ loci mcp status
 
 ## 已有 Context7
 
-如果现有 `AGENTS.md` 要求所有技术文档问题优先使用 Context7，请删除原来的 Context7 区块，再复制下面的组合模板。不能同时保留两套相互冲突的优先级。
+如果现有 `AGENTS.md` 要求所有技术文档问题优先使用 Context7，请删除原来的 Context7 区块，再复制下面的组合模板。不能同时保留两套相互冲突的优先级。无需修改、删除或覆盖用户在项目中安装的 Context7 Skill；组合模板只约束它的查询步骤何时可以执行。
 
-这份模板先查询 Loci。只有 Loci 无法提供足够证据时，才调用 Context7，并且只查询尚未解决的概念。
+这份模板依次执行 Loci 本地查询、云端发现、云端拉取确认和官方抓取确认。本地或云端未命中时不能立即调用 Context7；只有用户拒绝官方抓取、已授权获取失败或所得证据仍不足时，才把尚未解决的概念交给 Context7。
 
 ```md
 <!-- loci-context7:start -->
@@ -47,6 +47,16 @@ setup process, or library-specific error. Do not rely only on model memory.
 Do not use this workflow for ordinary refactoring, business-logic debugging,
 general programming concepts, or code review that does not depend on an external
 technology's current behavior.
+
+## Source ordering and matched skills
+
+This workflow controls documentation source ordering even when multiple documentation
+skills match the same task. A matching skill may be loaded and read, but loading it
+does not make its documentation tools immediately eligible.
+
+Unless the user explicitly requests a particular source, complete the Loci workflow
+before executing instructions from another documentation skill. Defer any instruction
+that would query Context7 or another source earlier.
 
 ## Loci workflow
 
@@ -64,10 +74,12 @@ technology's current behavior.
 7. If no suitable local library exists, call `loci_list_cloud_libraries`. This is
    read-only and does not require confirmation.
 8. Use only cloud matches with `pages > 0`. Explain the source and request confirmation
-   before calling `loci_pull_cloud_library`.
-9. If no usable cloud match exists, cloud lookup or pull fails, or a pull yields no
-   files, confirm the official documentation entry and separately request permission
-   before calling `loci_add_library`. A cloud copy does not replace this local fallback.
+   before calling `loci_pull_cloud_library`. Do not query Context7 while waiting for
+   the user's decision.
+9. If no usable cloud match exists, the user declines the pull, cloud lookup or pull
+   fails, or a pull yields no files, confirm the official documentation entry and
+   separately request permission before calling `loci_add_library`. A cloud copy does
+   not replace this local fallback. Do not query Context7 while waiting for this decision.
 10. Treat cloud pulls, source additions, active synchronization, and deletion as
     state-changing operations. Perform them only when explicitly requested or after
     user confirmation.
@@ -82,10 +94,20 @@ continue using it with a freshness caveat instead of deleting or replacing it.
 
 ## Context7 fallback
 
-Use Context7 only when Loci is unavailable, fails, has no suitable documentation,
-remains insufficient after a reasonable search, or the user declines the required
-Loci data change. If the user explicitly requests Context7, follow that request
-directly.
+An empty local result or cloud catalog result is not by itself a Context7 fallback
+condition. Offer the official-source crawl first. Use Context7 only when one of these
+terminal conditions is reached:
+
+- the Loci tools are unavailable;
+- the official documentation entry cannot be verified and the user does not provide
+  or approve a usable source;
+- the user declines the proposed official-source crawl;
+- after the official-source crawl has been offered, every acquisition path authorized
+  by the user fails or yields no usable files; or
+- existing or acquired Loci evidence remains insufficient after a reasonable search.
+
+If the user explicitly requests Context7, follow that request directly. Otherwise,
+state which terminal condition was reached before falling back.
 
 When falling back:
 
@@ -125,6 +147,16 @@ Do not use this workflow for ordinary refactoring, business-logic debugging,
 general programming concepts, or code review that does not depend on an external
 technology's current behavior.
 
+## Source ordering and matched skills
+
+This workflow controls documentation source ordering even when multiple documentation
+skills match the same task. A matching skill may be loaded and read, but loading it
+does not make its documentation tools immediately eligible.
+
+Unless the user explicitly requests a particular source, complete the Loci workflow
+before executing instructions from another documentation skill. Defer any instruction
+that would query another source earlier.
+
 ## Workflow
 
 1. Identify the relevant technology and the version used by the current project.
@@ -141,10 +173,13 @@ technology's current behavior.
 7. If no suitable local library exists, call `loci_list_cloud_libraries`. This is
    read-only and does not require confirmation.
 8. Use only cloud matches with `pages > 0`. Explain the source and request confirmation
-   before calling `loci_pull_cloud_library`.
-9. If no usable cloud match exists, cloud lookup or pull fails, or a pull yields no
-   files, confirm the official documentation entry and separately request permission
-   before calling `loci_add_library`. A cloud copy does not replace this local fallback.
+   before calling `loci_pull_cloud_library`. Do not query another documentation source
+   while waiting for the user's decision.
+9. If no usable cloud match exists, the user declines the pull, cloud lookup or pull
+   fails, or a pull yields no files, confirm the official documentation entry and
+   separately request permission before calling `loci_add_library`. A cloud copy does
+   not replace this local fallback. Do not query another documentation source while
+   waiting for this decision.
 10. Treat cloud pulls, source additions, active synchronization, and deletion as
     state-changing operations. Perform them only when explicitly requested or after
     user confirmation.
@@ -157,9 +192,13 @@ technology's current behavior.
 Keep an existing local library with files when cloud lookup or update is unavailable;
 continue using it with a freshness caveat instead of deleting or replacing it.
 
-If Loci is unavailable or remains insufficient, explain the limitation. Use another
-official documentation source only when the current project or user instructions
-allow it, and state that a fallback occurred.
+An empty local result or cloud catalog result is not by itself a fallback condition.
+Offer the official-source crawl first. Use another official documentation source only
+when the current project or user instructions allow it and the Loci tools are unavailable,
+the official entry cannot be verified and the user does not provide or approve a usable
+source, the user declines the official-source crawl, every user-authorized acquisition
+path fails or yields no usable files after that crawl has been offered, or the obtained
+evidence remains insufficient after a reasonable search. State why a fallback occurred.
 
 <!-- loci:end -->
 ```
@@ -168,7 +207,7 @@ allow it, and state that a fallback occurred.
 
 这两份模板都可以只依赖 Loci MCP，不要求用户安装 `use-loci` Skill，也不负责安装或更新任何 Skill。
 
-如果用户已经安装了适用于当前任务的 Skill，Codex 在用户显式调用或任务与 Skill 描述匹配时，会读取对应的 `SKILL.md` 并执行更具体的工作流。全局 `AGENTS.md` 继续提供稳定的文档查询顺序，两者不需要互相绑定。
+如果用户已经安装了适用于当前任务的 Skill，Codex 在用户显式调用或任务与 Skill 描述匹配时，会读取对应的 `SKILL.md`。Skill 被匹配或加载不代表其中的文档工具可以立即执行；全局 `AGENTS.md` 继续统一规定来源顺序，第三方 Skill 中更早查询其他来源的步骤应推迟到 Loci 流程到达兜底条件之后。Loci 不修改、删除或覆盖用户安装的第三方 Skill。
 
 ## 检查覆盖规则
 
@@ -180,6 +219,6 @@ allow it, and state that a fallback occurred.
 codex --ask-for-approval never "说明技术文档的查询流程，以及什么情况下使用 Context7。"
 ```
 
-使用组合模板时，预期顺序是 Loci 本地库、Loci 云端发现和获取、Context7 兜底。使用纯 Loci 模板时，不应出现 Context7 步骤。
+使用组合模板时，预期顺序是 Loci 本地库、Loci 云端发现、用户确认后的云端拉取或官方抓取、Context7 兜底。云端未命中时应先出现官方抓取询问，不能直接调用 Context7。使用纯 Loci 模板时，不应出现 Context7 步骤。
 
 配置入口请查看[配置 MCP](/agent/mcp)，具体检索流程请查看[使用 Loci Skill](/agent/skill)。Codex 对全局与仓库级指令的加载方式，请查看 [Codex AGENTS.md 文档](https://learn.chatgpt.com/docs/agent-configuration/agents-md.md)。
