@@ -1,4 +1,4 @@
-import type { CrawlFailure, CrawlProgress } from '@loci/core'
+import type { CrawlFailure, CrawlProgress, GithubBlockedState } from '@loci/core'
 
 export interface LibraryInput {
   name: string
@@ -16,6 +16,8 @@ export interface Library extends LibraryInput {
   lastError: string | null
   revision: string | null
   publishedAt: string | null
+  githubRevision: string | null
+  githubBlocked: GithubBlockedState | null
 }
 
 export interface PublicLibrary {
@@ -35,6 +37,7 @@ export interface SnapshotDocument {
   url: string
   language: string
   markdown: string
+  relativePath?: string
 }
 
 export interface LibrarySnapshot {

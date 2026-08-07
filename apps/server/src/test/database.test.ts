@@ -79,6 +79,27 @@ describe('ServerDatabase', () => {
     expect(() => database.publishSnapshot(library.id)).toThrow('没有可发布页面')
   })
 
+  it('重复创建和删除同一文档库时保持幂等', () => {
+    const database = new ServerDatabase(':memory:')
+    databases.push(database)
+    const input = {
+      name: 'Hono',
+      url: 'https://hono.dev/docs',
+      scopePath: '/docs',
+      pageLimit: 100,
+      schedule: null
+    }
+
+    const first = database.createLibrary(input)
+    const duplicate = database.createLibrary({ ...input, name: '重复请求' })
+
+    expect(duplicate.id).toBe(first.id)
+    expect(database.listLibraries()).toHaveLength(1)
+    database.deleteLibrary(first.id)
+    expect(() => database.deleteLibrary(first.id)).not.toThrow()
+    expect(database.listLibraries()).toEqual([])
+  })
+
   it('缩小收录范围时删除范围外文档，并允许同域名不同范围', () => {
     const database = new ServerDatabase(':memory:')
     databases.push(database)
@@ -116,6 +137,28 @@ describe('ServerDatabase', () => {
         schedule: null
       })
     ).not.toThrow()
+  })
+
+  it('用仓库根路径区分同一 GitHub 域名下的公开仓库', () => {
+    const database = new ServerDatabase(':memory:')
+    databases.push(database)
+    const vue = database.createLibrary({
+      name: 'Vue Docs',
+      url: 'https://github.com/vuejs/docs/tree/main/src',
+      scopePath: '/',
+      pageLimit: 1000,
+      schedule: null
+    })
+    const vite = database.createLibrary({
+      name: 'Vite',
+      url: 'https://github.com/vitejs/vite',
+      scopePath: '/',
+      pageLimit: 1000,
+      schedule: null
+    })
+
+    expect(vue.scopePath).toBe('/vuejs/docs')
+    expect(vite.scopePath).toBe('/vitejs/vite')
   })
 
   it('把旧版 hostname 唯一表无损迁移为默认全站范围', () => {

@@ -1,4 +1,5 @@
 import { fromMarkdown } from 'mdast-util-from-markdown'
+import { throwIfAborted } from './abort.js'
 import { immediateCrawlOptions, normalizeUrl, parsePage, runCrawlQueue } from './crawl.js'
 import { isUrlInScope } from './scope.js'
 import type { CrawledPage, CrawlProgress, FetchOptions, HttpCrawlOptions } from './types.js'
@@ -8,7 +9,7 @@ export interface LlmsEntry {
   url: string
 }
 
-type LlmsFetchOptions = Pick<FetchOptions, 'fetchImpl'>
+type LlmsFetchOptions = Pick<FetchOptions, 'fetchImpl' | 'signal'>
 
 interface MarkdownNode {
   type: string
@@ -84,6 +85,7 @@ export async function discoverLlmsEntries(
       visited: new Set([manifestUrl])
     })
   } catch {
+    throwIfAborted(options.signal)
     return []
   }
 }
@@ -104,6 +106,7 @@ async function expandLlmsManifests(
 ): Promise<LlmsEntry[]> {
   const expanded: LlmsEntry[] = []
   for (const entry of entries) {
+    throwIfAborted(options.signal)
     if (expanded.length >= limit) break
     if (!isLlmsManifest(entry.url) || state.depth >= 3 || state.visited.has(entry.url)) {
       if (!state.visited.has(entry.url)) expanded.push(entry)
@@ -141,6 +144,7 @@ async function expandLlmsManifests(
         ))
       )
     } catch {
+      throwIfAborted(options.signal)
       expanded.push(entry)
     }
   }
@@ -160,7 +164,8 @@ function normalizeMarkdown(markdown: string): string {
 
 /** llms.txt 及其静态资源直接请求，不应用网页抓取的超时、重试和退避策略。 */
 function fetchLlmsFile(url: string, options: LlmsFetchOptions): Promise<Response> {
-  return (options.fetchImpl ?? fetch)(url, { redirect: 'follow' })
+  throwIfAborted(options.signal)
+  return (options.fetchImpl ?? fetch)(url, { redirect: 'follow', signal: options.signal })
 }
 
 export async function fetchMarkdownPage(
@@ -168,6 +173,7 @@ export async function fetchMarkdownPage(
   options: LlmsFetchOptions = {}
 ): Promise<CrawledPage> {
   const response = await fetchLlmsFile(entry.url, options)
+  throwIfAborted(options.signal)
   const url = normalizeUrl(response.url || entry.url)
   if (!response.ok) return { url, status: response.status }
   const body = await response.text()
@@ -206,7 +212,8 @@ export function crawlLlmsSource(
     sitemapUrls: selectedEntries.slice(1).map((entry) => entry.url),
     fetchPage: (url) =>
       fetchMarkdownPage(entryByUrl.get(url) ?? { title: new URL(url).pathname, url }, {
-        fetchImpl: options.fetch
+        fetchImpl: options.fetch,
+        signal: options.signal
       })
   })
 }

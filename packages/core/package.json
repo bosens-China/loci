@@ -9,6 +9,14 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./github-url": {
+      "types": "./src/github-url.ts",
+      "default": "./src/github-url.ts"
+    },
+    "./schedule": {
+      "types": "./src/schedule.ts",
+      "default": "./src/schedule.ts"
     }
   },
   "scripts": {
@@ -20,11 +28,19 @@
   "dependencies": {
     "croner": "^10.0.1",
     "mdast-util-from-markdown": "^2.0.3",
+    "mdast-util-frontmatter": "^2.0.1",
+    "mdast-util-to-markdown": "^2.1.2",
     "mdream": "^1.5.8",
-    "node-html-parser": "^9.0.1"
+    "micromark-extension-frontmatter": "^2.0.0",
+    "node-html-parser": "^9.0.1",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
+    "@types/mdast": "^4.0.4",
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "yazl": "^3.3.1"
   }
 }

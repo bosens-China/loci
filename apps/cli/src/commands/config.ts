@@ -10,6 +10,8 @@ type ConfigKey =
   | 'browser-concurrency'
   | 'max-retries'
   | 'batch-interval-seconds'
+  | 'github-archive-limit-mb'
+  | 'github-markdown-limit-mb'
   | 'server-url'
 
 export function registerConfigCommands(program: Command): void {
@@ -29,6 +31,8 @@ export function registerConfigCommands(program: Command): void {
             ['browser-concurrency', settings.browserConcurrency],
             ['max-retries', settings.maxRetries],
             ['batch-interval-seconds', settings.batchIntervalSeconds],
+            ['github-archive-limit-mb', settings.githubArchiveLimitMb],
+            ['github-markdown-limit-mb', settings.githubMarkdownLimitMb],
             ['server-url', settings.serverUrl]
           ]
         )
@@ -74,6 +78,8 @@ function configOptions(settings: AppSettings): Array<{
       'browser-concurrency',
       'max-retries',
       'batch-interval-seconds',
+      'github-archive-limit-mb',
+      'github-markdown-limit-mb',
       'server-url'
     ] as const
   ).map((value) => ({
@@ -113,6 +119,9 @@ function configRange(
 ): [number, number] {
   if (key === 'mcp-port') return [1024, 65_535]
   if (key === 'max-retries') return [0, 10]
+  if (key === 'github-archive-limit-mb' || key === 'github-markdown-limit-mb') {
+    return [1, 10_240]
+  }
   return [1, 32]
 }
 
@@ -122,6 +131,8 @@ function configValue(settings: AppSettings, key: ConfigKey): string {
   if (key === 'browser-concurrency') return String(settings.browserConcurrency)
   if (key === 'max-retries') return String(settings.maxRetries)
   if (key === 'batch-interval-seconds') return String(settings.batchIntervalSeconds)
+  if (key === 'github-archive-limit-mb') return String(settings.githubArchiveLimitMb)
+  if (key === 'github-markdown-limit-mb') return String(settings.githubMarkdownLimitMb)
   return settings.serverUrl
 }
 
@@ -132,6 +143,8 @@ function applyConfigValue(settings: AppSettings, key: ConfigKey, value: string):
   if (key === 'browser-concurrency') settings.browserConcurrency = Number(value)
   if (key === 'max-retries') settings.maxRetries = Number(value)
   if (key === 'batch-interval-seconds') settings.batchIntervalSeconds = Number(value)
+  if (key === 'github-archive-limit-mb') settings.githubArchiveLimitMb = Number(value)
+  if (key === 'github-markdown-limit-mb') settings.githubMarkdownLimitMb = Number(value)
 }
 
 function configLabel(key: ConfigKey): string {
@@ -141,6 +154,8 @@ function configLabel(key: ConfigKey): string {
     'browser-concurrency': '浏览器默认并发',
     'max-retries': '失败重试次数',
     'batch-interval-seconds': '抓取批次间隔',
+    'github-archive-limit-mb': 'GitHub ZIP 默认上限（MB）',
+    'github-markdown-limit-mb': 'GitHub Markdown 默认上限（MB）',
     'server-url': 'Loci Server 地址'
   }[key]
 }
@@ -186,6 +201,8 @@ function isConfigKey(value: string): value is ConfigKey {
     'browser-concurrency',
     'max-retries',
     'batch-interval-seconds',
+    'github-archive-limit-mb',
+    'github-markdown-limit-mb',
     'server-url'
   ].includes(value)
 }

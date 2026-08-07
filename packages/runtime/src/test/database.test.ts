@@ -73,7 +73,9 @@ describe('createDatabase', () => {
         browserConcurrency: 5,
         maxRetries: 3,
         batchIntervalSeconds: 0,
-        serverUrl: 'https://loci.xiaowo.live'
+        serverUrl: 'https://loci.xiaowo.live',
+        githubArchiveLimitMb: 200,
+        githubMarkdownLimitMb: 100
       })
       expect(
         database.saveSettings({
@@ -83,7 +85,9 @@ describe('createDatabase', () => {
           browserConcurrency: 3,
           maxRetries: 4,
           batchIntervalSeconds: 100,
-          serverUrl: 'https://docs.example.com/'
+          serverUrl: 'https://docs.example.com/',
+          githubArchiveLimitMb: 200,
+          githubMarkdownLimitMb: 100
         })
       ).toEqual({
         mcpPort: 41000,
@@ -92,7 +96,9 @@ describe('createDatabase', () => {
         browserConcurrency: 3,
         maxRetries: 4,
         batchIntervalSeconds: 100,
-        serverUrl: 'https://docs.example.com'
+        serverUrl: 'https://docs.example.com',
+        githubArchiveLimitMb: 200,
+        githubMarkdownLimitMb: 100
       })
       expect(database.getSettings()).toEqual({
         mcpPort: 41000,
@@ -101,7 +107,9 @@ describe('createDatabase', () => {
         browserConcurrency: 3,
         maxRetries: 4,
         batchIntervalSeconds: 100,
-        serverUrl: 'https://docs.example.com'
+        serverUrl: 'https://docs.example.com',
+        githubArchiveLimitMb: 200,
+        githubMarkdownLimitMb: 100
       })
       expect(database.getInteractionPreference('cli', 'source-create')).toBeNull()
       database.setInteractionPreference('cli', 'source-create', {
@@ -122,7 +130,9 @@ describe('createDatabase', () => {
           browserConcurrency: 5,
           maxRetries: 3,
           batchIntervalSeconds: 0,
-          serverUrl: 'http://localhost:7001'
+          serverUrl: 'http://localhost:7001',
+          githubArchiveLimitMb: 200,
+          githubMarkdownLimitMb: 100
         })
       ).toThrow('MCP 端口必须是 1024 到 65535 之间的整数')
     } finally {
@@ -201,6 +211,105 @@ describe('createDatabase', () => {
         })
       ).toThrow('这个域名已经存在于文档源中')
       expect(database.getSourceConfig(vue.id).hostname).toBe('vuejs.org')
+    } finally {
+      database.close()
+    }
+  })
+
+  it('允许同一 GitHub 域名的不同仓库，并事务性替换仓库文档快照', () => {
+    const database = createDatabase(':memory:')
+    try {
+      const defaults = {
+        mode: 'auto' as const,
+        pageLimit: 1000,
+        scopePath: '/',
+        schedule: null,
+        httpConcurrency: null,
+        browserConcurrency: null,
+        githubArchiveLimitMb: null,
+        githubMarkdownLimitMb: null
+      }
+      const vue = database.createSource({
+        ...defaults,
+        name: 'Vue Docs',
+        url: 'https://github.com/vuejs/docs/tree/main/src'
+      })
+      database.createSource({
+        ...defaults,
+        name: 'Vite Docs',
+        url: 'https://github.com/vitejs/vite'
+      })
+      expect(database.listSources()).toHaveLength(2)
+      expect(vue).toMatchObject({
+        url: 'https://github.com/vuejs/docs',
+        kind: 'github',
+        scopePath: '/'
+      })
+      expect(
+        database.createSource({
+          ...defaults,
+          name: 'Duplicate',
+          url: 'https://github.com/VueJS/Docs.git'
+        })
+      ).toMatchObject({ id: vue.id, name: 'Vue Docs' })
+
+      database.replaceSourceDocuments(vue.id, [
+        {
+          sourceId: vue.id,
+          title: 'old.md',
+          url: 'https://github.com/vuejs/docs/blob/old/guide/old.md',
+          relativePath: 'guide/old.md',
+          markdown: '# Old',
+          language: 'und',
+          fetchMode: 'http',
+          crawledAt: new Date().toISOString()
+        }
+      ])
+      database.replaceSourceDocuments(vue.id, [
+        {
+          sourceId: vue.id,
+          title: 'new.md',
+          url: 'https://github.com/vuejs/docs/blob/new/guide/new.md',
+          relativePath: 'guide/new.md',
+          markdown: '# New',
+          language: 'und',
+          fetchMode: 'http',
+          crawledAt: new Date().toISOString()
+        }
+      ])
+      expect(database.listDocuments()).toMatchObject([{ title: 'new.md', folder: 'guide' }])
+      expect(database.searchDocuments('Old')).toEqual([])
+
+      database.updateResolvedSource(vue.id, vue.url, 'http', null, {
+        defaultBranch: 'main',
+        revision: 'new'
+      })
+      expect(database.getSourceConfig(vue.id)).toMatchObject({
+        githubDefaultBranch: 'main',
+        githubRevision: 'new'
+      })
+      const runId = database.startCrawlRun(vue.id)
+      database.finishCrawlRun(
+        runId,
+        'completed',
+        {
+          queued: 1,
+          processed: 1,
+          succeeded: 0,
+          failed: 1,
+          limitReached: false,
+          failures: [
+            {
+              url: 'https://github.com/vuejs/docs/blob/new/lfs.md',
+              reason: 'git_lfs_unsupported',
+              message: 'Git LFS Markdown 不受支持',
+              retryable: false
+            }
+          ]
+        },
+        null
+      )
+      expect(database.listCrawlFailures(runId)[0]?.reason).toBe('git_lfs_unsupported')
     } finally {
       database.close()
     }

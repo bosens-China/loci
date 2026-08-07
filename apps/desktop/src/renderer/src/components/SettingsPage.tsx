@@ -96,6 +96,8 @@ function SettingsPage(): React.JSX.Element {
           browserConcurrency={state.settings.browserConcurrency}
           maxRetries={state.settings.maxRetries}
           batchIntervalSeconds={state.settings.batchIntervalSeconds}
+          githubArchiveLimitMb={state.settings.githubArchiveLimitMb}
+          githubMarkdownLimitMb={state.settings.githubMarkdownLimitMb}
           saving={saving === 'crawl'}
           onSave={(crawlSettings) => handleSavePartial('crawl', crawlSettings, '抓取默认值已保存')}
         />

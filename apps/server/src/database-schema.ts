@@ -14,6 +14,10 @@ const schema = `
     schedule TEXT,
     last_crawled_at TEXT,
     last_error TEXT,
+    github_revision TEXT,
+    github_blocked_revision TEXT,
+    github_blocked_limit_kind TEXT,
+    github_blocked_limit_bytes INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE(hostname, scope_path)
@@ -27,6 +31,7 @@ const schema = `
     language TEXT NOT NULL,
     markdown TEXT NOT NULL,
     crawled_at TEXT NOT NULL,
+    relative_path TEXT,
     UNIQUE(library_id, url)
   ) STRICT;
 
@@ -38,11 +43,36 @@ const schema = `
     byte_size INTEGER NOT NULL,
     content TEXT NOT NULL
   ) STRICT;
+
+  CREATE TABLE IF NOT EXISTS sync_jobs (
+    id TEXT PRIMARY KEY,
+    library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (
+      status IN ('queued', 'running', 'canceling', 'canceled', 'completed', 'completed_with_errors', 'failed')
+    ),
+    owner_id TEXT NOT NULL,
+    lease_expires_at TEXT NOT NULL,
+    progress_json TEXT,
+    failures_json TEXT NOT NULL DEFAULT '[]',
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    finished_at TEXT
+  ) STRICT;
+
+  CREATE UNIQUE INDEX IF NOT EXISTS sync_jobs_active_library
+    ON sync_jobs(library_id)
+    WHERE status IN ('queued', 'running', 'canceling');
 `
 
 /** 初始化当前结构，并兼容迁移只有 hostname 唯一约束的旧版数据库。 */
 export function initializeServerDatabase(database: DatabaseSync): void {
   database.exec(schema)
+  addColumn(database, 'documents', 'relative_path', 'TEXT')
+  addColumn(database, 'libraries', 'github_revision', 'TEXT')
+  addColumn(database, 'libraries', 'github_blocked_revision', 'TEXT')
+  addColumn(database, 'libraries', 'github_blocked_limit_kind', 'TEXT')
+  addColumn(database, 'libraries', 'github_blocked_limit_bytes', 'INTEGER')
   const columns = database.prepare('PRAGMA table_info(libraries)').all() as unknown as Array<{
     name: string
   }>
@@ -81,5 +111,23 @@ export function initializeServerDatabase(database: DatabaseSync): void {
     throw error
   } finally {
     database.exec('PRAGMA foreign_keys = ON')
+  }
+  addColumn(database, 'libraries', 'github_revision', 'TEXT')
+  addColumn(database, 'libraries', 'github_blocked_revision', 'TEXT')
+  addColumn(database, 'libraries', 'github_blocked_limit_kind', 'TEXT')
+  addColumn(database, 'libraries', 'github_blocked_limit_bytes', 'INTEGER')
+}
+
+function addColumn(
+  database: DatabaseSync,
+  table: string,
+  column: string,
+  definition: string
+): void {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{
+    name: string
+  }>
+  if (!columns.some((item) => item.name === column)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
   }
 }

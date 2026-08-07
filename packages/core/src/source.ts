@@ -1,8 +1,19 @@
-import { crawlHttpSource, fetchHttpPage, getHostname, normalizeUrl } from './crawl.js'
+import {
+  crawlHttpSource,
+  fetchHttpPage,
+  getHostname,
+  isImmediateStaticHostname,
+  normalizeUrl
+} from './crawl.js'
+import { throwIfAborted } from './abort.js'
 import { crawlLlmsSource, discoverLlmsEntries } from './llms.js'
+import { crawlGithubSource } from './github-source.js'
+import type { GithubBlockedState } from './github-limits.js'
+import { parseGithubRepositoryUrl } from './github-url.js'
 import { selectFetchMode } from './mode.js'
+import { crawlOpenApiSource, discoverOpenApiEntries } from './openapi.js'
 import { crawlRenderedSource, fetchCrawledPageWithRetry, type RenderedCrawler } from './rendered.js'
-import type { CrawledPage, CrawlProgress, HttpCrawlOptions } from './types.js'
+import type { CrawledDocument, CrawledPage, CrawlProgress, HttpCrawlOptions } from './types.js'
 
 export type SourceFetchMode = 'auto' | 'http' | 'browser'
 
@@ -11,7 +22,11 @@ export interface SourceResolution {
   hostname: string
   fetchMode: Exclude<SourceFetchMode, 'auto'>
   iconUrl: string | null
-  discovery: 'llms' | 'pages'
+  discovery: 'github' | 'llms' | 'openapi' | 'pages'
+  github?: {
+    defaultBranch: string
+    revision: string
+  }
 }
 
 export interface SourceCrawlResult {
@@ -26,18 +41,54 @@ export interface SourceCrawlOptions extends Omit<HttpCrawlOptions, 'concurrency'
   crawler?: RenderedCrawler
   beforeBrowserCrawl?: () => Promise<void>
   onResolved?: (resolution: SourceResolution) => Promise<void> | void
+  onSnapshot?: (documents: CrawledDocument[]) => Promise<void> | void
+  githubArchiveLimitBytes?: number
+  githubMarkdownLimitBytes?: number
+  githubPreviousRevision?: string | null
+  githubBlocked?: GithubBlockedState | null
 }
 
 /** 文档源抓取的通用编排；桌面端和服务端只注入不同的浏览器实现。 */
 export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCrawlResult> {
+  throwIfAborted(options.signal)
   const scopePath = options.scopePath ?? '/'
+  const githubRepository = parseGithubRepositoryUrl(options.firstUrl)
+  if (githubRepository) {
+    const result = await crawlGithubSource({
+      repository: githubRepository,
+      pageLimit: options.pageLimit,
+      archiveLimitBytes: options.githubArchiveLimitBytes,
+      markdownLimitBytes: options.githubMarkdownLimitBytes,
+      previousRevision: options.githubPreviousRevision,
+      blocked: options.githubBlocked,
+      fetch: options.fetch,
+      signal: options.signal,
+      onProgress: options.onProgress
+    })
+    const resolution: SourceResolution = {
+      firstUrl: githubRepository.url,
+      hostname: 'github.com',
+      fetchMode: 'http',
+      iconUrl: 'https://github.com/favicon.ico',
+      discovery: 'github',
+      github: { defaultBranch: result.defaultBranch, revision: result.revision }
+    }
+    if (!result.unchanged) {
+      throwIfAborted(options.signal)
+      if (options.onSnapshot) await options.onSnapshot(result.documents)
+      else for (const document of result.documents) await options.onDocument(document)
+    }
+    throwIfAborted(options.signal)
+    await options.onResolved?.(resolution)
+    return { progress: result.progress, resolution }
+  }
   if (options.fetchMode === 'browser') await options.beforeBrowserCrawl?.()
   const llmsEntries = await discoverLlmsEntries(
     options.firstUrl,
     options.hostname,
     scopePath,
     options.pageLimit,
-    { fetchImpl: options.fetch }
+    { fetchImpl: options.fetch, signal: options.signal }
   )
   if (llmsEntries.length) {
     const resolution: SourceResolution = {
@@ -58,7 +109,33 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
     return { progress, resolution }
   }
 
+  if (!isImmediateStaticHostname(options.hostname)) {
+    const openApiEntries = await discoverOpenApiEntries(options.firstUrl, options.hostname, {
+      fetchImpl: options.fetch,
+      signal: options.signal
+    })
+    if (openApiEntries.length) {
+      const resolution: SourceResolution = {
+        firstUrl: options.firstUrl,
+        hostname: options.hostname,
+        fetchMode: 'http',
+        iconUrl: new URL('/favicon.ico', options.firstUrl).toString(),
+        discovery: 'openapi'
+      }
+      await options.onResolved?.(resolution)
+      const progress = await crawlOpenApiSource(
+        toCrawlOptions(options, resolution, {
+          concurrency: options.httpConcurrency ?? 9,
+          firstNodeId: options.firstNodeId ?? options.firstUrl
+        }),
+        openApiEntries
+      )
+      return { progress, resolution }
+    }
+  }
+
   const selected = await readFirstPage(options)
+  throwIfAborted(options.signal)
   const firstUrl = normalizeUrl(selected.firstPage.url || options.firstUrl)
   const resolution: SourceResolution = {
     firstUrl,
@@ -98,7 +175,8 @@ async function readFirstPage(options: SourceCrawlOptions): Promise<{
       firstPage: await fetchHttpPage(options.firstUrl, {
         fetchImpl: options.fetch,
         maxRetries: options.maxRetries,
-        sleep: options.sleep
+        sleep: options.sleep,
+        signal: options.signal
       })
     }
   }
@@ -114,10 +192,12 @@ async function readFirstPage(options: SourceCrawlOptions): Promise<{
     fetchHttpPage(options.firstUrl, {
       fetchImpl: options.fetch,
       maxRetries: options.maxRetries,
-      sleep: options.sleep
+      sleep: options.sleep,
+      signal: options.signal
     }),
     fetchBrowserEntry(options)
   ])
+  throwIfAborted(options.signal)
   return selectAutoResult(httpResult, browserResult)
 }
 
@@ -152,7 +232,8 @@ function fetchBrowserEntry(options: SourceCrawlOptions): Promise<CrawledPage> {
     {},
     {
       maxRetries: options.maxRetries,
-      sleep: options.sleep
+      sleep: options.sleep,
+      signal: options.signal
     }
   )
 }
@@ -181,6 +262,7 @@ function toCrawlOptions(
     sleep: options.sleep,
     maxRetries: options.maxRetries,
     batchIntervalMs: options.batchIntervalMs,
+    signal: options.signal,
     waitIfPaused: options.waitIfPaused,
     onDocument: options.onDocument,
     onError: options.onError,

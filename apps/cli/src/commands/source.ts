@@ -1,5 +1,6 @@
 import { Option, type Command } from 'commander'
 import { deriveSourceName, formatBytes, type DocumentSource, type FetchMode } from '@loci/shared'
+import { parseGithubRepositoryUrl } from '@loci/core'
 import type { BrowserInstallPrompt } from '../browser.js'
 import { startBackgroundSourceSync } from '../background-sync.js'
 import { runWithRuntime, type CommandResult } from '../command-runtime.js'
@@ -40,6 +41,8 @@ interface SourceOptions {
   yes?: boolean
   sync?: boolean
   background?: boolean
+  archiveLimit?: number
+  markdownLimit?: number
 }
 
 export function registerSourceCommands(program: Command): void {
@@ -55,13 +58,13 @@ export function registerSourceCommands(program: Command): void {
           process.stdout.write('还没有本地文档源，可运行 loci source add 创建。\n')
         } else {
           printTable(
-            ['名称', '页面', '内容大小', '方式', '范围', '最近更新', '短 ID'],
+            ['名称', '文档', '内容大小', '类型', '范围', '最近更新', '短 ID'],
             sources.map((item) => [
               item.name,
               item.pages,
               formatBytes(item.contentSize),
-              modeLabel(item.mode),
-              item.scopePath,
+              item.kind === 'github' ? 'GitHub' : modeLabel(item.mode),
+              item.kind === 'github' ? '默认分支' : item.scopePath,
               item.lastUpdated,
               item.id.slice(0, 8)
             ])
@@ -83,6 +86,8 @@ export function registerSourceCommands(program: Command): void {
     .option('--scope <path>', '收录路径，默认 /')
     .option('--http-concurrency <number>', 'HTTP 并发覆盖值，默认继承共享设置', numberValue)
     .option('--browser-concurrency <number>', '浏览器并发覆盖值，默认继承共享设置', numberValue)
+    .option('--archive-limit <size>', 'GitHub ZIP 上限，例如 200mb', sizeMbValue)
+    .option('--markdown-limit <size>', 'GitHub Markdown 总量上限，例如 100mb', sizeMbValue)
     .option('--no-sync', '创建后不执行首次同步')
     .option('--background', '使用一次性后台进程执行首次同步')
     .action((urlArgument: string | undefined, options: SourceOptions) =>
@@ -101,16 +106,21 @@ export function registerSourceCommands(program: Command): void {
             placeholder: 'https://example.com/docs/start',
             validate: validatePublicUrl
           }))
+        const repository = parseGithubRepositoryUrl(url)
         const hostname = new URL(url).hostname
         const input = {
           name:
             options.name ??
             (guided
-              ? await askText('文档源名称', { initialValue: deriveSourceName(url) || hostname })
-              : deriveSourceName(url) || hostname),
+              ? await askText('文档源名称', {
+                  initialValue: repository?.repo || deriveSourceName(url) || hostname
+                })
+              : repository?.repo || deriveSourceName(url) || hostname),
           url,
-          mode:
-            options.mode ?? (guided ? await askMode('抓取方式', preference.mode) : preference.mode),
+          mode: repository
+            ? 'auto'
+            : (options.mode ??
+              (guided ? await askMode('抓取方式', preference.mode) : preference.mode)),
           pageLimit:
             options.pageLimit ??
             (guided
@@ -120,14 +130,17 @@ export function registerSourceCommands(program: Command): void {
                   maximum: 10_000
                 })
               : preference.pageLimit),
-          scopePath:
-            options.scope ??
-            (guided
-              ? await askScope(url, scopeAtDepth(url, preference.scopeDepth))
-              : scopeAtDepth(url, preference.scopeDepth)),
+          scopePath: repository
+            ? '/'
+            : (options.scope ??
+              (guided
+                ? await askScope(url, scopeAtDepth(url, preference.scopeDepth))
+                : scopeAtDepth(url, preference.scopeDepth))),
           schedule: null,
           httpConcurrency: options.httpConcurrency ?? null,
-          browserConcurrency: options.browserConcurrency ?? null
+          browserConcurrency: options.browserConcurrency ?? null,
+          githubArchiveLimitMb: options.archiveLimit ?? null,
+          githubMarkdownLimitMb: options.markdownLimit ?? null
         }
         let syncAfterSave = options.sync !== false
         if (guided) {
@@ -166,6 +179,8 @@ export function registerSourceCommands(program: Command): void {
     .option('--scope <path>', '收录路径')
     .option('--http-concurrency <number>', 'HTTP 并发覆盖值', numberValue)
     .option('--browser-concurrency <number>', '浏览器并发覆盖值', numberValue)
+    .option('--archive-limit <size>', 'GitHub ZIP 上限，例如 200mb', sizeMbValue)
+    .option('--markdown-limit <size>', 'GitHub Markdown 总量上限，例如 100mb', sizeMbValue)
     .action((reference: string | undefined, options: SourceOptions) =>
       runWithRuntime('修改文档源', async (runtime) => {
         const current = await resolveSource(runtime, reference, {
@@ -190,7 +205,9 @@ export function registerSourceCommands(program: Command): void {
           name:
             options.name ??
             (editAll ? await askText('文档源名称', { initialValue: current.name }) : current.name),
-          mode: options.mode ?? (editAll ? await askMode('抓取方式', current.mode) : current.mode),
+          mode: parseGithubRepositoryUrl(url)
+            ? 'auto'
+            : (options.mode ?? (editAll ? await askMode('抓取方式', current.mode) : current.mode)),
           pageLimit:
             options.pageLimit ??
             (editAll
@@ -200,10 +217,14 @@ export function registerSourceCommands(program: Command): void {
                   maximum: 10_000
                 })
               : current.pageLimit),
-          scopePath:
-            options.scope ?? (editAll ? await askScope(url, current.scopePath) : current.scopePath),
+          scopePath: parseGithubRepositoryUrl(url)
+            ? '/'
+            : (options.scope ??
+              (editAll ? await askScope(url, current.scopePath) : current.scopePath)),
           httpConcurrency: options.httpConcurrency ?? current.httpConcurrency,
-          browserConcurrency: options.browserConcurrency ?? current.browserConcurrency
+          browserConcurrency: options.browserConcurrency ?? current.browserConcurrency,
+          githubArchiveLimitMb: options.archiveLimit ?? current.githubArchiveLimitMb,
+          githubMarkdownLimitMb: options.markdownLimit ?? current.githubMarkdownLimitMb
         }
         if (editAll && sameSourceInput(current, input)) return `文档源“${current.name}”没有变化`
         let syncAfterSave = false
@@ -258,6 +279,12 @@ export function registerSourceCommands(program: Command): void {
       })
     )
   registerSourceHistoryCommands(source)
+}
+
+function sizeMbValue(value: string): number {
+  const match = /^(\d+)(?:\s*(?:m|mb|mib))?$/i.exec(value.trim())
+  if (!match) throw new CliError(`无效大小：${value}，请使用整数 MB，例如 200mb`, 2)
+  return numberValue(match[1]!)
 }
 
 async function syncSource(

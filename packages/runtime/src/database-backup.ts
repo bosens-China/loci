@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { DEFAULT_APP_SETTINGS } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
+import { parseGithubRepositoryUrl } from '@loci/core'
 
 const sourceSchema = z
   .object({
@@ -22,6 +23,15 @@ const sourceSchema = z
     cloud_library_id: z.string().nullable().optional(),
     cloud_revision: z.string().nullable().optional(),
     cloud_auto_sync: z.number().int().min(0).max(1).optional(),
+    document_kind: z.enum(['web', 'github']).optional(),
+    source_identity: z.string().nullable().optional(),
+    github_archive_limit_mb: z.number().int().min(1).max(10240).nullable().optional(),
+    github_markdown_limit_mb: z.number().int().min(1).max(10240).nullable().optional(),
+    github_default_branch: z.string().nullable().optional(),
+    github_revision: z.string().nullable().optional(),
+    github_blocked_revision: z.string().nullable().optional(),
+    github_blocked_limit_kind: z.enum(['archive', 'markdown']).nullable().optional(),
+    github_blocked_limit_bytes: z.number().int().positive().nullable().optional(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime()
   })
@@ -36,7 +46,8 @@ const documentSchema = z
     crawled_at: z.string().datetime(),
     markdown: z.string(),
     language: z.string(),
-    fetch_mode: z.enum(['http', 'browser'])
+    fetch_mode: z.enum(['http', 'browser']),
+    relative_path: z.string().nullable().optional()
   })
   .strict()
 
@@ -59,7 +70,13 @@ const crawlFailureSchema = z
     id: z.string().min(1),
     run_id: z.string().min(1),
     url: z.string().url(),
-    reason: z.enum(['not_found', 'out_of_scope_redirect', 'http_error', 'request_error']),
+    reason: z.enum([
+      'not_found',
+      'out_of_scope_redirect',
+      'http_error',
+      'request_error',
+      'git_lfs_unsupported'
+    ]),
     message: z.string(),
     retryable: z.number().int().min(0).max(1),
     status_code: z.number().int().nullable(),
@@ -79,7 +96,9 @@ const settingsSchema = z
       .int()
       .refine((value) => value === 0 || (value >= 100 && value <= 3000))
       .optional(),
-    server_url: z.string().url().optional()
+    server_url: z.string().url().optional(),
+    github_archive_limit_mb: z.number().int().min(1).max(10240).optional(),
+    github_markdown_limit_mb: z.number().int().min(1).max(10240).optional()
   })
   .strict()
 
@@ -153,16 +172,25 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
           `SELECT id, name, first_url, hostname, fetch_mode, page_limit, scope_path, schedule,
              http_concurrency, browser_concurrency, icon_url, source_type, cloud_server_url,
              cloud_library_id, cloud_revision, cloud_auto_sync, created_at, updated_at
+             , document_kind, source_identity, github_archive_limit_mb, github_markdown_limit_mb,
+             github_default_branch, github_revision, github_blocked_revision,
+             github_blocked_limit_kind, github_blocked_limit_bytes
            FROM document_sources ORDER BY created_at`
         )
         .all(),
       documents: database.prepare('SELECT * FROM documents ORDER BY crawled_at').all(),
-      crawlRuns: database.prepare('SELECT * FROM crawl_runs ORDER BY rowid').all(),
+      crawlRuns: database
+        .prepare(
+          `SELECT id, source_id, status, started_at, finished_at, discovered_count,
+             success_count, failure_count, error_message FROM crawl_runs ORDER BY rowid`
+        )
+        .all(),
       crawlFailures: database.prepare('SELECT * FROM crawl_failures ORDER BY rowid').all(),
       settings: database
         .prepare(
           `SELECT mcp_port, theme, http_concurrency, browser_concurrency, max_retries,
-             batch_interval_seconds, server_url FROM app_settings WHERE id = 1`
+             batch_interval_seconds, server_url, github_archive_limit_mb,
+             github_markdown_limit_mb FROM app_settings WHERE id = 1`
         )
         .get()
     }
@@ -187,8 +215,10 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
       `INSERT INTO document_sources
        (id, name, first_url, hostname, fetch_mode, page_limit, scope_path, schedule, http_concurrency,
         browser_concurrency, icon_url, source_type, cloud_server_url, cloud_library_id,
-        cloud_revision, cloud_auto_sync, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        cloud_revision, cloud_auto_sync, document_kind, source_identity, github_archive_limit_mb,
+        github_markdown_limit_mb, github_default_branch, github_revision, github_blocked_revision,
+        github_blocked_limit_kind, github_blocked_limit_bytes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     for (const source of sources) {
       const sourceType = source.source_type ?? 'local'
@@ -198,6 +228,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
       ) {
         throw new Error(`云文档来源信息不完整：${source.name}`)
       }
+      const repository = parseGithubRepositoryUrl(source.first_url)
+      const documentKind = source.document_kind ?? (repository ? 'github' : 'web')
       insertSource.run(
         source.id,
         source.name,
@@ -215,6 +247,15 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         sourceType === 'cloud' ? (source.cloud_library_id ?? null) : null,
         sourceType === 'cloud' ? (source.cloud_revision ?? null) : null,
         sourceType === 'cloud' ? (source.cloud_auto_sync ?? 0) : 0,
+        documentKind,
+        source.source_identity ?? repository?.identity ?? source.hostname,
+        source.github_archive_limit_mb ?? null,
+        source.github_markdown_limit_mb ?? null,
+        source.github_default_branch ?? null,
+        source.github_revision ?? null,
+        source.github_blocked_revision ?? null,
+        source.github_blocked_limit_kind ?? null,
+        source.github_blocked_limit_bytes ?? null,
         source.created_at,
         source.updated_at
       )
@@ -222,8 +263,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
 
     const insertDocument = database.prepare(
       `INSERT INTO documents
-       (id, source_id, title, url, crawled_at, markdown, language, fetch_mode)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, source_id, title, url, crawled_at, markdown, language, fetch_mode, relative_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     const insertSearch = database.prepare(
       'INSERT INTO documents_fts (document_id, source_id, title, markdown) VALUES (?, ?, ?, ?)'
@@ -237,7 +278,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         document.crawled_at,
         document.markdown,
         document.language,
-        document.fetch_mode
+        document.fetch_mode,
+        document.relative_path ?? null
       )
       insertSearch.run(document.id, document.source_id, document.title, document.markdown)
     }
@@ -284,7 +326,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         `UPDATE app_settings
          SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?,
              max_retries = ?, batch_interval_seconds = ?, server_url = ?,
-             server_url_customized = ?
+             server_url_customized = ?, github_archive_limit_mb = ?,
+             github_markdown_limit_mb = ?
          WHERE id = 1`
       )
       .run(
@@ -295,7 +338,9 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         settings.max_retries ?? DEFAULT_APP_SETTINGS.maxRetries,
         settings.batch_interval_seconds ?? DEFAULT_APP_SETTINGS.batchIntervalSeconds,
         normalizeServerUrl(settings.server_url ?? DEFAULT_APP_SETTINGS.serverUrl),
-        settings.server_url ? 1 : 0
+        settings.server_url ? 1 : 0,
+        settings.github_archive_limit_mb ?? DEFAULT_APP_SETTINGS.githubArchiveLimitMb,
+        settings.github_markdown_limit_mb ?? DEFAULT_APP_SETTINGS.githubMarkdownLimitMb
       )
     database.exec('COMMIT')
     return { sources: sources.length, documents: documents.length }

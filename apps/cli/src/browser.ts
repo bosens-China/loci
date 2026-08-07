@@ -22,9 +22,14 @@ export class CliBrowserCrawler {
   constructor(private readonly browsersPath: string) {}
 
   async fetchPage(url: string, request: RenderedPageRequest = {}): Promise<CrawledPage> {
+    request.signal?.throwIfAborted()
     const browser = await this.getBrowser()
     const context = await browser.newContext({ acceptDownloads: false })
     const page = await context.newPage()
+    const abort = (): void => {
+      void context.close().catch(() => undefined)
+    }
+    request.signal?.addEventListener('abort', abort, { once: true })
     const timeout = 30_000
     page.setDefaultTimeout(timeout)
     page.setDefaultNavigationTimeout(timeout)
@@ -48,9 +53,10 @@ export class CliBrowserCrawler {
       if (status >= 200 && status < 300) {
         await waitForStableContent(
           async () => page.evaluate(() => document.body?.innerText ?? ''),
-          { isIdle: () => Promise.resolve(true) }
+          { isIdle: () => Promise.resolve(true), signal: request.signal }
         )
       }
+      request.signal?.throwIfAborted()
       const finalUrl = normalizeUrl(page.url() || url)
       return {
         url: finalUrl,
@@ -61,7 +67,8 @@ export class CliBrowserCrawler {
           : {})
       }
     } finally {
-      await context.close()
+      request.signal?.removeEventListener('abort', abort)
+      await context.close().catch(() => undefined)
     }
   }
 

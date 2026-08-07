@@ -1,9 +1,11 @@
+import { abortableSleep, throwIfAborted } from './abort.js'
 import { discoverSitemapUrls, isRetryableStatus, retryAfterMs, runCrawlQueue } from './crawl.js'
 import type { CrawledPage, CrawlProgress, FetchOptions, HttpCrawlOptions } from './types.js'
 
 export interface RenderedPageRequest {
   hostname?: string
   scopePath?: string
+  signal?: AbortSignal
 }
 
 /** 平台只需要实现单页渲染，重试、队列和页面发现由核心包负责。 */
@@ -27,25 +29,29 @@ export interface StableContentOptions {
   isIdle?: () => boolean | Promise<boolean>
   sleep?: (milliseconds: number) => Promise<void>
   now?: () => number
+  signal?: AbortSignal
 }
 
 export async function fetchCrawledPageWithRetry(
   crawler: RenderedCrawler,
   url: string,
   request: RenderedPageRequest,
-  options: Pick<FetchOptions, 'maxRetries' | 'sleep'> = {}
+  options: Pick<FetchOptions, 'maxRetries' | 'sleep' | 'signal'> = {}
 ): Promise<CrawledPage> {
   const maxRetries = options.maxRetries ?? 3
   const sleep = options.sleep ?? defaultSleep
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    throwIfAborted(options.signal)
     try {
-      const page = await crawler.fetchPage(url, request)
+      const page = await crawler.fetchPage(url, { ...request, signal: options.signal })
+      throwIfAborted(options.signal)
       if (!isRetryableStatus(page.status) || attempt === maxRetries) return page
-      await sleep(retryAfterMs(page.retryAfter ?? null))
+      await abortableSleep(retryAfterMs(page.retryAfter ?? null), options.signal, sleep)
     } catch (error) {
+      throwIfAborted(options.signal)
       if (attempt === maxRetries) throw error
-      await sleep(0)
+      await abortableSleep(0, options.signal, sleep)
     }
   }
   throw new Error('浏览器抓取任务未返回结果')
@@ -56,11 +62,20 @@ export async function crawlRenderedSource(options: RenderedCrawlOptions): Promis
     options.firstUrl,
     options.hostname,
     options.pageLimit,
-    { fetchImpl: options.fetch, maxRetries: options.maxRetries, sleep: options.sleep },
+    {
+      fetchImpl: options.fetch,
+      maxRetries: options.maxRetries,
+      sleep: options.sleep,
+      signal: options.signal
+    },
     options.scopePath
   )
   const run = (crawler: RenderedCrawler): Promise<CrawlProgress> => {
-    const request = { hostname: options.hostname, scopePath: options.scopePath }
+    const request = {
+      hostname: options.hostname,
+      scopePath: options.scopePath,
+      signal: options.signal
+    }
     return runCrawlQueue({
       ...options,
       concurrency: options.concurrency ?? 5,
@@ -69,7 +84,8 @@ export async function crawlRenderedSource(options: RenderedCrawlOptions): Promis
       fetchPage: (url) =>
         fetchCrawledPageWithRetry(crawler, url, request, {
           maxRetries: options.maxRetries,
-          sleep: options.sleep
+          sleep: options.sleep,
+          signal: options.signal
         })
     })
   }
@@ -94,6 +110,7 @@ export async function waitForStableContent(
   let stableChecks = 0
 
   while (true) {
+    throwIfAborted(options.signal)
     const current = await readContent()
     const elapsed = now() - startedAt
     const normalized = current.replace(/\s+/gu, ' ').trim()
@@ -106,7 +123,7 @@ export async function waitForStableContent(
     previous = current
     if (elapsed >= minimumWaitMs && stableChecks >= requiredStableChecks) return
     if (elapsed >= timeoutMs) return
-    await sleep(Math.min(intervalMs, timeoutMs - elapsed))
+    await abortableSleep(Math.min(intervalMs, timeoutMs - elapsed), options.signal, sleep)
   }
 }
 

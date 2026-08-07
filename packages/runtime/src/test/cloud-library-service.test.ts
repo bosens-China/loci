@@ -99,6 +99,27 @@ describe('CloudLibraryService', () => {
     expect(database.searchDocuments('version-v1')).toHaveLength(1)
     expect(database.listSources().find((item) => item.id === imported.source.id)?.pages).toBe(1)
   })
+
+  it('同一云文档的重复导入复用一次下载', async () => {
+    database = createDatabase(':memory:')
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      await gate
+      return jsonResponse(snapshot('sha256:v1'))
+    })
+    const service = new CloudLibraryService(database, fetcher)
+
+    const first = service.importLibrary('http://localhost:7001', 'library-1', false)
+    const duplicate = service.importLibrary('http://localhost:7001', 'library-1', false)
+    release()
+    const [firstResult, duplicateResult] = await Promise.all([first, duplicate])
+
+    expect(fetcher).toHaveBeenCalledOnce()
+    expect(duplicateResult.source.id).toBe(firstResult.source.id)
+  })
 })
 
 function library(revision: string): Record<string, unknown> {

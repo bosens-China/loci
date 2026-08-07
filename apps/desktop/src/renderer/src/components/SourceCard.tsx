@@ -103,22 +103,26 @@ function SourceCard({
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <Tag bordered={false} className="bg-[var(--ant-color-fill-quaternary)] text-xs">
-              {source.mode === 'auto'
-                ? '自动检测'
-                : source.mode === 'http'
-                  ? 'HTTP 直取'
-                  : '浏览器渲染'}
+              {source.kind === 'github'
+                ? 'GitHub ZIP'
+                : source.mode === 'auto'
+                  ? '自动检测'
+                  : source.mode === 'http'
+                    ? 'HTTP 直取'
+                    : '浏览器渲染'}
             </Tag>
             <Tag bordered={false} className="bg-[var(--ant-color-fill-quaternary)] text-xs">
-              {source.pages} 页
+              {source.pages} {source.kind === 'github' ? '个 Markdown' : '页'}
             </Tag>
             <Tag bordered={false} className="bg-[var(--ant-color-fill-quaternary)] text-xs">
               {formatBytes(source.contentSize)}
             </Tag>
             <Tag bordered={false} className="bg-[var(--ant-color-fill-quaternary)] text-xs">
-              {source.httpConcurrency || source.browserConcurrency
-                ? `HTTP ${source.httpConcurrency ?? '默认'} · 浏览器 ${source.browserConcurrency ?? '默认'}`
-                : '默认并发'}
+              {source.kind === 'github'
+                ? `${source.githubDefaultBranch ?? '默认分支'}${source.githubRevision ? ` · ${source.githubRevision.slice(0, 7)}` : ''}`
+                : source.httpConcurrency || source.browserConcurrency
+                  ? `HTTP ${source.httpConcurrency ?? '默认'} · 浏览器 ${source.browserConcurrency ?? '默认'}`
+                  : '默认并发'}
             </Tag>
             <SourceScheduleTag schedule={source.schedule} />
           </div>

@@ -1,6 +1,6 @@
 import { PRODUCTION_SERVER_URL } from '@loci/shared'
 
-export const LOCI_SCHEMA_VERSION = 4
+export const LOCI_SCHEMA_VERSION = 6
 
 // 基础表结构集中维护，具体子模块的增量表由各自初始化函数负责。
 export const LOCI_DATABASE_SCHEMA = `
@@ -18,6 +18,15 @@ export const LOCI_DATABASE_SCHEMA = `
     http_concurrency INTEGER CHECK (http_concurrency IS NULL OR http_concurrency BETWEEN 1 AND 32),
     browser_concurrency INTEGER CHECK (browser_concurrency IS NULL OR browser_concurrency BETWEEN 1 AND 32),
     icon_url TEXT,
+    document_kind TEXT NOT NULL DEFAULT 'web' CHECK (document_kind IN ('web', 'github')),
+    source_identity TEXT,
+    github_archive_limit_mb INTEGER CHECK (github_archive_limit_mb IS NULL OR github_archive_limit_mb BETWEEN 1 AND 10240),
+    github_markdown_limit_mb INTEGER CHECK (github_markdown_limit_mb IS NULL OR github_markdown_limit_mb BETWEEN 1 AND 10240),
+    github_default_branch TEXT,
+    github_revision TEXT,
+    github_blocked_revision TEXT,
+    github_blocked_limit_kind TEXT CHECK (github_blocked_limit_kind IS NULL OR github_blocked_limit_kind IN ('archive', 'markdown')),
+    github_blocked_limit_bytes INTEGER,
     source_type TEXT NOT NULL DEFAULT 'local' CHECK (source_type IN ('local', 'cloud')),
     cloud_server_url TEXT,
     cloud_library_id TEXT,
@@ -36,6 +45,7 @@ export const LOCI_DATABASE_SCHEMA = `
     markdown TEXT NOT NULL,
     language TEXT NOT NULL DEFAULT 'und',
     fetch_mode TEXT NOT NULL CHECK (fetch_mode IN ('http', 'browser')),
+    relative_path TEXT,
     UNIQUE(source_id, url)
   ) STRICT;
 
@@ -57,7 +67,9 @@ export const LOCI_DATABASE_SCHEMA = `
       batch_interval_seconds = 0 OR batch_interval_seconds BETWEEN 100 AND 3000
     ),
     server_url TEXT NOT NULL DEFAULT '${PRODUCTION_SERVER_URL}',
-    server_url_customized INTEGER NOT NULL DEFAULT 0 CHECK (server_url_customized IN (0, 1))
+    server_url_customized INTEGER NOT NULL DEFAULT 0 CHECK (server_url_customized IN (0, 1)),
+    github_archive_limit_mb INTEGER NOT NULL DEFAULT 200 CHECK (github_archive_limit_mb BETWEEN 1 AND 10240),
+    github_markdown_limit_mb INTEGER NOT NULL DEFAULT 100 CHECK (github_markdown_limit_mb BETWEEN 1 AND 10240)
   ) STRICT;
 
   CREATE TABLE IF NOT EXISTS interaction_preferences (

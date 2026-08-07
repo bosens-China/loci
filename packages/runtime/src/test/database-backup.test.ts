@@ -32,7 +32,9 @@ describe('database backup', () => {
         browserConcurrency: 3,
         maxRetries: 4,
         batchIntervalSeconds: 100,
-        serverUrl: 'https://docs.example.com'
+        serverUrl: 'https://docs.example.com',
+        githubArchiveLimitMb: 200,
+        githubMarkdownLimitMb: 100
       })
       const runId = sourceDatabase.startCrawlRun(source.id)
       sourceDatabase.finishCrawlRun(

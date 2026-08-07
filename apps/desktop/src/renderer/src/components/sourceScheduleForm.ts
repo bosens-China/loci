@@ -14,6 +14,8 @@ export interface SourceFormValues {
   scopePath: string
   httpConcurrency: number | null
   browserConcurrency: number | null
+  githubArchiveLimitMb: number | null
+  githubMarkdownLimitMb: number | null
   scheduleEnabled: boolean
   schedulePreset: string
   scheduleExpression: string
@@ -29,6 +31,8 @@ export function getSourceFormValues(source?: DocumentSource): SourceFormValues {
     scopePath: source?.scopePath ?? '/',
     httpConcurrency: source?.httpConcurrency ?? null,
     browserConcurrency: source?.browserConcurrency ?? null,
+    githubArchiveLimitMb: source?.githubArchiveLimitMb ?? null,
+    githubMarkdownLimitMb: source?.githubMarkdownLimitMb ?? null,
     scheduleEnabled: Boolean(source?.schedule),
     schedulePreset: getSchedulePreset(schedule)?.expression ?? CUSTOM_SCHEDULE,
     scheduleExpression: schedule
@@ -44,6 +48,8 @@ export function toCreateSourceInput(values: SourceFormValues): CreateSourceInput
     scopePath: values.scopePath,
     httpConcurrency: values.httpConcurrency ?? null,
     browserConcurrency: values.browserConcurrency ?? null,
+    githubArchiveLimitMb: values.githubArchiveLimitMb ?? null,
+    githubMarkdownLimitMb: values.githubMarkdownLimitMb ?? null,
     schedule: values.scheduleEnabled ? normalizeCronSchedule(values.scheduleExpression) : null
   }
 }

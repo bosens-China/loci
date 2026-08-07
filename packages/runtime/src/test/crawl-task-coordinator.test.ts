@@ -43,4 +43,38 @@ describe('CrawlTaskCoordinator', () => {
     ])
     expect(coordinator.isRunning('vite')).toBe(false)
   })
+
+  it('失败任务清理后允许同一文档源安全重试', async () => {
+    const coordinator = new CrawlTaskCoordinator()
+    const firstStart = vi.fn(async () => {
+      throw new Error('临时失败')
+    })
+    await expect(coordinator.run('vite', firstStart)).rejects.toThrow('临时失败')
+    await vi.waitFor(() => expect(coordinator.isRunning('vite')).toBe(false))
+
+    const retryStart = vi.fn(async () => progress)
+    await expect(coordinator.run('vite', retryStart)).resolves.toEqual(progress)
+    expect(retryStart).toHaveBeenCalledOnce()
+  })
+
+  it('不同文档源拥有独立任务并可同时运行', async () => {
+    const coordinator = new CrawlTaskCoordinator()
+    let finishVite!: (value: CrawlProgress) => void
+    let finishVue!: (value: CrawlProgress) => void
+    const vite = coordinator.run(
+      'vite',
+      () => new Promise<CrawlProgress>((resolve) => (finishVite = resolve))
+    )
+    const vue = coordinator.run(
+      'vue',
+      () => new Promise<CrawlProgress>((resolve) => (finishVue = resolve))
+    )
+    await vi.waitFor(() => {
+      expect(coordinator.isRunning('vite')).toBe(true)
+      expect(coordinator.isRunning('vue')).toBe(true)
+    })
+    finishVite(progress)
+    finishVue(progress)
+    await Promise.all([vite, vue])
+  })
 })

@@ -7,6 +7,8 @@ interface CrawlSettingsCardProps {
   browserConcurrency: number
   maxRetries: number
   batchIntervalSeconds: number
+  githubArchiveLimitMb: number
+  githubMarkdownLimitMb: number
   saving: boolean
   onSave: (settings: CrawlSettingsForm) => void
 }
@@ -16,6 +18,8 @@ interface CrawlSettingsForm {
   browserConcurrency: number
   maxRetries: number
   batchIntervalSeconds: number
+  githubArchiveLimitMb: number
+  githubMarkdownLimitMb: number
 }
 
 /**
@@ -26,6 +30,8 @@ export function CrawlSettingsCard({
   browserConcurrency,
   maxRetries,
   batchIntervalSeconds,
+  githubArchiveLimitMb,
+  githubMarkdownLimitMb,
   saving,
   onSave
 }: CrawlSettingsCardProps): React.JSX.Element {
@@ -36,9 +42,19 @@ export function CrawlSettingsCard({
       httpConcurrency,
       browserConcurrency,
       maxRetries,
-      batchIntervalSeconds
+      batchIntervalSeconds,
+      githubArchiveLimitMb,
+      githubMarkdownLimitMb
     })
-  }, [batchIntervalSeconds, browserConcurrency, form, httpConcurrency, maxRetries])
+  }, [
+    batchIntervalSeconds,
+    browserConcurrency,
+    form,
+    githubArchiveLimitMb,
+    githubMarkdownLimitMb,
+    httpConcurrency,
+    maxRetries
+  ])
 
   return (
     <Card
@@ -53,7 +69,14 @@ export function CrawlSettingsCard({
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ httpConcurrency, browserConcurrency, maxRetries, batchIntervalSeconds }}
+        initialValues={{
+          httpConcurrency,
+          browserConcurrency,
+          maxRetries,
+          batchIntervalSeconds,
+          githubArchiveLimitMb,
+          githubMarkdownLimitMb
+        }}
         onFinish={onSave}
       >
         <Typography.Paragraph type="secondary" className="text-xs">
@@ -67,6 +90,22 @@ export function CrawlSettingsCard({
             rules={[{ required: true, type: 'number', min: 1, max: 32 }]}
           >
             <InputNumber min={1} max={32} className="w-full" addonAfter="页" />
+          </Form.Item>
+
+          <Form.Item
+            name="githubArchiveLimitMb"
+            label="GitHub ZIP 默认上限"
+            rules={[{ required: true, type: 'number', min: 1, max: 10240 }]}
+          >
+            <InputNumber min={1} max={10240} className="w-full" addonAfter="MB" />
+          </Form.Item>
+
+          <Form.Item
+            name="githubMarkdownLimitMb"
+            label="GitHub Markdown 默认上限"
+            rules={[{ required: true, type: 'number', min: 1, max: 10240 }]}
+          >
+            <InputNumber min={1} max={10240} className="w-full" addonAfter="MB" />
           </Form.Item>
 
           <Form.Item

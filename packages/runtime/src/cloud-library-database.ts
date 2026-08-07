@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import { getHostname, normalizeUrl } from '@loci/core'
+import { getHostname, normalizeUrl, parseGithubRepositoryUrl } from '@loci/core'
 
 export interface CloudSnapshot {
   schemaVersion: 1
@@ -16,6 +16,7 @@ export interface CloudSnapshot {
     url: string
     language: string
     markdown: string
+    relativePath?: string
   }>
 }
 
@@ -88,7 +89,7 @@ export function createCloudLibraryDatabase(database: DatabaseSync): CloudLibrary
             .prepare(
               `UPDATE document_sources
                SET name = ?, first_url = ?, hostname = ?, page_limit = ?, cloud_revision = ?,
-                 cloud_auto_sync = ?, updated_at = ? WHERE id = ?`
+                 cloud_auto_sync = ?, document_kind = ?, updated_at = ? WHERE id = ?`
             )
             .run(
               snapshot.library.name,
@@ -97,6 +98,7 @@ export function createCloudLibraryDatabase(database: DatabaseSync): CloudLibrary
               Math.max(1, snapshot.documents.length),
               snapshot.library.revision,
               Number(autoSync),
+              parseGithubRepositoryUrl(url) ? 'github' : 'web',
               now,
               sourceId
             )
@@ -108,8 +110,8 @@ export function createCloudLibraryDatabase(database: DatabaseSync): CloudLibrary
               `INSERT INTO document_sources
                (id, name, first_url, hostname, fetch_mode, page_limit, schedule,
                 http_concurrency, browser_concurrency, icon_url, source_type, cloud_server_url,
-                cloud_library_id, cloud_revision, cloud_auto_sync, created_at, updated_at)
-               VALUES (?, ?, ?, ?, 'http', ?, NULL, NULL, NULL, NULL, 'cloud', ?, ?, ?, ?, ?, ?)`
+                cloud_library_id, cloud_revision, cloud_auto_sync, document_kind, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 'http', ?, NULL, NULL, NULL, NULL, 'cloud', ?, ?, ?, ?, ?, ?, ?)`
             )
             .run(
               sourceId,
@@ -121,6 +123,7 @@ export function createCloudLibraryDatabase(database: DatabaseSync): CloudLibrary
               snapshot.library.id,
               snapshot.library.revision,
               Number(autoSync),
+              parseGithubRepositoryUrl(url) ? 'github' : 'web',
               now,
               now
             )
@@ -128,8 +131,8 @@ export function createCloudLibraryDatabase(database: DatabaseSync): CloudLibrary
 
         const insertDocument = database.prepare(
           `INSERT INTO documents
-           (id, source_id, title, url, crawled_at, markdown, language, fetch_mode)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'http')`
+           (id, source_id, title, url, crawled_at, markdown, language, fetch_mode, relative_path)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'http', ?)`
         )
         const insertSearch = database.prepare(
           'INSERT INTO documents_fts (document_id, source_id, title, markdown) VALUES (?, ?, ?, ?)'
@@ -143,7 +146,8 @@ export function createCloudLibraryDatabase(database: DatabaseSync): CloudLibrary
             document.url,
             snapshot.library.publishedAt,
             document.markdown,
-            document.language
+            document.language,
+            document.relativePath ?? null
           )
           insertSearch.run(documentId, sourceId, document.title, document.markdown)
         }

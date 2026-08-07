@@ -7,7 +7,9 @@ describe('sourceScheduleForm', () => {
       mode: 'auto',
       scopePath: '/',
       httpConcurrency: null,
-      browserConcurrency: null
+      browserConcurrency: null,
+      githubArchiveLimitMb: null,
+      githubMarkdownLimitMb: null
     })
   })
 })

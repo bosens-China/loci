@@ -68,8 +68,13 @@ async function fetchPage(
   request: RenderedPageRequest,
   options: BrowserOptions
 ): Promise<CrawledPage> {
+  request.signal?.throwIfAborted()
   await assertAllowedBrowserRequest(url, request.hostname, true, options.lookup, request.scopePath)
   const page = await context.newPage()
+  const abort = (): void => {
+    void page.close().catch(() => undefined)
+  }
+  request.signal?.addEventListener('abort', abort, { once: true })
   const pendingRequests = new Set<Request>()
   page.on('request', (item) => {
     if (tracksContentRequest(item)) pendingRequests.add(item)
@@ -94,8 +99,10 @@ async function fetchPage(
       return { url: finalUrl, status, retryAfter }
     }
     await waitForStableContent(() => page.evaluate(() => document.body?.innerText ?? ''), {
-      isIdle: () => pendingRequests.size === 0
+      isIdle: () => pendingRequests.size === 0,
+      signal: request.signal
     })
+    request.signal?.throwIfAborted()
     return {
       url: finalUrl,
       status,
@@ -103,6 +110,7 @@ async function fetchPage(
       page: parsePage(await page.content(), finalUrl)
     }
   } finally {
+    request.signal?.removeEventListener('abort', abort)
     await page.close().catch(() => undefined)
   }
 }

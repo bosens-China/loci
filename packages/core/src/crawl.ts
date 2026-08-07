@@ -1,5 +1,8 @@
 import { parse } from 'node-html-parser'
 import { htmlToMarkdown } from 'mdream'
+import { abortableSleep, throwIfAborted } from './abort.js'
+import { fetchWithRetry } from './retry.js'
+export { fetchWithRetry, isRetryableStatus, retryAfterMs } from './retry.js'
 import { isUrlInScope } from './scope.js'
 import type {
   CrawledDocument,
@@ -128,40 +131,6 @@ function resolveLink(href: string, baseUrl: string): string | undefined {
   }
 }
 
-export async function fetchWithRetry(url: string, options: FetchOptions = {}): Promise<Response> {
-  const timeoutMs = options.timeoutMs ?? 30_000
-  const maxRetries = options.maxRetries ?? 3
-  const fetchImpl = options.fetchImpl ?? fetch
-  const sleep = options.sleep ?? defaultSleep
-
-  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-    try {
-      const response = await fetchImpl(url, {
-        signal: AbortSignal.timeout(timeoutMs),
-        redirect: 'follow'
-      })
-      if (!isRetryableStatus(response.status) || attempt === maxRetries) return response
-      await sleep(retryAfterMs(response.headers.get('retry-after')))
-    } catch (error) {
-      if (attempt === maxRetries) throw error
-      await sleep(0)
-    }
-  }
-  throw new Error('抓取任务未返回结果')
-}
-
-export function isRetryableStatus(status: number): boolean {
-  return status === 408 || status === 429 || status >= 500
-}
-
-export function retryAfterMs(value: string | null): number {
-  if (!value) return 0
-  const seconds = Number(value)
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
-  const date = Date.parse(value)
-  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0
-}
-
 export function parseSitemap(
   xml: string,
   baseUrl: string,
@@ -188,14 +157,17 @@ export function parseSitemap(
 
 export async function fetchHttpPage(
   url: string,
-  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'> = {}
+  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep' | 'signal'> = {}
 ): Promise<CrawledPage> {
   const response = await fetchWithRetry(url, options)
+  throwIfAborted(options.signal)
   const finalUrl = normalizeUrl(response.url || url)
+  const body = response.ok ? await response.text() : undefined
+  throwIfAborted(options.signal)
   return {
     url: finalUrl,
     status: response.status,
-    ...(response.ok ? { page: parsePage(await response.text(), finalUrl) } : {})
+    ...(body === undefined ? {} : { page: parsePage(body, finalUrl) })
   }
 }
 
@@ -203,7 +175,7 @@ export async function discoverSitemapUrls(
   firstUrl: string,
   hostname: string,
   pageLimit: number,
-  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep'> = {},
+  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep' | 'signal'> = {},
   scopePath = '/'
 ): Promise<string[]> {
   try {
@@ -212,6 +184,7 @@ export async function discoverSitemapUrls(
     if (!response.ok) return []
     return parseSitemap(await response.text(), sitemapUrl, hostname, pageLimit + 1, scopePath)
   } catch {
+    throwIfAborted(options.signal)
     return []
   }
 }
@@ -221,7 +194,12 @@ export async function crawlHttpSource(options: HttpCrawlOptions): Promise<CrawlP
     options.firstUrl,
     options.hostname,
     options.pageLimit,
-    { fetchImpl: options.fetch, maxRetries: options.maxRetries, sleep: options.sleep },
+    {
+      fetchImpl: options.fetch,
+      maxRetries: options.maxRetries,
+      sleep: options.sleep,
+      signal: options.signal
+    },
     options.scopePath
   )
   const requestPolicy = isImmediateStaticHostname(options.hostname)
@@ -236,7 +214,8 @@ export async function crawlHttpSource(options: HttpCrawlOptions): Promise<CrawlP
       fetchHttpPage(url, {
         fetchImpl: options.fetch,
         maxRetries: options.maxRetries,
-        sleep: options.sleep
+        sleep: options.sleep,
+        signal: options.signal
       })
   })
 }
@@ -281,6 +260,7 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
   let cursor = 0
 
   const processPage = async (item: QueueItem): Promise<void> => {
+    throwIfAborted(options.signal)
     const node: CrawlNode = {
       id: item.id,
       url: item.url,
@@ -327,6 +307,7 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
           ...(result.status ? { statusCode: result.status } : {})
         }
       } else if (!failure && page) {
+        throwIfAborted(options.signal)
         node.title = page.title
         await options.onDocument({
           url: node.url,
@@ -343,6 +324,7 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
         }
       }
     } catch (error) {
+      throwIfAborted(options.signal)
       failure = {
         url: item.url,
         reason: 'request_error',
@@ -352,6 +334,7 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
     }
 
     try {
+      throwIfAborted(options.signal)
       if (failure) {
         failures.push(failure)
         progress.failed += 1
@@ -368,12 +351,15 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
   }
 
   while (cursor < queue.length) {
+    throwIfAborted(options.signal)
     await options.waitIfPaused?.()
+    throwIfAborted(options.signal)
     const batch = queue.slice(cursor, cursor + Math.max(1, options.concurrency))
     cursor += batch.length
     await Promise.all(batch.map(processPage))
+    throwIfAborted(options.signal)
     if (cursor < queue.length && options.batchIntervalMs) {
-      await (options.sleep ?? defaultSleep)(options.batchIntervalMs)
+      await abortableSleep(options.batchIntervalMs, options.signal, options.sleep ?? defaultSleep)
     }
   }
   const completed = failures.length ? { ...progress, failures } : progress

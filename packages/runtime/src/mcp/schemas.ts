@@ -23,7 +23,13 @@ export const librarySchema = z.object({
 
 const failureSchema = z.object({
   url: z.string(),
-  reason: z.enum(['not_found', 'out_of_scope_redirect', 'http_error', 'request_error']),
+  reason: z.enum([
+    'not_found',
+    'out_of_scope_redirect',
+    'http_error',
+    'request_error',
+    'git_lfs_unsupported'
+  ]),
   message: z.string(),
   retryable: z.boolean(),
   status_code: z.number().int().optional(),

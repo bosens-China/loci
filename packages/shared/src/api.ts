@@ -12,6 +12,8 @@ export interface AppSettings {
   maxRetries: number
   batchIntervalSeconds: number
   serverUrl: string
+  githubArchiveLimitMb: number
+  githubMarkdownLimitMb: number
 }
 
 export interface McpServerStatus {
@@ -122,10 +124,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   browserConcurrency: 5,
   maxRetries: 3,
   batchIntervalSeconds: 0,
-  serverUrl: PRODUCTION_SERVER_URL
+  serverUrl: PRODUCTION_SERVER_URL,
+  githubArchiveLimitMb: 200,
+  githubMarkdownLimitMb: 100
 }
 
 export type SourceStatus = 'healthy' | 'syncing' | 'attention'
+export type SourceKind = 'web' | 'github'
 
 export interface DocumentSource {
   id: string
@@ -143,6 +148,11 @@ export interface DocumentSource {
   browserConcurrency: number | null
   iconUrl: string | null
   cloud: CloudSourceOrigin | null
+  kind: SourceKind
+  githubArchiveLimitMb: number | null
+  githubMarkdownLimitMb: number | null
+  githubDefaultBranch: string | null
+  githubRevision: string | null
 }
 
 export interface CloudSourceOrigin {
@@ -161,6 +171,8 @@ export interface CreateSourceInput {
   schedule: string | null
   httpConcurrency: number | null
   browserConcurrency: number | null
+  githubArchiveLimitMb?: number | null
+  githubMarkdownLimitMb?: number | null
 }
 
 export type UpdateSourceInput = CreateSourceInput
@@ -176,7 +188,7 @@ export interface CrawlProgress {
 }
 
 export type CrawlFailureReason =
-  'not_found' | 'out_of_scope_redirect' | 'http_error' | 'request_error'
+  'not_found' | 'out_of_scope_redirect' | 'http_error' | 'request_error' | 'git_lfs_unsupported'
 
 export interface CrawlFailure {
   url: string

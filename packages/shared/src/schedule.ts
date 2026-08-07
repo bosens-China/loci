@@ -6,4 +6,4 @@ export {
   getUpcomingScheduleRuns,
   getSchedulePreset,
   normalizeCronSchedule
-} from '@loci/core'
+} from '@loci/core/schedule'

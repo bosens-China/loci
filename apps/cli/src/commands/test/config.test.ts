@@ -29,6 +29,22 @@ describe('CLI 共享设置', () => {
     await runtime.close()
   })
 
+  it('保存 GitHub 下载和 Markdown 默认上限', async () => {
+    await createProgram().parseAsync(['config', 'set', 'github-archive-limit-mb', '300'], {
+      from: 'user'
+    })
+    await createProgram().parseAsync(['config', 'set', 'github-markdown-limit-mb', '150'], {
+      from: 'user'
+    })
+
+    const runtime = createCliRuntime()
+    expect(runtime.database.getSettings()).toMatchObject({
+      githubArchiveLimitMb: 300,
+      githubMarkdownLimitMb: 150
+    })
+    await runtime.close()
+  })
+
   it('把批次秒数解释成人类可读时间', () => {
     expect(formatBatchIntervalHint('0')).toContain('不额外等待')
     expect(formatBatchIntervalHint('120')).toContain('约 2 分钟')

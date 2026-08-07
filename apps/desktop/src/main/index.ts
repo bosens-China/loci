@@ -14,7 +14,7 @@ import {
   importAgentClient,
   readRuntimeLock,
   resolveLociDataDir,
-  resolvePreferredMcpConnection,
+  createHttpMcpConnection,
   type LociDatabase,
   type McpRuntime,
   type RuntimeLock
@@ -94,7 +94,7 @@ if (isPrimaryInstance)
     } finally {
       migrationLock?.release()
     }
-    cloudLibraryService = new CloudLibraryService(requireDatabase())
+    cloudLibraryService = new CloudLibraryService(requireDatabase(), fetch, dataDir)
     mcpRuntime = createMcpRuntime(requireDatabase(), createMcpServices())
     await mcpRuntime.start()
     tray = createAppTray(
@@ -153,9 +153,7 @@ if (isPrimaryInstance)
       return setOpenAtLogin(enabled)
     })
     ipcMain.handle('agents:import', async (_event, client: unknown) => {
-      const connection = await resolvePreferredMcpConnection(
-        requireMcpRuntime().getState().mcp.endpoint
-      )
+      const connection = createHttpMcpConnection(requireMcpRuntime().getState().mcp.endpoint)
       return importAgentClient(client, connection)
     })
     ipcMain.handle('data:export', () =>

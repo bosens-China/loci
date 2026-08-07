@@ -13,6 +13,7 @@ export interface RenderedFetchOptions {
   timeoutMs?: number
   hostname?: string
   scopePath?: string
+  signal?: AbortSignal
 }
 
 interface MainFrameResponse {
@@ -57,6 +58,11 @@ export async function fetchRenderedPage(
     }
   })
   const webContentsId = window.webContents.id
+  options.signal?.throwIfAborted()
+  const abort = (): void => {
+    if (!window.isDestroyed()) window.destroy()
+  }
+  options.signal?.addEventListener('abort', abort, { once: true })
   responses.delete(webContentsId)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event) => {
@@ -82,7 +88,7 @@ export async function fetchRenderedPage(
               String(
                 await window.webContents.executeJavaScript("document.body?.innerText ?? ''", true)
               ),
-            { isIdle: () => !window.webContents.isLoading() }
+            { isIdle: () => !window.webContents.isLoading(), signal: options.signal }
           )
         }
         const html =
@@ -104,6 +110,7 @@ export async function fetchRenderedPage(
       options.timeoutMs ?? 30_000
     )
   } finally {
+    options.signal?.removeEventListener('abort', abort)
     responses.delete(webContentsId)
     if (!window.isDestroyed()) window.destroy()
   }

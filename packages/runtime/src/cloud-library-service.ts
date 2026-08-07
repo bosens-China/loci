@@ -1,8 +1,15 @@
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import type { CloudCatalogItem, CloudImportResult } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
 import type { CloudSnapshot } from './cloud-library-database.js'
 import type { LociDatabase } from './database.js'
+import {
+  RuntimeLockedError,
+  acquireRuntimeLock,
+  readRuntimeLock,
+  type RuntimeLock
+} from './runtime-lock.js'
 
 const publicLibrarySchema = z.object({
   id: z.string().min(1),
@@ -31,7 +38,8 @@ const snapshotSchema = z.object({
         title: z.string(),
         url: z.string().url(),
         language: z.string(),
-        markdown: z.string()
+        markdown: z.string(),
+        relativePath: z.string().optional()
       })
     )
     .min(1)
@@ -39,11 +47,12 @@ const snapshotSchema = z.object({
 })
 
 export class CloudLibraryService {
-  private readonly updating = new Set<string>()
+  private readonly updating = new Map<string, Promise<CloudImportResult>>()
 
   constructor(
     private readonly database: LociDatabase,
-    private readonly fetcher: typeof fetch = fetch
+    private readonly fetcher: typeof fetch = fetch,
+    private readonly dataDir?: string
   ) {}
 
   async listCatalog(serverUrl: string): Promise<CloudCatalogItem[]> {
@@ -120,8 +129,38 @@ export class CloudLibraryService {
     autoSync: boolean
   ): Promise<CloudImportResult> {
     const key = `${serverUrl}\n${libraryId}`
-    if (this.updating.has(key)) throw new Error('这个云文档正在更新中')
-    this.updating.add(key)
+    const active = this.updating.get(key)
+    if (active) return active
+    const task = this.downloadOnce(serverUrl, libraryId, sourceId, revision, autoSync, key)
+    this.updating.set(key, task)
+    try {
+      return await task
+    } finally {
+      if (this.updating.get(key) === task) this.updating.delete(key)
+    }
+  }
+
+  private async downloadOnce(
+    serverUrl: string,
+    libraryId: string,
+    sourceId: string | null,
+    revision: string | undefined,
+    autoSync: boolean,
+    key: string
+  ): Promise<CloudImportResult> {
+    let lock: RuntimeLock | undefined
+    if (this.dataDir) {
+      const lockKey = cloudLockKey(key)
+      try {
+        lock = acquireRuntimeLock(this.dataDir, lockKey, '云文档同步')
+      } catch (error) {
+        if (!(error instanceof RuntimeLockedError)) throw error
+        await waitForRuntimeLock(this.dataDir, lockKey)
+        const current = this.database.findCloudSource(serverUrl, libraryId)
+        if (current && current.revision !== revision) return this.result(current.sourceId, true)
+        return this.downloadOnce(serverUrl, libraryId, sourceId, revision, autoSync, key)
+      }
+    }
     try {
       const snapshot = await this.fetchSnapshot(serverUrl, libraryId, revision)
       if (!snapshot) return this.result(sourceId, false)
@@ -129,7 +168,7 @@ export class CloudLibraryService {
       const saved = this.database.replaceCloudSnapshot(serverUrl, snapshot, autoSync)
       return this.result(saved.sourceId, saved.updated)
     } finally {
-      this.updating.delete(key)
+      lock?.release()
     }
   }
 
@@ -182,6 +221,16 @@ export class CloudLibraryService {
       : undefined
     if (!source) throw new Error('云文档本地副本不存在')
     return { source, updated, documents: source.pages }
+  }
+}
+
+function cloudLockKey(key: string): string {
+  return `cloud-${createHash('sha256').update(key).digest('hex')}`
+}
+
+async function waitForRuntimeLock(dataDir: string, key: string): Promise<void> {
+  while (readRuntimeLock(dataDir, key)) {
+    await new Promise((resolve) => setTimeout(resolve, 100))
   }
 }
 

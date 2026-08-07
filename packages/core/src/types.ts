@@ -1,5 +1,5 @@
 export type CrawlFailureReason =
-  'not_found' | 'out_of_scope_redirect' | 'http_error' | 'request_error'
+  'not_found' | 'out_of_scope_redirect' | 'http_error' | 'request_error' | 'git_lfs_unsupported'
 
 export interface CrawlFailure {
   url: string
@@ -45,6 +45,7 @@ export interface CrawledDocument {
   markdown: string
   crawledAt: string
   fetchMode: 'http' | 'browser'
+  relativePath?: string
 }
 
 export interface CrawledPage {
@@ -59,6 +60,7 @@ export interface FetchOptions {
   maxRetries?: number
   fetchImpl?: typeof fetch
   sleep?: (milliseconds: number) => Promise<void>
+  signal?: AbortSignal
 }
 
 export interface HttpCrawlOptions {
@@ -74,6 +76,7 @@ export interface HttpCrawlOptions {
   sleep?: FetchOptions['sleep']
   maxRetries?: number
   batchIntervalMs?: number
+  signal?: AbortSignal
   waitIfPaused?: () => Promise<void>
   onDocument: (document: CrawledDocument) => Promise<void> | void
   onError?: (error: CrawlFailure & { missing?: boolean }) => Promise<void> | void

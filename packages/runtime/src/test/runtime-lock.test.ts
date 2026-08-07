@@ -1,6 +1,9 @@
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   acquireCrawlRuntimeLock,
@@ -32,6 +35,30 @@ describe('runtime lock', () => {
 
     lock.release()
     expect(readRuntimeLock(dataDir, 'mcp')).toBeNull()
+  })
+
+  it('uses the same atomic lock across real Node processes', async () => {
+    const dataDir = createDataDir()
+    const moduleUrl = pathToFileURL(resolve('src/runtime-lock.ts')).href
+    const script = `
+      import { acquireRuntimeLock } from ${JSON.stringify(moduleUrl)}
+      const lock = acquireRuntimeLock(${JSON.stringify(dataDir)}, 'crawl-vite', '子进程')
+      process.stdout.write('locked\\n')
+      process.stdin.once('data', () => { lock.release(); process.exit(0) })
+    `
+    const child = spawn(
+      process.execPath,
+      ['--experimental-transform-types', '--input-type=module', '--eval', script],
+      { stdio: ['pipe', 'pipe', 'pipe'] }
+    )
+    await once(child.stdout!, 'data')
+
+    expect(() => acquireRuntimeLock(dataDir, 'crawl-vite', '父进程')).toThrow(RuntimeLockedError)
+    child.stdin!.write('release')
+    await once(child, 'exit')
+
+    const lock = acquireRuntimeLock(dataDir, 'crawl-vite', '父进程')
+    lock.release()
   })
 
   it('keeps full-database maintenance and crawling mutually exclusive', () => {

@@ -28,8 +28,9 @@ export function initializeSettings(
     .prepare(
       `INSERT OR IGNORE INTO app_settings
        (id, mcp_port, theme, http_concurrency, browser_concurrency, max_retries,
-        batch_interval_seconds, server_url, server_url_customized)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, 0)`
+        batch_interval_seconds, server_url, server_url_customized, github_archive_limit_mb,
+        github_markdown_limit_mb)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
     )
     .run(
       DEFAULT_APP_SETTINGS.mcpPort,
@@ -38,7 +39,9 @@ export function initializeSettings(
       DEFAULT_APP_SETTINGS.browserConcurrency,
       DEFAULT_APP_SETTINGS.maxRetries,
       DEFAULT_APP_SETTINGS.batchIntervalSeconds,
-      serverUrl
+      serverUrl,
+      DEFAULT_APP_SETTINGS.githubArchiveLimitMb,
+      DEFAULT_APP_SETTINGS.githubMarkdownLimitMb
     )
   if (!options.overrideServerUrl && serverUrl === PRODUCTION_SERVER_URL) {
     database
@@ -59,7 +62,8 @@ export function createSettingsDatabase(
       const row = database
         .prepare(
           `SELECT mcp_port, theme, http_concurrency, browser_concurrency, max_retries,
-             batch_interval_seconds, server_url FROM app_settings WHERE id = 1`
+             batch_interval_seconds, server_url, github_archive_limit_mb,
+             github_markdown_limit_mb FROM app_settings WHERE id = 1`
         )
         .get() as unknown as SettingsRow
       return {
@@ -69,7 +73,9 @@ export function createSettingsDatabase(
         browserConcurrency: Number(row.browser_concurrency),
         maxRetries: Number(row.max_retries),
         batchIntervalSeconds: Number(row.batch_interval_seconds),
-        serverUrl: serverUrlOverride ?? row.server_url
+        serverUrl: serverUrlOverride ?? row.server_url,
+        githubArchiveLimitMb: Number(row.github_archive_limit_mb),
+        githubMarkdownLimitMb: Number(row.github_markdown_limit_mb)
       }
     },
     saveSettings: (settings) => {
@@ -88,6 +94,7 @@ export function createSettingsDatabase(
           `UPDATE app_settings
            SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?,
                max_retries = ?, batch_interval_seconds = ?,
+               github_archive_limit_mb = ?, github_markdown_limit_mb = ?,
                server_url_customized = CASE WHEN server_url = ? THEN server_url_customized ELSE 1 END,
                server_url = ?
            WHERE id = 1`
@@ -99,6 +106,8 @@ export function createSettingsDatabase(
           normalized.browserConcurrency,
           normalized.maxRetries,
           normalized.batchIntervalSeconds,
+          normalized.githubArchiveLimitMb,
+          normalized.githubMarkdownLimitMb,
           persistedServerUrl,
           persistedServerUrl
         )
@@ -115,4 +124,6 @@ interface SettingsRow {
   max_retries: number
   batch_interval_seconds: number
   server_url: string
+  github_archive_limit_mb: number
+  github_markdown_limit_mb: number
 }

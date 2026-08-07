@@ -1,10 +1,11 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { crawlSource, type CrawlNode, type CrawlProgress } from '@loci/core'
+import { crawlSource, GithubLimitError, type CrawlNode, type CrawlProgress } from '@loci/core'
 import {
   CloudAdminClient,
   CloudLibraryService,
   CrawlTaskCoordinator,
+  RuntimeLockedError,
   acquireCrawlRuntimeLock,
   acquireMaintenanceRuntimeLock,
   createDatabase,
@@ -12,6 +13,8 @@ import {
   readRuntimeLock,
   resolveLociCacheDir,
   resolveLociDataDir,
+  crawlRunState,
+  waitForExternalCrawl,
   type LociDatabase
 } from '@loci/runtime'
 import type {
@@ -83,7 +86,17 @@ export function createCliRuntime(): CliRuntime {
     onProgress?: (progress: CrawlProgress) => void,
     onBrowserMissing?: BrowserInstallPrompt
   ): Promise<CrawlProgress> => {
-    const lock = acquireCrawlRuntimeLock(dataDir, sourceId, 'CLI')
+    let lock
+    try {
+      lock = acquireCrawlRuntimeLock(dataDir, sourceId, 'CLI')
+    } catch (error) {
+      if (!(error instanceof RuntimeLockedError)) throw error
+      if (!readRuntimeLock(dataDir, `crawl-${sourceId}`)) throw error
+      return waitForExternalCrawl(database, sourceId, (progress) => {
+        updateState(states, sourceId, progress, null, true)
+        onProgress?.(progress)
+      })
+    }
     try {
       const source = database.getSourceConfig(sourceId)
       const initialNode: CrawlNode = {
@@ -110,6 +123,9 @@ export function createCliRuntime(): CliRuntime {
       const runId = database.startCrawlRun(sourceId)
       try {
         const settings = database.getSettings()
+        const documents: Parameters<LociDatabase['saveDocument']>[0][] = []
+        const deletedUrls: string[] = []
+        let replaceAll = false
         const result = await crawlSource({
           firstUrl: source.firstUrl,
           firstNodeId: source.firstUrl,
@@ -122,31 +138,55 @@ export function createCliRuntime(): CliRuntime {
           browserConcurrency: source.browserConcurrency ?? settings.browserConcurrency,
           maxRetries: settings.maxRetries,
           batchIntervalMs: settings.batchIntervalSeconds * 1000,
+          githubArchiveLimitBytes:
+            (source.githubArchiveLimitMb ?? settings.githubArchiveLimitMb) * 1024 * 1024,
+          githubMarkdownLimitBytes:
+            (source.githubMarkdownLimitMb ?? settings.githubMarkdownLimitMb) * 1024 * 1024,
+          githubPreviousRevision: source.githubRevision,
+          githubBlocked: source.githubBlocked,
           crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
           beforeBrowserCrawl: () => browser.ensureInstalled(onBrowserMissing),
-          onDocument: (document) => database.saveDocument({ ...document, sourceId }),
+          onDocument: (document) => {
+            documents.push({ ...document, sourceId })
+          },
+          onSnapshot: (snapshot) => {
+            replaceAll = true
+            documents.push(...snapshot.map((document) => ({ ...document, sourceId })))
+          },
           onError: ({ url, missing }) => {
-            if (missing) database.deleteDocument(sourceId, url)
+            if (missing) deletedUrls.push(url)
           },
           onProgress: (progress) => {
             updateState(states, sourceId, progress, null, true)
+            database.updateCrawlRunProgress(runId, progress)
             onProgress?.(progress)
-          },
-          onResolved: (resolution) =>
-            database.updateResolvedSource(
-              sourceId,
-              resolution.firstUrl,
-              resolution.fetchMode,
-              resolution.iconUrl
-            )
+          }
         })
         if (result.progress.succeeded === 0 && result.progress.failed > 0) {
           throw new Error(`抓取失败：${result.progress.failed} 个页面均未成功`)
         }
+        database.commitSourceCrawl(sourceId, {
+          documents,
+          deletedUrls,
+          replaceAll,
+          resolution: {
+            firstUrl: result.resolution.firstUrl,
+            mode: result.resolution.fetchMode,
+            iconUrl: result.resolution.iconUrl,
+            github: result.resolution.github
+          }
+        })
         updateState(states, sourceId, result.progress, null, false)
         database.finishCrawlRun(runId, 'completed', result.progress, null)
         return result.progress
       } catch (error) {
+        if (error instanceof GithubLimitError) {
+          database.updateGithubBlocked(sourceId, {
+            revision: error.revision,
+            kind: error.kind,
+            limitBytes: error.limitBytes
+          })
+        }
         const message = error instanceof Error ? error.message : '更新失败'
         const current = states.get(sourceId)
         if (current) {
@@ -179,7 +219,7 @@ export function createCliRuntime(): CliRuntime {
     dataDir,
     cacheDir,
     database,
-    cloud: new CloudLibraryService(database),
+    cloud: new CloudLibraryService(database, fetch, dataDir),
     admin: new CloudAdminClient(),
     crawlSource: run,
     createSource: (input) => {
@@ -205,7 +245,9 @@ export function createCliRuntime(): CliRuntime {
           scopePath: current.scopePath,
           schedule: schedule,
           httpConcurrency: current.httpConcurrency,
-          browserConcurrency: current.browserConcurrency
+          browserConcurrency: current.browserConcurrency,
+          githubArchiveLimitMb: current.githubArchiveLimitMb,
+          githubMarkdownLimitMb: current.githubMarkdownLimitMb
         })
       }),
     isCrawling: (sourceId) =>
@@ -214,7 +256,12 @@ export function createCliRuntime(): CliRuntime {
         states.get(sourceId)?.running ||
         readRuntimeLock(dataDir, `crawl-${sourceId}`)
       ),
-    getCrawlState: (sourceId) => states.get(sourceId),
+    getCrawlState: (sourceId) => {
+      const local = states.get(sourceId)
+      if (local) return local
+      const active = database.getActiveCrawlRun(sourceId)
+      return active ? crawlRunState(active) : undefined
+    },
     assertWritable,
     close: async () => {
       await browser.close()

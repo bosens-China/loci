@@ -1,15 +1,34 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { getHostname, isUrlInScope, normalizeScopePath, normalizeUrl } from '@loci/core'
-import type { CrawledDocument } from '@loci/core'
-import type {
-  Library,
-  LibraryInput,
-  LibrarySnapshot,
-  PublicLibrary,
-  SnapshotDocument
-} from './types.js'
+import { getHostname, isUrlInScope, normalizeUrl } from '@loci/core'
+import type { CrawledDocument, CrawlFailure, CrawlProgress } from '@loci/core'
+import type { Library, LibraryInput, LibrarySnapshot, PublicLibrary } from './types.js'
 import { initializeServerDatabase } from './database-schema.js'
+import { normalizeLibraryScope } from './library-input.js'
+import { ConflictError, NotFoundError } from './database-errors.js'
+import {
+  expireSyncJobLeases,
+  finishSyncJob,
+  getOrCreateSyncJob,
+  getSyncJob,
+  heartbeatSyncJob,
+  isLibrarySyncActive,
+  listSyncJobs,
+  markSyncJobRunning,
+  requestSyncJobCancel
+} from './sync-job-database.js'
+import {
+  commitServerCrawl,
+  deleteServerDocument,
+  getServerSnapshot,
+  listServerDocumentUrls,
+  publishServerSnapshot,
+  replaceServerDocuments,
+  saveServerDocument,
+  type CrawlCommit
+} from './server-document-database.js'
+
+export { ConflictError, NotFoundError } from './database-errors.js'
 
 interface LibraryRow {
   id: string
@@ -24,6 +43,10 @@ interface LibraryRow {
   last_error: string | null
   revision: string | null
   published_at: string | null
+  github_revision: string | null
+  github_blocked_revision: string | null
+  github_blocked_limit_kind: 'archive' | 'markdown' | null
+  github_blocked_limit_bytes: number | null
 }
 
 interface PublicLibraryRow {
@@ -36,14 +59,6 @@ interface PublicLibraryRow {
   last_crawled_at: string | null
   published_at: string
 }
-
-interface SnapshotRow {
-  revision: string
-  content: string
-}
-
-export class NotFoundError extends Error {}
-export class ConflictError extends Error {}
 
 /** 服务端 SQLite 是抓取工作区和公开快照的唯一权威存储。 */
 export class ServerDatabase {
@@ -62,6 +77,8 @@ export class ServerDatabase {
       .prepare(
         `SELECT l.id, l.name, l.first_url, l.hostname, l.scope_path, l.page_limit, l.schedule,
           COUNT(d.id) AS page_count, l.last_crawled_at, l.last_error,
+          l.github_revision, l.github_blocked_revision, l.github_blocked_limit_kind,
+          l.github_blocked_limit_bytes,
           s.revision, s.published_at
         FROM libraries l
         LEFT JOIN documents d ON d.library_id = l.id
@@ -71,6 +88,32 @@ export class ServerDatabase {
       )
       .all() as unknown as LibraryRow[]
     return rows.map(toLibrary)
+  }
+
+  readonly syncJobs = {
+    getOrCreate: (libraryId: string, ownerId: string, leaseExpiresAt: string) =>
+      getOrCreateSyncJob(this.#database, libraryId, ownerId, leaseExpiresAt),
+    list: () => listSyncJobs(this.#database),
+    get: (id: string) => getSyncJob(this.#database, id),
+    isLibraryActive: (libraryId: string) => isLibrarySyncActive(this.#database, libraryId),
+    markRunning: (id: string, ownerId: string, leaseExpiresAt: string) =>
+      markSyncJobRunning(this.#database, id, ownerId, leaseExpiresAt),
+    heartbeat: (
+      id: string,
+      ownerId: string,
+      leaseExpiresAt: string,
+      progress?: CrawlProgress | null
+    ) => heartbeatSyncJob(this.#database, id, ownerId, leaseExpiresAt, progress),
+    finish: (
+      id: string,
+      ownerId: string,
+      status: 'canceled' | 'completed' | 'completed_with_errors' | 'failed',
+      progress: CrawlProgress | null,
+      failures: CrawlFailure[],
+      error: string | null
+    ) => finishSyncJob(this.#database, id, ownerId, status, progress, failures, error),
+    cancel: (id: string) => requestSyncJobCancel(this.#database, id),
+    expire: () => expireSyncJobLeases(this.#database)
   }
 
   listPublishedLibraries(): PublicLibrary[] {
@@ -106,32 +149,37 @@ export class ServerDatabase {
     const url = normalizeUrl(input.url)
     const hostname = getHostname(url)
     const scopePath = normalizeLibraryScope(url, hostname, input.scopePath)
-    if (
-      this.#database
-        .prepare('SELECT 1 FROM libraries WHERE hostname = ? AND scope_path = ?')
-        .get(hostname, scopePath)
-    ) {
-      throw new ConflictError('这个域名和收录范围已经存在于服务器文档库中')
-    }
+    const existing = this.#database
+      .prepare('SELECT id FROM libraries WHERE hostname = ? AND scope_path = ?')
+      .get(hostname, scopePath) as unknown as { id: string } | undefined
+    if (existing) return this.getLibrary(existing.id)
     const id = randomUUID()
     const now = new Date().toISOString()
-    this.#database
-      .prepare(
-        `INSERT INTO libraries
-          (id, name, first_url, hostname, scope_path, page_limit, schedule, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        id,
-        input.name.trim(),
-        url,
-        hostname,
-        scopePath,
-        input.pageLimit,
-        input.schedule,
-        now,
-        now
-      )
+    try {
+      this.#database
+        .prepare(
+          `INSERT INTO libraries
+            (id, name, first_url, hostname, scope_path, page_limit, schedule, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          id,
+          input.name.trim(),
+          url,
+          hostname,
+          scopePath,
+          input.pageLimit,
+          input.schedule,
+          now,
+          now
+        )
+    } catch (error) {
+      const duplicate = this.#database
+        .prepare('SELECT id FROM libraries WHERE hostname = ? AND scope_path = ?')
+        .get(hostname, scopePath) as unknown as { id: string } | undefined
+      if (duplicate) return this.getLibrary(duplicate.id)
+      throw error
+    }
     return this.getLibrary(id)
   }
 
@@ -146,10 +194,15 @@ export class ServerDatabase {
     if (duplicate) throw new ConflictError('这个域名和收录范围已经存在于服务器文档库中')
 
     transaction(this.#database, () => {
+      this.assertLibraryIdle(id)
       this.#database
         .prepare(
           `UPDATE libraries SET name = ?, first_url = ?, hostname = ?, scope_path = ?,
-            page_limit = ?, schedule = ?, updated_at = ? WHERE id = ?`
+            page_limit = ?, schedule = ?, github_revision = CASE WHEN ? THEN NULL ELSE github_revision END,
+            github_blocked_revision = CASE WHEN ? THEN NULL ELSE github_blocked_revision END,
+            github_blocked_limit_kind = CASE WHEN ? THEN NULL ELSE github_blocked_limit_kind END,
+            github_blocked_limit_bytes = CASE WHEN ? THEN NULL ELSE github_blocked_limit_bytes END,
+            updated_at = ? WHERE id = ?`
         )
         .run(
           input.name.trim(),
@@ -158,6 +211,10 @@ export class ServerDatabase {
           scopePath,
           input.pageLimit,
           input.schedule,
+          current.url !== url || current.pageLimit !== input.pageLimit ? 1 : 0,
+          current.url !== url || current.pageLimit !== input.pageLimit ? 1 : 0,
+          current.url !== url || current.pageLimit !== input.pageLimit ? 1 : 0,
+          current.url !== url || current.pageLimit !== input.pageLimit ? 1 : 0,
           new Date().toISOString(),
           id
         )
@@ -171,45 +228,43 @@ export class ServerDatabase {
   }
 
   deleteLibrary(id: string): void {
-    const result = this.#database.prepare('DELETE FROM libraries WHERE id = ?').run(id)
-    if (Number(result.changes) === 0) throw new NotFoundError('文档库不存在')
+    transaction(this.#database, () => {
+      const existing = this.#database.prepare('SELECT 1 FROM libraries WHERE id = ?').get(id)
+      if (!existing) return
+      this.assertLibraryIdle(id)
+      this.#database.prepare('DELETE FROM libraries WHERE id = ?').run(id)
+    })
+  }
+
+  private assertLibraryIdle(id: string): void {
+    const active = this.#database
+      .prepare(
+        `SELECT 1 FROM sync_jobs WHERE library_id = ?
+         AND status IN ('queued', 'running', 'canceling') LIMIT 1`
+      )
+      .get(id)
+    if (active) throw new ConflictError('同步期间不能修改或删除文档库')
   }
 
   listDocumentUrls(libraryId: string): string[] {
-    return (
-      this.#database
-        .prepare('SELECT url FROM documents WHERE library_id = ? ORDER BY url')
-        .all(libraryId) as unknown as { url: string }[]
-    ).map((row) => row.url)
+    return listServerDocumentUrls(this.#database, libraryId)
   }
 
   saveDocument(libraryId: string, document: CrawledDocument): void {
-    this.#database
-      .prepare(
-        `INSERT INTO documents
-          (id, library_id, title, url, language, markdown, crawled_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(library_id, url) DO UPDATE SET
-          title = excluded.title,
-          language = excluded.language,
-          markdown = excluded.markdown,
-          crawled_at = excluded.crawled_at`
-      )
-      .run(
-        randomUUID(),
-        libraryId,
-        document.title,
-        document.url,
-        document.language,
-        document.markdown,
-        document.crawledAt
-      )
+    saveServerDocument(this.#database, libraryId, document)
+  }
+
+  replaceDocuments(libraryId: string, documents: CrawledDocument[]): void {
+    replaceServerDocuments(this.#database, libraryId, documents)
   }
 
   deleteDocument(libraryId: string, url: string): void {
-    this.#database
-      .prepare('DELETE FROM documents WHERE library_id = ? AND url = ?')
-      .run(libraryId, url)
+    deleteServerDocument(this.#database, libraryId, url)
+  }
+
+  /** 工作文档、成功提交和公开快照使用同一个事务提交。 */
+  commitCrawl(libraryId: string, commit: CrawlCommit): LibrarySnapshot {
+    return commitServerCrawl(this.#database, libraryId, commit, (id) => this.getLibrary(id))
   }
 
   deleteDocumentsOutsideScope(libraryId: string, hostname: string, scopePath: string): number {
@@ -235,64 +290,34 @@ export class ServerDatabase {
       .run(new Date().toISOString(), error, new Date().toISOString(), libraryId)
   }
 
-  publishSnapshot(libraryId: string): LibrarySnapshot {
-    const library = this.getLibrary(libraryId)
-    const documents = this.#database
-      .prepare(
-        `SELECT id, title, url, language, markdown FROM documents
-        WHERE library_id = ? ORDER BY url`
-      )
-      .all(libraryId) as unknown as SnapshotDocument[]
-    if (!documents.length) throw new ConflictError('文档库没有可发布页面')
-    const payload = {
-      schemaVersion: 1 as const,
-      library: { id: library.id, name: library.name, url: library.url },
-      documents
-    }
-    const contentSize = documents.reduce(
-      (total, document) => total + Buffer.byteLength(document.markdown),
-      0
-    )
-    const revision = `sha256:${createHash('sha256').update(JSON.stringify(payload)).digest('hex')}`
-    const current = this.#database
-      .prepare('SELECT revision, content FROM library_snapshots WHERE library_id = ?')
-      .get(libraryId) as unknown as SnapshotRow | undefined
-    if (current?.revision === revision) {
-      this.#database
-        .prepare('UPDATE library_snapshots SET byte_size = ? WHERE library_id = ?')
-        .run(contentSize, libraryId)
-      return JSON.parse(current.content) as LibrarySnapshot
-    }
-
-    const publishedAt = new Date().toISOString()
-    const snapshot: LibrarySnapshot = {
-      ...payload,
-      library: { ...payload.library, revision, publishedAt }
-    }
-    const content = JSON.stringify(snapshot)
-    // ponytail: 单库整包快照受 10,000 页上限保护；超出实际内存预算后再改为对象存储流式发布。
+  updateGithubRevision(libraryId: string, revision: string): void {
     this.#database
       .prepare(
-        `INSERT INTO library_snapshots
-          (library_id, revision, published_at, page_count, byte_size, content)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(library_id) DO UPDATE SET
-          revision = excluded.revision,
-          published_at = excluded.published_at,
-          page_count = excluded.page_count,
-          byte_size = excluded.byte_size,
-          content = excluded.content`
+        `UPDATE libraries SET github_revision = ?, github_blocked_revision = NULL,
+          github_blocked_limit_kind = NULL, github_blocked_limit_bytes = NULL, updated_at = ?
+         WHERE id = ?`
       )
-      .run(libraryId, revision, publishedAt, documents.length, contentSize, content)
-    return snapshot
+      .run(revision, new Date().toISOString(), libraryId)
+  }
+
+  updateGithubBlocked(
+    libraryId: string,
+    blocked: { revision: string; kind: 'archive' | 'markdown'; limitBytes: number }
+  ): void {
+    this.#database
+      .prepare(
+        `UPDATE libraries SET github_blocked_revision = ?, github_blocked_limit_kind = ?,
+          github_blocked_limit_bytes = ?, updated_at = ? WHERE id = ?`
+      )
+      .run(blocked.revision, blocked.kind, blocked.limitBytes, new Date().toISOString(), libraryId)
+  }
+
+  publishSnapshot(libraryId: string): LibrarySnapshot {
+    return publishServerSnapshot(this.#database, libraryId, (id) => this.getLibrary(id))
   }
 
   getSnapshot(libraryId: string): { revision: string; content: string } {
-    const row = this.#database
-      .prepare('SELECT revision, content FROM library_snapshots WHERE library_id = ?')
-      .get(libraryId) as unknown as SnapshotRow | undefined
-    if (!row) throw new NotFoundError('文档库尚未发布')
-    return row
+    return getServerSnapshot(this.#database, libraryId)
   }
 
   close(): void {
@@ -313,16 +338,19 @@ function toLibrary(row: LibraryRow): Library {
     lastCrawledAt: row.last_crawled_at,
     lastError: row.last_error,
     revision: row.revision,
-    publishedAt: row.published_at
+    publishedAt: row.published_at,
+    githubRevision: row.github_revision,
+    githubBlocked:
+      row.github_blocked_revision &&
+      row.github_blocked_limit_kind &&
+      row.github_blocked_limit_bytes !== null
+        ? {
+            revision: row.github_blocked_revision,
+            kind: row.github_blocked_limit_kind,
+            limitBytes: Number(row.github_blocked_limit_bytes)
+          }
+        : null
   }
-}
-
-function normalizeLibraryScope(url: string, hostname: string, input: string): string {
-  const scopePath = normalizeScopePath(input)
-  if (!isUrlInScope(url, hostname, scopePath)) {
-    throw new ConflictError('收录范围必须包含第一个页面')
-  }
-  return scopePath
 }
 
 function transaction(database: DatabaseSync, action: () => void): void {

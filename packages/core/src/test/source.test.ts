@@ -40,7 +40,7 @@ describe('crawlSource', () => {
     })
 
     const result = await crawlSource({
-      firstUrl: 'https://docs.example.com/start',
+      firstUrl: 'https://docs.example.com/docs',
       hostname: 'docs.example.com',
       pageLimit: 10,
       fetchMode: 'auto',
@@ -58,7 +58,91 @@ describe('crawlSource', () => {
     })
     expect(beforeBrowserCrawl).not.toHaveBeenCalled()
     expect(fetchPage).not.toHaveBeenCalled()
+    expect(fetchImpl).not.toHaveBeenCalledWith(
+      'https://docs.example.com/openapi.json',
+      expect.anything()
+    )
     expect(documents[0]?.markdown).toBe('# Guide')
+  })
+
+  it('在 llms.txt 之后命中 OpenAPI，并跳过浏览器和网页发现', async () => {
+    const documents: CrawledDocument[] = []
+    const fetchPage = vi.fn(async () => renderedPage('browser'))
+    const beforeBrowserCrawl = vi.fn(async () => undefined)
+    const fetchImpl = createFetchMock(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/llms.txt')) return new Response('', { status: 404 })
+      if (url.endsWith('/openapi.json')) {
+        return new Response(
+          JSON.stringify({
+            openapi: '3.1.0',
+            info: { title: 'Ops API', version: '1.0.0' },
+            paths: {
+              '/health': {
+                get: { summary: '健康检查', responses: { 200: { description: 'OK' } } }
+              }
+            }
+          })
+        )
+      }
+      return new Response('', { status: 404 })
+    })
+
+    const result = await crawlSource({
+      firstUrl: 'https://api.example.com/docs',
+      hostname: 'api.example.com',
+      pageLimit: 10,
+      fetchMode: 'auto',
+      fetch: fetchImpl,
+      crawler: { fetchPage },
+      beforeBrowserCrawl,
+      onDocument: (document) => {
+        documents.push(document)
+      }
+    })
+
+    expect(result.resolution.discovery).toBe('openapi')
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://api.example.com/llms.txt')
+    expect(fetchPage).not.toHaveBeenCalled()
+    expect(beforeBrowserCrawl).not.toHaveBeenCalled()
+    expect(fetchImpl.mock.calls.some(([input]) => String(input).endsWith('/sitemap.xml'))).toBe(
+      false
+    )
+    expect(documents).toHaveLength(1)
+    expect(documents[0]).toMatchObject({
+      url: 'https://api.example.com/openapi.json',
+      title: 'Ops API',
+      fetchMode: 'http'
+    })
+    expect(documents[0]?.markdown).toContain('### GET `/health` — 健康检查')
+  })
+
+  it('OpenAPI 候选未命中时继续普通网页流程', async () => {
+    const documents: CrawledDocument[] = []
+    const fetchImpl = createFetchMock(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/llms.txt') || url.endsWith('/sitemap.xml')) {
+        return new Response('', { status: 404 })
+      }
+      if (url === 'https://docs.example.com/docs') {
+        return new Response('<html><title>Docs</title><main><h1>普通文档</h1></main></html>')
+      }
+      return new Response('', { status: 404 })
+    })
+
+    const result = await crawlSource({
+      firstUrl: 'https://docs.example.com/docs',
+      hostname: 'docs.example.com',
+      pageLimit: 10,
+      fetchMode: 'http',
+      fetch: fetchImpl,
+      onDocument: (document) => {
+        documents.push(document)
+      }
+    })
+
+    expect(result.resolution.discovery).toBe('pages')
+    expect(documents[0]?.markdown).toBe('# 普通文档')
   })
 
   it('展开站点清单中的库级 llms.txt', async () => {

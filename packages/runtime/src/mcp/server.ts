@@ -89,10 +89,9 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
         const crawling = services.isCrawling(existing.id)
         if (crawling) {
           const runningState = services.getCrawlState(existing.id)
-          const item =
-            wait_for_completion && runningState?.running
-              ? await waitForSync(services, existing.id, context)
-              : stateToSyncItem(existing.id, runningState, true)
+          const item = wait_for_completion
+            ? await waitForSync(services, existing.id, context)
+            : stateToSyncItem(existing.id, runningState, true)
           const sync = { ...item }
           delete sync.library_id
           const library =
@@ -103,9 +102,7 @@ export function createLociMcpServer(services: LociMcpServices): McpServer {
               ...sync,
               library: serializeLibrary(library, item.status === 'syncing' ? 'syncing' : undefined)
             },
-            wait_for_completion && runningState?.running
-              ? `已有文档库同步状态：${item.status}`
-              : '文档库正在同步'
+            wait_for_completion ? `已有文档库同步状态：${item.status}` : '文档库正在同步'
           )
         }
         if (existing.pages === 0) {

@@ -1,7 +1,10 @@
 import {
   CrawlTaskCoordinator,
+  RuntimeLockedError,
   acquireCrawlRuntimeLock,
+  crawlRunState,
   readRuntimeLock,
+  waitForExternalCrawl,
   type LociDatabase
 } from '@loci/runtime'
 import type { CrawlNode, CrawlProgress, CrawlRunState } from '@loci/shared'
@@ -92,7 +95,34 @@ export function createDesktopCrawlRuntime(
     id: string,
     onProgress: (progress: CrawlProgress) => void
   ): Promise<CrawlProgress> => {
-    const lock = acquireCrawlRuntimeLock(options.getDataDir(), id, '桌面端')
+    let lock
+    try {
+      lock = acquireCrawlRuntimeLock(options.getDataDir(), id, '桌面端')
+    } catch (error) {
+      if (!(error instanceof RuntimeLockedError)) throw error
+      if (!readRuntimeLock(options.getDataDir(), `crawl-${id}`)) throw error
+      const database = options.getDatabase()
+      const progress = await waitForExternalCrawl(database, id, (current) => {
+        publish({
+          sourceId: id,
+          progress: current,
+          nodes: current.node ? [current.node] : [],
+          error: null,
+          running: true,
+          paused: false
+        })
+        onProgress(current)
+      })
+      publish({
+        sourceId: id,
+        progress,
+        nodes: progress.node ? [progress.node] : [],
+        error: null,
+        running: false,
+        paused: false
+      })
+      return progress
+    }
     try {
       const database = options.getDatabase()
       const source = database.getSourceConfig(id)
@@ -127,10 +157,12 @@ export function createDesktopCrawlRuntime(
             id,
             (current) => {
               emitProgress(id, current)
+              database.updateCrawlRunProgress(runId, current)
               onProgress(current)
             },
             () => waitIfPaused(id),
-            (milliseconds) => waitForDelay(id, milliseconds)
+            (milliseconds) => waitForDelay(id, milliseconds),
+            controls.get(id)?.signal
           )
           if (progress.succeeded === 0 && progress.failed > 0) {
             throw new Error(`抓取失败：${progress.failed} 个页面均未成功`)
@@ -174,7 +206,12 @@ export function createDesktopCrawlRuntime(
       await control.done
     },
     isCrawling,
-    getState: (sourceId) => states.get(sourceId),
+    getState: (sourceId) => {
+      const local = states.get(sourceId)
+      if (local) return local
+      const active = options.getDatabase().getActiveCrawlRun(sourceId)
+      return active ? crawlRunState(active) : undefined
+    },
     listStates: () => [...states.values()],
     clearStates: () => states.clear(),
     deleteState: (sourceId) => states.delete(sourceId)

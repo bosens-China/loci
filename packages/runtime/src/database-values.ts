@@ -23,6 +23,11 @@ export interface SourceRow {
   cloud_library_id: string | null
   cloud_revision: string | null
   cloud_auto_sync: number
+  document_kind: 'web' | 'github'
+  github_archive_limit_mb: number | null
+  github_markdown_limit_mb: number | null
+  github_default_branch: string | null
+  github_revision: string | null
 }
 
 export interface DocumentRow {
@@ -34,6 +39,7 @@ export interface DocumentRow {
   language: string
   crawled_at: string
   markdown: string
+  relative_path: string | null
 }
 
 export function validateSettings(settings: AppSettings): AppSettings {
@@ -57,6 +63,8 @@ export function validateSettings(settings: AppSettings): AppSettings {
   ) {
     throw new Error('批次间隔必须为 0，或 100 到 3000 之间的整数秒')
   }
+  validateMegabytes(settings.githubArchiveLimitMb, 'GitHub ZIP 默认上限')
+  validateMegabytes(settings.githubMarkdownLimitMb, 'GitHub Markdown 默认上限')
   return { ...settings, serverUrl: normalizeServerUrl(settings.serverUrl) }
 }
 
@@ -70,6 +78,12 @@ export function validateSourceInput(input: CreateSourceInput): string | null {
   if (input.httpConcurrency !== null) validateConcurrency(input.httpConcurrency, '文档源 HTTP 并发')
   if (input.browserConcurrency !== null) {
     validateConcurrency(input.browserConcurrency, '文档源浏览器并发')
+  }
+  if (input.githubArchiveLimitMb != null) {
+    validateMegabytes(input.githubArchiveLimitMb, 'GitHub ZIP 上限')
+  }
+  if (input.githubMarkdownLimitMb != null) {
+    validateMegabytes(input.githubMarkdownLimitMb, 'GitHub Markdown 上限')
   }
   return normalizeCronSchedule(input.schedule)
 }
@@ -107,12 +121,21 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
             revision: row.cloud_revision,
             autoSync: Boolean(row.cloud_auto_sync)
           }
-        : null
+        : null,
+    kind: row.document_kind,
+    githubArchiveLimitMb:
+      row.github_archive_limit_mb === null ? null : Number(row.github_archive_limit_mb),
+    githubMarkdownLimitMb:
+      row.github_markdown_limit_mb === null ? null : Number(row.github_markdown_limit_mb),
+    githubDefaultBranch: row.github_default_branch,
+    githubRevision: row.github_revision
   }
 }
 
 export function toDocumentRecord(row: DocumentRow): DocumentRecord {
-  const path = new URL(row.url).pathname.split('/').filter(Boolean)
+  const path = row.relative_path
+    ? row.relative_path.split('/').filter(Boolean)
+    : new URL(row.url).pathname.split('/').filter(Boolean)
   return {
     id: row.id,
     sourceId: row.source_id,
@@ -181,15 +204,42 @@ export function migrateDatabase(database: DatabaseSync): void {
     'cloud_auto_sync',
     'INTEGER NOT NULL DEFAULT 0 CHECK (cloud_auto_sync IN (0, 1))'
   )
+  addColumn(
+    database,
+    'document_sources',
+    'document_kind',
+    "TEXT NOT NULL DEFAULT 'web' CHECK (document_kind IN ('web', 'github'))"
+  )
+  addColumn(database, 'document_sources', 'source_identity', 'TEXT')
+  addColumn(database, 'document_sources', 'github_archive_limit_mb', 'INTEGER')
+  addColumn(database, 'document_sources', 'github_markdown_limit_mb', 'INTEGER')
+  addColumn(database, 'document_sources', 'github_default_branch', 'TEXT')
+  addColumn(database, 'document_sources', 'github_revision', 'TEXT')
+  addColumn(database, 'document_sources', 'github_blocked_revision', 'TEXT')
+  addColumn(database, 'document_sources', 'github_blocked_limit_kind', 'TEXT')
+  addColumn(database, 'document_sources', 'github_blocked_limit_bytes', 'INTEGER')
+  addColumn(database, 'documents', 'relative_path', 'TEXT')
+  addColumn(database, 'app_settings', 'github_archive_limit_mb', 'INTEGER NOT NULL DEFAULT 200')
+  addColumn(database, 'app_settings', 'github_markdown_limit_mb', 'INTEGER NOT NULL DEFAULT 100')
+  database.exec(
+    `UPDATE document_sources SET source_identity = hostname
+     WHERE source_type = 'local' AND source_identity IS NULL`
+  )
   database.exec(
     `CREATE UNIQUE INDEX IF NOT EXISTS document_sources_cloud_origin
      ON document_sources(cloud_server_url, cloud_library_id)
      WHERE source_type = 'cloud'`
   )
+  database.exec('DROP INDEX IF EXISTS document_sources_local_hostname')
   database.exec(
-    `CREATE UNIQUE INDEX IF NOT EXISTS document_sources_local_hostname
-     ON document_sources(hostname)
+    `CREATE UNIQUE INDEX IF NOT EXISTS document_sources_local_identity
+     ON document_sources(source_identity)
      WHERE source_type = 'local'`
+  )
+  database.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS documents_relative_path
+     ON documents(source_id, relative_path)
+     WHERE relative_path IS NOT NULL`
   )
 }
 
@@ -214,6 +264,12 @@ function hasColumn(database: DatabaseSync, table: string, column: string): boole
 function validateConcurrency(value: number, label: string): void {
   if (!Number.isInteger(value) || value < 1 || value > 32) {
     throw new Error(`${label}必须是 1 到 32 之间的整数`)
+  }
+}
+
+function validateMegabytes(value: number, label: string): void {
+  if (!Number.isInteger(value) || value < 1 || value > 10240) {
+    throw new Error(`${label}必须是 1 到 10240 之间的整数 MB`)
   }
 }
 

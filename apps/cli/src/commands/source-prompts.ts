@@ -5,6 +5,7 @@ import {
   type FetchMode,
   type UpdateSourceInput
 } from '@loci/shared'
+import { isGithubRepositoryUrl } from '@loci/core'
 import { CliError } from '../errors.js'
 import { askSelect } from '../ui.js'
 
@@ -39,6 +40,15 @@ export async function askScope(url: string, current: string): Promise<string> {
 }
 
 export function formatSourceSummary(input: CreateSourceInput): string {
+  if (isGithubRepositoryUrl(input.url)) {
+    return [
+      `名称：${input.name}`,
+      `仓库：${input.url}`,
+      `Markdown 上限：${input.pageLimit}`,
+      `ZIP 上限：${input.githubArchiveLimitMb ? `${input.githubArchiveLimitMb} MB` : '继承全局设置'}`,
+      `Markdown 总量：${input.githubMarkdownLimitMb ? `${input.githubMarkdownLimitMb} MB` : '继承全局设置'}`
+    ].join('\n')
+  }
   return [
     `名称：${input.name}`,
     `URL：${input.url}`,
@@ -71,7 +81,13 @@ export function formatSourceChanges(
       : `HTTP 并发：${current.httpConcurrency ?? '继承全局'} → ${input.httpConcurrency ?? '继承全局'}`,
     current.browserConcurrency === input.browserConcurrency
       ? null
-      : `浏览器并发：${current.browserConcurrency ?? '继承全局'} → ${input.browserConcurrency ?? '继承全局'}`
+      : `浏览器并发：${current.browserConcurrency ?? '继承全局'} → ${input.browserConcurrency ?? '继承全局'}`,
+    current.githubArchiveLimitMb === (input.githubArchiveLimitMb ?? null)
+      ? null
+      : `ZIP 上限：${current.githubArchiveLimitMb ?? '继承全局'} → ${input.githubArchiveLimitMb ?? '继承全局'} MB`,
+    current.githubMarkdownLimitMb === (input.githubMarkdownLimitMb ?? null)
+      ? null
+      : `Markdown 总量：${current.githubMarkdownLimitMb ?? '继承全局'} → ${input.githubMarkdownLimitMb ?? '继承全局'} MB`
   ].filter((change): change is string => Boolean(change))
   return changes.join('\n')
 }
@@ -87,7 +103,9 @@ export function sameSourceInput(
     current.pageLimit === input.pageLimit &&
     current.scopePath === input.scopePath &&
     current.httpConcurrency === input.httpConcurrency &&
-    current.browserConcurrency === input.browserConcurrency
+    current.browserConcurrency === input.browserConcurrency &&
+    current.githubArchiveLimitMb === (input.githubArchiveLimitMb ?? null) &&
+    current.githubMarkdownLimitMb === (input.githubMarkdownLimitMb ?? null)
   )
 }
 

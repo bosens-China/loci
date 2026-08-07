@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ServerDatabase } from '../database.js'
 import { SyncService } from '../sync-service.js'
@@ -73,5 +76,144 @@ describe('SyncService 队列', () => {
     release()
     expect((await sync.wait(job.id))?.status).toBe('canceled')
     expect(() => database.getSnapshot(library.id)).toThrow('尚未发布')
+    expect(database.listDocumentUrls(library.id)).toEqual([])
+  })
+
+  it('两个 Server 实例同时启动同一文档库时复用持久任务', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-server-flight-'))
+    const filename = join(directory, 'server.sqlite')
+    const firstDatabase = new ServerDatabase(filename)
+    const library = firstDatabase.createLibrary({
+      name: 'Docs',
+      url: 'https://docs.example.com/start',
+      scopePath: '/',
+      pageLimit: 10,
+      schedule: null
+    })
+    const secondDatabase = new ServerDatabase(filename)
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let manifestRequests = 0
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/llms.txt')) {
+        manifestRequests += 1
+        await gate
+        return new Response('- [Guide](/guide.md)')
+      }
+      return new Response('# Guide', { headers: { 'content-type': 'text/markdown' } })
+    })
+    const first = new SyncService(firstDatabase, fetcher)
+    const second = new SyncService(secondDatabase, fetcher)
+    cleanup.push(() => {
+      void first.close()
+      void second.close()
+      firstDatabase.close()
+      secondDatabase.close()
+      rmSync(directory, { recursive: true, force: true })
+    })
+
+    const firstJob = first.start(library.id)
+    const secondJob = second.start(library.id)
+    expect(secondJob.id).toBe(firstJob.id)
+    release()
+    await Promise.all([first.wait(firstJob.id), second.wait(secondJob.id)])
+    expect(manifestRequests).toBe(1)
+    expect(second.getJob(secondJob.id)?.status).toBe('completed')
+  })
+
+  it('失败任务结束后可以创建新的重试任务', async () => {
+    const database = new ServerDatabase(':memory:')
+    let fail = true
+    const sync = new SyncService(database, async () => {
+      if (fail) throw new Error('网络失败')
+      return new Response('- [Guide](/guide.md)')
+    })
+    cleanup.push(() => {
+      void sync.close()
+      database.close()
+    })
+    const library = database.createLibrary({
+      name: 'Retry',
+      url: 'https://retry.example.com/start',
+      scopePath: '/',
+      pageLimit: 10,
+      schedule: null
+    })
+
+    const failed = sync.start(library.id)
+    expect((await sync.wait(failed.id))?.status).toBe('failed')
+    fail = false
+    const retried = sync.start(library.id)
+    expect(retried.id).not.toBe(failed.id)
+    expect((await sync.wait(retried.id))?.status).toBe('completed')
+  })
+
+  it('过期的跨进程租约会失败收口并允许接管', () => {
+    const database = new ServerDatabase(':memory:')
+    cleanup.push(() => database.close())
+    const library = database.createLibrary({
+      name: 'Lease',
+      url: 'https://lease.example.com/start',
+      scopePath: '/',
+      pageLimit: 10,
+      schedule: null
+    })
+    const expired = database.syncJobs.getOrCreate(
+      library.id,
+      'dead-process',
+      new Date(0).toISOString()
+    ).job
+    const recovered = database.syncJobs.getOrCreate(
+      library.id,
+      'new-process',
+      new Date(Date.now() + 30_000).toISOString()
+    ).job
+
+    expect(recovered.id).not.toBe(expired.id)
+    expect(database.syncJobs.get(expired.id)).toMatchObject({
+      status: 'failed',
+      error: '任务执行进程已退出或租约过期'
+    })
+  })
+
+  it('另一个 Server 实例可以取消运行任务且不会提交内容', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-server-cancel-'))
+    const filename = join(directory, 'server.sqlite')
+    const ownerDatabase = new ServerDatabase(filename)
+    const library = ownerDatabase.createLibrary({
+      name: 'Cancel',
+      url: 'https://cancel.example.com/start',
+      scopePath: '/',
+      pageLimit: 10,
+      schedule: null
+    })
+    const remoteDatabase = new ServerDatabase(filename)
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const owner = new SyncService(ownerDatabase, async () => {
+      await gate
+      return new Response('<main>content</main>')
+    })
+    const remote = new SyncService(remoteDatabase)
+    cleanup.push(() => {
+      void owner.close()
+      void remote.close()
+      ownerDatabase.close()
+      remoteDatabase.close()
+      rmSync(directory, { recursive: true, force: true })
+    })
+
+    const job = owner.start(library.id)
+    await vi.waitFor(() => expect(owner.getJob(job.id)?.status).toBe('running'))
+    expect(remote.cancel(job.id)?.status).toBe('canceling')
+    await new Promise((resolve) => setTimeout(resolve, 1_100))
+    release()
+    expect((await owner.wait(job.id))?.status).toBe('canceled')
+    expect(ownerDatabase.listDocumentUrls(library.id)).toEqual([])
   })
 })

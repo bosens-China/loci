@@ -6,6 +6,11 @@ export class CrawlControl {
   private resumeWait: (() => void) | null = null
   private readonly cancelDelays = new Set<() => void>()
   private finishDone = (): void => undefined
+  private readonly controller = new AbortController()
+
+  get signal(): AbortSignal {
+    return this.controller.signal
+  }
 
   constructor() {
     this.done = new Promise((resolve) => {
@@ -30,7 +35,9 @@ export class CrawlControl {
   }
 
   cancel(): void {
+    if (this.cancelled) return
     this.cancelled = true
+    this.controller.abort(new Error('抓取已取消'))
     this.resume()
     for (const cancelDelay of this.cancelDelays) cancelDelay()
   }

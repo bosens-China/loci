@@ -24,7 +24,12 @@ export const source: DocumentSource = {
   httpConcurrency: null,
   browserConcurrency: null,
   iconUrl: 'https://cn.vuejs.org/logo.svg',
-  cloud: null
+  cloud: null,
+  kind: 'web',
+  githubArchiveLimitMb: null,
+  githubMarkdownLimitMb: null,
+  githubDefaultBranch: null,
+  githubRevision: null
 }
 
 export const document: DocumentRecord = {

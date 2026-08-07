@@ -84,6 +84,35 @@ describe('文档源最短输入', () => {
     })
   })
 
+  it('识别 GitHub 仓库并接受大小上限参数', async () => {
+    await createProgram().parseAsync(
+      [
+        'source',
+        'add',
+        'https://github.com/vuejs/docs/tree/main/src',
+        '--archive-limit',
+        '250mb',
+        '--markdown-limit',
+        '120',
+        '--no-sync'
+      ],
+      { from: 'user' }
+    )
+
+    const runtime = createCliRuntime()
+    const source = runtime.database.listSources()[0]
+    await runtime.close()
+    expect(source).toMatchObject({
+      name: 'docs',
+      url: 'https://github.com/vuejs/docs',
+      kind: 'github',
+      mode: 'auto',
+      scopePath: '/',
+      githubArchiveLimitMb: 250,
+      githubMarkdownLimitMb: 120
+    })
+  })
+
   it('非交互环境不接受没有修改项的空更新', async () => {
     await createProgram().parseAsync(
       ['source', 'add', 'https://rspress.rs/guide/introduction.html', '--no-sync'],
