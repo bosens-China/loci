@@ -2,7 +2,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { LOCI_INSTRUCTIONS_END, LOCI_INSTRUCTIONS_START } from '@loci/shared'
+import {
+  LOCI_CONTEXT7_COMPATIBILITY,
+  LOCI_INSTRUCTIONS_END,
+  LOCI_INSTRUCTIONS_START
+} from '@loci/shared'
 import { installAgentGlobalRules } from '../agent-global-rules.js'
 import { acquireRuntimeLock } from '../runtime-lock.js'
 
@@ -49,6 +53,41 @@ describe('Agent 全局规则写入', () => {
     expect(
       readFileSync(join(homeDir, '.copilot', 'instructions', 'loci.instructions.md'), 'utf8')
     ).toMatch(/^---\n[\s\S]*applyTo: "\*\*"[\s\S]*<!-- loci:start -->/)
+  })
+
+  it('迁移 Codex 中有边界的 Context7 规则并返回明确提示', () => {
+    const codexDir = join(homeDir, '.codex')
+    const path = join(codexDir, 'AGENTS.md')
+    mkdirSync(codexDir, { recursive: true })
+    writeFileSync(
+      path,
+      '<!-- context7 -->\nRun `npx ctx7@latest library` first.\n<!-- context7 -->\n\n# 我的规则\n',
+      'utf8'
+    )
+
+    const first = installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+    const content = readFileSync(path, 'utf8')
+    const second = installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+
+    expect(first.message).toContain('检测到 Context7')
+    expect(content).toContain(LOCI_CONTEXT7_COMPATIBILITY)
+    expect(content).toContain('# 我的规则')
+    expect(content).not.toContain('<!-- context7 -->')
+    expect(second.changed).toBe(false)
+    expect(second.message).toContain('组合规则已是最新版本')
+  })
+
+  it('Codex 中未标记的 Context7 规则会中止且不修改文件', () => {
+    const codexDir = join(homeDir, '.codex')
+    const path = join(codexDir, 'AGENTS.md')
+    mkdirSync(codexDir, { recursive: true })
+    const original = 'Always run `npx ctx7@latest docs` first.\n'
+    writeFileSync(path, original, 'utf8')
+
+    expect(() => installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })).toThrow(
+      '无法安全替换'
+    )
+    expect(readFileSync(path, 'utf8')).toBe(original)
   })
 
   it('跨进程锁释放后可以重试', () => {

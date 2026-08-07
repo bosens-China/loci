@@ -13,6 +13,7 @@ import { basename, dirname, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
   getMcpClientDefinition,
+  hasContext7Compatibility,
   isAgentGlobalRulesClient,
   mergeLociAgentInstructions,
   type AgentGlobalRulesClient,
@@ -49,7 +50,9 @@ export function installAgentGlobalRules(
       : client === 'vscode'
         ? VSCODE_INSTRUCTIONS_HEADER
         : ''
-    const next = mergeLociAgentInstructions(current)
+    const hadContext7Compatibility = hasContext7Compatibility(current)
+    const next = mergeLociAgentInstructions(current, { migrateContext7: client === 'codex' })
+    const hasContext7 = hasContext7Compatibility(next)
     const changed = current !== next
     if (changed) writeFileAtomically(path, next)
     const label = getMcpClientDefinition(client).label
@@ -57,9 +60,14 @@ export function installAgentGlobalRules(
       client,
       path,
       changed,
-      message: changed
-        ? `已将 Loci 全局规则写入 ${label}：${path}`
-        : `${label} 的 Loci 全局规则已是最新版本：${path}`
+      message:
+        changed && hasContext7 && !hadContext7Compatibility
+          ? `检测到 Context7，已替换为 Loci 优先、Context7 兜底的组合规则：${path}`
+          : changed
+            ? `已将 Loci 全局规则写入 ${label}：${path}`
+            : hasContext7
+              ? `${label} 的 Loci 与 Context7 组合规则已是最新版本：${path}`
+              : `${label} 的 Loci 全局规则已是最新版本：${path}`
     }
   } finally {
     lock.release()

@@ -1,8 +1,8 @@
 export const LOCI_INSTRUCTIONS_START = '<!-- loci:start -->'
 export const LOCI_INSTRUCTIONS_END = '<!-- loci:end -->'
+export const LOCI_CONTEXT7_COMPATIBILITY = '<!-- loci:context7 -->'
 
-export const LOCI_AGENT_INSTRUCTIONS = `${LOCI_INSTRUCTIONS_START}
-# Technical Documentation with Loci
+const LOCI_INSTRUCTIONS_BODY = `# Technical Documentation with Loci
 
 Use the \`loci\` MCP server whenever a task depends on current information about a library,
 framework, SDK, API, CLI, configuration, version difference, migration, setup process, or
@@ -34,34 +34,148 @@ insufficient after a reasonable search. State why the fallback is needed.
 
 Treat cloud pulls, source additions, active synchronization, and deletion as state-changing
 operations. Perform them only when explicitly requested or after user confirmation. Before an
-authorized sync, follow an existing task instead of launching a competing request.
-${LOCI_INSTRUCTIONS_END}`
+authorized sync, follow an existing task instead of launching a competing request.`
 
-/** 只替换 Loci 管理的区块，保留文件中的其他个人规则。 */
-export function mergeLociAgentInstructions(content: string): string {
+const CONTEXT7_FALLBACK = `${LOCI_CONTEXT7_COMPATIBILITY}
+## Context7 fallback
+
+Context7 is a fallback for unresolved documentation questions. If a Context7 skill or instruction
+is loaded, defer its query steps until the Loci workflow reaches a fallback condition. If the user
+explicitly requests Context7, follow that request directly.
+
+When falling back:
+
+1. State why Loci was insufficient, then run
+   \`npx ctx7@latest library <name> "<user's question>"\` unless the user supplied a valid library ID.
+2. Choose the closest official or high-reputation match, preferring a version-specific ID when the
+   project version is known.
+3. Run \`npx ctx7@latest docs <libraryId> "<user's question>"\`. Use separate requests for distinct
+   concepts, but do not exceed three Context7 CLI requests for one question.
+4. Never include API keys, passwords, tokens, or other credentials in a query.
+5. Report quota failures and suggest \`npx ctx7@latest login\` or \`CONTEXT7_API_KEY\`; do not silently
+   answer from memory.
+6. If a request fails because of DNS or network access, retry outside Codex's default sandbox.`
+
+export const LOCI_AGENT_INSTRUCTIONS = createManagedBlock(LOCI_INSTRUCTIONS_BODY)
+export const LOCI_CONTEXT7_AGENT_INSTRUCTIONS = createManagedBlock(
+  `${LOCI_INSTRUCTIONS_BODY}\n\n${CONTEXT7_FALLBACK}`
+)
+
+interface MergeLociAgentInstructionsOptions {
+  migrateContext7?: boolean
+}
+
+interface ManagedRange {
+  start: number
+  end: number
+}
+
+/** 只替换 Loci 管理的区块；Codex 可同时迁移有明确边界的 Context7 规则。 */
+export function mergeLociAgentInstructions(
+  content: string,
+  options: MergeLociAgentInstructionsOptions = {}
+): string {
+  const lociRange = findLociRange(content)
+  const context7Range = options.migrateContext7 ? findContext7Range(content, lociRange) : undefined
+  const useContext7 =
+    context7Range !== undefined ||
+    (lociRange !== undefined &&
+      content.slice(lociRange.start, lociRange.end).includes(LOCI_CONTEXT7_COMPATIBILITY))
+  const newline = content.includes('\r\n') ? '\r\n' : '\n'
+  const block = (
+    useContext7 ? LOCI_CONTEXT7_AGENT_INSTRUCTIONS : LOCI_AGENT_INSTRUCTIONS
+  ).replaceAll('\n', newline)
+
+  if (context7Range && !lociRange) {
+    return replaceRange(content, context7Range, block)
+  }
+
+  const withoutContext7 = context7Range ? replaceRange(content, context7Range, '') : content
+  return mergeManagedBlock(withoutContext7, block, newline)
+}
+
+export function hasContext7Compatibility(content: string): boolean {
+  const range = findLociRange(content)
+  return (
+    range !== undefined &&
+    content.slice(range.start, range.end).includes(LOCI_CONTEXT7_COMPATIBILITY)
+  )
+}
+
+function createManagedBlock(body: string): string {
+  return `${LOCI_INSTRUCTIONS_START}\n${body}\n${LOCI_INSTRUCTIONS_END}`
+}
+
+function findLociRange(content: string): ManagedRange | undefined {
   const starts = [...content.matchAll(/^<!-- loci:start -->(?=\r?$)/gm)]
   const ends = [...content.matchAll(/^<!-- loci:end -->(?=\r?$)/gm)]
   if (starts.length !== ends.length || starts.length > 1) {
     throw new Error('Loci 全局规则标记不完整或重复，请先手动修复')
   }
+  if (starts.length === 0) return undefined
+  return toRange(starts[0], ends[0], 'Loci 全局规则')
+}
 
-  const newline = content.includes('\r\n') ? '\r\n' : '\n'
-  const block = LOCI_AGENT_INSTRUCTIONS.replaceAll('\n', newline)
-  if (starts.length === 0) {
-    if (!content) return `${block}${newline}`
-    const separator = content.endsWith(`${newline}${newline}`)
-      ? ''
-      : content.endsWith(newline)
-        ? newline
-        : `${newline}${newline}`
-    return `${content}${separator}${block}${newline}`
+function findContext7Range(
+  content: string,
+  lociRange: ManagedRange | undefined
+): ManagedRange | undefined {
+  const outsideLoci = lociRange ? maskRange(content, lociRange) : content
+  const legacy = [...outsideLoci.matchAll(/^<!-- context7 -->(?=\r?$)/gim)]
+  const starts = [...outsideLoci.matchAll(/^<!-- context7:start -->(?=\r?$)/gim)]
+  const ends = [...outsideLoci.matchAll(/^<!-- context7:end -->(?=\r?$)/gim)]
+  const hasStructured = starts.length > 0 || ends.length > 0
+
+  if (legacy.length > 0 && hasStructured) {
+    throw new Error('Context7 全局规则标记重复，请先手动修复')
   }
+  if (legacy.length === 2) return toRange(legacy[0], legacy[1], 'Context7 全局规则')
+  if (legacy.length > 0) {
+    throw new Error('Context7 全局规则标记不完整或重复，请先手动修复')
+  }
+  if (starts.length === 1 && ends.length === 1) {
+    return toRange(starts[0], ends[0], 'Context7 全局规则')
+  }
+  if (hasStructured) {
+    throw new Error('Context7 全局规则标记不完整或重复，请先手动修复')
+  }
+  if (/\bnpx\s+ctx7(?:@|\s)|\bctx7\s+(?:library|docs)\b/i.test(outsideLoci)) {
+    throw new Error('检测到未受标记管理的 Context7 规则，无法安全替换，请先手动添加边界')
+  }
+  return undefined
+}
 
-  const start = starts[0].index
-  const end = ends[0].index
+function toRange(
+  startMatch: RegExpMatchArray,
+  endMatch: RegExpMatchArray,
+  label: string
+): ManagedRange {
+  const start = startMatch.index
+  const end = endMatch.index
   if (start === undefined || end === undefined || end < start) {
-    throw new Error('Loci 全局规则标记顺序无效，请先手动修复')
+    throw new Error(`${label}标记顺序无效，请先手动修复`)
   }
-  const afterEnd = end + ends[0][0].length
-  return `${content.slice(0, start)}${block}${content.slice(afterEnd)}`
+  return { start, end: end + endMatch[0].length }
+}
+
+function maskRange(content: string, range: ManagedRange): string {
+  return `${content.slice(0, range.start)}${content
+    .slice(range.start, range.end)
+    .replace(/[^\r\n]/g, ' ')}${content.slice(range.end)}`
+}
+
+function replaceRange(content: string, range: ManagedRange, replacement: string): string {
+  return `${content.slice(0, range.start)}${replacement}${content.slice(range.end)}`
+}
+
+function mergeManagedBlock(content: string, block: string, newline: string): string {
+  const range = findLociRange(content)
+  if (range) return replaceRange(content, range, block)
+  if (!content) return `${block}${newline}`
+  const separator = content.endsWith(`${newline}${newline}`)
+    ? ''
+    : content.endsWith(newline)
+      ? newline
+      : `${newline}${newline}`
+  return `${content}${separator}${block}${newline}`
 }
