@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.9.0](https://github.com/bosens-China/loci/compare/loci-v1.8.1...loci-v1.9.0) (2026-08-07)
+
+
+### Features
+
+* 扩展文档抓取与同步安全 ([5c8e83e](https://github.com/bosens-China/loci/commit/5c8e83e6fe6cd50306cac4f0218a0f884aa5ed4a))
+* 统一 MCP 客户端配置 ([a13327b](https://github.com/bosens-China/loci/commit/a13327b47b271eec05f1bab8d192b6a940ff919d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.9.0
+    * @loci/runtime bumped to 1.5.0
+    * @loci/shared bumped to 1.11.0
+
 ## [1.8.1](https://github.com/bosens-China/loci/compare/loci-v1.8.0...loci-v1.8.1) (2026-08-06)
 
 
