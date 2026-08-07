@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.10.0](https://github.com/bosens-China/loci/compare/loci-v1.9.0...loci-v1.10.0) (2026-08-07)
+
+
+### Features
+
+* 支持配置 Agent 全局规则 ([76af9f8](https://github.com/bosens-China/loci/commit/76af9f8067336fd331f83d449ebd3aac96f908a9))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/runtime bumped to 1.6.0
+    * @loci/shared bumped to 1.12.0
+
 ## [1.9.0](https://github.com/bosens-China/loci/compare/loci-v1.8.1...loci-v1.9.0) (2026-08-07)
 
 
