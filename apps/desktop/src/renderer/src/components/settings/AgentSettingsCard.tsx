@@ -3,10 +3,13 @@ import { Alert, Button, Card, Divider, Form, InputNumber, Space, Tag, Typography
 import { useEffect } from 'react'
 import {
   GENERIC_MCP_CONFIG_TARGET,
+  LOCI_AGENT_INSTRUCTIONS,
   createMcpClientConfig,
   isAgentClient,
+  isAgentGlobalRulesClient,
   listMcpClients,
   type AgentClient,
+  type AgentGlobalRulesClient,
   type McpConfigTarget,
   type McpServerStatus
 } from '@loci/shared'
@@ -39,6 +42,20 @@ function createAgentConfigs(endpoint: string): Array<{
   ]
 }
 
+function createGlobalRulesConfigs(): Array<{
+  key: string
+  label: string
+  path: string
+  client?: AgentGlobalRulesClient
+}> {
+  return listMcpClients().map((definition) => ({
+    key: definition.id,
+    label: definition.label,
+    path: definition.globalRulesPath,
+    client: isAgentGlobalRulesClient(definition.id) ? definition.id : undefined
+  }))
+}
+
 interface AgentSettingsCardProps {
   mcpPort: number
   mcpStatus: McpServerStatus
@@ -46,6 +63,8 @@ interface AgentSettingsCardProps {
   onSavePort: (port: number) => void
   onImportAgent: (client: AgentClient) => void
   importingClient: AgentClient | null
+  onInstallGlobalRules: (client: AgentGlobalRulesClient) => void
+  installingGlobalRulesClient: AgentGlobalRulesClient | null
 }
 
 /**
@@ -57,10 +76,13 @@ export function AgentSettingsCard({
   saving,
   onSavePort,
   onImportAgent,
-  importingClient
+  importingClient,
+  onInstallGlobalRules,
+  installingGlobalRulesClient
 }: AgentSettingsCardProps): React.JSX.Element {
   const [form] = Form.useForm<{ mcpPort: number }>()
   const agentConfigs = createAgentConfigs(mcpStatus.endpoint)
+  const globalRulesConfigs = createGlobalRulesConfigs()
 
   useEffect(() => {
     form.setFieldsValue({ mcpPort })
@@ -133,6 +155,70 @@ export function AgentSettingsCard({
               {mcpStatus.endpoint}
             </Typography.Text>
           </Typography.Paragraph>
+        </div>
+
+        <Divider />
+
+        <Typography.Title level={5} className="mt-0! mb-1!">
+          配置用户级全局规则
+        </Typography.Title>
+        <Typography.Paragraph type="secondary" className="text-xs mb-3">
+          写入只会新增或替换 Loci 标记包围的区块，并保留文件中的其他个人规则。Cursor
+          官方仅支持在设置中维护 User Rules，因此需要手动复制。
+        </Typography.Paragraph>
+
+        <div className="overflow-hidden rounded-lg border border-solid border-[var(--ant-color-border-secondary)]">
+          {globalRulesConfigs.map((config) => {
+            const client = config.client
+            return (
+              <div
+                key={config.key}
+                className="border-0 border-b border-solid border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] p-4 last:border-b-0"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <Space size="small" wrap>
+                      <Typography.Text strong>{config.label}</Typography.Text>
+                      <Tag color={client ? 'blue' : 'default'} bordered={false} className="m-0!">
+                        {client ? '一键写入' : '手动复制'}
+                      </Tag>
+                    </Space>
+                    <Typography.Text
+                      type="secondary"
+                      className="mt-1 block truncate font-mono text-xs"
+                    >
+                      {config.path}
+                    </Typography.Text>
+                  </div>
+                  <Space size="small" wrap>
+                    {client && (
+                      <Button
+                        size="small"
+                        type="primary"
+                        loading={installingGlobalRulesClient === client}
+                        disabled={
+                          installingGlobalRulesClient !== null &&
+                          installingGlobalRulesClient !== client
+                        }
+                        onClick={() => onInstallGlobalRules(client)}
+                      >
+                        写入全局规则
+                      </Button>
+                    )}
+                    <Typography.Text
+                      className="cursor-pointer text-xs text-primary"
+                      copyable={{
+                        text: LOCI_AGENT_INSTRUCTIONS,
+                        tooltips: ['复制规则', '已复制']
+                      }}
+                    >
+                      复制规则
+                    </Typography.Text>
+                  </Space>
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         <Divider />

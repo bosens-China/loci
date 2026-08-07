@@ -27,6 +27,7 @@ loci source add https://rspress.rs/guide/introduction.html
 loci source sync rspress
 loci document search "Quick start"
 loci mcp configure codex
+loci mcp rules codex
 ```
 
 需要抓取依赖客户端渲染的网站时，再安装浏览器运行时：

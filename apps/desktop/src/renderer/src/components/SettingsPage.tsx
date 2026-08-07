@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons'
 import { Card, Skeleton, Tabs, Typography, message } from 'antd'
 import { useState } from 'react'
-import type { AgentClient, AppSettings, ThemeMode } from '@loci/shared'
+import type { AgentClient, AgentGlobalRulesClient, AppSettings, ThemeMode } from '@loci/shared'
 import { useAppSettings } from '../settings-context'
 import DataManagementCard from './DataManagementCard'
 import { AboutSettingsCard } from './settings/AboutSettingsCard'
@@ -25,6 +25,9 @@ function SettingsPage(): React.JSX.Element {
   const { state, loading, save } = useAppSettings()
   const [saving, setSaving] = useState<SavingSection | null>(null)
   const [importing, setImporting] = useState<AgentClient | null>(null)
+  const [installingGlobalRules, setInstallingGlobalRules] = useState<AgentGlobalRulesClient | null>(
+    null
+  )
   const [activeTab, setActiveTab] = useState('general')
   const [messageApi, contextHolder] = message.useMessage()
 
@@ -51,6 +54,17 @@ function SettingsPage(): React.JSX.Element {
         messageApi.error(error instanceof Error ? error.message : 'Agent 导入失败')
       })
       .finally(() => setImporting(null))
+  }
+
+  const handleInstallGlobalRules = (client: AgentGlobalRulesClient): void => {
+    setInstallingGlobalRules(client)
+    void window.api
+      .installAgentGlobalRules(client)
+      .then((result) => messageApi.success(result.message))
+      .catch((error: unknown) => {
+        messageApi.error(error instanceof Error ? error.message : '全局规则写入失败')
+      })
+      .finally(() => setInstallingGlobalRules(null))
   }
 
   const tabItems = [
@@ -80,6 +94,8 @@ function SettingsPage(): React.JSX.Element {
           }
           onImportAgent={handleImportAgent}
           importingClient={importing}
+          onInstallGlobalRules={handleInstallGlobalRules}
+          installingGlobalRulesClient={installingGlobalRules}
         />
       )
     },

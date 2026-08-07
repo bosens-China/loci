@@ -1,0 +1,100 @@
+# 配置客户端全局规则
+
+MCP 让 Agent 调用 Loci 工具，全局规则则规定什么时候优先使用这些工具。Loci 可以为拥有官方用户级文件的客户端一键写入规则；Cursor 使用官方设置页手动维护 User Rules。
+
+## 客户端对照
+
+| 客户端             | MCP 配置                                     | 用户级全局规则                                 | 项目级规则                                     |
+| ------------------ | -------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| Codex              | `loci mcp configure codex`                   | `~/.codex/AGENTS.md`                           | 项目根目录或子目录的 `AGENTS.md`               |
+| Cursor             | `loci mcp configure cursor`                  | `Customize → Rules → User Rules`               | 项目根目录或子目录的 `AGENTS.md`               |
+| VS Code            | `loci mcp configure vscode`                  | `~/.copilot/instructions/loci.instructions.md` | `AGENTS.md`、`.github/copilot-instructions.md` |
+| Claude Code        | `loci mcp configure claude-code`             | `~/.claude/CLAUDE.md`                          | `CLAUDE.md` 或 `.claude/CLAUDE.md`             |
+| Google Antigravity | `loci mcp config antigravity`，手动复制 HTTP | `~/.gemini/GEMINI.md`                          | `.agents/rules/`                               |
+| Kimi Code          | `loci mcp config`，手动复制                  | `~/.kimi-code/AGENTS.md`                       | 由 Kimi Code 配置决定                          |
+| 其他客户端         | `loci mcp config`，手动复制                  | 由目标客户端决定                               | 由目标客户端决定                               |
+
+同一个客户端只保留一个名为 `loci` 的 MCP。不要同时注册 CLI stdio 和桌面 HTTP。
+
+## 使用 CLI 写入
+
+运行对应命令：
+
+```bash
+loci mcp rules codex
+loci mcp rules vscode
+loci mcp rules claude-code
+loci mcp rules antigravity
+```
+
+交互终端会先展示客户端和目标路径。可信的自动化环境可以添加 `--yes`：
+
+```bash
+loci mcp rules codex --yes
+```
+
+Cursor 没有官方公开的用户级规则文件。下面的命令不会修改 Cursor 内部存储，而是输出可以粘贴到 User Rules 的内容：
+
+```bash
+loci mcp rules cursor
+```
+
+Kimi Code 或其他需要手动编辑规则的客户端，也可以复制该命令输出的客户端中立规则，再粘贴到对应的用户级入口。
+
+在桌面应用中，打开“系统设置 → Agent 连接 → 配置用户级全局规则”。Codex、VS Code、Claude Code 和 Antigravity 可以直接点击“写入全局规则”；Cursor 使用“复制规则”。
+
+## 受管区块
+
+Loci 写入的内容使用固定标记。中间内容由 Loci 自动生成，不需要手动复制：
+
+```md
+<!-- loci:start -->
+
+...
+<!-- loci:end -->
+```
+
+首次配置会创建文件或追加区块。再次配置会替换标记之间的内容，便于升级规则，同时保留区块之外的个人设置。标记缺失、重复或顺序错误时，Loci 会停止写入，请先手动修复文件。
+
+同一客户端的重复写入是幂等的。桌面和 CLI 共享跨进程锁，避免同时修改同一个目标。
+
+## 验证与移除
+
+配置完成后，新建 AI 会话，使客户端重新加载全局规则。确认客户端能够列出 Loci MCP 工具，再询问：
+
+```text
+请说明技术文档的查询顺序，以及什么情况下切换到其他来源。
+```
+
+预期回答会先查询 Loci 本地文档库，再查询云端公开目录，并在获得授权后拉取或抓取官方文档。如果回答没有采用该顺序，请检查目标文件或 Cursor User Rules 中是否存在一组完整的 Loci 标记。
+
+需要移除规则时，删除包括 `<!-- loci:start -->` 和 `<!-- loci:end -->` 在内的整个区块，保留文件中的其他内容。Cursor 用户应从 `Customize → Rules → User Rules` 中删除此前粘贴的 Loci 规则。再次运行 `loci mcp rules <client>` 会重新添加受管区块。
+
+## 各客户端注意事项
+
+### Codex
+
+如果 `~/.codex/AGENTS.override.md` 已存在，Codex 会忽略同目录的普通 `AGENTS.md`。Loci 因此优先把受管区块写入 override 文件。详细加载顺序和检查命令请查看 [Codex 全局与项目规则](/agent/codex)。
+
+### Cursor
+
+项目根目录和任意子目录都可以放置 `AGENTS.md`。子目录规则处理该目录及其子目录文件时生效，父子内容会合并，更具体的规则优先。这里的项目根规则只覆盖当前项目；跨项目规则仍应放在 User Rules。
+
+Cursor 官方目前没有声明 `~/AGENTS.md`、`~/.cursor/AGENTS.md` 或 `~/.cursor/rules` 是稳定的用户级规则入口。Loci 不修改未公开的内部设置文件。
+
+### VS Code
+
+Loci 创建专用的 `loci.instructions.md`，并写入 `applyTo: "**"`，使规则在所有工作区自动应用。VS Code 仍可通过 Settings Sync 同步用户指令文件。
+
+### Claude Code 与 Antigravity
+
+Claude Code 的 `~/.claude/CLAUDE.md` 和 Antigravity 的 `~/.gemini/GEMINI.md` 都会跨项目加载。Loci 只管理其中自己的标记区块。
+
+## 官方资料
+
+- [Codex：Custom instructions with AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md.md)
+- [Cursor：Rules](https://cursor.com/docs/rules.md)
+- [VS Code：Custom instructions](https://code.visualstudio.com/docs/agent-customization/custom-instructions)
+- [Claude Code：Memory](https://code.claude.com/docs/en/memory)
+- [Google Antigravity：Rules](https://www.antigravity.google/docs/ide/rules)
+- [Kimi Code：Agents and Sub-Agents](https://www.kimi.com/code/docs/en/kimi-code-cli/customization/agents)

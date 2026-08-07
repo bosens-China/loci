@@ -55,6 +55,10 @@ const api: LociApi = {
     ipcRenderer.invoke('app:update:open-release') as ReturnType<LociApi['openDesktopRelease']>,
   importAgentClient: (client) =>
     ipcRenderer.invoke('agents:import', client) as ReturnType<LociApi['importAgentClient']>,
+  installAgentGlobalRules: (client) =>
+    ipcRenderer.invoke('agents:global-rules:install', client) as ReturnType<
+      LociApi['installAgentGlobalRules']
+    >,
   exportData: () => ipcRenderer.invoke('data:export') as ReturnType<LociApi['exportData']>,
   importData: () => ipcRenderer.invoke('data:import') as ReturnType<LociApi['importData']>,
   cloudAdminLogin: (input) =>

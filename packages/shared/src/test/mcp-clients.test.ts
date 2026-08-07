@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   getMcpClientDefinition,
+  isAgentGlobalRulesClient,
   isAgentClient,
   isMcpClient,
+  listAgentGlobalRulesClients,
   listImportableAgentClients,
   listMcpClients,
   supportsMcpTransport
@@ -34,5 +36,13 @@ describe('MCP 客户端共享目录', () => {
     expect(supportsMcpTransport('antigravity', 'http')).toBe(true)
     expect(supportsMcpTransport('antigravity', 'stdio')).toBe(false)
     expect(getMcpClientDefinition('codex').executable).toBe('codex')
+    expect(listAgentGlobalRulesClients().map((client) => client.id)).toEqual([
+      'codex',
+      'vscode',
+      'claude-code',
+      'antigravity'
+    ])
+    expect(isAgentGlobalRulesClient('cursor')).toBe(false)
+    expect(isAgentGlobalRulesClient('antigravity')).toBe(true)
   })
 })

@@ -1,4 +1,5 @@
 export * from './api.js'
+export * from './agent-instructions.js'
 export * from './format-bytes.js'
 export * from './mcp-clients.js'
 export * from './mcp-config.js'

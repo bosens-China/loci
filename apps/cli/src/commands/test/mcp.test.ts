@@ -131,4 +131,32 @@ describe('MCP 手动配置', () => {
     expect(() => JSON.parse(output)).not.toThrow()
     expect(JSON.parse(output)).toHaveProperty('mcpServers.loci.command', 'loci')
   })
+
+  it('Cursor 全局规则输出受管区块和官方设置位置', async () => {
+    let output = ''
+    let hint = ''
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      output += String(chunk)
+      return true
+    })
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      hint += String(chunk)
+      return true
+    })
+
+    await createProgram().parseAsync(['mcp', 'rules', 'cursor'], { from: 'user' })
+
+    expect(output).toContain('<!-- loci:start -->')
+    expect(output).toContain('<!-- loci:end -->')
+    expect(hint).toContain('Customize → Rules → User Rules')
+  })
+
+  it('全局规则命令拒绝未知客户端和非交互省略值', async () => {
+    await expect(
+      createProgram().parseAsync(['mcp', 'rules', 'unknown'], { from: 'user' })
+    ).rejects.toThrow('不支持的 Agent 客户端')
+    await expect(createProgram().parseAsync(['mcp', 'rules'], { from: 'user' })).rejects.toThrow(
+      '非交互终端必须指定'
+    )
+  })
 })

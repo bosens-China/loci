@@ -1,4 +1,4 @@
-import type { AgentClient } from './mcp-clients.js'
+import type { AgentClient, AgentGlobalRulesClient } from './mcp-clients.js'
 
 export type FetchMode = 'auto' | 'http' | 'browser'
 
@@ -42,6 +42,13 @@ export interface DesktopUpdateState {
 
 export interface AgentImportResult {
   client: AgentClient
+  message: string
+}
+
+export interface AgentGlobalRulesResult {
+  client: AgentGlobalRulesClient
+  path: string
+  changed: boolean
   message: string
 }
 
@@ -260,6 +267,7 @@ export interface LociApi {
   checkDesktopUpdate: () => Promise<DesktopUpdateState>
   openDesktopRelease: () => Promise<void>
   importAgentClient: (client: AgentClient) => Promise<AgentImportResult>
+  installAgentGlobalRules: (client: AgentGlobalRulesClient) => Promise<AgentGlobalRulesResult>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>
   cloudAdminLogin: (input: CloudAdminLoginInput) => Promise<CloudAdminSession>

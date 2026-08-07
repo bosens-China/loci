@@ -6,6 +6,8 @@ interface McpClientEntry {
   id: string
   label: string
   configPath: string
+  globalRulesPath: string
+  globalRulesWrite: boolean
   transports: readonly McpTransport[]
   quickImport: boolean
   executable: string | null
@@ -20,6 +22,8 @@ export const MCP_CLIENTS = [
     id: 'codex',
     label: 'Codex',
     configPath: '~/.codex/config.toml',
+    globalRulesPath: '~/.codex/AGENTS.md',
+    globalRulesWrite: true,
     transports: ['stdio', 'http'],
     quickImport: true,
     executable: 'codex',
@@ -29,6 +33,8 @@ export const MCP_CLIENTS = [
     id: 'cursor',
     label: 'Cursor',
     configPath: '~/.cursor/mcp.json',
+    globalRulesPath: 'Customize → Rules → User Rules',
+    globalRulesWrite: false,
     transports: ['stdio', 'http'],
     quickImport: true,
     executable: 'cursor',
@@ -38,6 +44,8 @@ export const MCP_CLIENTS = [
     id: 'vscode',
     label: 'VS Code',
     configPath: '用户配置 mcp.json',
+    globalRulesPath: '~/.copilot/instructions/loci.instructions.md',
+    globalRulesWrite: true,
     transports: ['stdio', 'http'],
     quickImport: true,
     executable: 'code',
@@ -47,6 +55,8 @@ export const MCP_CLIENTS = [
     id: 'claude-code',
     label: 'Claude Code',
     configPath: '.mcp.json',
+    globalRulesPath: '~/.claude/CLAUDE.md',
+    globalRulesWrite: true,
     transports: ['stdio', 'http'],
     quickImport: true,
     executable: 'claude',
@@ -56,6 +66,8 @@ export const MCP_CLIENTS = [
     id: 'antigravity',
     label: 'Google Antigravity',
     configPath: '~/.gemini/config/mcp_config.json',
+    globalRulesPath: '~/.gemini/GEMINI.md',
+    globalRulesWrite: true,
     transports: ['http'],
     quickImport: false,
     executable: null,
@@ -73,6 +85,7 @@ export const GENERIC_MCP_CONFIG_TARGET = {
 export type McpClientDefinition = (typeof MCP_CLIENTS)[number]
 export type McpClient = McpClientDefinition['id']
 export type AgentClient = Extract<McpClientDefinition, { quickImport: true }>['id']
+export type AgentGlobalRulesClient = Extract<McpClientDefinition, { globalRulesWrite: true }>['id']
 export type McpConfigTarget = McpClient | typeof GENERIC_MCP_CONFIG_TARGET.id
 
 export function listMcpClients(): readonly McpClientDefinition[] {
@@ -87,12 +100,25 @@ export function listImportableAgentClients(): ReadonlyArray<
   )
 }
 
+export function listAgentGlobalRulesClients(): ReadonlyArray<
+  Extract<McpClientDefinition, { globalRulesWrite: true }>
+> {
+  return MCP_CLIENTS.filter(
+    (client): client is Extract<McpClientDefinition, { globalRulesWrite: true }> =>
+      client.globalRulesWrite
+  )
+}
+
 export function isMcpClient(value: unknown): value is McpClient {
   return typeof value === 'string' && MCP_CLIENTS.some((client) => client.id === value)
 }
 
 export function isAgentClient(value: unknown): value is AgentClient {
   return isMcpClient(value) && getMcpClientDefinition(value).quickImport
+}
+
+export function isAgentGlobalRulesClient(value: unknown): value is AgentGlobalRulesClient {
+  return isMcpClient(value) && getMcpClientDefinition(value).globalRulesWrite
 }
 
 export function getMcpClientDefinition(client: McpClient): McpClientDefinition {

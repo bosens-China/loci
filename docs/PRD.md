@@ -88,19 +88,20 @@
 
 - 当前决策：产品只向 Agent 暴露一个名为 `loci` 的逻辑 MCP。桌面设置页的一键配置和复制片段始终使用随 Electron 主进程启动、仅绑定 `127.0.0.1` 的 Streamable HTTP；CLI 自动配置默认由 Agent 按需拉起 `loci mcp stdio`，也允许用户显式选择 HTTP。两者同时安装时仍只在同一客户端注册其中一个入口。
 - 当前决策：桌面端和 CLI 复用同一个 MCP Server、工具 Schema 和本地数据库。不同 Agent 可以各自拉起 stdio 进程，但不能在同一客户端中同时注册重复的 CLI 与桌面工具。产品公开命名统一使用 `Loci`、`loci_*` 和 `Loci*`。
-- 当前决策：桌面端、CLI 和运行时共用一份 MCP 客户端能力目录。Codex、Cursor、VS Code 和 Claude Code 支持一键写入与按客户端复制配置；Google Antigravity 支持复制 HTTP 配置；其他客户端保留 Cursor `mcpServers` 风格的通用 stdio 或 HTTP 配置。产品面向个人开发者，不提供仅面向企业许可证或付费 API Key 用户的 Gemini CLI 快捷入口。所有片段都是具体客户端约定，不宣称为 MCP 协议统一配置格式。
+- 当前决策：桌面端、CLI 和运行时共用一份 MCP 客户端能力目录。Codex、Cursor、VS Code 和 Claude Code 支持一键写入与按客户端复制 MCP 配置；Google Antigravity 支持复制 HTTP 配置；其他客户端保留 Cursor `mcpServers` 风格的通用 stdio 或 HTTP 配置。产品面向个人开发者，不提供仅面向企业许可证或付费 API Key 用户的 Gemini CLI 快捷入口。所有片段都是具体客户端约定，不宣称为 MCP 协议统一配置格式。
 - 当前决策：MCP 使用“文档库”表示一个网站知识库，使用“文件”表示单个 Markdown 页面；提供本地文档库的添加、批量同步、同步状态、分页列表、目录、批量读取、关键词搜索和删除，以及云端公开目录查询和快照拉取，共十个工具。
 - 当前决策：Agent 先查询本地文档库；本地缺失时只读查询云端公开目录，用户确认后才拉取匹配快照；没有云端匹配或用户不选择拉取时，再确认官方来源并由用户授权首次抓取。云端查询不修改状态，云端拉取、首次抓取和主动同步都需要用户确认。
 - 当前决策：0 页本地库和云端候选不视为可用文档；空本地库可在授权后重试同步，云端无可用候选、查询或拉取失败、拉取后仍无文件时，再单独确认官方入口并创建本地抓取库。云端同域副本不阻止这个本地回退；已有本地内容在云端不可访问时继续可用并提示新鲜度。
-- 当前决策：Codex 用户可以通过全局 `AGENTS.md` 获得可独立执行的 Loci MCP 使用规范；该规范不依赖、不安装也不绑定 Skill。已安装的 Skill 仍可由 Codex 根据用户显式调用或任务匹配加载，但加载不代表其中的文档查询可以立即执行；除非用户明确指定来源，文档来源顺序统一由 `AGENTS.md` 编排。Loci 不修改、删除或覆盖用户安装的第三方 Skill。
-- 当前决策：Codex 接入文档提供两份可复制模板。已有 Context7 时，用户用组合模板替换原有的强制 Context7 规则，按 Loci 本地库、Loci 云端发现与获取、Context7 兜底的顺序执行；没有 Context7 时使用只依赖 Loci MCP 的模板。
+- 当前决策：桌面端和 CLI 可以配置 Agent 的用户级全局规则。Codex 写入 `~/.codex/AGENTS.md`，并优先更新已存在的 `AGENTS.override.md`；VS Code 写入 `~/.copilot/instructions/loci.instructions.md`；Claude Code 写入 `~/.claude/CLAUDE.md`；Google Antigravity 写入 `~/.gemini/GEMINI.md`。Cursor 没有官方稳定的用户级文件路径，因此只提供可复制规则，并引导用户粘贴到 `Customize → Rules → User Rules`；项目根目录和子目录仍可使用 `AGENTS.md`。
+- 当前决策：全局规则统一使用 `<!-- loci:start -->` 和 `<!-- loci:end -->` 管理区块。重复配置只替换该区块，保留用户其他内容；标记残缺、重复或顺序错误时拒绝写入。文件更新采用原子替换和客户端级跨进程锁，同一客户端的并发调用幂等复用，不同客户端可以独立执行。
+- 当前决策：全局规则提供可独立执行的 Loci MCP 使用规范，不依赖、不安装也不绑定 Skill。除非用户明确指定来源，Agent 按 Loci 本地库、Loci 云端公开目录、用户确认后的官方文档抓取顺序执行；已安装的 Skill 只补充同一工作流。Loci 不修改、删除或覆盖用户安装的第三方 Skill。
 - 当前决策：Loci 已有文档能够回答时停止检索；本地或云端未命中本身不构成 Context7 兜底条件，Agent 必须先提供官方文档抓取选项。只有 Loci 不可用、无法确认官方入口且用户没有指定可用来源、用户拒绝官方抓取、已经提供官方抓取选项后所有已授权获取路径仍失败或没有文件，或者合理检索后证据仍不足时，组合模板才把未解决的概念交给 Context7；切换前说明具体原因。用户明确指定 Context7 时尊重当前请求。
 - 当前决策：添加与同步默认异步启动并返回状态；Agent 可以轮询，也可以显式等待完成并接收进度通知。部分页面失败必须作为结构化结果返回，不掩盖已成功内容。
 - 当前决策：目录使用稳定派生 ID 和渐进展开；文件使用数据库 ID。搜索返回最佳匹配段落、小节与来源，读取支持按小节和偏移量续读。
 - 当前决策：全部工具提供输出 Schema，并同时返回可读文本和结构化内容。
 - 为什么：渐进目录、定位搜索和按需读取可以控制上下文规模；异步任务避免长时间阻塞 Agent 调用。
 - 边界 / 非目标：MCP 不允许单独删除同步文件，只允许永久删除整个文档库；HTTP transport 的非本机 Host 或 Origin 不得访问。CLI stdio 不作为后台常驻服务。
-- 权威入口：[MCP 与数据管理](../apps/docs/docs/cli/commands/integrations.mdx)、[Codex 全局接入](../apps/docs/docs/agent/codex.mdx)、[Agent 使用 Skill](../.agents/skills/use-loci/SKILL.md)、[共享客户端目录](../packages/shared/src/mcp-clients.ts)。
+- 权威入口：[MCP 与数据管理](../apps/docs/docs/cli/commands/integrations.mdx)、[Agent 全局规则](../apps/docs/docs/agent/global-rules.mdx)、[Codex 全局接入](../apps/docs/docs/agent/codex.mdx)、[Agent 使用 Skill](../.agents/skills/use-loci/SKILL.md)、[共享客户端目录](../packages/shared/src/mcp-clients.ts)。
 
 ## 设置与本地数据
 

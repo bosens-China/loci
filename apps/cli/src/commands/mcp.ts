@@ -5,6 +5,7 @@ import {
   createAgentImportCommand,
   createHttpMcpConnection,
   importAgentClient,
+  installAgentGlobalRules,
   createLociMcpServer,
   LOCI_CLI_STDIO_CONNECTION,
   readRuntimeLock,
@@ -14,13 +15,17 @@ import {
 } from '@loci/runtime'
 import {
   GENERIC_MCP_CONFIG_TARGET,
+  LOCI_AGENT_INSTRUCTIONS,
   createMcpClientConfig,
   getMcpClientDefinition,
   isAgentClient,
+  isAgentGlobalRulesClient,
   isMcpClient,
   listImportableAgentClients,
+  listMcpClients,
   supportsMcpTransport,
   type AgentClient,
+  type McpClient,
   type McpConfigTarget,
   type McpTransport
 } from '@loci/shared'
@@ -41,6 +46,10 @@ const clients: ReadonlyArray<{ value: AgentSelection; label: string }> = [
   ...agentClients,
   { value: 'manual', label: '其他客户端（复制通用配置）' }
 ]
+
+const globalRulesClients: ReadonlyArray<{ value: McpClient; label: string }> = listMcpClients().map(
+  (client) => ({ value: client.id, label: client.label })
+)
 
 export function registerMcpCommands(program: Command): void {
   const mcp = program.command('mcp').description('管理唯一的 Loci MCP 服务')
@@ -180,6 +189,47 @@ export function registerMcpCommands(program: Command): void {
         })
       }
     )
+
+  mcp
+    .command('rules [client]')
+    .description('写入 Loci 全局规则；Cursor 输出可复制内容')
+    .option('--yes', '跳过写入前确认')
+    .action(async (client: string | undefined, options: { yes?: boolean }) => {
+      const selected =
+        client ??
+        (process.stdin.isTTY
+          ? await askSelect<McpClient>('请选择 Agent 客户端', globalRulesClients, 'codex')
+          : undefined)
+      if (!selected) throw new CliError('非交互终端必须指定 Agent 客户端', 2)
+      if (!isMcpClient(selected)) throw new CliError(`不支持的 Agent 客户端：${selected}`, 2)
+
+      const definition = getMcpClientDefinition(selected)
+      if (!isAgentGlobalRulesClient(selected)) {
+        process.stderr.write(`请将下面的规则复制到 ${definition.globalRulesPath}。\n`)
+        process.stdout.write(`${LOCI_AGENT_INSTRUCTIONS}\n`)
+        return
+      }
+
+      if (process.stdin.isTTY && !options.yes) {
+        note(
+          [
+            `客户端：${definition.label}`,
+            `目标：${definition.globalRulesPath}`,
+            '仅替换 Loci 受管区块'
+          ].join('\n'),
+          '全局规则写入预览'
+        )
+        if (!(await askConfirm('确认写入这个客户端的用户级全局规则吗？', true))) return
+      }
+      await runWithRuntime(
+        '配置 Agent 全局规则',
+        async (runtime) =>
+          installAgentGlobalRules(selected, {
+            dataDir: runtime.dataDir,
+            owner: 'CLI Agent 全局规则写入'
+          }).message
+      )
+    })
 }
 
 function formatCommand(command: string, args: readonly string[]): string {

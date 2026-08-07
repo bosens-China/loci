@@ -29,6 +29,8 @@ loci mcp status
 
 交互终端会在写入前展示目标客户端、传输方式和配置命令。可信的自动化环境可以使用 `--yes` 跳过确认。
 
+MCP 配置只负责连接工具。需要让 Agent 在所有项目中优先使用 Loci 时，还应[配置客户端全局规则](/agent/global-rules)。
+
 Google Antigravity 需要复制 HTTP 配置：
 
 ```bash
@@ -116,5 +118,6 @@ loci doctor
 | `loci mcp status`             | 显示传输方式、HTTP 地址和当前宿主。 |
 | `loci mcp config [client]`    | 打印客户端配置，不修改文件。        |
 | `loci mcp configure [client]` | 确认后写入支持的客户端配置。        |
+| `loci mcp rules [client]`     | 写入全局规则；Cursor 输出复制内容。 |
 
 需要让 AI 遵循固定检索流程时，继续阅读[使用 Loci Skill](/agent/skill)。CLI 数据导入、导出和清理命令请查看[数据备份与运行环境](/cli/commands/integrations)。

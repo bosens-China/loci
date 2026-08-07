@@ -12,6 +12,7 @@ import {
   createMcpRuntime,
   databaseNeedsMigration,
   importAgentClient,
+  installAgentGlobalRules,
   readRuntimeLock,
   resolveLociDataDir,
   createHttpMcpConnection,
@@ -156,6 +157,12 @@ if (isPrimaryInstance)
       const connection = createHttpMcpConnection(requireMcpRuntime().getState().mcp.endpoint)
       return importAgentClient(client, connection)
     })
+    ipcMain.handle('agents:global-rules:install', (_event, client: unknown) =>
+      installAgentGlobalRules(client, {
+        dataDir,
+        owner: '桌面端 Agent 全局规则写入'
+      })
+    )
     ipcMain.handle('data:export', () =>
       exportBackupFile(mainWindow, requireDatabase().exportBackup())
     )
