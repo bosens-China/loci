@@ -23,7 +23,7 @@ export default defineConfig({
     nav: [
       { text: '桌面应用', link: '/desktop/getting-started' },
       { text: 'CLI', link: '/cli/getting-started' },
-      { text: '收录规则', link: '/guide/crawling' },
+      { text: '文档收录', link: '/guide/crawling' },
       { text: 'AI 接入', link: '/agent/overview' }
     ],
     sidebar: {
@@ -66,8 +66,12 @@ export default defineConfig({
           items: [
             { text: '接入方式概览', link: '/agent/overview' },
             { text: '配置 MCP', link: '/agent/mcp' },
+            { text: '配置全局规则', link: '/agent/global-rules' },
             { text: '使用 Loci Skill', link: '/agent/skill' },
-            { text: '配置 Codex AGENTS.md', link: '/agent/codex' }
+            {
+              text: '客户端配置',
+              items: [{ text: 'Codex 规则详解', link: '/agent/codex' }]
+            }
           ]
         }
       ]
