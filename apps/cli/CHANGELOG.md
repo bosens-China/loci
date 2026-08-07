@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/bosens-China/loci/compare/cli-v1.9.0...cli-v1.9.1) (2026-08-07)
+
+
+### Bug Fixes
+
+* 修复 CLI 发布产物依赖打包 ([ffbc083](https://github.com/bosens-China/loci/commit/ffbc083033ce9965a5f2d26815c2fc9c82bbae28))
+
 ## [1.9.0](https://github.com/bosens-China/loci/compare/cli-v1.8.1...cli-v1.9.0) (2026-08-07)
 
 
