@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.6.0](https://github.com/bosens-China/loci/compare/server-v1.5.1...server-v1.6.0) (2026-08-07)
+
+
+### Features
+
+* 扩展文档抓取与同步安全 ([5c8e83e](https://github.com/bosens-China/loci/commit/5c8e83e6fe6cd50306cac4f0218a0f884aa5ed4a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.9.0
+
 ## [1.5.1](https://github.com/bosens-China/loci/compare/server-v1.5.0...server-v1.5.1) (2026-08-06)
 
 
