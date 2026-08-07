@@ -184,7 +184,10 @@ if (isPrimaryInstance)
 
     if (scheduleRuntimeLock) restoreScheduledCrawls(requireDatabase().listSources())
     createWindow(!shouldStartHidden())
-    if (app.isPackaged) void requireAppUpdater().check(false)
+    if (app.isPackaged)
+      void requireAppUpdater()
+        .check(false)
+        .catch((error) => console.warn('后台检查应用更新失败', error))
     mainWindow?.on('focus', () => mainWindow?.webContents.send('database:external-change'))
 
     app.on('activate', function () {

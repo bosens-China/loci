@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { app, shell } from 'electron'
 import { isNewerVersion } from '@loci/shared'
 import type { DesktopUpdateState } from '@loci/shared'
+import type { AppUpdater as ElectronAutoUpdater, ProgressInfo, UpdateInfo } from 'electron-updater'
 
 export { isNewerVersion } from '@loci/shared'
 
@@ -29,11 +30,27 @@ export interface AppUpdater {
   openRelease: () => Promise<void>
 }
 
-/** 桌面端仅检查并跳转下载，不接管各平台的安装流程。 */
-export function createAppUpdater(): AppUpdater {
-  const currentVersion = app.getVersion()
-  const path = join(app.getPath('userData'), CACHE_FILE)
+interface AppUpdaterOptions {
+  platform?: NodeJS.Platform
+  currentVersion?: string
+  cachePath?: string
+  fetcher?: typeof fetch
+  loadAutoUpdater?: () => Promise<ElectronAutoUpdater>
+}
+
+/** Windows/Linux 自动下载并在退出时安装；macOS 保持手动安装。 */
+export function createAppUpdater(options: AppUpdaterOptions = {}): AppUpdater {
+  const platform = options.platform ?? process.platform
+  const currentVersion = options.currentVersion ?? app.getVersion()
+  const path = options.cachePath ?? join(app.getPath('userData'), CACHE_FILE)
+  const fetcher = options.fetcher ?? fetch
+  const autoUpdateSupported = platform === 'win32' || platform === 'linux'
   let cache = readCache(path)
+  let status: DesktopUpdateState['status'] = 'idle'
+  let downloadProgress: number | null = null
+  let error: string | null = null
+  let checking: Promise<DesktopUpdateState> | undefined
+  let automaticUpdater: Promise<ElectronAutoUpdater> | undefined
 
   const getState = (): DesktopUpdateState => ({
     currentVersion,
@@ -42,23 +59,101 @@ export function createAppUpdater(): AppUpdater {
       cache.latestVersion && isNewerVersion(cache.latestVersion, currentVersion)
     ),
     checkedAt: cache.checkedAt ?? null,
+    autoUpdateSupported,
+    status,
+    downloadProgress,
+    error,
     manualInstallHint:
-      process.platform === 'darwin'
+      platform === 'darwin'
         ? 'macOS 版本需要手动下载 DMG；未签名应用首次打开可能需要在“隐私与安全性”中点击“仍要打开”。'
         : null
   })
 
-  return {
-    getState,
-    check: async (force = true): Promise<DesktopUpdateState> => {
-      if (!force && cache.checkedOn === today()) return getState()
-      cache = { ...cache, checkedOn: today() }
-      writeCache(path, cache)
+  const getAutomaticUpdater = (): Promise<ElectronAutoUpdater> => {
+    automaticUpdater ??= (
+      options.loadAutoUpdater?.() ?? import('electron-updater').then((it) => it.autoUpdater)
+    ).then((updater) => {
+      updater.allowPrerelease = false
+      updater.autoDownload = true
+      updater.autoInstallOnAppQuit = true
+      updater.on('checking-for-update', () => {
+        status = 'checking'
+        error = null
+      })
+      updater.on('update-available', (info: UpdateInfo) => {
+        saveLatestVersion(info.version)
+        status = 'downloading'
+      })
+      updater.on('update-not-available', (info: UpdateInfo) => {
+        saveLatestVersion(info.version)
+        status = 'idle'
+        downloadProgress = null
+      })
+      updater.on('download-progress', (progress: ProgressInfo) => {
+        status = 'downloading'
+        downloadProgress = Math.round(progress.percent)
+      })
+      updater.on('update-downloaded', (info: UpdateInfo) => {
+        saveLatestVersion(info.version)
+        status = 'ready'
+        downloadProgress = 100
+      })
+      updater.on('error', (reason: Error) => {
+        status = 'error'
+        error = reason.message
+      })
+      return updater
+    })
+    return automaticUpdater
+  }
 
-      const latestVersion = await fetchLatestDesktopVersion()
+  const saveLatestVersion = (latestVersion: string): void => {
+    cache = { ...cache, latestVersion }
+    writeCache(path, cache)
+  }
+
+  const runCheck = async (): Promise<DesktopUpdateState> => {
+    cache = { ...cache, checkedOn: today() }
+    writeCache(path, cache)
+    status = 'checking'
+    error = null
+
+    try {
+      const latestVersion = await fetchLatestDesktopVersion(fetcher)
       cache = { ...cache, checkedAt: new Date().toISOString(), latestVersion }
       writeCache(path, cache)
+
+      if (autoUpdateSupported && isNewerVersion(latestVersion, currentVersion)) {
+        const updater = await getAutomaticUpdater()
+        updater.setFeedURL({
+          provider: 'generic',
+          url: `${RELEASES_URL}/download/loci-v${latestVersion}`
+        })
+        await updater.checkForUpdatesAndNotify({
+          title: 'Loci 更新已下载',
+          body: 'Loci {version} 已下载，将在退出应用后自动安装。'
+        })
+      } else {
+        status = 'idle'
+      }
       return getState()
+    } catch (reason) {
+      status = 'error'
+      error = reason instanceof Error ? reason.message : '检查更新失败'
+      throw reason
+    }
+  }
+
+  return {
+    getState,
+    check: (force = true): Promise<DesktopUpdateState> => {
+      if (checking) return checking
+      if (status === 'downloading' || status === 'ready') return Promise.resolve(getState())
+      if (!force && cache.checkedOn === today()) return Promise.resolve(getState())
+      checking = runCheck().finally(() => {
+        checking = undefined
+      })
+      return checking
     },
     openRelease: () =>
       shell.openExternal(

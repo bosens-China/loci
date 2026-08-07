@@ -37,6 +37,10 @@ export interface DesktopUpdateState {
   latestVersion: string | null
   updateAvailable: boolean
   checkedAt: string | null
+  autoUpdateSupported: boolean
+  status: 'idle' | 'checking' | 'downloading' | 'ready' | 'error'
+  downloadProgress: number | null
+  error: string | null
   manualInstallHint: string | null
 }
 

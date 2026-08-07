@@ -49,7 +49,10 @@ jobs:
         include:
           - os: windows-latest
             target: win
-            artifacts: apps/desktop/dist/*.exe
+            artifacts: |
+              apps/desktop/dist/*.exe
+              apps/desktop/dist/*.blockmap
+              apps/desktop/dist/latest.yml
             cache_path: |
               ~/AppData/Local/electron
               ~/AppData/Local/electron-builder
@@ -61,7 +64,10 @@ jobs:
               ~/Library/Caches/electron-builder
           - os: ubuntu-latest
             target: linux
-            artifacts: apps/desktop/dist/*.AppImage
+            artifacts: |
+              apps/desktop/dist/*.AppImage
+              apps/desktop/dist/*.blockmap
+              apps/desktop/dist/latest-linux.yml
             cache_path: |
               ~/.cache/electron
               ~/.cache/electron-builder

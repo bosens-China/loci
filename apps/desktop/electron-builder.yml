@@ -14,6 +14,10 @@ asarUnpack:
 win:
   icon: resources/icon.svg
   executableName: loci
+  publish:
+    provider: github
+    owner: bosens-China
+    repo: loci
   target:
     - target: nsis
       arch: x64
@@ -36,6 +40,10 @@ dmg:
 linux:
   icon: resources/icon.svg
   executableName: loci
+  publish:
+    provider: github
+    owner: bosens-China
+    repo: loci
   syncDesktopName: true
   artifactName: loci-${version}.${ext}
   target:

@@ -15,12 +15,26 @@ export function AboutSettingsCard(): React.JSX.Element {
     void window.api.getDesktopUpdate().then(setUpdate)
   }, [])
 
+  useEffect(() => {
+    if (update?.status !== 'checking' && update?.status !== 'downloading') return
+    const timer = window.setInterval(() => void window.api.getDesktopUpdate().then(setUpdate), 1000)
+    return () => window.clearInterval(timer)
+  }, [update?.status])
+
   const checkUpdate = async (): Promise<void> => {
     setChecking(true)
     try {
       const next = await window.api.checkDesktopUpdate()
       setUpdate(next)
-      messageApi.success(next.updateAvailable ? '发现可用更新' : 'Loci 已是最新版本')
+      messageApi.success(
+        next.updateAvailable && next.autoUpdateSupported
+          ? next.status === 'ready'
+            ? '更新已下载，将在退出后自动安装'
+            : '发现更新，已开始后台下载'
+          : next.updateAvailable
+            ? '发现可用更新'
+            : 'Loci 已是最新版本'
+      )
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : '检查更新失败')
     } finally {
@@ -53,9 +67,19 @@ export function AboutSettingsCard(): React.JSX.Element {
                 当前 v{update?.currentVersion ?? '—'}
               </Tag>
             </Space>
-            {update?.updateAvailable ? (
+            {update?.status === 'error' ? (
+              <Typography.Paragraph className="mb-0! mt-2! text-xs" type="danger">
+                自动更新失败：{update.error ?? '未知错误'}
+              </Typography.Paragraph>
+            ) : update?.updateAvailable ? (
               <Typography.Paragraph className="mb-0! mt-2! text-xs" type="warning">
-                已发布 v{update.latestVersion}，请下载新版本手动安装。
+                {update.autoUpdateSupported
+                  ? update.status === 'ready'
+                    ? `v${update.latestVersion} 已下载，将在退出应用后自动安装。`
+                    : update.status === 'downloading'
+                      ? `正在后台下载 v${update.latestVersion}${update.downloadProgress === null ? '' : `（${update.downloadProgress}%）`}。`
+                      : `已发布 v${update.latestVersion}，将在后台自动下载。`
+                  : `已发布 v${update.latestVersion}，请下载新版本手动安装。`}
               </Typography.Paragraph>
             ) : (
               <Typography.Paragraph className="mb-0! mt-2! text-xs" type="secondary">
@@ -67,15 +91,16 @@ export function AboutSettingsCard(): React.JSX.Element {
             <Button icon={<ReloadOutlined />} loading={checking} onClick={() => void checkUpdate()}>
               检查更新
             </Button>
-            {update?.updateAvailable && (
-              <Button
-                type="primary"
-                icon={<DownloadOutlined />}
-                onClick={() => void window.api.openDesktopRelease()}
-              >
-                前往下载
-              </Button>
-            )}
+            {update?.updateAvailable &&
+              (!update.autoUpdateSupported || update.status === 'error') && (
+                <Button
+                  type="primary"
+                  icon={<DownloadOutlined />}
+                  onClick={() => void window.api.openDesktopRelease()}
+                >
+                  前往下载
+                </Button>
+              )}
           </Space>
           {update?.updateAvailable && update.manualInstallHint && (
             <Typography.Text type="secondary" className="w-full text-xs">
