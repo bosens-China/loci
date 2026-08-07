@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.11.0](https://github.com/bosens-China/loci/compare/loci-v1.10.0...loci-v1.11.0) (2026-08-07)
+
+
+### Features
+
+* 支持桌面端自动更新 ([8297f06](https://github.com/bosens-China/loci/commit/8297f066dc5c1eeabc07a15f954a40b314449022))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/runtime bumped to 1.7.0
+    * @loci/shared bumped to 1.13.0
+
 ## [1.10.0](https://github.com/bosens-China/loci/compare/loci-v1.9.0...loci-v1.10.0) (2026-08-07)
 
 
