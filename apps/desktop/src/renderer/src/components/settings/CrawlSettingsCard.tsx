@@ -1,7 +1,7 @@
 import { DashboardOutlined } from '@ant-design/icons'
 import { Button, Card, Form, InputNumber, Space, Typography } from 'antd'
 import { useEffect } from 'react'
-import { DOCUMENT_SOURCE_LIMITS } from '@loci/core'
+import { DOCUMENT_SOURCE_LIMITS } from '@loci/core/source-policy'
 
 interface CrawlSettingsCardProps {
   httpConcurrency: number

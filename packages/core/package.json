@@ -17,6 +17,10 @@
     "./schedule": {
       "types": "./src/schedule.ts",
       "default": "./src/schedule.ts"
+    },
+    "./source-policy": {
+      "types": "./src/source-policy.ts",
+      "default": "./src/source-policy.ts"
     }
   },
   "scripts": {

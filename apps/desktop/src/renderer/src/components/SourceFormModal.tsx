@@ -1,7 +1,7 @@
 import { LinkOutlined } from '@ant-design/icons'
 import { Form, Input, InputNumber, Modal, Select, Tabs } from 'antd'
 import type { FormInstance } from 'antd'
-import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
+import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core/source-policy'
 import type { DocumentSource } from '../types'
 import type { SourceFormValues } from './sourceScheduleForm'
 import SourceScheduleFields from './SourceScheduleFields'

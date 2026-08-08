@@ -1,7 +1,7 @@
 import { ClockCircleOutlined, LinkOutlined } from '@ant-design/icons'
 import { AutoComplete, Form, Input, InputNumber, Modal } from 'antd'
 import { useEffect } from 'react'
-import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
+import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core/source-policy'
 import type { CloudLibrary, CloudLibraryInput } from '@loci/shared'
 import { SCHEDULE_PRESETS, getSourceScopeOptions, normalizeCronSchedule } from '@loci/shared'
 import { SourceScopeSelector } from './SourceScopeSelector'
