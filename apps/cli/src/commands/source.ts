@@ -1,11 +1,15 @@
 import { Option, type Command } from 'commander'
 import { deriveSourceName, formatBytes, type DocumentSource, type FetchMode } from '@loci/shared'
-import { parseGithubRepositoryUrl } from '@loci/core'
+import {
+  DOCUMENT_SOURCE_DEFAULTS,
+  DOCUMENT_SOURCE_LIMITS,
+  parseGithubRepositoryUrl
+} from '@loci/core'
 import type { BrowserInstallPrompt } from '../browser.js'
 import { startBackgroundSourceSync } from '../background-sync.js'
 import { runWithRuntime, type CommandResult } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
-import { validatePublicUrl } from '../input.js'
+import { validatePublicUrl, validateSourceName } from '../input.js'
 import { resolveSource } from '../resources.js'
 import {
   readSourceCreatePreference,
@@ -80,10 +84,18 @@ export function registerSourceCommands(program: Command): void {
     .option('--name <name>', '文档源名称，默认根据域名生成')
     .option('--url <url>', '第一个公开文档页面 URL')
     .addOption(
-      new Option('--mode <mode>', '抓取方式，默认 auto').choices(['auto', 'http', 'browser'])
+      new Option('--mode <mode>', `抓取方式，默认 ${DOCUMENT_SOURCE_DEFAULTS.mode}`).choices([
+        'auto',
+        'http',
+        'browser'
+      ])
     )
-    .option('--page-limit <number>', '页面上限，默认 1000', numberValue)
-    .option('--scope <path>', '收录路径，默认 /')
+    .option(
+      '--page-limit <number>',
+      `页面上限，默认 ${DOCUMENT_SOURCE_DEFAULTS.pageLimit}`,
+      numberValue
+    )
+    .option('--scope <path>', `收录路径，默认 ${DOCUMENT_SOURCE_DEFAULTS.scopePath}`)
     .option('--http-concurrency <number>', 'HTTP 并发覆盖值，默认继承共享设置', numberValue)
     .option('--browser-concurrency <number>', '浏览器并发覆盖值，默认继承共享设置', numberValue)
     .option('--archive-limit <size>', 'GitHub ZIP 上限，例如 200mb', sizeMbValue)
@@ -97,7 +109,12 @@ export function registerSourceCommands(program: Command): void {
         }
         const preference = process.stdin.isTTY
           ? readSourceCreatePreference(runtime.database)
-          : { mode: 'auto' as const, pageLimit: 1000, scopeDepth: 0, syncAfterCreate: true }
+          : {
+              mode: DOCUMENT_SOURCE_DEFAULTS.mode,
+              pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
+              scopeDepth: 0,
+              syncAfterCreate: true
+            }
         const guided = process.stdin.isTTY && !urlArgument && !options.url
         const url =
           options.url ??
@@ -113,12 +130,13 @@ export function registerSourceCommands(program: Command): void {
             options.name ??
             (guided
               ? await askText('文档源名称', {
-                  initialValue: repository?.repo || deriveSourceName(url) || hostname
+                  initialValue: repository?.repo || deriveSourceName(url) || hostname,
+                  validate: validateSourceName
                 })
               : repository?.repo || deriveSourceName(url) || hostname),
           url,
           mode: repository
-            ? 'auto'
+            ? DOCUMENT_SOURCE_DEFAULTS.mode
             : (options.mode ??
               (guided ? await askMode('抓取方式', preference.mode) : preference.mode)),
           pageLimit:
@@ -126,21 +144,24 @@ export function registerSourceCommands(program: Command): void {
             (guided
               ? await askInteger('页面上限', {
                   initialValue: preference.pageLimit,
-                  minimum: 1,
-                  maximum: 10_000
+                  minimum: DOCUMENT_SOURCE_LIMITS.pageLimit.min,
+                  maximum: DOCUMENT_SOURCE_LIMITS.pageLimit.max
                 })
               : preference.pageLimit),
           scopePath: repository
-            ? '/'
+            ? DOCUMENT_SOURCE_DEFAULTS.scopePath
             : (options.scope ??
               (guided
                 ? await askScope(url, scopeAtDepth(url, preference.scopeDepth))
                 : scopeAtDepth(url, preference.scopeDepth))),
-          schedule: null,
-          httpConcurrency: options.httpConcurrency ?? null,
-          browserConcurrency: options.browserConcurrency ?? null,
-          githubArchiveLimitMb: options.archiveLimit ?? null,
-          githubMarkdownLimitMb: options.markdownLimit ?? null
+          schedule: DOCUMENT_SOURCE_DEFAULTS.schedule,
+          httpConcurrency: options.httpConcurrency ?? DOCUMENT_SOURCE_DEFAULTS.httpConcurrency,
+          browserConcurrency:
+            options.browserConcurrency ?? DOCUMENT_SOURCE_DEFAULTS.browserConcurrency,
+          githubArchiveLimitMb:
+            options.archiveLimit ?? DOCUMENT_SOURCE_DEFAULTS.githubArchiveLimitMb,
+          githubMarkdownLimitMb:
+            options.markdownLimit ?? DOCUMENT_SOURCE_DEFAULTS.githubMarkdownLimitMb
         }
         let syncAfterSave = options.sync !== false
         if (guided) {
@@ -204,21 +225,26 @@ export function registerSourceCommands(program: Command): void {
           url,
           name:
             options.name ??
-            (editAll ? await askText('文档源名称', { initialValue: current.name }) : current.name),
+            (editAll
+              ? await askText('文档源名称', {
+                  initialValue: current.name,
+                  validate: validateSourceName
+                })
+              : current.name),
           mode: parseGithubRepositoryUrl(url)
-            ? 'auto'
+            ? DOCUMENT_SOURCE_DEFAULTS.mode
             : (options.mode ?? (editAll ? await askMode('抓取方式', current.mode) : current.mode)),
           pageLimit:
             options.pageLimit ??
             (editAll
               ? await askInteger('页面上限', {
                   initialValue: current.pageLimit,
-                  minimum: 1,
-                  maximum: 10_000
+                  minimum: DOCUMENT_SOURCE_LIMITS.pageLimit.min,
+                  maximum: DOCUMENT_SOURCE_LIMITS.pageLimit.max
                 })
               : current.pageLimit),
           scopePath: parseGithubRepositoryUrl(url)
-            ? '/'
+            ? DOCUMENT_SOURCE_DEFAULTS.scopePath
             : (options.scope ??
               (editAll ? await askScope(url, current.scopePath) : current.scopePath)),
           httpConcurrency: options.httpConcurrency ?? current.httpConcurrency,

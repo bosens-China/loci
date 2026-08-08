@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import {
   getSourceScopeOptions,
   normalizeServerUrl,
@@ -9,13 +10,21 @@ import type { LociDatabase } from '@loci/runtime'
 
 const sourceCreateSchema = z.object({
   mode: z.enum(['auto', 'http', 'browser']),
-  pageLimit: z.number().int().min(1).max(10_000),
+  pageLimit: z
+    .number()
+    .int()
+    .min(DOCUMENT_SOURCE_LIMITS.pageLimit.min)
+    .max(DOCUMENT_SOURCE_LIMITS.pageLimit.max),
   scopeDepth: z.number().int().nonnegative(),
   syncAfterCreate: z.boolean()
 })
 
 const adminCreateSchema = z.object({
-  pageLimit: z.number().int().min(1).max(10_000),
+  pageLimit: z
+    .number()
+    .int()
+    .min(DOCUMENT_SOURCE_LIMITS.pageLimit.min)
+    .max(DOCUMENT_SOURCE_LIMITS.pageLimit.max),
   scopeDepth: z.number().int().nonnegative(),
   schedule: z.string().nullable()
 })
@@ -47,8 +56,8 @@ const CLI_SCOPE = 'cli'
 
 export function readSourceCreatePreference(database: LociDatabase): SourceCreatePreference {
   return readPreference(database, CLI_SCOPE, 'source-create', sourceCreateSchema, {
-    mode: 'auto',
-    pageLimit: 1000,
+    mode: DOCUMENT_SOURCE_DEFAULTS.mode,
+    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
     scopeDepth: 0,
     syncAfterCreate: true
   })
@@ -66,7 +75,7 @@ export function readAdminCreatePreference(
   serverUrl: string
 ): AdminCreatePreference {
   return readPreference(database, adminScope(serverUrl), 'create', adminCreateSchema, {
-    pageLimit: 1000,
+    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
     scopeDepth: 0,
     schedule: null
   })

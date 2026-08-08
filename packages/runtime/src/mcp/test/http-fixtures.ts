@@ -1,6 +1,7 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import type {
   CloudCatalogItem,
+  CrawlFailure,
   CrawlProgress,
   CrawlRunState,
   DocumentRecord,
@@ -52,6 +53,18 @@ export const completedProgress: CrawlProgress = {
   limitReached: false
 }
 
+export const runId = 'run-vue-1'
+
+export const crawlFailures: CrawlFailure[] = [
+  {
+    url: 'https://cn.vuejs.org/missing.md',
+    reason: 'not_found',
+    message: 'HTTP 404',
+    retryable: false,
+    statusCode: 404
+  }
+]
+
 export const cloudLibrary: CloudCatalogItem = {
   id: 'cloud-vue',
   name: 'Vue 云端文档',
@@ -81,6 +94,9 @@ export function createServices(): LociMcpServices {
     deleteSource: () => undefined,
     isCrawling: () => false,
     getCrawlState: () => ({ ...runningState(), progress: completedProgress, running: false }),
+    getLatestCrawlRunId: () => runId,
+    getCrawlRunLibraryId: (id) => (id === runId ? source.id : undefined),
+    listCrawlFailures: (id) => (id === runId ? crawlFailures : []),
     listCloudLibraries: async () => [cloudLibrary],
     pullCloudLibrary: async () => ({ source, updated: true, documents: source.pages })
   }

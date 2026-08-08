@@ -1,6 +1,7 @@
 import { LinkOutlined } from '@ant-design/icons'
 import { Form, Input, InputNumber, Modal, Select, Tabs } from 'antd'
 import type { FormInstance } from 'antd'
+import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import type { DocumentSource } from '../types'
 import type { SourceFormValues } from './sourceScheduleForm'
 import SourceScheduleFields from './SourceScheduleFields'
@@ -33,9 +34,11 @@ export function SourceFormModal({
     const currentName = form.getFieldValue('name')?.trim() ?? ''
     const values: Partial<SourceFormValues> = {}
     if (parseGithubRepositoryUrl(inputUrl)) {
-      values.scopePath = '/'
-      values.mode = 'auto'
-    } else if (!scopeOptions.some((option) => option.value === scopePath)) values.scopePath = '/'
+      values.scopePath = DOCUMENT_SOURCE_DEFAULTS.scopePath
+      values.mode = DOCUMENT_SOURCE_DEFAULTS.mode
+    } else if (!scopeOptions.some((option) => option.value === scopePath)) {
+      values.scopePath = DOCUMENT_SOURCE_DEFAULTS.scopePath
+    }
     if (!editingSource && (!currentName || !form.isFieldTouched('name'))) {
       values.name = parseGithubRepositoryUrl(inputUrl)?.repo ?? deriveSourceName(inputUrl)
     }
@@ -85,9 +88,18 @@ export function SourceFormModal({
                   <Form.Item
                     name="name"
                     label="文档源名称"
-                    rules={[{ required: true, message: '请输入文档源名称' }]}
+                    rules={[
+                      { required: true, message: '请输入文档源名称' },
+                      {
+                        max: DOCUMENT_SOURCE_LIMITS.nameLength.max,
+                        message: `最多 ${DOCUMENT_SOURCE_LIMITS.nameLength.max} 个字符`
+                      }
+                    ]}
                   >
-                    <Input placeholder="例如：rspress" />
+                    <Input
+                      maxLength={DOCUMENT_SOURCE_LIMITS.nameLength.max}
+                      placeholder="例如：rspress"
+                    />
                   </Form.Item>
                   {!repository && (
                     <Form.Item
@@ -110,8 +122,8 @@ export function SourceFormModal({
                     rules={[{ required: true, message: '请输入页面上限' }]}
                   >
                     <InputNumber
-                      min={1}
-                      max={10000}
+                      min={DOCUMENT_SOURCE_LIMITS.pageLimit.min}
+                      max={DOCUMENT_SOURCE_LIMITS.pageLimit.max}
                       className="w-full"
                       addonAfter={repository ? '个' : '页'}
                     />
@@ -136,11 +148,17 @@ export function SourceFormModal({
                         name="githubArchiveLimitMb"
                         label="ZIP 下载上限（选填）"
                         extra="留空时使用全局默认值"
-                        rules={[{ type: 'number', min: 1, max: 10240 }]}
+                        rules={[
+                          {
+                            type: 'number',
+                            min: DOCUMENT_SOURCE_LIMITS.githubSizeMb.min,
+                            max: DOCUMENT_SOURCE_LIMITS.githubSizeMb.max
+                          }
+                        ]}
                       >
                         <InputNumber
-                          min={1}
-                          max={10240}
+                          min={DOCUMENT_SOURCE_LIMITS.githubSizeMb.min}
+                          max={DOCUMENT_SOURCE_LIMITS.githubSizeMb.max}
                           className="w-full"
                           placeholder="全局默认"
                           addonAfter="MB"
@@ -150,11 +168,17 @@ export function SourceFormModal({
                         name="githubMarkdownLimitMb"
                         label="Markdown 总量上限（选填）"
                         extra="留空时使用全局默认值"
-                        rules={[{ type: 'number', min: 1, max: 10240 }]}
+                        rules={[
+                          {
+                            type: 'number',
+                            min: DOCUMENT_SOURCE_LIMITS.githubSizeMb.min,
+                            max: DOCUMENT_SOURCE_LIMITS.githubSizeMb.max
+                          }
+                        ]}
                       >
                         <InputNumber
-                          min={1}
-                          max={10240}
+                          min={DOCUMENT_SOURCE_LIMITS.githubSizeMb.min}
+                          max={DOCUMENT_SOURCE_LIMITS.githubSizeMb.max}
                           className="w-full"
                           placeholder="全局默认"
                           addonAfter="MB"
@@ -177,17 +201,41 @@ export function SourceFormModal({
                           name="httpConcurrency"
                           label="HTTP 并发抓取数（选填）"
                           extra="留空时使用全局 HTTP 默认值"
-                          rules={[{ type: 'number', min: 1, max: 32, message: '请输入 1-32' }]}
+                          rules={[
+                            {
+                              type: 'number',
+                              min: DOCUMENT_SOURCE_LIMITS.concurrency.min,
+                              max: DOCUMENT_SOURCE_LIMITS.concurrency.max,
+                              message: `请输入 ${DOCUMENT_SOURCE_LIMITS.concurrency.min}-${DOCUMENT_SOURCE_LIMITS.concurrency.max}`
+                            }
+                          ]}
                         >
-                          <InputNumber min={1} max={32} className="w-full" placeholder="全局默认" />
+                          <InputNumber
+                            min={DOCUMENT_SOURCE_LIMITS.concurrency.min}
+                            max={DOCUMENT_SOURCE_LIMITS.concurrency.max}
+                            className="w-full"
+                            placeholder="全局默认"
+                          />
                         </Form.Item>
                         <Form.Item
                           name="browserConcurrency"
                           label="浏览器并发抓取数（选填）"
                           extra="留空时使用全局浏览器默认值"
-                          rules={[{ type: 'number', min: 1, max: 32, message: '请输入 1-32' }]}
+                          rules={[
+                            {
+                              type: 'number',
+                              min: DOCUMENT_SOURCE_LIMITS.concurrency.min,
+                              max: DOCUMENT_SOURCE_LIMITS.concurrency.max,
+                              message: `请输入 ${DOCUMENT_SOURCE_LIMITS.concurrency.min}-${DOCUMENT_SOURCE_LIMITS.concurrency.max}`
+                            }
+                          ]}
                         >
-                          <InputNumber min={1} max={32} className="w-full" placeholder="全局默认" />
+                          <InputNumber
+                            min={DOCUMENT_SOURCE_LIMITS.concurrency.min}
+                            max={DOCUMENT_SOURCE_LIMITS.concurrency.max}
+                            className="w-full"
+                            placeholder="全局默认"
+                          />
                         </Form.Item>
                       </div>
                     </>

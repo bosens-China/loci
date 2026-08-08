@@ -27,7 +27,7 @@ export function findBestPassage(
   fallbackTitle: string,
   fileId: string
 ): SearchPassage {
-  const tokens = query.toLocaleLowerCase().trim().split(/\s+/u).filter(Boolean)
+  const tokens = toSearchTokens(query).map((token) => token.toLocaleLowerCase())
   const passages = splitSections(markdown, fallbackTitle).flatMap((section, sectionIndex) =>
     section.paragraphs.map((paragraph) => ({
       sectionId: createSectionId(fileId, sectionIndex),
@@ -127,3 +127,4 @@ function splitSections(markdown: string, fallbackTitle: string): MarkdownSection
   flush()
   return sections
 }
+import { toSearchTokens } from '../database-values.js'

@@ -1,4 +1,5 @@
 import type { Command } from 'commander'
+import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/core'
 import {
   deriveSourceName,
   normalizeCronSchedule,
@@ -40,8 +41,8 @@ export function registerAdminSubcommands(admin: Command, waitForSync: WaitForSyn
     .description('创建 Server 文档库')
     .requiredOption('--url <url>', '第一个公开文档页面 URL')
     .option('--name <name>', '文档源名称')
-    .option('--scope <path>', '收录范围', '/')
-    .option('--page-limit <number>', '页面上限', integerValue, 1000)
+    .option('--scope <path>', '收录范围', DOCUMENT_SOURCE_DEFAULTS.scopePath)
+    .option('--page-limit <number>', '页面上限', integerValue, DOCUMENT_SOURCE_DEFAULTS.pageLimit)
     .option('--schedule <cron>', '5 段 Cron 更新计划')
     .action((options: LibraryOptions) =>
       withAdmin('创建 Server 文档库', async (client) => {
@@ -149,8 +150,8 @@ function createInput(options: LibraryOptions): CloudLibraryInput {
   return {
     name: options.name ?? (deriveSourceName(url) || new URL(url).hostname),
     url,
-    scopePath: options.scope ?? '/',
-    pageLimit: options.pageLimit ?? 1000,
+    scopePath: options.scope ?? DOCUMENT_SOURCE_DEFAULTS.scopePath,
+    pageLimit: options.pageLimit ?? DOCUMENT_SOURCE_DEFAULTS.pageLimit,
     schedule: scheduleValue(options.schedule, null)
   }
 }

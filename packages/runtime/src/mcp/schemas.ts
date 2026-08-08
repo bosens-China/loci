@@ -10,18 +10,22 @@ export const librarySchema = z.object({
   name: z.string(),
   url: z.string(),
   mode: z.enum(['auto', 'http', 'browser']),
-  status: z.enum(['healthy', 'syncing', 'attention']),
+  availability: z.enum(['usable', 'empty']),
   pages: z.number().int(),
   content_size: z.number().int().nonnegative(),
   page_limit: z.number().int(),
+  scope_path: z.string(),
   last_updated: z.string(),
   schedule: z.string().nullable(),
   http_concurrency: z.number().int().nullable(),
   browser_concurrency: z.number().int().nullable(),
+  kind: z.enum(['web', 'github']),
+  github_archive_limit_mb: z.number().int().nullable(),
+  github_markdown_limit_mb: z.number().int().nullable(),
   icon_url: z.string().nullable()
 })
 
-const failureSchema = z.object({
+export const failureSchema = z.object({
   url: z.string(),
   reason: z.enum([
     'not_found',
@@ -42,7 +46,10 @@ export const progressSchema = z.object({
   succeeded: z.number().int(),
   failed: z.number().int(),
   limit_reached: z.boolean(),
-  failures: z.array(failureSchema).optional()
+  failures_total: z.number().int().nonnegative(),
+  failure_counts: z.record(z.string(), z.number().int().nonnegative()),
+  failures_sample: z.array(failureSchema).optional(),
+  has_more_failures: z.boolean()
 })
 
 const syncStatusSchema = z.enum([
@@ -56,8 +63,9 @@ const syncStatusSchema = z.enum([
 
 export const addLibraryOutputSchema = z.object({
   created: z.boolean(),
-  status: syncStatusSchema,
+  sync_status: syncStatusSchema,
   library: librarySchema,
+  run_id: z.string().optional(),
   file_count: z.number().int().optional(),
   progress: progressSchema.optional(),
   error: z.string().optional()
@@ -65,7 +73,8 @@ export const addLibraryOutputSchema = z.object({
 
 const syncItemSchema = z.object({
   library_id: z.string(),
-  status: syncStatusSchema,
+  sync_status: syncStatusSchema,
+  run_id: z.string().optional(),
   file_count: z.number().int().optional(),
   progress: progressSchema.optional(),
   error: z.string().optional()
@@ -73,6 +82,17 @@ const syncItemSchema = z.object({
 
 export const syncLibrariesOutputSchema = z.object({ items: z.array(syncItemSchema) })
 export const syncStatusOutputSchema = z.object({ items: z.array(syncItemSchema) })
+
+export const syncFailuresOutputSchema = z.object({
+  library_id: z.string(),
+  run_id: z.string(),
+  total_count: z.number().int(),
+  count: z.number().int(),
+  offset: z.number().int(),
+  items: z.array(failureSchema),
+  has_more: z.boolean(),
+  next_offset: z.number().int().optional()
+})
 
 export const listLibrariesOutputSchema = z.object({
   total_count: z.number().int(),
@@ -176,6 +196,8 @@ const searchHitSchema = z.object({
 
 const searchResultSchema = z.object({
   query: z.string(),
+  retrieval_mode: z.enum(['all_terms', 'any_terms', 'fuzzy']),
+  fallback_used: z.boolean(),
   total_count: z.number().int(),
   count: z.number().int(),
   offset: z.number().int(),

@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { GithubBlockedState } from '@loci/core'
-import { getHostname, normalizeUrl } from '@loci/core'
+import { getHostname, normalizeScopePath, normalizeUrl } from '@loci/core'
 import type { DocumentSource } from '@loci/shared'
 import { type SourceRow, toDocumentSource } from './database-values.js'
 
@@ -19,6 +19,10 @@ export interface SourceConfig {
   githubDefaultBranch: string | null
   githubRevision: string | null
   githubBlocked: GithubBlockedState | null
+}
+
+export function createWebSourceIdentity(hostname: string, scopePath: string): string {
+  return `${hostname.toLowerCase()}|${normalizeScopePath(scopePath)}`
 }
 
 interface SourceConfigRow {
@@ -101,7 +105,9 @@ export function assertLocalSourceIdentityAvailable(
         )
         .get(identity)
   if (duplicate) {
-    throw new Error(github ? '这个 GitHub 仓库已经存在于文档源中' : '这个域名已经存在于文档源中')
+    throw new Error(
+      github ? '这个 GitHub 仓库已经存在于文档源中' : '这个域名和收录范围已经存在于文档源中'
+    )
   }
 }
 
@@ -112,7 +118,7 @@ export function throwLocalHostnameConflict(error: unknown): never {
       error.message.includes('document_sources_local_identity') ||
       error.message.includes('UNIQUE constraint failed: document_sources.hostname'))
   ) {
-    throw new Error('这个域名已经存在于文档源中')
+    throw new Error('这个域名和收录范围已经存在于文档源中')
   }
   throw error
 }
@@ -142,7 +148,7 @@ export function updateResolvedSourceRecord(
     .prepare(
       `UPDATE document_sources
        SET first_url = ?, hostname = ?, fetch_mode = ?, icon_url = COALESCE(?, icon_url),
-           source_identity = CASE WHEN document_kind = 'web' THEN ? ELSE source_identity END,
+            source_identity = CASE WHEN document_kind = 'web' THEN ? || '|' || scope_path ELSE source_identity END,
            github_default_branch = COALESCE(?, github_default_branch),
            github_revision = COALESCE(?, github_revision),
            github_blocked_revision = CASE WHEN ? IS NULL THEN github_blocked_revision ELSE NULL END,

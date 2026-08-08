@@ -1,7 +1,12 @@
 import { Hono } from 'hono'
 import { bearerAuth } from 'hono/bearer-auth'
 import { HTTPException } from 'hono/http-exception'
-import { normalizeCronSchedule, normalizeScopePath } from '@loci/core'
+import {
+  DOCUMENT_SOURCE_DEFAULTS,
+  DOCUMENT_SOURCE_LIMITS,
+  normalizeCronSchedule,
+  normalizeScopePath
+} from '@loci/core'
 import { z } from 'zod'
 import { AdminAuth, readBearerToken } from './auth.js'
 import { ConflictError, NotFoundError, ServerDatabase } from './database.js'
@@ -14,10 +19,18 @@ const credentialsSchema = z.object({
 })
 
 const librarySchema = z.object({
-  name: z.string().trim().min(1).max(100),
+  name: z
+    .string()
+    .trim()
+    .min(DOCUMENT_SOURCE_LIMITS.nameLength.min)
+    .max(DOCUMENT_SOURCE_LIMITS.nameLength.max),
   url: z.string().url(),
-  scopePath: z.string().default('/'),
-  pageLimit: z.number().int().min(1).max(10_000),
+  scopePath: z.string().default(DOCUMENT_SOURCE_DEFAULTS.scopePath),
+  pageLimit: z
+    .number()
+    .int()
+    .min(DOCUMENT_SOURCE_LIMITS.pageLimit.min)
+    .max(DOCUMENT_SOURCE_LIMITS.pageLimit.max),
   schedule: z.string().nullable()
 })
 

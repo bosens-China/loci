@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import {
+  DOCUMENT_SOURCE_DEFAULTS,
   getHostname,
   isUrlInScope,
   normalizeScopePath,
@@ -50,6 +51,7 @@ import {
 import { LOCI_DATABASE_SCHEMA, LOCI_SCHEMA_VERSION } from './database-schema.js'
 import {
   assertLocalSourceIdentityAvailable,
+  createWebSourceIdentity,
   findLocalSourceId,
   readDocumentSource,
   readSourceConfig,
@@ -140,7 +142,7 @@ export function createDatabase(
     }
     database.exec(LOCI_DATABASE_SCHEMA)
     initializeCrawlHistoryDatabase(database)
-    migrateDatabase(database)
+    migrateDatabase(database, row.user_version)
     initializeSettings(database, options)
     database.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION}`)
   } catch (error) {
@@ -179,9 +181,12 @@ export function createDatabase(
       const repository = parseGithubRepositoryUrl(input.url)
       const url = repository?.url ?? normalizeUrl(input.url)
       const hostname = getHostname(url)
-      const scopePath = repository ? '/' : normalizeScopePath(input.scopePath ?? '/')
+      const mode = repository ? DOCUMENT_SOURCE_DEFAULTS.mode : input.mode
+      const scopePath = repository
+        ? DOCUMENT_SOURCE_DEFAULTS.scopePath
+        : normalizeScopePath(input.scopePath ?? DOCUMENT_SOURCE_DEFAULTS.scopePath)
       if (!isUrlInScope(url, hostname, scopePath)) throw new Error('起始页面不在收录范围内')
-      const identity = repository?.identity ?? hostname
+      const identity = repository?.identity ?? createWebSourceIdentity(hostname, scopePath)
       const existingId = findLocalSourceId(database, identity)
       if (existingId) return readDocumentSource(database, existingId)
       const now = new Date().toISOString()
@@ -200,7 +205,7 @@ export function createDatabase(
             input.name.trim(),
             url,
             hostname,
-            input.mode,
+            mode,
             input.pageLimit,
             scopePath,
             schedule,
@@ -225,11 +230,14 @@ export function createDatabase(
       const repository = parseGithubRepositoryUrl(input.url)
       const url = repository?.url ?? normalizeUrl(input.url)
       const hostname = getHostname(url)
-      const scopePath = repository ? '/' : normalizeScopePath(input.scopePath ?? '/')
+      const mode = repository ? DOCUMENT_SOURCE_DEFAULTS.mode : input.mode
+      const scopePath = repository
+        ? DOCUMENT_SOURCE_DEFAULTS.scopePath
+        : normalizeScopePath(input.scopePath ?? DOCUMENT_SOURCE_DEFAULTS.scopePath)
       if (!isUrlInScope(url, hostname, scopePath)) {
         throw new Error('起始页面不在收录范围内')
       }
-      const identity = repository?.identity ?? hostname
+      const identity = repository?.identity ?? createWebSourceIdentity(hostname, scopePath)
       const current = database
         .prepare(
           `SELECT first_url, page_limit, github_archive_limit_mb, github_markdown_limit_mb
@@ -270,7 +278,7 @@ export function createDatabase(
               input.name.trim(),
               url,
               hostname,
-              input.mode,
+              mode,
               input.pageLimit,
               scopePath,
               schedule,

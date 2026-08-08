@@ -2,21 +2,38 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { DEFAULT_APP_SETTINGS } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
-import { parseGithubRepositoryUrl } from '@loci/core'
+import { DOCUMENT_SOURCE_LIMITS, parseGithubRepositoryUrl } from '@loci/core'
+
+const pageLimitSchema = z
+  .number()
+  .int()
+  .min(DOCUMENT_SOURCE_LIMITS.pageLimit.min)
+  .max(DOCUMENT_SOURCE_LIMITS.pageLimit.max)
+const concurrencySchema = z
+  .number()
+  .int()
+  .min(DOCUMENT_SOURCE_LIMITS.concurrency.min)
+  .max(DOCUMENT_SOURCE_LIMITS.concurrency.max)
+const githubSizeSchema = z
+  .number()
+  .int()
+  .min(DOCUMENT_SOURCE_LIMITS.githubSizeMb.min)
+  .max(DOCUMENT_SOURCE_LIMITS.githubSizeMb.max)
 
 const sourceSchema = z
   .object({
     id: z.string().min(1),
-    name: z.string().min(1),
+    // 兼容统一名称上限生效前导出的旧数据。
+    name: z.string().min(DOCUMENT_SOURCE_LIMITS.nameLength.min),
     first_url: z.string().url(),
     hostname: z.string().min(1),
     fetch_mode: z.enum(['auto', 'http', 'browser']),
-    page_limit: z.number().int().min(1).max(10000),
+    page_limit: pageLimitSchema,
     scope_path: z.string().startsWith('/').optional(),
     schedule: z.string().nullable(),
-    http_concurrency: z.number().int().min(1).max(32).nullable().optional(),
-    browser_concurrency: z.number().int().min(1).max(32).nullable().optional(),
-    concurrency: z.number().int().min(1).max(32).nullable().optional(),
+    http_concurrency: concurrencySchema.nullable().optional(),
+    browser_concurrency: concurrencySchema.nullable().optional(),
+    concurrency: concurrencySchema.nullable().optional(),
     icon_url: z.string().nullable(),
     source_type: z.enum(['local', 'cloud']).optional(),
     cloud_server_url: z.string().nullable().optional(),
@@ -25,8 +42,8 @@ const sourceSchema = z
     cloud_auto_sync: z.number().int().min(0).max(1).optional(),
     document_kind: z.enum(['web', 'github']).optional(),
     source_identity: z.string().nullable().optional(),
-    github_archive_limit_mb: z.number().int().min(1).max(10240).nullable().optional(),
-    github_markdown_limit_mb: z.number().int().min(1).max(10240).nullable().optional(),
+    github_archive_limit_mb: githubSizeSchema.nullable().optional(),
+    github_markdown_limit_mb: githubSizeSchema.nullable().optional(),
     github_default_branch: z.string().nullable().optional(),
     github_revision: z.string().nullable().optional(),
     github_blocked_revision: z.string().nullable().optional(),
@@ -88,8 +105,8 @@ const settingsSchema = z
   .object({
     mcp_port: z.number().int().min(1024).max(65535),
     theme: z.enum(['auto', 'light', 'dark']),
-    http_concurrency: z.number().int().min(1).max(32),
-    browser_concurrency: z.number().int().min(1).max(32),
+    http_concurrency: concurrencySchema,
+    browser_concurrency: concurrencySchema,
     max_retries: z.number().int().min(0).max(10).optional(),
     batch_interval_seconds: z
       .number()
@@ -97,8 +114,8 @@ const settingsSchema = z
       .refine((value) => value === 0 || (value >= 100 && value <= 3000))
       .optional(),
     server_url: z.string().url().optional(),
-    github_archive_limit_mb: z.number().int().min(1).max(10240).optional(),
-    github_markdown_limit_mb: z.number().int().min(1).max(10240).optional()
+    github_archive_limit_mb: githubSizeSchema.optional(),
+    github_markdown_limit_mb: githubSizeSchema.optional()
   })
   .strict()
 

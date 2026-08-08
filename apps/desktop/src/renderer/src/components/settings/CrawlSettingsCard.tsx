@@ -1,6 +1,7 @@
 import { DashboardOutlined } from '@ant-design/icons'
 import { Button, Card, Form, InputNumber, Space, Typography } from 'antd'
 import { useEffect } from 'react'
+import { DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 
 interface CrawlSettingsCardProps {
   httpConcurrency: number
@@ -87,33 +88,81 @@ export function CrawlSettingsCard({
           <Form.Item
             name="httpConcurrency"
             label="HTTP 直取并发上限"
-            rules={[{ required: true, type: 'number', min: 1, max: 32 }]}
+            rules={[
+              {
+                required: true,
+                type: 'number',
+                min: DOCUMENT_SOURCE_LIMITS.concurrency.min,
+                max: DOCUMENT_SOURCE_LIMITS.concurrency.max
+              }
+            ]}
           >
-            <InputNumber min={1} max={32} className="w-full" addonAfter="页" />
+            <InputNumber
+              min={DOCUMENT_SOURCE_LIMITS.concurrency.min}
+              max={DOCUMENT_SOURCE_LIMITS.concurrency.max}
+              className="w-full"
+              addonAfter="页"
+            />
           </Form.Item>
 
           <Form.Item
             name="githubArchiveLimitMb"
             label="GitHub ZIP 默认上限"
-            rules={[{ required: true, type: 'number', min: 1, max: 10240 }]}
+            rules={[
+              {
+                required: true,
+                type: 'number',
+                min: DOCUMENT_SOURCE_LIMITS.githubSizeMb.min,
+                max: DOCUMENT_SOURCE_LIMITS.githubSizeMb.max
+              }
+            ]}
           >
-            <InputNumber min={1} max={10240} className="w-full" addonAfter="MB" />
+            <InputNumber
+              min={DOCUMENT_SOURCE_LIMITS.githubSizeMb.min}
+              max={DOCUMENT_SOURCE_LIMITS.githubSizeMb.max}
+              className="w-full"
+              addonAfter="MB"
+            />
           </Form.Item>
 
           <Form.Item
             name="githubMarkdownLimitMb"
             label="GitHub Markdown 默认上限"
-            rules={[{ required: true, type: 'number', min: 1, max: 10240 }]}
+            rules={[
+              {
+                required: true,
+                type: 'number',
+                min: DOCUMENT_SOURCE_LIMITS.githubSizeMb.min,
+                max: DOCUMENT_SOURCE_LIMITS.githubSizeMb.max
+              }
+            ]}
           >
-            <InputNumber min={1} max={10240} className="w-full" addonAfter="MB" />
+            <InputNumber
+              min={DOCUMENT_SOURCE_LIMITS.githubSizeMb.min}
+              max={DOCUMENT_SOURCE_LIMITS.githubSizeMb.max}
+              className="w-full"
+              addonAfter="MB"
+            />
           </Form.Item>
 
           <Form.Item
             name="browserConcurrency"
             label="无头浏览器并发上限"
-            rules={[{ required: true, type: 'number', min: 1, max: 32 }]}
+            rules={[
+              {
+                required: true,
+                type: 'number',
+                min: DOCUMENT_SOURCE_LIMITS.concurrency.min,
+                max: DOCUMENT_SOURCE_LIMITS.concurrency.max
+              }
+            ]}
           >
-            <InputNumber min={1} max={32} className="w-full" addonAfter="页" />
+            <InputNumber
+              min={DOCUMENT_SOURCE_LIMITS.concurrency.min}
+              max={DOCUMENT_SOURCE_LIMITS.concurrency.max}
+              className="w-full"
+              addonAfter="页"
+            />
           </Form.Item>
 
           <Form.Item

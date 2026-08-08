@@ -58,6 +58,9 @@ describe('createDatabase', () => {
       })
       expect(database.listDocuments()).toHaveLength(1)
       expect(database.searchDocuments('reusable')[0]?.title).toBe('Learn React')
+      expect(database.searchDocuments('reusable missing')).toEqual([])
+      expect(database.searchDocuments('reusable,missing', 'any')[0]?.title).toBe('Learn React')
+      expect(database.searchDocuments('learn missing', 'fuzzy')[0]?.title).toBe('Learn React')
       expect(database.clearDocuments()).toBe(1)
       expect(database.listDocuments()).toEqual([])
       expect(database.searchDocuments('reusable')).toEqual([])
@@ -180,37 +183,6 @@ describe('createDatabase', () => {
       expect(updated).toMatchObject({ scopePath: '/guide', pages: 1 })
       expect(database.searchDocuments('API')).toEqual([])
       expect(database.listDocumentUrls(source.id)).toEqual(['https://docs.example.com/guide/start'])
-    } finally {
-      database.close()
-    }
-  })
-
-  it('在数据库层阻止本地文档源更新为重复 hostname', () => {
-    const database = createDatabase(':memory:')
-    try {
-      const defaults = {
-        mode: 'http' as const,
-        pageLimit: 10,
-        scopePath: '/',
-        schedule: null,
-        httpConcurrency: null,
-        browserConcurrency: null
-      }
-      database.createSource({ ...defaults, name: 'Vite', url: 'https://vite.dev/guide' })
-      const vue = database.createSource({
-        ...defaults,
-        name: 'Vue',
-        url: 'https://vuejs.org/guide'
-      })
-
-      expect(() =>
-        database.updateSource(vue.id, {
-          ...defaults,
-          name: 'Vue on Vite',
-          url: 'https://vite.dev/api'
-        })
-      ).toThrow('这个域名已经存在于文档源中')
-      expect(database.getSourceConfig(vue.id).hostname).toBe('vuejs.org')
     } finally {
       database.close()
     }

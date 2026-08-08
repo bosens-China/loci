@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
+import { DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import type { CloudCatalogItem, CloudImportResult } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
 import type { CloudSnapshot } from './cloud-library-database.js'
@@ -43,7 +44,7 @@ const snapshotSchema = z.object({
       })
     )
     .min(1)
-    .max(10_000)
+    .max(DOCUMENT_SOURCE_LIMITS.pageLimit.max)
 })
 
 export class CloudLibraryService {

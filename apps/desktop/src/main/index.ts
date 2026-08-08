@@ -250,12 +250,15 @@ function createMcpServices(): LociMcpServices {
   return {
     listSources: () => requireDatabase().listSources(),
     listDocuments: () => requireDatabase().listDocuments(),
-    searchDocuments: (query) => requireDatabase().searchDocuments(query),
+    searchDocuments: (query, mode) => requireDatabase().searchDocuments(query, mode),
     createSource,
     crawlSource: crawlRuntime.crawlSource,
     deleteSource,
     isCrawling: crawlRuntime.isCrawling,
     getCrawlState: crawlRuntime.getState,
+    getLatestCrawlRunId: (libraryId) => requireDatabase().listCrawlHistory(libraryId)[0]?.id,
+    getCrawlRunLibraryId: (runId) => requireDatabase().getCrawlRun(runId)?.sourceId,
+    listCrawlFailures: (runId) => requireDatabase().listCrawlFailures(runId),
     listCloudLibraries: () =>
       requireCloudLibraryService().listCatalog(requireDatabase().getSettings().serverUrl),
     pullCloudLibrary: (libraryId) => {

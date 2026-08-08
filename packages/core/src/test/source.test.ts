@@ -65,6 +65,32 @@ describe('crawlSource', () => {
     expect(documents[0]?.markdown).toBe('# Guide')
   })
 
+  it('llms.txt 清单中的 404 只记为失败，不回退抓取 HTML', async () => {
+    const fetchPage = vi.fn(async () => renderedPage('# Browser fallback'))
+    const fetchImpl = createFetchMock(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/llms.txt')) return new Response('- [Missing](/missing.md)')
+      return new Response('', { status: 404 })
+    })
+
+    const result = await crawlSource({
+      firstUrl: 'https://docs.example.com/docs',
+      hostname: 'docs.example.com',
+      pageLimit: 10,
+      fetchMode: 'auto',
+      fetch: fetchImpl,
+      crawler: { fetchPage },
+      onDocument: () => undefined
+    })
+
+    expect(result.resolution.discovery).toBe('llms')
+    expect(result.progress).toMatchObject({ succeeded: 0, failed: 1 })
+    expect(result.progress.failures).toMatchObject([
+      { url: 'https://docs.example.com/missing.md', reason: 'not_found', retryable: false }
+    ])
+    expect(fetchPage).not.toHaveBeenCalled()
+  })
+
   it('在 llms.txt 之后命中 OpenAPI，并跳过浏览器和网页发现', async () => {
     const documents: CrawledDocument[] = []
     const fetchPage = vi.fn(async () => renderedPage('browser'))

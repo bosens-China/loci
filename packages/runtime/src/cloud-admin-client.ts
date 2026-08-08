@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/core'
 import type {
   CloudAdminLoginInput,
   CloudAdminSession,
@@ -15,7 +16,7 @@ const librarySchema = z.object({
   name: z.string(),
   url: z.string(),
   hostname: z.string(),
-  scopePath: z.string().default('/'),
+  scopePath: z.string().default(DOCUMENT_SOURCE_DEFAULTS.scopePath),
   pageLimit: z.number(),
   schedule: z.string().nullable(),
   pages: z.number(),

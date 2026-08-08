@@ -1,4 +1,5 @@
 import type { Command } from 'commander'
+import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import {
   SCHEDULE_PRESETS,
   deriveSourceName,
@@ -11,7 +12,7 @@ import {
 import type { CloudAdminClient, LociDatabase } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError, errorMessage } from '../errors.js'
-import { validatePublicUrl } from '../input.js'
+import { validatePublicUrl, validateSourceName } from '../input.js'
 import {
   readAdminCreatePreference,
   readAdminSyncSelection,
@@ -192,7 +193,11 @@ async function adminLoop(
 }
 
 export async function askLibraryInput(
-  preference: AdminCreatePreference = { pageLimit: 1000, scopeDepth: 0, schedule: null }
+  preference: AdminCreatePreference = {
+    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
+    scopeDepth: 0,
+    schedule: DOCUMENT_SOURCE_DEFAULTS.schedule
+  }
 ): Promise<CloudLibraryInput> {
   return {
     ...(await askLibraryBasics(undefined, preference)),
@@ -203,7 +208,7 @@ export async function askLibraryInput(
 async function askLibraryBasics(
   current?: CloudLibrary,
   preference: Pick<AdminCreatePreference, 'pageLimit' | 'scopeDepth'> = {
-    pageLimit: 1000,
+    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
     scopeDepth: 0
   }
 ): Promise<Omit<CloudLibraryInput, 'schedule'>> {
@@ -215,8 +220,7 @@ async function askLibraryBasics(
   const inferredName = deriveSourceName(url) || new URL(url).hostname
   const name = await askText('文档源名称', {
     initialValue: current?.name ?? inferredName,
-    validate: (value) =>
-      (value?.trim().length ?? 0) <= 100 ? undefined : '文档源名称不能超过 100 个字符'
+    validate: validateSourceName
   })
   const scopePath = await askScope(
     url,
@@ -224,8 +228,8 @@ async function askLibraryBasics(
   )
   const pageLimit = await askInteger('收录页面上限', {
     initialValue: current?.pageLimit ?? preference.pageLimit,
-    minimum: 1,
-    maximum: 10_000
+    minimum: DOCUMENT_SOURCE_LIMITS.pageLimit.min,
+    maximum: DOCUMENT_SOURCE_LIMITS.pageLimit.max
   })
   return { name, url, scopePath, pageLimit }
 }

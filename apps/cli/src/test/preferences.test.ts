@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createDatabase, type LociDatabase } from '@loci/runtime'
+import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/core'
 import {
   readAdminCreatePreference,
   readAdminSyncSelection,
@@ -63,8 +64,8 @@ describe('CLI 交互偏好', () => {
     database.setInteractionPreference('cli', 'source-create', { pageLimit: -1 })
 
     expect(readSourceCreatePreference(database)).toEqual({
-      mode: 'auto',
-      pageLimit: 1000,
+      mode: DOCUMENT_SOURCE_DEFAULTS.mode,
+      pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
       scopeDepth: 0,
       syncAfterCreate: true
     })

@@ -1,6 +1,7 @@
 import { ClockCircleOutlined, LinkOutlined } from '@ant-design/icons'
 import { AutoComplete, Form, Input, InputNumber, Modal } from 'antd'
 import { useEffect } from 'react'
+import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import type { CloudLibrary, CloudLibraryInput } from '@loci/shared'
 import { SCHEDULE_PRESETS, getSourceScopeOptions, normalizeCronSchedule } from '@loci/shared'
 import { SourceScopeSelector } from './SourceScopeSelector'
@@ -36,8 +37,8 @@ function CloudLibraryFormModal({
     form.setFieldsValue({
       name: library?.name ?? '',
       url: library?.url ?? '',
-      scopePath: library?.scopePath ?? '/',
-      pageLimit: library?.pageLimit ?? 1000,
+      scopePath: library?.scopePath ?? DOCUMENT_SOURCE_DEFAULTS.scopePath,
+      pageLimit: library?.pageLimit ?? DOCUMENT_SOURCE_DEFAULTS.pageLimit,
       schedule: library?.schedule ?? undefined
     })
   }, [form, library, open])
@@ -67,9 +68,15 @@ function CloudLibraryFormModal({
         <Form.Item
           name="name"
           label="文档源名称"
-          rules={[{ required: true, message: '请输入文档源名称' }]}
+          rules={[
+            { required: true, message: '请输入文档源名称' },
+            { max: DOCUMENT_SOURCE_LIMITS.nameLength.max }
+          ]}
         >
-          <Input placeholder="例如：Hono 官方文档" />
+          <Input
+            maxLength={DOCUMENT_SOURCE_LIMITS.nameLength.max}
+            placeholder="例如：Hono 官方文档"
+          />
         </Form.Item>
         <Form.Item
           name="url"
@@ -86,7 +93,7 @@ function CloudLibraryFormModal({
               const options = getSourceScopeOptions(event.currentTarget.value)
               const scopePath = form.getFieldValue('scopePath')
               if (!options.some((option) => option.value === scopePath)) {
-                form.setFieldValue('scopePath', '/')
+                form.setFieldValue('scopePath', DOCUMENT_SOURCE_DEFAULTS.scopePath)
               }
             }}
           />
@@ -104,7 +111,12 @@ function CloudLibraryFormModal({
           label="收录页面上限"
           rules={[{ required: true, message: '请输入页面上限' }]}
         >
-          <InputNumber min={1} max={10000} addonAfter="页" className="w-full" />
+          <InputNumber
+            min={DOCUMENT_SOURCE_LIMITS.pageLimit.min}
+            max={DOCUMENT_SOURCE_LIMITS.pageLimit.max}
+            addonAfter="页"
+            className="w-full"
+          />
         </Form.Item>
         <Form.Item
           name="schedule"

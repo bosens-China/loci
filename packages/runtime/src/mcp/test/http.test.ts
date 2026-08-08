@@ -10,6 +10,7 @@ import {
   createServices,
   document,
   getFirstFile,
+  runId,
   runningState,
   source
 } from './http-fixtures.js'
@@ -33,6 +34,7 @@ describe('MCP HTTP server', () => {
       'loci_add_library',
       'loci_sync_libraries',
       'loci_get_sync_status',
+      'loci_list_sync_failures',
       'loci_list_libraries',
       'loci_list_cloud_libraries',
       'loci_pull_cloud_library',
@@ -51,7 +53,11 @@ describe('MCP HTTP server', () => {
       name: 'loci_add_library',
       arguments: { url: source.url }
     })
-    expect(added.structuredContent).toMatchObject({ created: false, status: 'idle' })
+    expect(added.structuredContent).toMatchObject({
+      created: false,
+      sync_status: 'idle',
+      library: { availability: 'usable', scope_path: '/' }
+    })
 
     const cloud = await client.callTool({
       name: 'loci_list_cloud_libraries',
@@ -97,6 +103,8 @@ describe('MCP HTTP server', () => {
       results: [
         {
           query: '响应式基础',
+          retrieval_mode: 'all_terms',
+          fallback_used: false,
           items: [{ file_id: document.id, section_id: `${document.id}:section:0` }]
         },
         {
@@ -145,7 +153,7 @@ describe('MCP HTTP server', () => {
       }
     )
     expect(synced.structuredContent).toMatchObject({
-      items: [{ library_id: source.id, status: 'completed' }]
+      items: [{ library_id: source.id, sync_status: 'completed', run_id: runId }]
     })
     expect(progressEvents).toEqual([0, 1])
 
@@ -197,21 +205,42 @@ describe('MCP HTTP server', () => {
       arguments: { library_ids: [source.id], wait_for_completion: true }
     })
 
-    expect(first.structuredContent).toMatchObject({ items: [{ status: 'syncing' }] })
-    expect(duplicate.structuredContent).toMatchObject({ items: [{ status: 'syncing' }] })
-    expect(status.structuredContent).toMatchObject({ items: [{ status: 'syncing' }] })
+    expect(first.structuredContent).toMatchObject({ items: [{ sync_status: 'syncing' }] })
+    expect(duplicate.structuredContent).toMatchObject({ items: [{ sync_status: 'syncing' }] })
+    expect(status.structuredContent).toMatchObject({ items: [{ sync_status: 'syncing' }] })
     expect(crawlCalls).toBe(1)
     await vi.waitFor(() => expect(progressListeners).toHaveLength(1))
     progressListeners.forEach((listener) => listener(completedProgress))
     active = false
     resolveCrawl?.(completedProgress)
     expect((await waiting).structuredContent).toMatchObject({
-      items: [{ status: 'completed' }]
+      items: [{ sync_status: 'completed' }]
     })
     expect(crawlCalls).toBe(1)
   })
 
-  it('添加文档库时分别传递两种并发覆盖值', async () => {
+  it('等待模式会复用只有跨进程锁、尚未读到进度快照的任务', async () => {
+    const crawlSource = vi.fn(async () => completedProgress)
+    httpServer = await startMcpHttpServer(0, {
+      ...createServices(),
+      crawlSource,
+      isCrawling: () => true,
+      getCrawlState: () => undefined
+    })
+    client = await connect(httpServer)
+
+    const synced = await client.callTool({
+      name: 'loci_sync_libraries',
+      arguments: { library_ids: [source.id], wait_for_completion: true }
+    })
+
+    expect(crawlSource).toHaveBeenCalledOnce()
+    expect(synced.structuredContent).toMatchObject({
+      items: [{ library_id: source.id, sync_status: 'completed' }]
+    })
+  })
+
+  it('添加文档库时允许覆盖 CLI 抓取默认值', async () => {
     let createdInput: CreateSourceInput | undefined
     httpServer = await startMcpHttpServer(0, {
       ...createServices(),
@@ -231,13 +260,28 @@ describe('MCP HTTP server', () => {
       name: 'loci_add_library',
       arguments: {
         url: source.url,
+        name: 'Vue Router',
+        mode: 'browser',
+        page_limit: 300,
+        scope_path: '/guide/',
         http_concurrency: 8,
         browser_concurrency: 2,
+        github_archive_limit_mb: 400,
+        github_markdown_limit_mb: 160,
         wait_for_completion: true
       }
     })
 
-    expect(createdInput).toMatchObject({ httpConcurrency: 8, browserConcurrency: 2 })
+    expect(createdInput).toMatchObject({
+      name: 'Vue Router',
+      mode: 'browser',
+      pageLimit: 300,
+      scopePath: '/guide',
+      httpConcurrency: 8,
+      browserConcurrency: 2,
+      githubArchiveLimitMb: 400,
+      githubMarkdownLimitMb: 160
+    })
   })
 
   it('云端同域副本不会阻止创建本地抓取回退', async () => {
@@ -268,25 +312,27 @@ describe('MCP HTTP server', () => {
     })
 
     expect(created).toBe(true)
-    expect(added.structuredContent).toMatchObject({ created: true, status: 'completed' })
+    expect(added.structuredContent).toMatchObject({
+      created: true,
+      sync_status: 'completed'
+    })
   })
 
-  it('exposes structured failure details and retry guidance', async () => {
+  it('先返回失败摘要，再按 run_id 分页读取详情', async () => {
+    const failures = Array.from({ length: 7 }, (_, index) => ({
+      url: `https://cn.vuejs.org/missing-${index}.md`,
+      reason: 'not_found' as const,
+      message: 'HTTP 404',
+      retryable: false,
+      statusCode: 404
+    }))
     const failedProgress: CrawlProgress = {
-      queued: 1,
-      processed: 1,
+      queued: 7,
+      processed: 7,
       succeeded: 0,
-      failed: 1,
+      failed: 7,
       limitReached: false,
-      failures: [
-        {
-          url: 'https://cn.vuejs.org/missing',
-          reason: 'http_error',
-          message: '页面返回 HTTP 503',
-          retryable: true,
-          statusCode: 503
-        }
-      ]
+      failures
     }
     httpServer = await startMcpHttpServer(0, {
       ...createServices(),
@@ -294,7 +340,8 @@ describe('MCP HTTP server', () => {
         onProgress?.(failedProgress)
         return failedProgress
       },
-      getCrawlState: () => ({ ...runningState(), progress: failedProgress, running: false })
+      getCrawlState: () => ({ ...runningState(), progress: failedProgress, running: false }),
+      listCrawlFailures: (id) => (id === runId ? failures : [])
     })
     client = await connect(httpServer)
 
@@ -305,12 +352,33 @@ describe('MCP HTTP server', () => {
     expect(synced.structuredContent).toMatchObject({
       items: [
         {
-          status: 'completed_with_errors',
+          sync_status: 'completed_with_errors',
+          run_id: runId,
           progress: {
-            failures: [{ reason: 'http_error', status_code: 503, retryable: true }]
+            failures_total: 7,
+            failure_counts: { not_found: 7 },
+            has_more_failures: true
           }
         }
       ]
+    })
+    const progress = (synced.structuredContent as { items: Array<{ progress: unknown }> }).items[0]
+      ?.progress as { failures_sample: unknown[] }
+    expect(progress.failures_sample).toHaveLength(5)
+
+    const detail = await client.callTool({
+      name: 'loci_list_sync_failures',
+      arguments: { run_id: runId, offset: 1, limit: 2 }
+    })
+    expect(detail.structuredContent).toMatchObject({
+      library_id: source.id,
+      run_id: runId,
+      total_count: 7,
+      count: 2,
+      offset: 1,
+      has_more: true,
+      next_offset: 3,
+      items: [{ url: failures[1]?.url }, { url: failures[2]?.url }]
     })
   })
 

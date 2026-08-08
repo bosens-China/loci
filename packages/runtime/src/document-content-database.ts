@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { DocumentRecord } from '@loci/shared'
-import { type DocumentRow, toDocumentRecord, toFtsExpression } from './database-values.js'
+import {
+  type DocumentRow,
+  toDocumentRecord,
+  toFtsExpression,
+  toSearchTokens
+} from './database-values.js'
+
+export type DocumentSearchMode = 'all' | 'any' | 'fuzzy'
 
 export interface StoredDocument {
   sourceId: string
@@ -22,7 +29,7 @@ export interface DocumentContentDatabase {
   clearDocuments: () => number
   clearSources: () => number
   listDocuments: () => DocumentRecord[]
-  searchDocuments: (query: string) => DocumentRecord[]
+  searchDocuments: (query: string, mode?: DocumentSearchMode) => DocumentRecord[]
 }
 
 export function createDocumentContentDatabase(database: DatabaseSync): DocumentContentDatabase {
@@ -68,23 +75,57 @@ export function createDocumentContentDatabase(database: DatabaseSync): DocumentC
         .all() as unknown as DocumentRow[]
       return rows.map(toDocumentRecord)
     },
-    searchDocuments: (query) => {
-      const expression = toFtsExpression(query)
-      if (!expression) return []
-      const rows = database
-        .prepare(
-          `SELECT d.id, d.source_id, s.name AS source_name, d.title, d.url,
-             d.language, d.crawled_at, d.markdown, d.relative_path
-           FROM documents_fts f
-           JOIN documents d ON d.id = f.document_id
-           JOIN document_sources s ON s.id = d.source_id
-           WHERE documents_fts MATCH ?
-           ORDER BY rank`
-        )
-        .all(expression) as unknown as DocumentRow[]
-      return rows.map(toDocumentRecord)
-    }
+    searchDocuments: (query, mode = 'all') =>
+      (mode === 'fuzzy'
+        ? searchDocumentMetadata(database, query)
+        : searchFts(database, query, mode)
+      ).map(toDocumentRecord)
   }
+}
+
+function searchFts(
+  database: DatabaseSync,
+  query: string,
+  mode: Exclude<DocumentSearchMode, 'fuzzy'>
+): DocumentRow[] {
+  const expression = toFtsExpression(query, mode === 'all' ? 'AND' : 'OR')
+  if (!expression) return []
+  return database
+    .prepare(
+      `SELECT d.id, d.source_id, s.name AS source_name, d.title, d.url,
+         d.language, d.crawled_at, d.markdown, d.relative_path
+       FROM documents_fts f
+       JOIN documents d ON d.id = f.document_id
+       JOIN document_sources s ON s.id = d.source_id
+       WHERE documents_fts MATCH ?
+       ORDER BY bm25(documents_fts, 0, 0, 8, 1)`
+    )
+    .all(expression) as unknown as DocumentRow[]
+}
+
+function searchDocumentMetadata(database: DatabaseSync, query: string): DocumentRow[] {
+  const tokens = toSearchTokens(query)
+    .filter((token) => token.length >= 2)
+    .slice(0, 10)
+  if (!tokens.length) return []
+  const conditions = tokens.map(() => `(d.title LIKE ? ESCAPE '\\' OR d.url LIKE ? ESCAPE '\\')`)
+  const values = tokens.flatMap((token) => {
+    const pattern = `%${escapeLike(token)}%`
+    return [pattern, pattern]
+  })
+  return database
+    .prepare(
+      `SELECT d.id, d.source_id, s.name AS source_name, d.title, d.url,
+         d.language, d.crawled_at, d.markdown, d.relative_path
+       FROM documents d JOIN document_sources s ON s.id = d.source_id
+       WHERE ${conditions.join(' OR ')}
+       ORDER BY d.crawled_at DESC LIMIT 500`
+    )
+    .all(...values) as unknown as DocumentRow[]
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/gu, (character) => `\\${character}`)
 }
 
 export function storeDocument(database: DatabaseSync, document: StoredDocument): void {

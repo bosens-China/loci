@@ -1,6 +1,7 @@
-import { PRODUCTION_SERVER_URL } from '@loci/shared'
+import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
+import { DEFAULT_APP_SETTINGS, PRODUCTION_SERVER_URL } from '@loci/shared'
 
-export const LOCI_SCHEMA_VERSION = 6
+export const LOCI_SCHEMA_VERSION = 7
 
 // 基础表结构集中维护，具体子模块的增量表由各自初始化函数负责。
 export const LOCI_DATABASE_SCHEMA = `
@@ -12,16 +13,16 @@ export const LOCI_DATABASE_SCHEMA = `
     first_url TEXT NOT NULL,
     hostname TEXT NOT NULL,
     fetch_mode TEXT NOT NULL CHECK (fetch_mode IN ('auto', 'http', 'browser')),
-    page_limit INTEGER NOT NULL DEFAULT 1000 CHECK (page_limit BETWEEN 1 AND 10000),
-    scope_path TEXT NOT NULL DEFAULT '/',
+    page_limit INTEGER NOT NULL DEFAULT ${DOCUMENT_SOURCE_DEFAULTS.pageLimit} CHECK (page_limit BETWEEN ${DOCUMENT_SOURCE_LIMITS.pageLimit.min} AND ${DOCUMENT_SOURCE_LIMITS.pageLimit.max}),
+    scope_path TEXT NOT NULL DEFAULT '${DOCUMENT_SOURCE_DEFAULTS.scopePath}',
     schedule TEXT,
-    http_concurrency INTEGER CHECK (http_concurrency IS NULL OR http_concurrency BETWEEN 1 AND 32),
-    browser_concurrency INTEGER CHECK (browser_concurrency IS NULL OR browser_concurrency BETWEEN 1 AND 32),
+    http_concurrency INTEGER CHECK (http_concurrency IS NULL OR http_concurrency BETWEEN ${DOCUMENT_SOURCE_LIMITS.concurrency.min} AND ${DOCUMENT_SOURCE_LIMITS.concurrency.max}),
+    browser_concurrency INTEGER CHECK (browser_concurrency IS NULL OR browser_concurrency BETWEEN ${DOCUMENT_SOURCE_LIMITS.concurrency.min} AND ${DOCUMENT_SOURCE_LIMITS.concurrency.max}),
     icon_url TEXT,
     document_kind TEXT NOT NULL DEFAULT 'web' CHECK (document_kind IN ('web', 'github')),
     source_identity TEXT,
-    github_archive_limit_mb INTEGER CHECK (github_archive_limit_mb IS NULL OR github_archive_limit_mb BETWEEN 1 AND 10240),
-    github_markdown_limit_mb INTEGER CHECK (github_markdown_limit_mb IS NULL OR github_markdown_limit_mb BETWEEN 1 AND 10240),
+    github_archive_limit_mb INTEGER CHECK (github_archive_limit_mb IS NULL OR github_archive_limit_mb BETWEEN ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.min} AND ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.max}),
+    github_markdown_limit_mb INTEGER CHECK (github_markdown_limit_mb IS NULL OR github_markdown_limit_mb BETWEEN ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.min} AND ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.max}),
     github_default_branch TEXT,
     github_revision TEXT,
     github_blocked_revision TEXT,
@@ -60,16 +61,16 @@ export const LOCI_DATABASE_SCHEMA = `
     id INTEGER PRIMARY KEY CHECK (id = 1),
     mcp_port INTEGER NOT NULL CHECK (mcp_port BETWEEN 1024 AND 65535),
     theme TEXT NOT NULL CHECK (theme IN ('auto', 'light', 'dark')),
-    http_concurrency INTEGER NOT NULL DEFAULT 9 CHECK (http_concurrency BETWEEN 1 AND 32),
-    browser_concurrency INTEGER NOT NULL DEFAULT 5 CHECK (browser_concurrency BETWEEN 1 AND 32),
-    max_retries INTEGER NOT NULL DEFAULT 3 CHECK (max_retries BETWEEN 0 AND 10),
+    http_concurrency INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.httpConcurrency} CHECK (http_concurrency BETWEEN ${DOCUMENT_SOURCE_LIMITS.concurrency.min} AND ${DOCUMENT_SOURCE_LIMITS.concurrency.max}),
+    browser_concurrency INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.browserConcurrency} CHECK (browser_concurrency BETWEEN ${DOCUMENT_SOURCE_LIMITS.concurrency.min} AND ${DOCUMENT_SOURCE_LIMITS.concurrency.max}),
+    max_retries INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.maxRetries} CHECK (max_retries BETWEEN 0 AND 10),
     batch_interval_seconds INTEGER NOT NULL DEFAULT 0 CHECK (
       batch_interval_seconds = 0 OR batch_interval_seconds BETWEEN 100 AND 3000
     ),
     server_url TEXT NOT NULL DEFAULT '${PRODUCTION_SERVER_URL}',
     server_url_customized INTEGER NOT NULL DEFAULT 0 CHECK (server_url_customized IN (0, 1)),
-    github_archive_limit_mb INTEGER NOT NULL DEFAULT 200 CHECK (github_archive_limit_mb BETWEEN 1 AND 10240),
-    github_markdown_limit_mb INTEGER NOT NULL DEFAULT 100 CHECK (github_markdown_limit_mb BETWEEN 1 AND 10240)
+    github_archive_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubArchiveLimitMb} CHECK (github_archive_limit_mb BETWEEN ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.min} AND ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.max}),
+    github_markdown_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubMarkdownLimitMb} CHECK (github_markdown_limit_mb BETWEEN ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.min} AND ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.max})
   ) STRICT;
 
   CREATE TABLE IF NOT EXISTS interaction_preferences (

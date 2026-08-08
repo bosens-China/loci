@@ -147,4 +147,55 @@ describe('database lifecycle', () => {
       rmSync(directory, { recursive: true, force: true })
     }
   })
+
+  it('把旧版 hostname 标识迁移为 hostname 与收录范围组合', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-scope-'))
+    const filename = join(directory, 'scope.sqlite')
+    const initial = createDatabase(filename)
+    const root = initial.createSource({
+      name: 'Vite',
+      url: 'https://vite.dev/guide',
+      mode: 'http',
+      pageLimit: 100,
+      scopePath: '/',
+      schedule: null,
+      httpConcurrency: null,
+      browserConcurrency: null
+    })
+    initial.close()
+
+    const legacy = new DatabaseSync(filename)
+    legacy.exec(`UPDATE document_sources SET source_identity = hostname; PRAGMA user_version = 6`)
+    legacy.close()
+
+    const migrated = createDatabase(filename)
+    try {
+      const api = migrated.createSource({
+        name: 'Vite API',
+        url: 'https://vite.dev/api',
+        mode: 'http',
+        pageLimit: 100,
+        scopePath: '/api',
+        schedule: null,
+        httpConcurrency: null,
+        browserConcurrency: null
+      })
+      expect(api.id).not.toBe(root.id)
+      expect(
+        migrated.createSource({
+          name: 'Vite Duplicate',
+          url: 'https://vite.dev/start',
+          mode: 'http',
+          pageLimit: 100,
+          scopePath: '/',
+          schedule: null,
+          httpConcurrency: null,
+          browserConcurrency: null
+        }).id
+      ).toBe(root.id)
+    } finally {
+      migrated.close()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
 })

@@ -1,5 +1,5 @@
 import type { ServerContext } from '@modelcontextprotocol/server'
-import type { CrawlProgress, CrawlRunState, DocumentSource, SourceStatus } from '@loci/shared'
+import type { CrawlFailure, CrawlProgress, CrawlRunState, DocumentSource } from '@loci/shared'
 import type { LociMcpServices } from './server.js'
 
 export async function waitForSync(
@@ -9,17 +9,21 @@ export async function waitForSync(
 ): Promise<Record<string, unknown>> {
   try {
     const progress = await services.crawlSource(libraryId, progressReporter(context, libraryId))
+    const runId = services.getLatestCrawlRunId(libraryId)
     return {
       library_id: libraryId,
-      status: progress.failed ? 'completed_with_errors' : 'completed',
+      sync_status: progress.failed ? 'completed_with_errors' : 'completed',
+      ...(runId ? { run_id: runId } : {}),
       file_count: services.listDocuments().filter((item) => item.sourceId === libraryId).length,
       progress: serializeProgress(progress)
     }
   } catch (error) {
     const state = services.getCrawlState(libraryId)
+    const runId = services.getLatestCrawlRunId(libraryId)
     return {
       library_id: libraryId,
-      status: 'failed',
+      sync_status: 'failed',
+      ...(runId ? { run_id: runId } : {}),
       ...(state ? { progress: serializeProgress(state.progress) } : {}),
       error: error instanceof Error ? error.message : '未知错误'
     }
@@ -33,12 +37,19 @@ export function startInBackground(services: LociMcpServices, libraryId: string):
 export function stateToSyncItem(
   libraryId: string,
   state: CrawlRunState | undefined,
-  crawling: boolean
+  crawling: boolean,
+  runId?: string
 ): Record<string, unknown> {
-  if (!state) return { library_id: libraryId, status: crawling ? 'syncing' : 'idle' }
+  if (!state) {
+    return {
+      library_id: libraryId,
+      sync_status: crawling ? 'syncing' : 'idle',
+      ...(runId ? { run_id: runId } : {})
+    }
+  }
   return {
     library_id: libraryId,
-    status:
+    sync_status:
       crawling || state.running
         ? 'syncing'
         : state.error
@@ -46,6 +57,7 @@ export function stateToSyncItem(
           : state.progress.failed
             ? 'completed_with_errors'
             : 'completed',
+    ...(runId ? { run_id: runId } : {}),
     progress: serializeProgress(state.progress),
     ...(state.error ? { error: state.error } : {})
   }
@@ -74,46 +86,55 @@ function progressReporter(
   }
 }
 
-export function serializeLibrary(
-  source: DocumentSource,
-  status?: SourceStatus
-): Record<string, unknown> {
+export function serializeLibrary(source: DocumentSource): Record<string, unknown> {
   return {
     id: source.id,
     name: source.name,
     url: source.url,
     mode: source.mode,
-    status: status ?? source.status,
+    availability: source.pages > 0 ? 'usable' : 'empty',
     pages: source.pages,
     content_size: source.contentSize,
     page_limit: source.pageLimit,
+    scope_path: source.scopePath,
     last_updated: source.lastUpdated,
     schedule: source.schedule,
     http_concurrency: source.httpConcurrency,
     browser_concurrency: source.browserConcurrency,
+    kind: source.kind,
+    github_archive_limit_mb: source.githubArchiveLimitMb,
+    github_markdown_limit_mb: source.githubMarkdownLimitMb,
     icon_url: source.iconUrl
   }
 }
 
-function serializeProgress(progress: CrawlProgress): Record<string, unknown> {
+export function serializeProgress(progress: CrawlProgress): Record<string, unknown> {
+  const failures = progress.failures ?? []
+  const sample = failures.slice(0, 5)
   return {
     queued: progress.queued,
     processed: progress.processed,
     succeeded: progress.succeeded,
     failed: progress.failed,
     limit_reached: progress.limitReached,
-    ...(progress.failures?.length
-      ? {
-          failures: progress.failures.map((failure) => ({
-            url: failure.url,
-            reason: failure.reason,
-            message: failure.message,
-            retryable: failure.retryable,
-            ...(failure.statusCode === undefined ? {} : { status_code: failure.statusCode }),
-            ...(failure.redirectUrl ? { redirect_url: failure.redirectUrl } : {})
-          }))
-        }
-      : {})
+    failures_total: progress.failed,
+    failure_counts: failures.reduce<Record<string, number>>((counts, item) => {
+      counts[item.reason] = (counts[item.reason] ?? 0) + 1
+      return counts
+    }, {}),
+    ...(sample.length ? { failures_sample: sample.map(serializeFailure) } : {}),
+    has_more_failures: progress.failed > sample.length
+  }
+}
+
+export function serializeFailure(item: CrawlFailure): Record<string, unknown> {
+  return {
+    url: item.url,
+    reason: item.reason,
+    message: item.message,
+    retryable: item.retryable,
+    ...(item.statusCode === undefined ? {} : { status_code: item.statusCode }),
+    ...(item.redirectUrl ? { redirect_url: item.redirectUrl } : {})
   }
 }
 
@@ -137,9 +158,12 @@ export function page<T>(
 export function result(
   output: Record<string, unknown>,
   summary: string,
-  body = JSON.stringify(output, null, 2)
+  body?: string
 ): { content: Array<{ type: 'text'; text: string }>; structuredContent: Record<string, unknown> } {
-  return { content: [{ type: 'text', text: `${summary}\n\n${body}` }], structuredContent: output }
+  return {
+    content: [{ type: 'text', text: body ? `${summary}\n\n${body}` : summary }],
+    structuredContent: output
+  }
 }
 
 export function failure(message: string): {
@@ -158,7 +182,7 @@ export function renderFiles(
 }
 
 export function syncSummary(item: Record<string, unknown>): string {
-  return `${String(item.library_id)}: ${String(item.status)}`
+  return `${String(item.library_id)}: ${String(item.sync_status)}`
 }
 
 export function readAnnotations(): {

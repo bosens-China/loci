@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import { deriveSourceName, getSourceScopeOptions } from '../source-url.js'
 
 describe('文档源 URL 默认值', () => {
@@ -14,5 +15,21 @@ describe('文档源 URL 默认值', () => {
       { label: '/guide', value: '/guide' },
       { label: '/guide/start', value: '/guide/start' }
     ])
+  })
+
+  it('导出所有入口共用的基础值和输入边界', () => {
+    expect(DOCUMENT_SOURCE_DEFAULTS).toMatchObject({
+      mode: 'auto',
+      pageLimit: 1000,
+      scopePath: '/',
+      httpConcurrency: null,
+      browserConcurrency: null
+    })
+    expect(DOCUMENT_SOURCE_LIMITS).toMatchObject({
+      nameLength: { min: 1, max: 100 },
+      pageLimit: { min: 1, max: 10_000 },
+      concurrency: { min: 1, max: 32 },
+      githubSizeMb: { min: 1, max: 10_240 }
+    })
   })
 })
