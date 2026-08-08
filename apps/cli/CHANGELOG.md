@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.11.0](https://github.com/bosens-China/loci/compare/cli-v1.10.1...cli-v1.11.0) (2026-08-08)
+
+
+### Features
+
+* 优化 MCP 检索与建库契约 ([4be2413](https://github.com/bosens-China/loci/commit/4be241312d11a1a42cc0f6aa5aaafef17fad615b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.10.0
+    * @loci/runtime bumped to 1.8.0
+    * @loci/shared bumped to 1.14.0
+
 ## [1.10.1](https://github.com/bosens-China/loci/compare/cli-v1.10.0...cli-v1.10.1) (2026-08-07)
 
 
