@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.12.0](https://github.com/bosens-China/loci/compare/loci-v1.11.0...loci-v1.12.0) (2026-08-08)
+
+
+### Features
+
+* 优化 MCP 检索与建库契约 ([4be2413](https://github.com/bosens-China/loci/commit/4be241312d11a1a42cc0f6aa5aaafef17fad615b))
+
+
+### Bug Fixes
+
+* 修复桌面端文档源常量打包 ([ceca04c](https://github.com/bosens-China/loci/commit/ceca04ca8c688386135301287f9bd071f32f3af6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.10.0
+    * @loci/runtime bumped to 1.8.0
+    * @loci/shared bumped to 1.14.0
+
 ## [1.11.0](https://github.com/bosens-China/loci/compare/loci-v1.10.0...loci-v1.11.0) (2026-08-07)
 
 

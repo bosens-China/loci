@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.7.0](https://github.com/bosens-China/loci/compare/server-v1.6.0...server-v1.7.0) (2026-08-08)
+
+
+### Features
+
+* 优化 MCP 检索与建库契约 ([4be2413](https://github.com/bosens-China/loci/commit/4be241312d11a1a42cc0f6aa5aaafef17fad615b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.10.0
+
 ## [1.6.0](https://github.com/bosens-China/loci/compare/server-v1.5.1...server-v1.6.0) (2026-08-07)
 
 
