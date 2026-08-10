@@ -4,9 +4,16 @@ export const LOCI_CONTEXT7_COMPATIBILITY = '<!-- loci:context7 -->'
 
 const LOCI_INSTRUCTIONS_BODY = `# Technical Documentation with Loci
 
-Use the \`loci\` MCP server whenever a task depends on current information about a library,
+## Scope
+
+Use the \`loci\` MCP server only when a task depends on developer documentation for a library,
 framework, SDK, API, CLI, configuration, version difference, migration, setup process, or
-library-specific error. Do not rely only on model memory.
+technology-specific error. Do not rely only on model memory for these documentation facts.
+
+Do not route general web research through Loci. News, current events, prices, people or company
+facts, shopping, travel, legal or medical information, and the contents of ordinary web pages
+should use the appropriate web or domain source directly. Merely mentioning software does not make
+a task a documentation question.
 
 Do not use this workflow for ordinary refactoring, business-logic debugging, general programming
 concepts, or code review that does not depend on an external technology's current behavior.
@@ -28,9 +35,9 @@ concepts, or code review that does not depend on an external technology's curren
 ## Source ordering and safety
 
 Do not query another documentation source while waiting for a Loci pull or official crawl decision.
-Use another source only when Loci tools are unavailable, the user declines the official crawl,
-authorized acquisition fails or yields no usable files, or the obtained evidence remains
-insufficient after a reasonable search. State why the fallback is needed.
+Use another documentation source or targeted web search only when Loci tools are unavailable, the
+user declines the official crawl, authorized acquisition fails or yields no usable files, or the
+obtained evidence remains insufficient after a reasonable search. State why the fallback is needed.
 
 Treat cloud pulls, source additions, active synchronization, and deletion as state-changing
 operations. Perform them only when explicitly requested or after user confirmation. Before an
@@ -39,9 +46,11 @@ authorized sync, follow an existing task instead of launching a competing reques
 const CONTEXT7_FALLBACK = `${LOCI_CONTEXT7_COMPATIBILITY}
 ## Context7 fallback
 
-Context7 is a fallback for unresolved documentation questions. If a Context7 skill or instruction
-is loaded, defer its query steps until the Loci workflow reaches a fallback condition. If the user
-explicitly requests Context7, follow that request directly.
+Context7 and other documentation sources are fallbacks only for unresolved, in-scope developer
+documentation questions. Non-documentation tasks should use the appropriate source directly
+without first exhausting Loci. If a Context7 skill or instruction is loaded, defer its query steps
+until the Loci workflow reaches a fallback condition. If the user explicitly requests Context7,
+follow that request directly.
 
 When falling back:
 
@@ -124,9 +133,15 @@ function findContext7Range(
   const legacy = [...outsideLoci.matchAll(/^<!-- context7 -->(?=\r?$)/gim)]
   const starts = [...outsideLoci.matchAll(/^<!-- context7:start -->(?=\r?$)/gim)]
   const ends = [...outsideLoci.matchAll(/^<!-- context7:end -->(?=\r?$)/gim)]
+  const lociContext7Starts = [...outsideLoci.matchAll(/^<!-- loci-context7:start -->(?=\r?$)/gim)]
+  const lociContext7Ends = [...outsideLoci.matchAll(/^<!-- loci-context7:end -->(?=\r?$)/gim)]
   const hasStructured = starts.length > 0 || ends.length > 0
+  const hasLegacyLociContext7 = lociContext7Starts.length > 0 || lociContext7Ends.length > 0
+  const markerStyles = [legacy.length > 0, hasStructured, hasLegacyLociContext7].filter(
+    Boolean
+  ).length
 
-  if (legacy.length > 0 && hasStructured) {
+  if (markerStyles > 1) {
     throw new Error('Context7 全局规则标记重复，请先手动修复')
   }
   if (legacy.length === 2) return toRange(legacy[0], legacy[1], 'Context7 全局规则')
@@ -138,6 +153,12 @@ function findContext7Range(
   }
   if (hasStructured) {
     throw new Error('Context7 全局规则标记不完整或重复，请先手动修复')
+  }
+  if (lociContext7Starts.length === 1 && lociContext7Ends.length === 1) {
+    return toRange(lociContext7Starts[0], lociContext7Ends[0], '旧版 Loci 与 Context7 全局规则')
+  }
+  if (hasLegacyLociContext7) {
+    throw new Error('旧版 Loci 与 Context7 全局规则标记不完整或重复，请先手动修复')
   }
   if (/\bnpx\s+ctx7(?:@|\s)|\bctx7\s+(?:library|docs)\b/i.test(outsideLoci)) {
     throw new Error('检测到未受标记管理的 Context7 规则，无法安全替换，请先手动添加边界')

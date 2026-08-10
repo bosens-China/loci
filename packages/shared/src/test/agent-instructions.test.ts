@@ -8,6 +8,15 @@ import {
 } from '../agent-instructions.js'
 
 describe('Loci Agent 全局规则区块', () => {
+  it('明确限定技术文档职责并让非文档任务直接选择其他来源', () => {
+    expect(LOCI_AGENT_INSTRUCTIONS).toContain('only when a task depends on developer documentation')
+    expect(LOCI_AGENT_INSTRUCTIONS).toContain('Do not route general web research through Loci')
+    expect(LOCI_AGENT_INSTRUCTIONS).toContain('use the appropriate web or domain source directly')
+    expect(LOCI_AGENT_INSTRUCTIONS).toContain(
+      'another documentation source or targeted web search only when'
+    )
+  })
+
   it('追加规则并保持重复执行幂等', () => {
     const first = mergeLociAgentInstructions('# 我的规则\n')
 
@@ -53,6 +62,28 @@ describe('Loci Agent 全局规则区块', () => {
     expect(mergeLociAgentInstructions(first, { migrateContext7: true })).toBe(first)
   })
 
+  it('迁移旧版 Loci 与 Context7 组合区块并保留其他内容', () => {
+    const current = [
+      '<!-- loci-context7:start -->',
+      '# Technical Documentation: Loci First, Context7 Fallback',
+      'Run `npx ctx7@latest docs` only after Loci.',
+      '<!-- loci-context7:end -->',
+      '',
+      '# 我的其他规则',
+      ''
+    ].join('\r\n')
+
+    const first = mergeLociAgentInstructions(current, { migrateContext7: true })
+
+    expect(first).not.toContain('loci-context7:start')
+    expect(first).not.toContain('loci-context7:end')
+    expect(first).toContain(LOCI_CONTEXT7_COMPATIBILITY)
+    expect(first).toContain('# 我的其他规则')
+    expect(first).toContain('\r\n')
+    expect(first.match(/<!-- loci:start -->/g)).toHaveLength(1)
+    expect(mergeLociAgentInstructions(first, { migrateContext7: true })).toBe(first)
+  })
+
   it('迁移 Context7 时保留已有 Loci 区块位置与其他内容', () => {
     const current = [
       '<!-- context7:start -->',
@@ -94,6 +125,17 @@ describe('Loci Agent 全局规则区块', () => {
         migrateContext7: true
       })
     ).toThrow('无法安全替换')
+    expect(() =>
+      mergeLociAgentInstructions('<!-- loci-context7:start -->\nRun `ctx7 docs`.\n', {
+        migrateContext7: true
+      })
+    ).toThrow('不完整')
+    expect(() =>
+      mergeLociAgentInstructions(
+        '<!-- loci-context7:start -->\n旧规则\n<!-- loci-context7:end -->\n<!-- context7 -->\n新规则\n<!-- context7 -->\n',
+        { migrateContext7: true }
+      )
+    ).toThrow('重复')
   })
 
   it('拒绝不完整、重复或逆序标记', () => {

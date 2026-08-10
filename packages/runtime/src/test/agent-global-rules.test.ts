@@ -77,6 +77,25 @@ describe('Agent 全局规则写入', () => {
     expect(second.message).toContain('组合规则已是最新版本')
   })
 
+  it('迁移旧版 Codex Loci 与 Context7 组合规则', () => {
+    const codexDir = join(homeDir, '.codex')
+    const path = join(codexDir, 'AGENTS.md')
+    mkdirSync(codexDir, { recursive: true })
+    writeFileSync(
+      path,
+      '<!-- loci-context7:start -->\nRun `npx ctx7@latest docs` after Loci.\n<!-- loci-context7:end -->\n\n# 我的规则\n',
+      'utf8'
+    )
+
+    const result = installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+    const content = readFileSync(path, 'utf8')
+
+    expect(result.message).toContain('检测到 Context7')
+    expect(content).toContain(LOCI_CONTEXT7_COMPATIBILITY)
+    expect(content).toContain('# 我的规则')
+    expect(content).not.toContain('loci-context7')
+  })
+
   it('Codex 中未标记的 Context7 规则会中止且不修改文件', () => {
     const codexDir = join(homeDir, '.codex')
     const path = join(codexDir, 'AGENTS.md')
