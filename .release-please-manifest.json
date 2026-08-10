@@ -1,8 +1,8 @@
 {
-  "apps/desktop": "1.12.0",
-  "apps/cli": "1.11.0",
+  "apps/desktop": "1.12.1",
+  "apps/cli": "1.11.1",
   "apps/server": "1.7.0",
   "packages/core": "1.10.0",
-  "packages/shared": "1.14.0",
-  "packages/runtime": "1.8.0"
+  "packages/shared": "1.15.0",
+  "packages/runtime": "1.9.0"
 }
