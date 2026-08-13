@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.12.0](https://github.com/bosens-China/loci/compare/cli-v1.11.1...cli-v1.12.0) (2026-08-13)
+
+
+### Features
+
+* 增强 Agent MCP 配置写入 ([f8e03c2](https://github.com/bosens-China/loci/commit/f8e03c24fed286a46d37ba132e875a1893b3dc65))
+* 支持 CLI 与桌面管理 Skills ([e2f50ff](https://github.com/bosens-China/loci/commit/e2f50ff8ecd7138cf288edc0d585ee51c82ef68d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/runtime bumped to 1.10.0
+    * @loci/shared bumped to 1.16.0
+
 ## [1.11.1](https://github.com/bosens-China/loci/compare/cli-v1.11.0...cli-v1.11.1) (2026-08-10)
 
 
