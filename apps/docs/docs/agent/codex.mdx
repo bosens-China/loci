@@ -73,6 +73,8 @@ Context7 规则
 
 CLI 和桌面端会用一个 Loci 受管区块替换完整的 Context7 区块。组合规则先执行 Loci 本地、云端和用户授权的官方抓取流程，只在 Loci 不可用、用户拒绝抓取、已授权获取失败或证据不足时调用 Context7。再次写入只升级这个组合区块。
 
+安装顺序不影响最终结果。先写入 Loci、后安装全局 Context7 Skill 时，再执行一次 `loci mcp rules codex` 或点击桌面的“写入全局规则”，Loci 会检测 `~/.agents/skills/context7-mcp/SKILL.md` 与 `~/.codex/skills/context7-mcp/SKILL.md` 并升级已有区块。已经生成组合规则后，如果 Context7 安装器又写入一组具有完整边界的新规则，下一次执行同一操作会去重并保留一个最新的组合区块。Loci 不会在后台监听第三方 Skill 安装。
+
 如果 Context7 标记不完整、重复，或者规则包含 `ctx7` 命令但没有标记，Loci 会停止写入并要求手动整理边界。这个安全检查不会修改项目级 `AGENTS.md`、Context7 Skill 或文件中的其他个人规则。
 
 ## 项目级规则

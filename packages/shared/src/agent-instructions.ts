@@ -72,6 +72,7 @@ export const LOCI_CONTEXT7_AGENT_INSTRUCTIONS = createManagedBlock(
 
 interface MergeLociAgentInstructionsOptions {
   migrateContext7?: boolean
+  context7Available?: boolean
 }
 
 interface ManagedRange {
@@ -87,6 +88,7 @@ export function mergeLociAgentInstructions(
   const lociRange = findLociRange(content)
   const context7Range = options.migrateContext7 ? findContext7Range(content, lociRange) : undefined
   const useContext7 =
+    options.context7Available === true ||
     context7Range !== undefined ||
     (lociRange !== undefined &&
       content.slice(lociRange.start, lociRange.end).includes(LOCI_CONTEXT7_COMPATIBILITY))

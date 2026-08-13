@@ -96,6 +96,44 @@ describe('Agent 全局规则写入', () => {
     expect(content).not.toContain('loci-context7')
   })
 
+  it('Context7 Skill 后装后再次写入会升级已有 Loci 规则', () => {
+    const first = installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+    const path = join(homeDir, '.codex', 'AGENTS.md')
+    expect(readFileSync(path, 'utf8')).not.toContain(LOCI_CONTEXT7_COMPATIBILITY)
+
+    const skillDir = join(homeDir, '.agents', 'skills', 'context7-mcp')
+    mkdirSync(skillDir, { recursive: true })
+    writeFileSync(join(skillDir, 'SKILL.md'), '# Context7\n', 'utf8')
+    const second = installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+    const third = installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+
+    expect(first.changed).toBe(true)
+    expect(second.changed).toBe(true)
+    expect(second.message).toContain('检测到 Context7')
+    expect(readFileSync(path, 'utf8')).toContain(LOCI_CONTEXT7_COMPATIBILITY)
+    expect(third.changed).toBe(false)
+  })
+
+  it('组合规则存在时再次安装 Context7 规则会去重', () => {
+    const skillDir = join(homeDir, '.codex', 'skills', 'context7-mcp')
+    mkdirSync(skillDir, { recursive: true })
+    writeFileSync(join(skillDir, 'SKILL.md'), '# Context7\n', 'utf8')
+    const path = join(homeDir, '.codex', 'AGENTS.md')
+    installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+    writeFileSync(
+      path,
+      `${readFileSync(path, 'utf8')}\n<!-- context7:start -->\n新规则\n<!-- context7:end -->\n`,
+      'utf8'
+    )
+
+    installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+    const content = readFileSync(path, 'utf8')
+
+    expect(content).not.toContain('<!-- context7:start -->')
+    expect(content).not.toContain('<!-- context7:end -->')
+    expect(content.match(/<!-- loci:start -->/g)).toHaveLength(1)
+  })
+
   it('Codex 中未标记的 Context7 规则会中止且不修改文件', () => {
     const codexDir = join(homeDir, '.codex')
     const path = join(codexDir, 'AGENTS.md')

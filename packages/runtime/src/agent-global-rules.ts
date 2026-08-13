@@ -1,16 +1,6 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync
-} from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, resolve } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { resolve } from 'node:path'
 import {
   getMcpClientDefinition,
   hasContext7Compatibility,
@@ -19,6 +9,7 @@ import {
   type AgentGlobalRulesClient,
   type AgentGlobalRulesResult
 } from '@loci/shared'
+import { writeFileAtomically } from './atomic-file.js'
 import { acquireRuntimeLock } from './runtime-lock.js'
 
 interface InstallAgentGlobalRulesOptions {
@@ -44,14 +35,18 @@ export function installAgentGlobalRules(
 
   const lock = acquireRuntimeLock(options.dataDir, `agent-global-rules-${client}`, options.owner)
   try {
-    const path = resolveAgentGlobalRulesPath(client, options.homeDir ?? homedir())
+    const homeDir = options.homeDir ?? homedir()
+    const path = resolveAgentGlobalRulesPath(client, homeDir)
     const current = existsSync(path)
       ? readFileSync(path, 'utf8')
       : client === 'vscode'
         ? VSCODE_INSTRUCTIONS_HEADER
         : ''
     const hadContext7Compatibility = hasContext7Compatibility(current)
-    const next = mergeLociAgentInstructions(current, { migrateContext7: client === 'codex' })
+    const next = mergeLociAgentInstructions(current, {
+      migrateContext7: client === 'codex',
+      context7Available: client === 'codex' && isContext7SkillInstalled(homeDir)
+    })
     const hasContext7 = hasContext7Compatibility(next)
     const changed = current !== next
     if (changed) writeFileAtomically(path, next)
@@ -74,6 +69,13 @@ export function installAgentGlobalRules(
   }
 }
 
+/** Context7 可能晚于规则安装；每次重写都重新检查两个 Codex 用户级 Skill 入口。 */
+function isContext7SkillInstalled(homeDir: string): boolean {
+  return ['.agents/skills/context7-mcp/SKILL.md', '.codex/skills/context7-mcp/SKILL.md'].some(
+    (path) => existsSync(resolve(homeDir, path))
+  )
+}
+
 export function resolveAgentGlobalRulesPath(
   client: AgentGlobalRulesClient,
   homeDir: string
@@ -85,23 +87,4 @@ export function resolveAgentGlobalRulesPath(
   const configured = getMcpClientDefinition(client).globalRulesPath
   if (!configured.startsWith('~/')) throw new Error('Agent 全局规则路径无效')
   return resolve(homeDir, configured.slice(2))
-}
-
-function writeFileAtomically(path: string, content: string): void {
-  mkdirSync(dirname(path), { recursive: true })
-  const target = existsSync(path) ? realpathSync(path) : path
-  const tempPath = resolve(
-    dirname(target),
-    `.${basename(target)}.${process.pid}.${randomUUID()}.tmp`
-  )
-  try {
-    writeFileSync(tempPath, content, {
-      encoding: 'utf8',
-      flag: 'wx',
-      mode: existsSync(target) ? statSync(target).mode : 0o600
-    })
-    renameSync(tempPath, target)
-  } finally {
-    rmSync(tempPath, { force: true })
-  }
 }

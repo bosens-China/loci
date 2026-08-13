@@ -62,6 +62,8 @@ Loci 写入的内容使用固定标记。中间内容由 Loci 自动生成，不
 
 首次配置会创建文件或追加区块。再次配置会替换标记之间的内容，便于升级规则，同时保留区块之外的个人设置。标记缺失、重复或顺序错误时，Loci 会停止写入，请先手动修复文件。Codex 中具有完整标记边界的 Context7 全局规则，以及旧版文档生成的 `loci-context7` 组合区块，都会被迁移为当前的 Loci 与 Context7 组合区块。
 
+如果先写入 Loci 规则、之后才安装全局 Context7 Skill，再次运行 `loci mcp rules codex` 或再次点击桌面的“写入全局规则”即可升级为组合规则。Loci 每次都会重新检查 `~/.agents/skills/context7-mcp/SKILL.md` 和 `~/.codex/skills/context7-mcp/SKILL.md`；如果 Context7 后续又追加了一个带完整边界的规则区块，也会删除该重复区块并收敛为一个 Loci 受管区块。Loci 不常驻监听第三方安装，因此安装 Context7 本身不会立即改写规则文件。
+
 同一客户端的重复写入是幂等的。桌面和 CLI 共享跨进程锁，避免同时修改同一个目标。
 
 ## 验证与移除

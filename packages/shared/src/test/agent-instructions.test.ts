@@ -114,6 +114,27 @@ describe('Loci Agent 全局规则区块', () => {
     expect(next).not.toContain(LOCI_CONTEXT7_COMPATIBILITY)
   })
 
+  it('Context7 后装时把已有 Loci 区块升级为组合规则', () => {
+    const current = mergeLociAgentInstructions('# 我的规则\n')
+    const next = mergeLociAgentInstructions(current, { context7Available: true })
+
+    expect(current).not.toContain(LOCI_CONTEXT7_COMPATIBILITY)
+    expect(next).toContain(LOCI_CONTEXT7_COMPATIBILITY)
+    expect(next).toContain('# 我的规则')
+    expect(mergeLociAgentInstructions(next, { context7Available: true })).toBe(next)
+  })
+
+  it('已有组合规则后再次出现 Context7 区块时仍收敛为单一区块', () => {
+    const combined = mergeLociAgentInstructions('', { context7Available: true })
+    const current = `${combined}\n<!-- context7:start -->\n新 Context7 规则\n<!-- context7:end -->\n`
+    const next = mergeLociAgentInstructions(current, { migrateContext7: true })
+
+    expect(next).not.toContain('<!-- context7:start -->')
+    expect(next).not.toContain('<!-- context7:end -->')
+    expect(next.match(/<!-- loci:start -->/g)).toHaveLength(1)
+    expect(next).toContain(LOCI_CONTEXT7_COMPATIBILITY)
+  })
+
   it('拒绝不完整或无法安全定位的 Context7 规则', () => {
     expect(() =>
       mergeLociAgentInstructions('<!-- context7 -->\nRun `ctx7 docs`.\n', {
