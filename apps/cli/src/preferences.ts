@@ -30,7 +30,7 @@ const adminCreateSchema = z.object({
 })
 
 const mcpConfigureSchema = z.object({
-  client: z.enum(['codex', 'cursor', 'vscode', 'claude-code']),
+  client: z.enum(['codex', 'cursor', 'vscode', 'claude-code', 'antigravity']),
   transport: z.enum(['stdio', 'http'])
 })
 

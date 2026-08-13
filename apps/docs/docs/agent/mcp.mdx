@@ -20,21 +20,33 @@
 npm install --global @boses/cli
 ```
 
-Codex、Cursor、VS Code 和 Claude Code 可以自动写入配置。以下命令以 Codex 为例：
+Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都可以自动写入配置。以下命令以 Codex 为例：
 
 ```bash
 loci mcp configure codex
 loci mcp status
 ```
 
-交互终端会在写入前展示目标客户端、传输方式和配置命令。可信的自动化环境可以使用 `--yes` 跳过确认。
+交互终端会在写入前展示目标客户端、传输方式、首选命令和回退文件。可信的自动化环境可以使用 `--yes` 跳过确认。
+
+一键配置默认先调用客户端命令。命令未安装、超时、执行异常或返回失败状态时，Loci 会读取对应用户级配置，只新增或替换名为 `loci` 的服务；Antigravity 没有对应命令，因此直接写文件。
+
+| 客户端             | 用户级回退文件                     | 服务位置             | HTTP 地址字段 |
+| ------------------ | ---------------------------------- | -------------------- | ------------- |
+| Codex              | `~/.codex/config.toml`             | `[mcp_servers.loci]` | `url`         |
+| Cursor             | `~/.cursor/mcp.json`               | `mcpServers.loci`    | `url`         |
+| VS Code            | 默认用户 Profile 的 `mcp.json`     | `servers.loci`       | `url`         |
+| Claude Code        | `~/.claude.json`                   | `mcpServers.loci`    | `url`         |
+| Google Antigravity | `~/.gemini/config/mcp_config.json` | `mcpServers.loci`    | `serverUrl`   |
+
+文件不存在时会创建父目录与配置文件。文件存在时，JSON/JSONC 合并会保留注释、尾逗号、其他服务和顶层设置；Codex 只替换 `[mcp_servers.loci]` 及其子表。原文件无法解析、目标容器不是对象、Codex 存在重复或冲突定义时会停止并保留原文件。VS Code 使用多个 Profile 时，命令仍是首选；只有命令失败后才写入默认用户 Profile。
 
 MCP 配置只负责连接工具。需要让 Agent 在所有项目中优先使用 Loci 时，还应[配置客户端全局规则](/agent/global-rules)。
 
-Google Antigravity 需要复制 HTTP 配置：
+Google Antigravity 仅支持 HTTP，可以一键写入：
 
 ```bash
-loci mcp config antigravity
+loci mcp configure antigravity
 ```
 
 Kimi Code 或其他未内置的客户端可以打印通用 `mcpServers` 配置：
@@ -139,7 +151,15 @@ loci doctor
 | `loci mcp serve`              | 在前台启动本机 HTTP MCP。           |
 | `loci mcp status`             | 显示传输方式、HTTP 地址和当前宿主。 |
 | `loci mcp config [client]`    | 打印客户端配置，不修改文件。        |
-| `loci mcp configure [client]` | 确认后写入支持的客户端配置。        |
+| `loci mcp configure [client]` | 命令优先，失败时回退用户配置文件。  |
 | `loci mcp rules [client]`     | 写入全局规则；Cursor 输出复制内容。 |
 
 需要让 AI 遵循固定检索流程时，继续阅读[使用 Loci Skill](/agent/skill)。CLI 数据导入、导出和清理命令请查看[数据备份与运行环境](/cli/commands/integrations)。
+
+## 客户端官方配置资料
+
+- [Codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
+- [Cursor MCP](https://docs.cursor.com/context/model-context-protocol)
+- [VS Code MCP servers](https://code.visualstudio.com/docs/agent-customization/mcp-servers)
+- [Claude Code MCP](https://code.claude.com/docs/en/mcp)
+- [Google Antigravity MCP](https://antigravity.google/docs/mcp)

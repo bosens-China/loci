@@ -54,7 +54,7 @@ export const MCP_CLIENTS = [
   {
     id: 'claude-code',
     label: 'Claude Code',
-    configPath: '.mcp.json',
+    configPath: '~/.claude.json',
     globalRulesPath: '~/.claude/CLAUDE.md',
     globalRulesWrite: true,
     transports: ['stdio', 'http'],
@@ -84,7 +84,7 @@ export const GENERIC_MCP_CONFIG_TARGET = {
 
 export type McpClientDefinition = (typeof MCP_CLIENTS)[number]
 export type McpClient = McpClientDefinition['id']
-export type AgentClient = Extract<McpClientDefinition, { quickImport: true }>['id']
+export type AgentClient = McpClient
 export type AgentGlobalRulesClient = Extract<McpClientDefinition, { globalRulesWrite: true }>['id']
 export type McpConfigTarget = McpClient | typeof GENERIC_MCP_CONFIG_TARGET.id
 
@@ -92,12 +92,8 @@ export function listMcpClients(): readonly McpClientDefinition[] {
   return MCP_CLIENTS
 }
 
-export function listImportableAgentClients(): ReadonlyArray<
-  Extract<McpClientDefinition, { quickImport: true }>
-> {
-  return MCP_CLIENTS.filter(
-    (client): client is Extract<McpClientDefinition, { quickImport: true }> => client.quickImport
-  )
+export function listImportableAgentClients(): readonly McpClientDefinition[] {
+  return MCP_CLIENTS
 }
 
 export function listAgentGlobalRulesClients(): ReadonlyArray<
@@ -114,7 +110,7 @@ export function isMcpClient(value: unknown): value is McpClient {
 }
 
 export function isAgentClient(value: unknown): value is AgentClient {
-  return isMcpClient(value) && getMcpClientDefinition(value).quickImport
+  return isMcpClient(value)
 }
 
 export function isAgentGlobalRulesClient(value: unknown): value is AgentGlobalRulesClient {

@@ -11,7 +11,7 @@ import {
 } from '../mcp-clients.js'
 
 describe('MCP 客户端共享目录', () => {
-  it('统一列出五个具名客户端和四个可自动写入客户端', () => {
+  it('统一列出五个具名客户端和五个可自动写入客户端', () => {
     expect(listMcpClients().map((client) => client.id)).toEqual([
       'codex',
       'cursor',
@@ -23,13 +23,14 @@ describe('MCP 客户端共享目录', () => {
       'codex',
       'cursor',
       'vscode',
-      'claude-code'
+      'claude-code',
+      'antigravity'
     ])
   })
 
   it('区分具名客户端、可自动写入客户端和传输能力', () => {
     expect(isMcpClient('antigravity')).toBe(true)
-    expect(isAgentClient('antigravity')).toBe(false)
+    expect(isAgentClient('antigravity')).toBe(true)
     expect(isAgentClient('codex')).toBe(true)
     expect(isMcpClient('unknown')).toBe(false)
     expect(isMcpClient('gemini-cli')).toBe(false)

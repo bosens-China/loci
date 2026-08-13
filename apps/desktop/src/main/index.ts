@@ -155,7 +155,10 @@ if (isPrimaryInstance)
     })
     ipcMain.handle('agents:import', async (_event, client: unknown) => {
       const connection = createHttpMcpConnection(requireMcpRuntime().getState().mcp.endpoint)
-      return importAgentClient(client, connection)
+      return importAgentClient(client, connection, {
+        dataDir,
+        owner: '桌面端 Agent MCP 配置写入'
+      })
     })
     ipcMain.handle('agents:global-rules:install', (_event, client: unknown) =>
       installAgentGlobalRules(client, {

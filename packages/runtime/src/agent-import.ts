@@ -4,11 +4,19 @@ import which from 'which'
 import {
   getMcpClientDefinition,
   isAgentClient,
+  supportsMcpTransport,
   type AgentClient,
   type AgentImportResult,
   type McpAgentConnection,
   type McpImportStrategy
 } from '@loci/shared'
+import {
+  resolveAgentMcpConfigPath,
+  writeAgentMcpConfigFile,
+  type AgentMcpConfigPathOptions
+} from './agent-mcp-config.js'
+import { resolveLociDataDir } from './data-path.js'
+import { acquireRuntimeLock } from './runtime-lock.js'
 
 export type { McpAgentConnection } from '@loci/shared'
 
@@ -23,6 +31,13 @@ interface CommandResult {
   output: string
 }
 
+export interface ImportAgentClientOptions extends AgentMcpConfigPathOptions {
+  dataDir?: string
+  owner?: string
+}
+
+const activeImports = new Map<string, Promise<AgentImportResult>>()
+
 export const LOCI_CLI_STDIO_CONNECTION: McpAgentConnection = {
   type: 'stdio',
   command: 'loci',
@@ -35,16 +50,66 @@ export function createHttpMcpConnection(endpoint: string): McpAgentConnection {
 
 export async function importAgentClient(
   client: unknown,
-  connection: McpAgentConnection
+  connection: McpAgentConnection,
+  options: ImportAgentClientOptions = {}
 ): Promise<AgentImportResult> {
   const selected = requireAgentClient(client)
-  const command = createAgentImportCommand(selected, connection)
-  const executable = await resolveExecutable(command)
-  await runCommand(executable, command.args, command.label)
-  const transport = connection.type === 'stdio' ? 'CLI stdio' : '桌面 HTTP'
-  return {
-    client: selected,
-    message: `已将 ${transport} MCP 导入到 ${command.label} 的用户配置`
+  validateClientConnection(selected, connection)
+  const path = resolveAgentMcpConfigPath(selected, options)
+  const active = activeImports.get(path)
+  if (active) return active
+
+  const task = performAgentImport(selected, connection, path, options)
+  activeImports.set(path, task)
+  try {
+    return await task
+  } finally {
+    if (activeImports.get(path) === task) activeImports.delete(path)
+  }
+}
+
+async function performAgentImport(
+  client: AgentClient,
+  connection: McpAgentConnection,
+  path: string,
+  options: ImportAgentClientOptions
+): Promise<AgentImportResult> {
+  const definition = getMcpClientDefinition(client)
+  const lock = acquireRuntimeLock(
+    options.dataDir ?? resolveLociDataDir(),
+    `agent-mcp-config-${client}`,
+    options.owner ?? 'Agent MCP 配置写入'
+  )
+  try {
+    let commandError: Error | undefined
+    if (definition.quickImport) {
+      const command = createAgentImportCommand(client, connection)
+      try {
+        const executable = await resolveExecutable(command)
+        await runCommand(executable, command.args, command.label)
+        return {
+          client,
+          message: `已通过 ${command.label} 命令写入 ${transportLabel(connection)} MCP`
+        }
+      } catch (error) {
+        commandError = toError(error)
+      }
+    }
+
+    const result = writeAgentMcpConfigFile(client, connection, options)
+    const status = result.changed
+      ? result.created
+        ? `已创建用户配置：${path}`
+        : `已合并用户配置：${path}`
+      : `用户配置已是最新版本：${path}`
+    return {
+      client,
+      message: commandError
+        ? `${definition.label} 配置命令失败（${commandError.message}），${status}`
+        : `${definition.label} 不支持配置命令，${status}`
+    }
+  } finally {
+    lock.release()
   }
 }
 
@@ -53,10 +118,10 @@ export function createAgentImportCommand(
   connection: McpAgentConnection
 ): AgentImportCommand {
   const selected = requireAgentClient(client)
-  validateConnection(connection)
+  validateClientConnection(selected, connection)
   const definition = getMcpClientDefinition(selected)
   if (!definition.executable || !definition.quickImport) {
-    throw new Error('这个 Agent 客户端不支持自动写入')
+    throw new Error('这个 Agent 客户端不支持命令导入')
   }
   return {
     command: definition.executable,
@@ -129,6 +194,14 @@ function validateConnection(connection: McpAgentConnection): void {
     url.hash
   ) {
     throw new Error('MCP 地址不是有效的本机地址')
+  }
+}
+
+function validateClientConnection(client: AgentClient, connection: McpAgentConnection): void {
+  validateConnection(connection)
+  if (!supportsMcpTransport(client, connection.type)) {
+    const definition = getMcpClientDefinition(client)
+    throw new Error(`${definition.label} 不支持 ${connection.type} 传输`)
   }
 }
 
@@ -211,4 +284,12 @@ function lastOutputLine(output: string): string {
     .filter(Boolean)
     .at(-1)
   return line ? `：${line.slice(0, 240)}` : ''
+}
+
+function transportLabel(connection: McpAgentConnection): string {
+  return connection.type === 'stdio' ? 'CLI stdio' : '本地 HTTP'
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error('未知错误')
 }

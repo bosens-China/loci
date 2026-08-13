@@ -9,6 +9,7 @@ import {
   createLociMcpServer,
   LOCI_CLI_STDIO_CONNECTION,
   readRuntimeLock,
+  resolveAgentMcpConfigPath,
   startMcpHttpServer,
   type LociMcpServices,
   type McpAgentConnection
@@ -129,7 +130,7 @@ export function registerMcpCommands(program: Command): void {
 
   mcp
     .command('configure [client]')
-    .description('把唯一的 Loci MCP 写入 Agent 客户端配置，默认使用 CLI stdio')
+    .description('优先用客户端命令写入 Loci MCP，失败时回退用户配置文件')
     .addOption(
       new Option('--transport <transport>', '选择 MCP 传输方式').choices(['stdio', 'http'])
     )
@@ -151,7 +152,12 @@ export function registerMcpCommands(program: Command): void {
             ? await askSelect<AgentSelection>('请选择 Agent 客户端', clients, remembered.client)
             : 'manual')
         const transport =
-          options.transport ?? (process.stdin.isTTY ? remembered.transport : 'stdio')
+          options.transport ??
+          (selected === 'antigravity'
+            ? 'http'
+            : process.stdin.isTTY
+              ? remembered.transport
+              : 'stdio')
         if (selected === 'manual') {
           await printManualMcpConfig(transport, GENERIC_MCP_CONFIG_TARGET.id)
           return
@@ -162,6 +168,10 @@ export function registerMcpCommands(program: Command): void {
             2
           )
         }
+        if (!supportsMcpTransport(selected, transport)) {
+          const definition = getMcpClientDefinition(selected)
+          throw new CliError(`${definition.label} 不支持 ${transport} 传输`, 2)
+        }
         await runWithRuntime('配置 Agent 客户端', async (runtime) => {
           const connection =
             transport === 'stdio'
@@ -170,12 +180,22 @@ export function registerMcpCommands(program: Command): void {
                   `http://127.0.0.1:${runtime.database.getSettings().mcpPort}/mcp`
                 )
           if (process.stdin.isTTY && !options.yes) {
-            const command = createAgentImportCommand(selected, connection)
+            const definition = getMcpClientDefinition(selected)
+            const path = resolveAgentMcpConfigPath(selected)
+            const action = definition.quickImport
+              ? (() => {
+                  const command = createAgentImportCommand(selected, connection)
+                  return [
+                    `优先执行：${formatCommand(command.command, command.args)}`,
+                    `命令失败后合并：${path}`
+                  ]
+                })()
+              : [`直接合并：${path}`]
             note(
               [
-                `客户端：${command.label}`,
+                `客户端：${definition.label}`,
                 `传输方式：${transport === 'stdio' ? 'CLI stdio' : '本地 HTTP'}`,
-                `将执行：${formatCommand(command.command, command.args)}`
+                ...action
               ].join('\n'),
               'MCP 配置写入预览'
             )
@@ -183,7 +203,10 @@ export function registerMcpCommands(program: Command): void {
               return '客户端配置未修改'
             }
           }
-          const result = await importAgentClient(selected, connection)
+          const result = await importAgentClient(selected, connection, {
+            dataDir: runtime.dataDir,
+            owner: 'CLI Agent MCP 配置写入'
+          })
           saveMcpConfigurePreference(runtime.database, { client: selected, transport })
           return result.message
         })

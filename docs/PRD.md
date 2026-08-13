@@ -89,7 +89,8 @@
 
 - 当前决策：产品只向 Agent 暴露一个名为 `loci` 的逻辑 MCP。桌面设置页的一键配置和复制片段始终使用随 Electron 主进程启动、仅绑定 `127.0.0.1` 的 Streamable HTTP；CLI 自动配置默认由 Agent 按需拉起 `loci mcp stdio`，也允许用户显式选择 HTTP。两者同时安装时仍只在同一客户端注册其中一个入口。
 - 当前决策：桌面端和 CLI 复用同一个 MCP Server、工具 Schema 和本地数据库。不同 Agent 可以各自拉起 stdio 进程，但不能在同一客户端中同时注册重复的 CLI 与桌面工具。产品公开命名统一使用 `Loci`、`loci_*` 和 `Loci*`。
-- 当前决策：桌面端、CLI 和运行时共用一份 MCP 客户端能力目录。Codex、Cursor、VS Code 和 Claude Code 支持一键写入与按客户端复制 MCP 配置；Google Antigravity 支持复制 HTTP 配置；其他客户端保留 Cursor `mcpServers` 风格的通用 stdio 或 HTTP 配置。产品面向个人开发者，不提供仅面向企业许可证或付费 API Key 用户的 Gemini CLI 快捷入口。所有片段都是具体客户端约定，不宣称为 MCP 协议统一配置格式。
+- 当前决策：桌面端、CLI 和运行时共用一份 MCP 客户端能力目录。Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都支持一键写入与按客户端复制 MCP 配置；其他客户端保留 Cursor `mcpServers` 风格的通用 stdio 或 HTTP 配置。产品面向个人开发者，不提供仅面向企业许可证或付费 API Key 用户的 Gemini CLI 快捷入口。所有片段都是具体客户端约定，不宣称为 MCP 协议统一配置格式。
+- 当前决策：一键配置默认优先调用客户端官方命令；命令缺失、超时、执行异常或非零退出时回退到用户级配置文件，没有命令入口的 Antigravity 直接回退。回退按客户端官方结构只新增或替换名为 `loci` 的服务：Codex 使用 `~/.codex/config.toml` 的 `[mcp_servers.loci]`，Cursor 使用 `~/.cursor/mcp.json` 的 `mcpServers.loci`，VS Code 使用默认用户 Profile `mcp.json` 的 `servers.loci`，Claude Code 使用 `~/.claude.json` 的 `mcpServers.loci`，Antigravity 使用 `~/.gemini/config/mcp_config.json` 的 `mcpServers.loci`。文件不存在时创建；已有 JSON/JSONC 或 TOML 保留其他设置与注释；无法安全解析、结构冲突或重复定义时拒绝写入。命令与文件回退共享客户端级 single-flight、跨进程锁和原子替换。
 - 当前决策：MCP 使用“文档库”表示一个网站知识库，使用“文件”表示单个 Markdown 页面；提供本地文档库的添加、批量同步、同步状态、同步失败分页、分页列表、目录、批量读取、关键词搜索和删除，以及云端公开目录查询和快照拉取，共十一个工具。
 - 当前决策：MCP 新增网页库使用共享产品基础值：`auto`、1000 页、根路径，以及继承全局并发/大小设置；同时允许 Agent 按任务覆盖抓取方式、页面上限、收录路径、HTTP/浏览器并发和 GitHub ZIP/Markdown 大小上限。网页库按域名与规范化收录路径共同复用，同域不同路径可建立独立逻辑文档库。
 - 当前决策：CLI、桌面、MCP 和 Server 共享文档源业务字段的产品基础默认值、取值边界、`null` 继承含义和 GitHub 创建/更新规范化；领域层负责最终校验。显式参数优先，CLI 安全偏好只覆盖 CLI 的基础值，MCP 不读取 CLI 偏好。各入口不要求一一对应：CLI 保留提示、确认和前台/后台控制，MCP 保留批量、分页、结构化输出、等待开关和 Agent 专用检索流程。

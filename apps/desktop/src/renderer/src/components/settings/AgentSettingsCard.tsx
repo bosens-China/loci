@@ -14,8 +14,6 @@ import {
   type McpServerStatus
 } from '@loci/shared'
 
-const SKILL_INSTALL_COMMAND = 'npx skills add bosens-China/dochub-mcp --skill use-loci -y'
-
 function createAgentConfigs(endpoint: string): Array<{
   key: McpConfigTarget
   label: string
@@ -227,7 +225,8 @@ export function AgentSettingsCard({
           集成到 Agent 编辑器
         </Typography.Title>
         <Typography.Paragraph type="secondary" className="text-xs mb-3">
-          桌面端统一使用上方 HTTP Endpoint；支持的客户端可一键写入，也可以只复制配置片段。
+          桌面端统一使用上方 HTTP
+          Endpoint；一键配置会优先调用客户端命令，命令失败或不支持时安全合并用户配置文件。
         </Typography.Paragraph>
 
         <div className="overflow-hidden rounded-lg border border-solid border-[var(--ant-color-border-secondary)]">
@@ -290,26 +289,6 @@ export function AgentSettingsCard({
               </div>
             )
           })}
-        </div>
-
-        <Divider />
-
-        <Typography.Title level={5} className="mt-0! mb-1!">
-          安装 Loci Agent Skill
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" className="text-xs mb-2">
-          在控制台运行下方命令，即可一键为当前项目配置 Loci 专用工具集：
-        </Typography.Paragraph>
-        <div className="p-3 rounded-lg bg-[var(--ant-color-fill-quaternary)] border border-solid border-[var(--ant-color-border-secondary)] flex items-center justify-between">
-          <Typography.Text code className="font-mono text-xs m-0">
-            {SKILL_INSTALL_COMMAND}
-          </Typography.Text>
-          <Typography.Text
-            className="text-xs text-primary cursor-pointer shrink-0"
-            copyable={{ text: SKILL_INSTALL_COMMAND, tooltips: ['复制命令', '已复制'] }}
-          >
-            复制命令
-          </Typography.Text>
         </div>
       </Form>
     </Card>
