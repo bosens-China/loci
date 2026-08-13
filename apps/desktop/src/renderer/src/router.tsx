@@ -30,6 +30,11 @@ const settingsRoute = createRoute({
   path: 'settings'
 }).lazy(() => import('./routes/settings.lazy').then((module) => module.Route))
 
+const skillsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'skills'
+}).lazy(() => import('./routes/skills.lazy').then((module) => module.Route))
+
 const cloudCatalogRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'cloud'
@@ -50,6 +55,7 @@ const routeTree = rootRoute.addChildren([
   sourcesRoute,
   libraryRoute,
   settingsRoute,
+  skillsRoute,
   cloudCatalogRoute,
   adminLoginRoute,
   adminCloudRoute

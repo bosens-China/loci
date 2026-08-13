@@ -38,6 +38,7 @@ import { getOpenAtLogin, setOpenAtLogin, shouldStartHidden } from './open-at-log
 import { registerCloudAdminIpc } from './cloud-admin-ipc'
 import { registerCloudLibraryRuntime } from './cloud-library-runtime'
 import { createAppUpdater, type AppUpdater } from './app-update'
+import { registerSkillsIpc } from './skills-ipc'
 
 let database: LociDatabase | undefined
 let mainWindow: BrowserWindow | undefined
@@ -170,6 +171,11 @@ if (isPrimaryInstance)
       exportBackupFile(mainWindow, requireDatabase().exportBackup())
     )
     ipcMain.handle('data:import', () => importLocalData())
+    registerSkillsIpc({
+      getDatabase: requireDatabase,
+      getDataDir: () => dataDir,
+      getWindow: () => mainWindow
+    })
     registerCloudAdminIpc(() => requireDatabase().getSettings().serverUrl)
     try {
       scheduleRuntimeLock = acquireRuntimeLock(dataDir, 'schedule', '桌面端计划运行器')

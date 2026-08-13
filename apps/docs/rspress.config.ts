@@ -51,6 +51,7 @@ export default defineConfig({
                 { text: '本地文档库', link: '/cli/commands/local-library' },
                 { text: '云端文档库', link: '/cli/commands/cloud-library' },
                 { text: '数据备份与运行环境', link: '/cli/commands/integrations' },
+                { text: 'Skills 管理', link: '/agent/skill' },
                 {
                   text: 'Admin：Server 管理',
                   link: '/cli/commands/admin'

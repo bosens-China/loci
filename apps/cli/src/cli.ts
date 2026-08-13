@@ -11,6 +11,7 @@ import { registerMcpCommands } from './commands/mcp.js'
 import { registerSourceCommands } from './commands/source.js'
 import { registerScheduleCommands } from './commands/schedule.js'
 import { registerStatusCommand } from './commands/status.js'
+import { registerSkillsCommands } from './commands/skills.js'
 import { registerUpdateCommand } from './commands/update.js'
 import {
   CLI_VERSION,
@@ -81,6 +82,7 @@ export function createProgram(): Command {
   registerBrowserCommands(program)
   registerConfigCommands(program)
   registerDataCommands(program)
+  registerSkillsCommands(program)
   registerDoctorCommand(program)
   return program
 }

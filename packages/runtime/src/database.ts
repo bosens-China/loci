@@ -50,6 +50,10 @@ import {
 } from './document-content-database.js'
 import { LOCI_DATABASE_SCHEMA, LOCI_SCHEMA_VERSION } from './database-schema.js'
 import {
+  createSkillInstallationDatabase,
+  type SkillInstallationDatabase
+} from './skill-database.js'
+import {
   assertLocalSourceIdentityAvailable,
   createWebSourceIdentity,
   findLocalSourceId,
@@ -83,7 +87,8 @@ export interface LociDatabase
     SettingsDatabase,
     InteractionPreferencesDatabase,
     CrawlHistoryDatabase,
-    DocumentContentDatabase {
+    DocumentContentDatabase,
+    SkillInstallationDatabase {
   schemaVersion: number
   listSources: () => DocumentSource[]
   createSource: (input: CreateSourceInput) => DocumentSource
@@ -157,6 +162,7 @@ export function createDatabase(
     ...createInteractionPreferencesDatabase(database),
     ...createCrawlHistoryDatabase(database),
     ...createDocumentContentDatabase(database),
+    ...createSkillInstallationDatabase(database),
     listSources: () => {
       const rows = database
         .prepare(

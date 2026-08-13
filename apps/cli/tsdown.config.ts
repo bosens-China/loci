@@ -7,6 +7,12 @@ export default defineConfig({
   target: 'node22',
   outDir: 'dist',
   outExtensions: () => ({ js: '.js' }),
+  copy: [
+    {
+      from: '../../.agents/skills/use-loci',
+      to: 'dist/resources/skills'
+    }
+  ],
   clean: true,
   sourcemap: true,
   deps: {

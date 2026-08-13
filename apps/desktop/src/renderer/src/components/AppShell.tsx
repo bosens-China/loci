@@ -6,7 +6,8 @@ import {
   FileSearchOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  SettingOutlined
+  SettingOutlined,
+  ToolOutlined
 } from '@ant-design/icons'
 import { Button, Layout, Menu, Typography } from 'antd'
 import type { MenuProps } from 'antd'
@@ -34,6 +35,7 @@ function AppShell({ activeView, onViewChange, children }: AppShellProps): React.
         { key: 'overview', icon: <AppstoreOutlined />, label: '总览' },
         { key: 'sources', icon: <DatabaseOutlined />, label: '文档源' },
         { key: 'library', icon: <FileSearchOutlined />, label: '知识库' },
+        { key: 'skills', icon: <ToolOutlined />, label: 'Skills 管理' },
         { key: 'cloudCatalog', icon: <CloudDownloadOutlined />, label: '云端资源' }
       ]
     },

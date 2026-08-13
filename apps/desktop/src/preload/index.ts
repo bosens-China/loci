@@ -59,6 +59,17 @@ const api: LociApi = {
     ipcRenderer.invoke('agents:global-rules:install', client) as ReturnType<
       LociApi['installAgentGlobalRules']
     >,
+  listSkills: (input) =>
+    ipcRenderer.invoke('skills:list', input) as ReturnType<LociApi['listSkills']>,
+  previewSkills: (input) =>
+    ipcRenderer.invoke('skills:preview', input) as ReturnType<LociApi['previewSkills']>,
+  addSkills: (input) => ipcRenderer.invoke('skills:add', input) as ReturnType<LociApi['addSkills']>,
+  removeSkills: (input) =>
+    ipcRenderer.invoke('skills:remove', input) as ReturnType<LociApi['removeSkills']>,
+  clearSkills: (input) =>
+    ipcRenderer.invoke('skills:clear', input) as ReturnType<LociApi['clearSkills']>,
+  selectSkillProject: () =>
+    ipcRenderer.invoke('skills:select-project') as ReturnType<LociApi['selectSkillProject']>,
   exportData: () => ipcRenderer.invoke('data:export') as ReturnType<LociApi['exportData']>,
   importData: () => ipcRenderer.invoke('data:import') as ReturnType<LociApi['importData']>,
   cloudAdminLogin: (input) =>

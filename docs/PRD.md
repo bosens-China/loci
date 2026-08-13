@@ -111,6 +111,18 @@
 - 边界 / 非目标：MCP 不允许单独删除同步文件，只允许永久删除整个文档库；HTTP transport 的非本机 Host 或 Origin 不得访问。CLI stdio 不作为后台常驻服务。
 - 权威入口：[MCP 与数据管理](../apps/docs/docs/cli/commands/integrations.mdx)、[Agent 全局规则](../apps/docs/docs/agent/global-rules.mdx)、[Codex 全局接入](../apps/docs/docs/agent/codex.mdx)、[Agent 使用 Skill](../.agents/skills/use-loci/SKILL.md)、[共享客户端目录](../packages/shared/src/mcp-clients.ts)。
 
+## Skills 管理
+
+- 当前决策：产品只通过 CLI 和桌面管理 Loci 官方内置 Skills。CLI 使用 `loci skills add/list/remove/clear`；桌面侧边栏提供独立“Skills 管理”页面。两端复用同一 runtime、SQLite 安装台账和文件事务，不向 Server 或 MCP 暴露 Skills 写操作。
+- 当前决策：`add` 默认把 `use-loci` 安装到用户级 `~/.agents/skills`，同时承担更新；项目级操作必须显式提供项目根目录。`remove` 和 `clear` 默认只处理用户级全局安装，删除项目内容不得推断当前目录。
+- 当前决策：用户可以选择通用、Codex、Cursor、Claude Code、VS Code、Antigravity 或全部客户端。路径按客户端官方用户级和项目级目录解析，多个客户端落到同一物理目录时自动去重。
+- 当前决策：更新整目录替换，不做文件合并。新内容先在同父目录暂存并校验，再通过旧目录备份和原子重命名切换；失败恢复旧目录。删除先移入隔离目录，SQLite 提交成功后才清理。只有台账与 `.loci-skill.json` 同时确认所有权时才能替换或删除，不接管第三方目录。
+- 当前决策：同一目标使用进程内 single-flight 和跨进程文件锁；并发入口等待正在执行的短事务并复查最终状态，不同目标可以并行。SQLite 台账属于机器本地文件状态，不进入知识库备份导入导出。
+- 当前决策：`.agents/skills/use-loci` 是内置 Skill 的唯一内容源，不维护生成的 TypeScript 副本或第二份 public 目录。CLI 由 tsdown 将完整目录复制到 npm 包的 `dist/resources`，桌面由 electron-builder `extraResources` 原样复制到应用资源目录；两端只负责解析各自资源路径，Runtime 递归读取真实文件并统一执行摘要、安装、更新和事务。
+- 为什么：内置离线分发避免依赖第三方安装命令；显式项目路径和双重所有权校验降低误删风险；共享事务让 CLI 与桌面保持一致并防止并发损坏。
+- 边界 / 非目标：不实现第三方 Skill 市场、Git/npm 下载、自动更新、Server 下发、任意目标目录或手工目录接管。
+- 权威入口：[使用 Loci Skill](../apps/docs/docs/agent/skill.mdx)。
+
 ## 设置与本地数据
 
 - 当前决策：设置页分别保存 HTTP MCP 端口、HTTP 默认并发、浏览器默认并发、GitHub ZIP 与 Markdown 默认大小和主题。每个区块独立异步保存并提供局部反馈，不阻塞其他设置。

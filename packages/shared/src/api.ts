@@ -1,4 +1,13 @@
 import type { AgentClient, AgentGlobalRulesClient } from './mcp-clients.js'
+import type {
+  SkillAgent,
+  SkillClearResult,
+  SkillInstallation,
+  SkillOperationInput,
+  SkillOperationResult,
+  SkillProjectSelection,
+  SkillTargetPreview
+} from './skills.js'
 
 export type FetchMode = 'auto' | 'http' | 'browser'
 
@@ -272,6 +281,12 @@ export interface LociApi {
   openDesktopRelease: () => Promise<void>
   importAgentClient: (client: AgentClient) => Promise<AgentImportResult>
   installAgentGlobalRules: (client: AgentGlobalRulesClient) => Promise<AgentGlobalRulesResult>
+  listSkills: (input?: SkillOperationInput) => Promise<SkillInstallation[]>
+  previewSkills: (input?: SkillOperationInput) => Promise<SkillTargetPreview[]>
+  addSkills: (input?: SkillOperationInput) => Promise<SkillOperationResult[]>
+  removeSkills: (input?: SkillOperationInput) => Promise<SkillOperationResult[]>
+  clearSkills: (input?: { agent?: SkillAgent; project?: string }) => Promise<SkillClearResult>
+  selectSkillProject: () => Promise<SkillProjectSelection>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>
   cloudAdminLogin: (input: CloudAdminLoginInput) => Promise<CloudAdminSession>

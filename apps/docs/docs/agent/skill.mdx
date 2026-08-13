@@ -21,17 +21,69 @@ MCP 提供可执行能力，Skill 提供使用方法。只有 MCP 时，AI 已�
 
 Skill 不保存文档，也不维护第二份同步状态。CLI、桌面应用、MCP 和 Skill 最终使用同一个本地知识库。
 
-## 获取 Skill
+## 使用 CLI 管理 Skill
 
-可以使用 Skills CLI 从 GitHub 仓库安装：
+Loci CLI 内置完整的 `use-loci`，无需额外下载。最简命令会安装到用户级通用目录 `~/.agents/skills/use-loci`：
 
 ```bash
-npx skills add bosens-China/loci
+loci skills add
 ```
 
-按照命令提示选择 `use-loci` Skill 和目标 AI 客户端。也可以手动安装：Loci 仓库内的 Skill 位于 `.agents/skills/use-loci/`，将整个 `use-loci` 目录安装到客户端支持的 Skills 目录，并保留其中的 `SKILL.md`。
+`add` 同时负责安装和更新。目录不存在时创建，已是最新时保持不变，由 Loci 管理但版本过期或有本地修改时，会在确认后整目录重新安装。它不会覆盖没有 Loci 所有权标记的第三方目录。
 
-不同客户端的安装方式可能不同。安装后应确认客户端能够发现名为 `use-loci` 的 Skill；配置 MCP 的方法请查看[配置 MCP](/agent/mcp)。
+指定 Agent 客户端：
+
+```bash
+loci skills add --agent cursor
+loci skills add --agent claude-code
+loci skills add --agent all
+```
+
+项目级操作必须显式提供项目根目录，不会推断当前文件夹：
+
+```bash
+loci skills add --agent all --project /absolute/path/to/project
+```
+
+查看、删除和批量清理：
+
+```bash
+loci skills list
+loci skills list --json
+loci skills remove --agent cursor
+loci skills remove --agent cursor --project /absolute/path/to/project
+loci skills clear --agent all --yes
+```
+
+`remove` 和 `clear` 未传 `--project` 时只操作用户级全局安装。删除项目 Skill 必须始终指定项目路径。
+
+## Agent 与安装路径
+
+| Agent 参数    | 用户级全局目录            | 项目级目录                 |
+| ------------- | ------------------------- | -------------------------- |
+| `universal`   | `~/.agents/skills`        | `<project>/.agents/skills` |
+| `codex`       | `~/.agents/skills`        | `<project>/.agents/skills` |
+| `cursor`      | `~/.cursor/skills`        | `<project>/.cursor/skills` |
+| `claude-code` | `~/.claude/skills`        | `<project>/.claude/skills` |
+| `vscode`      | `~/.copilot/skills`       | `<project>/.github/skills` |
+| `antigravity` | `~/.gemini/config/skills` | `<project>/.agents/skills` |
+| `all`         | 上述目录去重后全部写入    | 上述目录去重后全部写入     |
+
+Codex、通用目录和 Antigravity 项目目录可能指向相同物理路径。Loci 会自动去重，只保留一条安装记录。
+
+## 在桌面应用中管理
+
+桌面应用侧边栏的“Skills 管理”提供与 CLI 相同的安装台账和文件状态：
+
+- 添加或重新安装 `use-loci`；
+- 选择通用、Codex、Cursor、Claude Code、VS Code、Antigravity 或全部客户端；
+- 默认安装到全局，项目安装通过目录选择器明确选择根目录；
+- 查看最新、过期、修改、缺失和冲突状态；
+- 删除单条安装，或清空所有 Loci 管理的全局 Skill。
+
+CLI 与桌面使用同一个 SQLite 台账。手工删除目录后，列表会显示缺失；再次删除可清理失效记录。Loci 不会扫描、接管或删除第三方 Skill。
+
+安装完成后还需要配置名为 `loci` 的 MCP，具体方法请查看[配置 MCP](/agent/mcp)。
 
 ## 如何触发
 

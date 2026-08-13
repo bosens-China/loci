@@ -21,9 +21,15 @@ describe('Loci CLI command surface', () => {
       'browser',
       'config',
       'data',
+      'skills',
       'doctor'
     ])
     expect(program.options.some((option) => option.long === '--json')).toBe(false)
+    expect(
+      program.commands
+        .find((command) => command.name() === 'skills')
+        ?.commands.map((command) => command.name())
+    ).toEqual(['add', 'list', 'remove', 'clear'])
     expect(
       program.commands
         .find((command) => command.name() === 'source')

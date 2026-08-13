@@ -4,6 +4,7 @@ export const VIEW_PATHS = {
   library: '/library',
   cloudCatalog: '/cloud',
   cloudLibraries: '/admin/cloud',
+  skills: '/skills',
   settings: '/settings'
 } as const
 
