@@ -2,7 +2,11 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import { DEFAULT_APP_SETTINGS } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
-import { DOCUMENT_SOURCE_LIMITS, parseGithubRepositoryUrl } from '@loci/core'
+import {
+  DOCUMENT_SOURCE_LIMITS,
+  normalizeExcludePathPattern,
+  parseGithubRepositoryUrl
+} from '@loci/core'
 
 const pageLimitSchema = z
   .number()
@@ -19,6 +23,17 @@ const githubSizeSchema = z
   .int()
   .min(DOCUMENT_SOURCE_LIMITS.githubSizeMb.min)
   .max(DOCUMENT_SOURCE_LIMITS.githubSizeMb.max)
+const excludePathPatternSchema = z
+  .string()
+  .max(DOCUMENT_SOURCE_LIMITS.excludePathPatternLength.max)
+  .refine((value) => {
+    try {
+      normalizeExcludePathPattern(value)
+      return true
+    } catch {
+      return false
+    }
+  }, '排除路径正则格式无效')
 
 const sourceSchema = z
   .object({
@@ -30,6 +45,7 @@ const sourceSchema = z
     fetch_mode: z.enum(['auto', 'http', 'browser']),
     page_limit: pageLimitSchema,
     scope_path: z.string().startsWith('/').optional(),
+    exclude_path_pattern: excludePathPatternSchema.nullable().optional(),
     schedule: z.string().nullable(),
     http_concurrency: concurrencySchema.nullable().optional(),
     browser_concurrency: concurrencySchema.nullable().optional(),
@@ -186,7 +202,7 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
     data: {
       sources: database
         .prepare(
-          `SELECT id, name, first_url, hostname, fetch_mode, page_limit, scope_path, schedule,
+          `SELECT id, name, first_url, hostname, fetch_mode, page_limit, scope_path, exclude_path_pattern, schedule,
              http_concurrency, browser_concurrency, icon_url, source_type, cloud_server_url,
              cloud_library_id, cloud_revision, cloud_auto_sync, created_at, updated_at
              , document_kind, source_identity, github_archive_limit_mb, github_markdown_limit_mb,
@@ -230,12 +246,12 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
 
     const insertSource = database.prepare(
       `INSERT INTO document_sources
-       (id, name, first_url, hostname, fetch_mode, page_limit, scope_path, schedule, http_concurrency,
+       (id, name, first_url, hostname, fetch_mode, page_limit, scope_path, exclude_path_pattern, schedule, http_concurrency,
         browser_concurrency, icon_url, source_type, cloud_server_url, cloud_library_id,
         cloud_revision, cloud_auto_sync, document_kind, source_identity, github_archive_limit_mb,
         github_markdown_limit_mb, github_default_branch, github_revision, github_blocked_revision,
         github_blocked_limit_kind, github_blocked_limit_bytes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     for (const source of sources) {
       const sourceType = source.source_type ?? 'local'
@@ -255,6 +271,7 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         source.fetch_mode,
         source.page_limit,
         source.scope_path ?? '/',
+        source.exclude_path_pattern ?? null,
         source.schedule,
         source.http_concurrency ?? source.concurrency ?? null,
         source.browser_concurrency ?? source.concurrency ?? null,

@@ -84,6 +84,34 @@ describe('文档源最短输入', () => {
     })
   })
 
+  it('创建、更新和清空排除路径正则', async () => {
+    await createProgram().parseAsync(
+      [
+        'source',
+        'add',
+        'https://rspress.rs/guide/introduction.html',
+        '--exclude-path',
+        '^/(zh|de)(?:/|$)',
+        '--no-sync'
+      ],
+      { from: 'user' }
+    )
+    await createProgram().parseAsync(
+      ['source', 'update', 'rspress', '--exclude-path', '^/fr(?:/|$)'],
+      { from: 'user' }
+    )
+    let runtime = createCliRuntime()
+    expect(runtime.database.listSources()[0]?.excludePathPattern).toBe('^/fr(?:/|$)')
+    await runtime.close()
+
+    await createProgram().parseAsync(['source', 'update', 'rspress', '--exclude-path', ''], {
+      from: 'user'
+    })
+    runtime = createCliRuntime()
+    expect(runtime.database.listSources()[0]?.excludePathPattern).toBeNull()
+    await runtime.close()
+  })
+
   it('识别 GitHub 仓库并接受大小上限参数', async () => {
     await createProgram().parseAsync(
       [

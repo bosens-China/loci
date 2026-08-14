@@ -6,6 +6,7 @@ export const DOCUMENT_SOURCE_DEFAULTS = {
   schedule: null,
   httpConcurrency: null,
   browserConcurrency: null,
+  excludePathPattern: null,
   githubArchiveLimitMb: null,
   githubMarkdownLimitMb: null
 } as const
@@ -15,5 +16,6 @@ export const DOCUMENT_SOURCE_LIMITS = {
   nameLength: { min: 1, max: 100 },
   pageLimit: { min: 1, max: 10_000 },
   concurrency: { min: 1, max: 32 },
+  excludePathPatternLength: { max: 500 },
   githubSizeMb: { min: 1, max: 10_240 }
 } as const

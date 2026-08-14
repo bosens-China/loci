@@ -162,6 +162,7 @@ export interface DocumentSource {
   contentSize: number
   pageLimit: number
   scopePath: string
+  excludePathPattern?: string | null
   lastUpdated: string
   schedule: string | null
   httpConcurrency: number | null
@@ -188,6 +189,7 @@ export interface CreateSourceInput {
   mode: FetchMode
   pageLimit: number
   scopePath?: string
+  excludePathPattern?: string | null
   schedule: string | null
   httpConcurrency: number | null
   browserConcurrency: number | null

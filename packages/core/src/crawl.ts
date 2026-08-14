@@ -3,7 +3,11 @@ import { htmlToMarkdown } from 'mdream'
 import { abortableSleep, throwIfAborted } from './abort.js'
 import { fetchWithRetry } from './retry.js'
 export { fetchWithRetry, isRetryableStatus, retryAfterMs } from './retry.js'
+import { discoverSitemapUrls } from './sitemap.js'
+export { discoverSitemapUrls, parseSitemap } from './sitemap.js'
 import { isUrlInScope } from './scope.js'
+import { createPathExclusionMatcher } from './path-exclusion.js'
+import { DOCUMENT_SOURCE_LIMITS } from './source-policy.js'
 import type {
   CrawledDocument,
   CrawledPage,
@@ -14,10 +18,13 @@ import type {
   HttpCrawlOptions,
   ParsedPage
 } from './types.js'
+import { normalizeUrl } from './url.js'
+export { getHostname, isAllowedNavigation, isSameHostname, normalizeUrl } from './url.js'
 
 export type {
   CrawledDocument,
   CrawledPage,
+  CrawlDuplicate,
   CrawlFailure,
   CrawlNode,
   CrawlProgress,
@@ -30,6 +37,7 @@ interface CrawlRunnerOptions extends HttpCrawlOptions {
   concurrency: number
   fetchMode: CrawledDocument['fetchMode']
   sitemapUrls?: readonly string[]
+  followPageLinks?: boolean
   fetchPage: (url: string) => Promise<CrawledPage>
 }
 
@@ -39,7 +47,11 @@ interface QueueItem {
   parentId?: string
 }
 
-const allowedProtocols = new Set(['http:', 'https:'])
+interface SlashContentCandidate {
+  url: string
+  markdown: string
+}
+
 const immediateStaticHostnameSuffixes = ['.github.io', '.gitlab.io'] as const
 
 interface ImmediateCrawlOptions {
@@ -60,33 +72,6 @@ export function immediateCrawlOptions(pageCount: number): ImmediateCrawlOptions 
 export function isImmediateStaticHostname(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase().replace(/\.$/u, '')
   return immediateStaticHostnameSuffixes.some((suffix) => normalized.endsWith(suffix))
-}
-
-export function normalizeUrl(input: string): string {
-  const url = new URL(input.trim())
-  if (!allowedProtocols.has(url.protocol)) {
-    throw new Error('文档源只支持 HTTP 或 HTTPS URL')
-  }
-  url.search = ''
-  url.hash = ''
-  return url.toString()
-}
-
-export function getHostname(input: string): string {
-  return new URL(normalizeUrl(input)).hostname
-}
-
-export function isSameHostname(input: string, hostname: string): boolean {
-  return getHostname(input) === hostname.toLowerCase()
-}
-
-export function isAllowedNavigation(input: string, hostname?: string, scopePath = '/'): boolean {
-  try {
-    normalizeUrl(input)
-    return !hostname || isUrlInScope(input, hostname, scopePath)
-  } catch {
-    return false
-  }
 }
 
 export function parsePage(html: string, pageUrl: string): ParsedPage {
@@ -131,30 +116,6 @@ function resolveLink(href: string, baseUrl: string): string | undefined {
   }
 }
 
-export function parseSitemap(
-  xml: string,
-  baseUrl: string,
-  hostname: string,
-  limit: number,
-  scopePath = '/'
-): string[] {
-  const urls: string[] = []
-  const seen = new Set<string>()
-  for (const node of parse(xml).querySelectorAll('loc')) {
-    try {
-      const url = normalizeUrl(new URL(node.text.trim(), baseUrl).toString())
-      if (isUrlInScope(url, hostname, scopePath) && !seen.has(url)) {
-        urls.push(url)
-        seen.add(url)
-      }
-    } catch {
-      continue
-    }
-    if (urls.length >= limit) break
-  }
-  return urls
-}
-
 export async function fetchHttpPage(
   url: string,
   options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep' | 'signal'> = {}
@@ -171,29 +132,14 @@ export async function fetchHttpPage(
   }
 }
 
-export async function discoverSitemapUrls(
-  firstUrl: string,
-  hostname: string,
-  pageLimit: number,
-  options: Pick<FetchOptions, 'fetchImpl' | 'maxRetries' | 'sleep' | 'signal'> = {},
-  scopePath = '/'
-): Promise<string[]> {
-  try {
-    const sitemapUrl = new URL('/sitemap.xml', firstUrl).toString()
-    const response = await fetchWithRetry(sitemapUrl, options)
-    if (!response.ok) return []
-    return parseSitemap(await response.text(), sitemapUrl, hostname, pageLimit + 1, scopePath)
-  } catch {
-    throwIfAborted(options.signal)
-    return []
-  }
-}
-
 export async function crawlHttpSource(options: HttpCrawlOptions): Promise<CrawlProgress> {
+  const sitemapDiscoveryLimit = options.excludePathPattern
+    ? DOCUMENT_SOURCE_LIMITS.pageLimit.max
+    : options.pageLimit
   const sitemapUrls = await discoverSitemapUrls(
     options.firstUrl,
     options.hostname,
-    options.pageLimit,
+    sitemapDiscoveryLimit,
     {
       fetchImpl: options.fetch,
       maxRetries: options.maxRetries,
@@ -202,14 +148,16 @@ export async function crawlHttpSource(options: HttpCrawlOptions): Promise<CrawlP
     },
     options.scopePath
   )
-  const requestPolicy = isImmediateStaticHostname(options.hostname)
-    ? immediateCrawlOptions(options.pageLimit)
-    : { concurrency: options.concurrency ?? 9 }
+  const requestPolicy =
+    sitemapUrls.length > 0 || isImmediateStaticHostname(options.hostname)
+      ? immediateCrawlOptions(options.pageLimit)
+      : { concurrency: options.concurrency ?? 9 }
   return runCrawlQueue({
     ...options,
     ...requestPolicy,
     fetchMode: 'http',
     sitemapUrls,
+    followPageLinks: sitemapUrls.length === 0,
     fetchPage: (url) =>
       fetchHttpPage(url, {
         fetchImpl: options.fetch,
@@ -225,17 +173,25 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
   const firstNodeId = options.firstNodeId ?? firstUrl
   const queue: QueueItem[] = []
   const seen = new Set<string>()
+  const slashCandidates = new Map<string, SlashContentCandidate>()
+  const isExcluded = createPathExclusionMatcher(options.excludePathPattern)
   let limitReached = false
 
-  const enqueue = (input: string, parentId?: string, force = false, id?: string): boolean => {
+  const enqueue = (input: string, parentId?: string, id?: string): boolean => {
     let url: string
     try {
       url = normalizeUrl(input)
-      if (!isUrlInScope(url, options.hostname, options.scopePath) || seen.has(url)) return false
+      if (
+        !isUrlInScope(url, options.hostname, options.scopePath) ||
+        isExcluded?.(url) ||
+        seen.has(url)
+      ) {
+        return false
+      }
     } catch {
       return false
     }
-    if (!force && seen.size >= options.pageLimit) {
+    if (seen.size >= options.pageLimit) {
       limitReached = true
       return false
     }
@@ -244,9 +200,10 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
     return true
   }
 
-  enqueue(firstUrl, undefined, true, firstNodeId)
-  for (const url of options.initialUrls ?? []) enqueue(url, undefined, true)
+  if (isExcluded?.(firstUrl)) throw new Error('起始页面被排除路径正则命中')
+  enqueue(firstUrl, undefined, firstNodeId)
   for (const url of options.sitemapUrls ?? []) enqueue(url, firstNodeId)
+  for (const url of options.initialUrls ?? []) enqueue(url)
 
   const progress: CrawlProgress = {
     queued: queue.length,
@@ -284,6 +241,14 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
           retryable: false,
           redirectUrl: node.url
         }
+      } else if (isExcluded?.(node.url)) {
+        failure = {
+          url: item.url,
+          reason: 'out_of_scope_redirect',
+          message: '页面跳转到了排除路径',
+          retryable: false,
+          redirectUrl: node.url
+        }
       }
       if (!failure && (result.status === 404 || result.status === 410)) {
         failure = {
@@ -309,18 +274,30 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
       } else if (!failure && page) {
         throwIfAborted(options.signal)
         node.title = page.title
-        await options.onDocument({
-          url: node.url,
-          title: page.title,
-          language: page.language,
-          markdown: page.markdown,
-          crawledAt: new Date().toISOString(),
-          fetchMode: options.fetchMode
-        })
+        const slashKey = trailingSlashGroup(item.url)
+        const candidate = slashKey ? slashCandidates.get(slashKey) : undefined
+        const duplicate = candidate?.markdown === page.markdown
+        if (duplicate && candidate) {
+          await options.onDuplicate?.({ url: node.url, duplicateOf: candidate.url })
+        } else {
+          if (slashKey && !candidate) {
+            slashCandidates.set(slashKey, { url: node.url, markdown: page.markdown })
+          }
+          await options.onDocument({
+            url: node.url,
+            title: page.title,
+            language: page.language,
+            markdown: page.markdown,
+            crawledAt: new Date().toISOString(),
+            fetchMode: options.fetchMode
+          })
+        }
         progress.succeeded += 1
         node.status = 'success'
-        for (const link of page.links) {
-          if (enqueue(link, item.id)) progress.queued = queue.length
+        if (!duplicate && options.followPageLinks !== false) {
+          for (const link of page.links) {
+            if (enqueue(link, item.id)) progress.queued = queue.length
+          }
         }
       }
     } catch (error) {
@@ -365,6 +342,13 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
   const completed = failures.length ? { ...progress, failures } : progress
   options.onProgress?.(completed)
   return completed
+}
+
+function trailingSlashGroup(input: string): string | undefined {
+  const url = new URL(input)
+  if (url.pathname === '/') return undefined
+  url.pathname = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname
+  return url.toString()
 }
 
 function defaultSleep(milliseconds: number): Promise<void> {

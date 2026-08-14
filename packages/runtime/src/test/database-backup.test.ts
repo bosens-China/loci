@@ -12,6 +12,7 @@ describe('database backup', () => {
         mode: 'http',
         pageLimit: 500,
         scopePath: '/learn',
+        excludePathPattern: '^/learn/legacy(?:/|$)',
         schedule: null,
         httpConcurrency: 4,
         browserConcurrency: 2
@@ -72,6 +73,9 @@ describe('database backup', () => {
       const invalid = structuredClone(backup)
       invalid.data.documents[0]!.source_id = 'missing-source'
       expect(() => targetDatabase.importBackup(invalid)).toThrow('引用的文档源不存在')
+      const invalidRegex = structuredClone(backup)
+      invalidRegex.data.sources[0]!.exclude_path_pattern = '['
+      expect(() => targetDatabase.importBackup(invalidRegex)).toThrow('排除路径正则格式无效')
       expect(targetDatabase.listSources()[0]?.name).toBe('Existing')
 
       expect(targetDatabase.importBackup(backup)).toEqual({ sources: 1, documents: 1 })
@@ -80,7 +84,8 @@ describe('database backup', () => {
         pages: 1,
         httpConcurrency: 4,
         browserConcurrency: 2,
-        scopePath: '/learn'
+        scopePath: '/learn',
+        excludePathPattern: '^/learn/legacy(?:/|$)'
       })
       expect(targetDatabase.searchDocuments('Components')[0]?.title).toBe('Learn React')
       expect(targetDatabase.getSettings()).toMatchObject({

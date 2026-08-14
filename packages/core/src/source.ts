@@ -12,6 +12,8 @@ import type { GithubBlockedState } from './github-limits.js'
 import { parseGithubRepositoryUrl } from './github-url.js'
 import { selectFetchMode } from './mode.js'
 import { crawlOpenApiSource, discoverOpenApiEntries } from './openapi.js'
+import { createPathExclusionMatcher } from './path-exclusion.js'
+import { DOCUMENT_SOURCE_LIMITS } from './source-policy.js'
 import { crawlRenderedSource, fetchCrawledPageWithRetry, type RenderedCrawler } from './rendered.js'
 import type { CrawledDocument, CrawledPage, CrawlProgress, HttpCrawlOptions } from './types.js'
 
@@ -87,7 +89,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
     options.firstUrl,
     options.hostname,
     scopePath,
-    options.pageLimit,
+    options.excludePathPattern ? DOCUMENT_SOURCE_LIMITS.pageLimit.max : options.pageLimit,
     { fetchImpl: options.fetch, signal: options.signal }
   )
   if (llmsEntries.length) {
@@ -104,7 +106,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
         concurrency: options.httpConcurrency ?? 9,
         firstNodeId: options.firstNodeId ?? options.firstUrl
       }),
-      llmsEntries
+      filterExcludedEntries(llmsEntries, options.excludePathPattern)
     )
     return { progress, resolution }
   }
@@ -128,7 +130,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
           concurrency: options.httpConcurrency ?? 9,
           firstNodeId: options.firstNodeId ?? options.firstUrl
         }),
-        openApiEntries
+        filterExcludedEntries(openApiEntries, options.excludePathPattern)
       )
       return { progress, resolution }
     }
@@ -256,6 +258,7 @@ function toCrawlOptions(
     scopePath: options.scopePath,
     pageLimit: options.pageLimit,
     initialUrls: options.initialUrls,
+    excludePathPattern: options.excludePathPattern,
     seedPage: overrides.seedPage,
     concurrency: overrides.concurrency,
     fetch: options.fetch,
@@ -265,7 +268,16 @@ function toCrawlOptions(
     signal: options.signal,
     waitIfPaused: options.waitIfPaused,
     onDocument: options.onDocument,
+    onDuplicate: options.onDuplicate,
     onError: options.onError,
     onProgress: options.onProgress
   }
+}
+
+function filterExcludedEntries<T extends { url: string }>(
+  entries: readonly T[],
+  pattern?: string | null
+): T[] {
+  const isExcluded = createPathExclusionMatcher(pattern)
+  return isExcluded ? entries.filter((entry) => !isExcluded(entry.url)) : [...entries]
 }

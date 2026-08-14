@@ -55,6 +55,7 @@ export function formatSourceSummary(input: CreateSourceInput): string {
     `抓取方式：${modeLabel(input.mode)}`,
     `页面上限：${input.pageLimit}`,
     `收录范围：${input.scopePath}`,
+    `排除路径：${input.excludePathPattern || '未启用'}`,
     `HTTP 并发：${input.httpConcurrency ?? '继承全局设置'}`,
     `浏览器并发：${input.browserConcurrency ?? '继承全局设置'}`
   ].join('\n')
@@ -76,6 +77,9 @@ export function formatSourceChanges(
     current.scopePath === input.scopePath
       ? null
       : `收录范围：${current.scopePath} → ${input.scopePath}`,
+    (current.excludePathPattern ?? null) === (input.excludePathPattern ?? null)
+      ? null
+      : `排除路径：${current.excludePathPattern || '未启用'} → ${input.excludePathPattern || '未启用'}`,
     current.httpConcurrency === input.httpConcurrency
       ? null
       : `HTTP 并发：${current.httpConcurrency ?? '继承全局'} → ${input.httpConcurrency ?? '继承全局'}`,
@@ -102,6 +106,7 @@ export function sameSourceInput(
     current.mode === input.mode &&
     current.pageLimit === input.pageLimit &&
     current.scopePath === input.scopePath &&
+    (current.excludePathPattern ?? null) === (input.excludePathPattern ?? null) &&
     current.httpConcurrency === input.httpConcurrency &&
     current.browserConcurrency === input.browserConcurrency &&
     current.githubArchiveLimitMb === (input.githubArchiveLimitMb ?? null) &&

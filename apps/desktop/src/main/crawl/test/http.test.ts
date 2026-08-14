@@ -52,7 +52,7 @@ describe('crawlHttpSource', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3)
   })
 
-  it('updates stored URLs even when they are no longer linked', async () => {
+  it('重新同步时历史 URL 也受页面上限约束', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input)
       if (url.endsWith('/sitemap.xml')) return new Response('', { status: 404 })
@@ -76,11 +76,9 @@ describe('crawlHttpSource', () => {
       }
     })
 
-    expect(documents.sort()).toEqual([
-      'https://docs.example.com/orphan',
-      'https://docs.example.com/start'
-    ])
-    expect(progress).toMatchObject({ queued: 2, processed: 2, limitReached: true })
+    expect(documents).toEqual(['https://docs.example.com/start'])
+    expect(progress).toMatchObject({ queued: 1, processed: 1, limitReached: true })
+    expect(fetchImpl).not.toHaveBeenCalledWith('https://docs.example.com/orphan', expect.anything())
     expect(fetchImpl).not.toHaveBeenCalledWith('https://docs.example.com/new', expect.anything())
   })
 
@@ -113,7 +111,7 @@ describe('crawlHttpSource', () => {
     expect(maxActive).toBe(2)
   })
 
-  it('只入队收录路径内的页面', async () => {
+  it('有效 Sitemap 只入队清单中位于收录路径内的页面', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input)
       if (url.endsWith('/sitemap.xml')) {
@@ -145,8 +143,72 @@ describe('crawlHttpSource', () => {
     })
     expect(documents).toEqual([
       'https://docs.example.com/guide/start',
-      'https://docs.example.com/guide/from-map',
-      'https://docs.example.com/guide/from-link'
+      'https://docs.example.com/guide/from-map'
     ])
+    expect(fetchImpl).not.toHaveBeenCalledWith(
+      'https://docs.example.com/guide/from-link',
+      expect.anything()
+    )
+  })
+
+  it('有效 Sitemap 优先于历史 URL 占用剩余页面额度', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/sitemap.xml')) {
+        return new Response('<urlset><url><loc>/current</loc></url></urlset>')
+      }
+      return new Response('<main>done</main>')
+    })
+    const documents: string[] = []
+
+    const progress = await crawlHttpSource({
+      firstUrl: 'https://docs.example.com/start',
+      hostname: 'docs.example.com',
+      pageLimit: 2,
+      initialUrls: ['https://docs.example.com/old'],
+      concurrency: 1,
+      fetch: fetchImpl,
+      sleep: async () => undefined,
+      onDocument: (document) => {
+        documents.push(document.url)
+      }
+    })
+
+    expect(documents).toEqual([
+      'https://docs.example.com/start',
+      'https://docs.example.com/current'
+    ])
+    expect(progress).toMatchObject({ queued: 2, processed: 2, limitReached: true })
+    expect(fetchImpl).not.toHaveBeenCalledWith('https://docs.example.com/old', expect.anything())
+  })
+
+  it.each([
+    ['格式无效', '<html>Not a sitemap</html>'],
+    ['没有范围内 URL', '<urlset><url><loc>https://other.example.com/outside</loc></url></urlset>']
+  ])('Sitemap %s时继续递归页面链接', async (_reason, sitemap) => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/sitemap.xml')) return new Response(sitemap)
+      const body = url.endsWith('/start')
+        ? '<main><a href="/next">next</a></main>'
+        : '<main>done</main>'
+      return new Response(body)
+    })
+    const documents: string[] = []
+
+    const progress = await crawlHttpSource({
+      firstUrl: 'https://docs.example.com/start',
+      hostname: 'docs.example.com',
+      pageLimit: 10,
+      concurrency: 1,
+      fetch: fetchImpl,
+      sleep: async () => undefined,
+      onDocument: (document) => {
+        documents.push(document.url)
+      }
+    })
+
+    expect(documents).toEqual(['https://docs.example.com/start', 'https://docs.example.com/next'])
+    expect(progress).toMatchObject({ queued: 2, succeeded: 2, failed: 0 })
   })
 })

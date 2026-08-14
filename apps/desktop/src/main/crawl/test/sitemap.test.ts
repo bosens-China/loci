@@ -10,4 +10,15 @@ describe('parseSitemap', () => {
       'https://docs.example.com/two'
     ])
   })
+
+  it('rejects content without a Sitemap URL set', () => {
+    expect(
+      parseSitemap(
+        '<html><body><loc>/not-a-sitemap</loc></body></html>',
+        'https://docs.example.com/start',
+        'docs.example.com',
+        10
+      )
+    ).toEqual([])
+  })
 })

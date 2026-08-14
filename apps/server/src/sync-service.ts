@@ -212,6 +212,9 @@ export class SyncService {
         onError: ({ url, missing }) => {
           if (missing) deletedUrls.push(url)
         },
+        onDuplicate: ({ url }) => {
+          deletedUrls.push(url)
+        },
         onProgress: (progressEvent) => {
           job.progress = withoutNode(progressEvent)
           if (

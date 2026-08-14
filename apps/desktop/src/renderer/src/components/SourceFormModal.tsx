@@ -1,6 +1,7 @@
 import { LinkOutlined } from '@ant-design/icons'
 import { Form, Input, InputNumber, Modal, Select, Tabs } from 'antd'
 import type { FormInstance } from 'antd'
+import { normalizeExcludePathPattern } from '@loci/core'
 import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core/source-policy'
 import type { DocumentSource } from '../types'
 import type { SourceFormValues } from './sourceScheduleForm'
@@ -187,6 +188,24 @@ export function SourceFormModal({
                     </div>
                   ) : (
                     <>
+                      <Form.Item
+                        name="excludePathPattern"
+                        label="排除路径正则（选填）"
+                        extra="只匹配 URL 的 pathname；命中的页面不会加入抓取队列"
+                        rules={[
+                          {
+                            validator: async (_, value: string | undefined) => {
+                              normalizeExcludePathPattern(value)
+                            }
+                          }
+                        ]}
+                      >
+                        <Input
+                          maxLength={DOCUMENT_SOURCE_LIMITS.excludePathPatternLength.max}
+                          placeholder="例如：/(zh|de|fr)(/|$)"
+                          allowClear
+                        />
+                      </Form.Item>
                       <Form.Item name="mode" label="网页读取方式" rules={[{ required: true }]}>
                         <Select
                           options={[

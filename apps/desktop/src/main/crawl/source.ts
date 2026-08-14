@@ -23,6 +23,7 @@ export async function runSourceCrawl(
       firstNodeId: source.firstUrl,
       hostname: source.hostname,
       scopePath: source.scopePath,
+      excludePathPattern: source.excludePathPattern,
       pageLimit: source.pageLimit,
       initialUrls: database.listDocumentUrls(sourceId),
       fetchMode: source.fetchMode,
@@ -49,6 +50,9 @@ export async function runSourceCrawl(
       },
       onError: ({ url, missing }) => {
         if (missing) deletedUrls.push(url)
+      },
+      onDuplicate: ({ url }) => {
+        deletedUrls.push(url)
       },
       onProgress
     })

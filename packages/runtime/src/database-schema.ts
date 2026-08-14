@@ -1,7 +1,7 @@
 import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import { DEFAULT_APP_SETTINGS, PRODUCTION_SERVER_URL } from '@loci/shared'
 
-export const LOCI_SCHEMA_VERSION = 8
+export const LOCI_SCHEMA_VERSION = 9
 
 // 基础表结构集中维护，具体子模块的增量表由各自初始化函数负责。
 export const LOCI_DATABASE_SCHEMA = `
@@ -15,6 +15,7 @@ export const LOCI_DATABASE_SCHEMA = `
     fetch_mode TEXT NOT NULL CHECK (fetch_mode IN ('auto', 'http', 'browser')),
     page_limit INTEGER NOT NULL DEFAULT ${DOCUMENT_SOURCE_DEFAULTS.pageLimit} CHECK (page_limit BETWEEN ${DOCUMENT_SOURCE_LIMITS.pageLimit.min} AND ${DOCUMENT_SOURCE_LIMITS.pageLimit.max}),
     scope_path TEXT NOT NULL DEFAULT '${DOCUMENT_SOURCE_DEFAULTS.scopePath}',
+    exclude_path_pattern TEXT,
     schedule TEXT,
     http_concurrency INTEGER CHECK (http_concurrency IS NULL OR http_concurrency BETWEEN ${DOCUMENT_SOURCE_LIMITS.concurrency.min} AND ${DOCUMENT_SOURCE_LIMITS.concurrency.max}),
     browser_concurrency INTEGER CHECK (browser_concurrency IS NULL OR browser_concurrency BETWEEN ${DOCUMENT_SOURCE_LIMITS.concurrency.min} AND ${DOCUMENT_SOURCE_LIMITS.concurrency.max}),

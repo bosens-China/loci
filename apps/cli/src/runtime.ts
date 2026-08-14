@@ -131,6 +131,7 @@ export function createCliRuntime(): CliRuntime {
           firstNodeId: source.firstUrl,
           hostname: source.hostname,
           scopePath: source.scopePath,
+          excludePathPattern: source.excludePathPattern,
           pageLimit: source.pageLimit,
           initialUrls: database.listDocumentUrls(sourceId),
           fetchMode: source.fetchMode,
@@ -155,6 +156,9 @@ export function createCliRuntime(): CliRuntime {
           },
           onError: ({ url, missing }) => {
             if (missing) deletedUrls.push(url)
+          },
+          onDuplicate: ({ url }) => {
+            deletedUrls.push(url)
           },
           onProgress: (progress) => {
             updateState(states, sourceId, progress, null, true)
@@ -243,6 +247,7 @@ export function createCliRuntime(): CliRuntime {
           mode: current.mode,
           pageLimit: current.pageLimit,
           scopePath: current.scopePath,
+          excludePathPattern: current.excludePathPattern ?? null,
           schedule: schedule,
           httpConcurrency: current.httpConcurrency,
           browserConcurrency: current.browserConcurrency,

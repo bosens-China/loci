@@ -55,6 +55,11 @@ export interface CrawledPage {
   page?: ParsedPage
 }
 
+export interface CrawlDuplicate {
+  url: string
+  duplicateOf: string
+}
+
 export interface FetchOptions {
   timeoutMs?: number
   maxRetries?: number
@@ -68,6 +73,7 @@ export interface HttpCrawlOptions {
   firstNodeId?: string
   hostname: string
   scopePath?: string
+  excludePathPattern?: string | null
   pageLimit: number
   initialUrls?: readonly string[]
   seedPage?: CrawledPage
@@ -79,6 +85,7 @@ export interface HttpCrawlOptions {
   signal?: AbortSignal
   waitIfPaused?: () => Promise<void>
   onDocument: (document: CrawledDocument) => Promise<void> | void
+  onDuplicate?: (duplicate: CrawlDuplicate) => Promise<void> | void
   onError?: (error: CrawlFailure & { missing?: boolean }) => Promise<void> | void
   onProgress?: (progress: CrawlProgress) => void
 }

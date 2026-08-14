@@ -9,7 +9,7 @@ import type { BrowserInstallPrompt } from '../browser.js'
 import { startBackgroundSourceSync } from '../background-sync.js'
 import { runWithRuntime, type CommandResult } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
-import { validatePublicUrl, validateSourceName } from '../input.js'
+import { validateExcludePathPattern, validatePublicUrl, validateSourceName } from '../input.js'
 import { resolveSource } from '../resources.js'
 import {
   readSourceCreatePreference,
@@ -40,6 +40,7 @@ interface SourceOptions {
   mode?: FetchMode
   pageLimit?: number
   scope?: string
+  excludePath?: string
   httpConcurrency?: number
   browserConcurrency?: number
   yes?: boolean
@@ -96,6 +97,7 @@ export function registerSourceCommands(program: Command): void {
       numberValue
     )
     .option('--scope <path>', `收录路径，默认 ${DOCUMENT_SOURCE_DEFAULTS.scopePath}`)
+    .option('--exclude-path <regex>', '排除 pathname 的正则，默认不启用')
     .option('--http-concurrency <number>', 'HTTP 并发覆盖值，默认继承共享设置', numberValue)
     .option('--browser-concurrency <number>', '浏览器并发覆盖值，默认继承共享设置', numberValue)
     .option('--archive-limit <size>', 'GitHub ZIP 上限，例如 200mb', sizeMbValue)
@@ -154,6 +156,16 @@ export function registerSourceCommands(program: Command): void {
               (guided
                 ? await askScope(url, scopeAtDepth(url, preference.scopeDepth))
                 : scopeAtDepth(url, preference.scopeDepth))),
+          excludePathPattern: repository
+            ? null
+            : (options.excludePath ??
+              (guided
+                ? await askText('排除路径正则（选填）', {
+                    required: false,
+                    placeholder: '/(zh|de|fr)(/|$)',
+                    validate: validateExcludePathPattern
+                  })
+                : null)),
           schedule: DOCUMENT_SOURCE_DEFAULTS.schedule,
           httpConcurrency: options.httpConcurrency ?? DOCUMENT_SOURCE_DEFAULTS.httpConcurrency,
           browserConcurrency:
@@ -198,6 +210,7 @@ export function registerSourceCommands(program: Command): void {
     .addOption(new Option('--mode <mode>', '抓取方式').choices(['auto', 'http', 'browser']))
     .option('--page-limit <number>', '页面上限', numberValue)
     .option('--scope <path>', '收录路径')
+    .option('--exclude-path <regex>', '排除 pathname 的正则；传空字符串可清除')
     .option('--http-concurrency <number>', 'HTTP 并发覆盖值', numberValue)
     .option('--browser-concurrency <number>', '浏览器并发覆盖值', numberValue)
     .option('--archive-limit <size>', 'GitHub ZIP 上限，例如 200mb', sizeMbValue)
@@ -247,6 +260,18 @@ export function registerSourceCommands(program: Command): void {
             ? DOCUMENT_SOURCE_DEFAULTS.scopePath
             : (options.scope ??
               (editAll ? await askScope(url, current.scopePath) : current.scopePath)),
+          excludePathPattern: parseGithubRepositoryUrl(url)
+            ? null
+            : options.excludePath !== undefined
+              ? options.excludePath
+              : editAll
+                ? await askText('排除路径正则（选填）', {
+                    initialValue: current.excludePathPattern ?? '',
+                    required: false,
+                    placeholder: '/(zh|de|fr)(/|$)',
+                    validate: validateExcludePathPattern
+                  })
+                : (current.excludePathPattern ?? null),
           httpConcurrency: options.httpConcurrency ?? current.httpConcurrency,
           browserConcurrency: options.browserConcurrency ?? current.browserConcurrency,
           githubArchiveLimitMb: options.archiveLimit ?? current.githubArchiveLimitMb,

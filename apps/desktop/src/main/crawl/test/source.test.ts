@@ -47,4 +47,52 @@ describe('runSourceCrawl', () => {
       database.close()
     }
   })
+
+  it('成功同步后移除正文相同的末尾斜杠旧记录', async () => {
+    const database = createDatabase(':memory:')
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/llms.txt')) return new Response('', { status: 404 })
+      if (url.endsWith('/sitemap.xml')) {
+        return new Response(
+          '<urlset><url><loc>/guide</loc></url><url><loc>/guide/</loc></url></urlset>'
+        )
+      }
+      if (url === 'https://docs.example.com/guide' || url === 'https://docs.example.com/guide/') {
+        return new Response('<html><title>Guide</title><main>same</main></html>')
+      }
+      return new Response('', { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchImpl)
+    try {
+      const source = database.createSource({
+        name: 'Docs',
+        url: 'https://docs.example.com/guide',
+        mode: 'http',
+        pageLimit: 2,
+        scopePath: '/',
+        schedule: null,
+        httpConcurrency: null,
+        browserConcurrency: null
+      })
+      for (const url of ['https://docs.example.com/guide', 'https://docs.example.com/guide/']) {
+        database.saveDocument({
+          sourceId: source.id,
+          url,
+          title: 'Old',
+          markdown: 'old',
+          language: 'en',
+          fetchMode: 'http',
+          crawledAt: new Date().toISOString()
+        })
+      }
+
+      const progress = await runSourceCrawl(database, source.id)
+
+      expect(progress).toMatchObject({ queued: 2, processed: 2, succeeded: 2 })
+      expect(database.listDocumentUrls(source.id)).toHaveLength(1)
+    } finally {
+      database.close()
+    }
+  })
 })

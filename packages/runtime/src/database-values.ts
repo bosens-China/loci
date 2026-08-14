@@ -2,7 +2,12 @@ import type { DatabaseSync } from 'node:sqlite'
 import { DEFAULT_APP_SETTINGS, normalizeCronSchedule, PRODUCTION_SERVER_URL } from '@loci/shared'
 import type { AppSettings, CreateSourceInput, DocumentRecord, DocumentSource } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
-import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS, normalizeScopePath } from '@loci/core'
+import {
+  DOCUMENT_SOURCE_DEFAULTS,
+  DOCUMENT_SOURCE_LIMITS,
+  normalizeExcludePathPattern,
+  normalizeScopePath
+} from '@loci/core'
 
 export interface SourceRow {
   id: string
@@ -11,6 +16,7 @@ export interface SourceRow {
   fetch_mode: 'auto' | 'http' | 'browser'
   page_limit: number
   scope_path: string
+  exclude_path_pattern: string | null
   schedule: string | null
   http_concurrency: number | null
   browser_concurrency: number | null
@@ -85,6 +91,7 @@ export function validateSourceInput(input: CreateSourceInput): string | null {
   }
   if (!['auto', 'http', 'browser'].includes(input.mode)) throw new Error('不支持的抓取方式')
   normalizeScopePath(input.scopePath ?? DOCUMENT_SOURCE_DEFAULTS.scopePath)
+  normalizeExcludePathPattern(input.excludePathPattern)
   if (input.httpConcurrency !== null) validateConcurrency(input.httpConcurrency, '文档源 HTTP 并发')
   if (input.browserConcurrency !== null) {
     validateConcurrency(input.browserConcurrency, '文档源浏览器并发')
@@ -115,6 +122,7 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
     contentSize: Number(row.content_size),
     pageLimit: Number(row.page_limit),
     scopePath: row.scope_path,
+    excludePathPattern: row.exclude_path_pattern ?? null,
     lastUpdated: row.last_crawled_at ? formatDate(row.last_crawled_at) : '尚未更新',
     schedule: row.schedule,
     httpConcurrency: row.http_concurrency === null ? null : Number(row.http_concurrency),
@@ -167,6 +175,7 @@ export function migrateDatabase(database: DatabaseSync, previousVersion = 0): vo
     'scope_path',
     `TEXT NOT NULL DEFAULT '${DOCUMENT_SOURCE_DEFAULTS.scopePath}'`
   )
+  addColumn(database, 'document_sources', 'exclude_path_pattern', 'TEXT')
   const hasLegacyConcurrency = hasColumn(database, 'document_sources', 'concurrency')
   if (
     addColumn(database, 'document_sources', 'http_concurrency', 'INTEGER') &&

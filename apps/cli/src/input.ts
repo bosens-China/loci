@@ -1,4 +1,4 @@
-import { DOCUMENT_SOURCE_LIMITS } from '@loci/core'
+import { DOCUMENT_SOURCE_LIMITS, normalizeExcludePathPattern } from '@loci/core'
 
 /** 校验面向抓取场景的公开 HTTP(S) URL。 */
 export function validatePublicUrl(value: string | undefined): string | undefined {
@@ -18,4 +18,13 @@ export function validateSourceName(value: string | undefined): string | undefine
   return length <= DOCUMENT_SOURCE_LIMITS.nameLength.max
     ? undefined
     : `文档源名称不能超过 ${DOCUMENT_SOURCE_LIMITS.nameLength.max} 个字符`
+}
+
+export function validateExcludePathPattern(value: string | undefined): string | undefined {
+  try {
+    normalizeExcludePathPattern(value)
+    return undefined
+  } catch (error) {
+    return error instanceof Error ? error.message : '排除路径正则格式无效'
+  }
 }

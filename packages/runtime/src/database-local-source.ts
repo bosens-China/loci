@@ -11,6 +11,7 @@ export interface SourceConfig {
   fetchMode: 'auto' | 'http' | 'browser'
   pageLimit: number
   scopePath: string
+  excludePathPattern: string | null
   httpConcurrency: number | null
   browserConcurrency: number | null
   kind: 'web' | 'github'
@@ -32,6 +33,7 @@ interface SourceConfigRow {
   fetch_mode: SourceConfig['fetchMode']
   page_limit: number
   scope_path: string
+  exclude_path_pattern: string | null
   http_concurrency: number | null
   browser_concurrency: number | null
   source_type: 'local' | 'cloud'
@@ -48,7 +50,7 @@ interface SourceConfigRow {
 export function readSourceConfig(database: DatabaseSync, id: string): SourceConfig {
   const source = database
     .prepare(
-      `SELECT id, first_url, hostname, fetch_mode, page_limit, scope_path, http_concurrency,
+      `SELECT id, first_url, hostname, fetch_mode, page_limit, scope_path, exclude_path_pattern, http_concurrency,
          browser_concurrency, source_type, document_kind, github_archive_limit_mb,
          github_markdown_limit_mb, github_default_branch, github_revision,
          github_blocked_revision, github_blocked_limit_kind, github_blocked_limit_bytes
@@ -64,6 +66,7 @@ export function readSourceConfig(database: DatabaseSync, id: string): SourceConf
     fetchMode: source.fetch_mode,
     pageLimit: Number(source.page_limit),
     scopePath: source.scope_path,
+    excludePathPattern: source.exclude_path_pattern,
     httpConcurrency: source.http_concurrency === null ? null : Number(source.http_concurrency),
     browserConcurrency:
       source.browser_concurrency === null ? null : Number(source.browser_concurrency),
@@ -183,7 +186,7 @@ export function findLocalSourceId(database: DatabaseSync, identity: string): str
 export function readDocumentSource(database: DatabaseSync, id: string): DocumentSource {
   const row = database
     .prepare(
-      `SELECT s.id, s.name, s.first_url, s.fetch_mode, s.page_limit, s.scope_path, s.schedule,
+      `SELECT s.id, s.name, s.first_url, s.fetch_mode, s.page_limit, s.scope_path, s.exclude_path_pattern, s.schedule,
          s.http_concurrency, s.browser_concurrency, s.icon_url, s.source_type,
          s.cloud_server_url, s.cloud_library_id, s.cloud_revision, s.cloud_auto_sync,
          s.document_kind, s.github_archive_limit_mb, s.github_markdown_limit_mb,

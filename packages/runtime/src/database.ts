@@ -4,7 +4,9 @@ import { DatabaseSync } from 'node:sqlite'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
   getHostname,
+  isPathExcluded,
   isUrlInScope,
+  normalizeExcludePathPattern,
   normalizeScopePath,
   normalizeUrl,
   parseGithubRepositoryUrl,
@@ -166,7 +168,7 @@ export function createDatabase(
     listSources: () => {
       const rows = database
         .prepare(
-          `SELECT s.id, s.name, s.first_url, s.fetch_mode, s.page_limit, s.scope_path, s.schedule,
+          `SELECT s.id, s.name, s.first_url, s.fetch_mode, s.page_limit, s.scope_path, s.exclude_path_pattern, s.schedule,
              s.http_concurrency, s.browser_concurrency, s.icon_url, s.source_type,
              s.cloud_server_url, s.cloud_library_id, s.cloud_revision, s.cloud_auto_sync,
              s.document_kind, s.github_archive_limit_mb, s.github_markdown_limit_mb,
@@ -191,7 +193,11 @@ export function createDatabase(
       const scopePath = repository
         ? DOCUMENT_SOURCE_DEFAULTS.scopePath
         : normalizeScopePath(input.scopePath ?? DOCUMENT_SOURCE_DEFAULTS.scopePath)
+      const excludePathPattern = repository
+        ? null
+        : normalizeExcludePathPattern(input.excludePathPattern)
       if (!isUrlInScope(url, hostname, scopePath)) throw new Error('起始页面不在收录范围内')
+      if (isPathExcluded(url, excludePathPattern)) throw new Error('起始页面不能被排除路径正则命中')
       const identity = repository?.identity ?? createWebSourceIdentity(hostname, scopePath)
       const existingId = findLocalSourceId(database, identity)
       if (existingId) return readDocumentSource(database, existingId)
@@ -201,10 +207,10 @@ export function createDatabase(
         database
           .prepare(
             `INSERT INTO document_sources
-             (id, name, first_url, hostname, fetch_mode, page_limit, scope_path, schedule,
+             (id, name, first_url, hostname, fetch_mode, page_limit, scope_path, exclude_path_pattern, schedule,
               http_concurrency, browser_concurrency, document_kind, source_identity,
               github_archive_limit_mb, github_markdown_limit_mb, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .run(
             id,
@@ -214,6 +220,7 @@ export function createDatabase(
             mode,
             input.pageLimit,
             scopePath,
+            excludePathPattern,
             schedule,
             input.httpConcurrency,
             input.browserConcurrency,
@@ -240,8 +247,14 @@ export function createDatabase(
       const scopePath = repository
         ? DOCUMENT_SOURCE_DEFAULTS.scopePath
         : normalizeScopePath(input.scopePath ?? DOCUMENT_SOURCE_DEFAULTS.scopePath)
+      const excludePathPattern = repository
+        ? null
+        : normalizeExcludePathPattern(input.excludePathPattern)
       if (!isUrlInScope(url, hostname, scopePath)) {
         throw new Error('起始页面不在收录范围内')
+      }
+      if (isPathExcluded(url, excludePathPattern)) {
+        throw new Error('起始页面不能被排除路径正则命中')
       }
       const identity = repository?.identity ?? createWebSourceIdentity(hostname, scopePath)
       const current = database
@@ -270,7 +283,7 @@ export function createDatabase(
           const result = database
             .prepare(
               `UPDATE document_sources
-               SET name = ?, first_url = ?, hostname = ?, fetch_mode = ?, page_limit = ?, scope_path = ?,
+               SET name = ?, first_url = ?, hostname = ?, fetch_mode = ?, page_limit = ?, scope_path = ?, exclude_path_pattern = ?,
                    schedule = ?, http_concurrency = ?, browser_concurrency = ?, document_kind = ?,
                    source_identity = ?, github_archive_limit_mb = ?, github_markdown_limit_mb = ?,
                    github_revision = CASE WHEN ? THEN NULL ELSE github_revision END,
@@ -287,6 +300,7 @@ export function createDatabase(
               mode,
               input.pageLimit,
               scopePath,
+              excludePathPattern,
               schedule,
               input.httpConcurrency,
               input.browserConcurrency,
@@ -302,14 +316,16 @@ export function createDatabase(
               id
             )
           if (Number(result.changes) !== 1) throw new Error('文档源不存在')
-          if (!repository) deleteDocumentsOutsideScope(database, id, hostname, scopePath)
+          if (!repository) {
+            deleteDocumentsOutsideScope(database, id, hostname, scopePath, excludePathPattern)
+          }
         })
       } catch (error) {
         throwLocalHostnameConflict(error)
       }
       const source = database
         .prepare(
-          `SELECT id, name, first_url, fetch_mode, page_limit, scope_path, schedule, http_concurrency, browser_concurrency, icon_url,
+          `SELECT id, name, first_url, fetch_mode, page_limit, scope_path, exclude_path_pattern, schedule, http_concurrency, browser_concurrency, icon_url,
              source_type, cloud_server_url, cloud_library_id, cloud_revision, cloud_auto_sync,
              document_kind, github_archive_limit_mb, github_markdown_limit_mb,
              github_default_branch, github_revision,
