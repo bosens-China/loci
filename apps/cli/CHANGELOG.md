@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/bosens-China/loci/compare/cli-v1.13.0...cli-v1.14.0) (2026-08-14)
+
+
+### Features
+
+* 优化 CLI 命令结构与交互 ([b947e58](https://github.com/bosens-China/loci/commit/b947e5820198671e506120b85fb4dc819ed1b057))
+
 ## [1.13.0](https://github.com/bosens-China/loci/compare/cli-v1.12.0...cli-v1.13.0) (2026-08-14)
 
 
