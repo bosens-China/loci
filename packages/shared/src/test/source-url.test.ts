@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
+import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '../source-policy.js'
 import { deriveSourceName, getSourceScopeOptions } from '../source-url.js'
 
 describe('文档源 URL 默认值', () => {

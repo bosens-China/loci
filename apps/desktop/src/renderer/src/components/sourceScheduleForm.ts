@@ -1,10 +1,10 @@
 import {
   CUSTOM_SCHEDULE,
   DEFAULT_SCHEDULE,
+  DOCUMENT_SOURCE_DEFAULTS,
   getSchedulePreset,
   normalizeCronSchedule
 } from '@loci/shared'
-import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/core/source-policy'
 import type { CreateSourceInput, DocumentSource, FetchMode } from '../types'
 
 export interface SourceFormValues {

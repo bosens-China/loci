@@ -2,9 +2,9 @@ import { open, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Buffer } from 'node:buffer'
+import type { GithubRepository } from '@loci/shared'
 import { throwIfAborted } from './abort.js'
 import { formatGithubBytes, GithubLimitError } from './github-limits.js'
-import type { GithubRepository } from './github-url.js'
 
 const githubConnectTimeoutMs = 30_000
 const githubIdleTimeoutMs = 60_000

@@ -1,2 +1,6 @@
-export { deriveSourceName, getSourceScopeOptions, type SourceScopeOption } from '@loci/shared'
-export { parseGithubRepositoryUrl } from '@loci/core/github-url'
+export {
+  deriveSourceName,
+  getSourceScopeOptions,
+  parseGithubRepositoryUrl,
+  type SourceScopeOption
+} from '@loci/shared'

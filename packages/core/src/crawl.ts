@@ -1,13 +1,12 @@
 import { parse } from 'node-html-parser'
 import { htmlToMarkdown } from 'mdream'
+import { createPathExclusionMatcher, DOCUMENT_SOURCE_LIMITS } from '@loci/shared'
 import { abortableSleep, throwIfAborted } from './abort.js'
 import { fetchWithRetry } from './retry.js'
 export { fetchWithRetry, isRetryableStatus, retryAfterMs } from './retry.js'
 import { discoverSitemapUrls } from './sitemap.js'
 export { discoverSitemapUrls, parseSitemap } from './sitemap.js'
 import { isUrlInScope } from './scope.js'
-import { createPathExclusionMatcher } from './path-exclusion.js'
-import { DOCUMENT_SOURCE_LIMITS } from './source-policy.js'
 import type {
   CrawledDocument,
   CrawledPage,

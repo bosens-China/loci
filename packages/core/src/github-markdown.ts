@@ -1,10 +1,10 @@
 import { posix } from 'node:path'
+import type { GithubRepository } from '@loci/shared'
 import type { Definition, Image, Link, Nodes, Parent } from 'mdast'
 import { frontmatterFromMarkdown, frontmatterToMarkdown } from 'mdast-util-frontmatter'
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import { toMarkdown } from 'mdast-util-to-markdown'
 import { frontmatter } from 'micromark-extension-frontmatter'
-import type { GithubRepository } from './github-url.js'
 
 interface RewriteContext {
   repository: GithubRepository

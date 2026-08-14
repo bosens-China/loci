@@ -1,4 +1,9 @@
 import {
+  createPathExclusionMatcher,
+  DOCUMENT_SOURCE_LIMITS,
+  parseGithubRepositoryUrl
+} from '@loci/shared'
+import {
   crawlHttpSource,
   fetchHttpPage,
   getHostname,
@@ -9,11 +14,8 @@ import { throwIfAborted } from './abort.js'
 import { crawlLlmsSource, discoverLlmsEntries } from './llms.js'
 import { crawlGithubSource } from './github-source.js'
 import type { GithubBlockedState } from './github-limits.js'
-import { parseGithubRepositoryUrl } from './github-url.js'
 import { selectFetchMode } from './mode.js'
 import { crawlOpenApiSource, discoverOpenApiEntries } from './openapi.js'
-import { createPathExclusionMatcher } from './path-exclusion.js'
-import { DOCUMENT_SOURCE_LIMITS } from './source-policy.js'
 import { crawlRenderedSource, fetchCrawledPageWithRetry, type RenderedCrawler } from './rendered.js'
 import type { CrawledDocument, CrawledPage, CrawlProgress, HttpCrawlOptions } from './types.js'
 

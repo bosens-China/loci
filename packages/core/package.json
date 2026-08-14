@@ -9,18 +9,6 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
-    },
-    "./github-url": {
-      "types": "./src/github-url.ts",
-      "default": "./src/github-url.ts"
-    },
-    "./schedule": {
-      "types": "./src/schedule.ts",
-      "default": "./src/schedule.ts"
-    },
-    "./source-policy": {
-      "types": "./src/source-policy.ts",
-      "default": "./src/source-policy.ts"
     }
   },
   "scripts": {
@@ -30,7 +18,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "croner": "^10.0.1",
+    "@loci/shared": "workspace:*",
     "mdast-util-from-markdown": "^2.0.3",
     "mdast-util-frontmatter": "^2.0.1",
     "mdast-util-to-markdown": "^2.1.2",

@@ -29,6 +29,38 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
+  {
+    files: ['apps/desktop/src/renderer/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@loci/core', '@loci/core/*', '@loci/runtime', '@loci/runtime/*'],
+              message: 'Renderer 只能引用浏览器安全的 @loci/shared 领域契约。'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ['packages/shared/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['node:*', '@loci/core', '@loci/core/*', '@loci/runtime', '@loci/runtime/*'],
+              message: '@loci/shared 必须保持浏览器安全，不能依赖 Node 或上层实现。'
+            }
+          ]
+        }
+      ]
+    }
+  },
   // 禁用所有与格式化相关的 ESLint 规则
   eslintConfigPrettier
 )

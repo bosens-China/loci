@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/core/source-policy'
+import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/shared'
 import { getSourceFormValues, toCreateSourceInput } from '../sourceScheduleForm'
 
 describe('sourceScheduleForm', () => {

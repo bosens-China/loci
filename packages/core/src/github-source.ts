@@ -1,6 +1,7 @@
 import { basename, posix } from 'node:path'
 import { Buffer } from 'node:buffer'
 import * as yauzl from 'yauzl'
+import type { GithubRepository } from '@loci/shared'
 import { throwIfAborted } from './abort.js'
 import { rewriteGithubMarkdown } from './github-markdown.js'
 import { downloadGithubArchive, readGithubRepositoryMetadata } from './github-download.js'
@@ -12,7 +13,6 @@ import {
   GithubLimitError,
   type GithubBlockedState
 } from './github-limits.js'
-import type { GithubRepository } from './github-url.js'
 import type { CrawledDocument, CrawlFailure, CrawlProgress } from './types.js'
 
 const githubEntryLimit = 100_000
