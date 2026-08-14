@@ -10,6 +10,9 @@ describe('内置 Skill 静态资源打包配置', () => {
     const config = read('apps/cli/tsdown.config.ts')
 
     expect(existsSync(resolve(workspaceRoot, '.agents/skills/use-loci/SKILL.md'))).toBe(true)
+    expect(existsSync(resolve(workspaceRoot, '.agents/skills/use-loci/references/cli.md'))).toBe(
+      true
+    )
     expect(packageJson.files).toContain('dist/resources/**')
     expect(packageJson.scripts.prebuild).toBeUndefined()
     expect(config).toContain("from: '../../.agents/skills/use-loci'")
@@ -24,6 +27,9 @@ describe('内置 Skill 静态资源打包配置', () => {
     expect(config).toContain('extraResources:')
     expect(config).toContain('from: ../../.agents/skills/use-loci')
     expect(config).toContain('to: skills/use-loci')
+    expect(existsSync(resolve(workspaceRoot, '.agents/skills/use-loci/references/cli.md'))).toBe(
+      true
+    )
   })
 
   it('Runtime 不再维护资源生成命令或生成文件', () => {

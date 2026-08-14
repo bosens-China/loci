@@ -1,6 +1,6 @@
 # CLI 安装与使用
 
-Loci CLI 适合终端、自动化脚本和服务器环境。CLI 与桌面应用使用同一份本地数据。
+Loci CLI 适合终端、自动化脚本和服务器环境。它将公开技术文档保存为本地 Markdown，供后续搜索、阅读和 Agent 查询。
 
 ## 安装 CLI
 
@@ -40,7 +40,7 @@ loci source sync rspress
 loci source add http://localhost:8000/docs
 ```
 
-公开 GitHub 仓库也可以直接作为文档源。Loci 会读取默认分支当前提交的 ZIP，保留 Markdown 的仓库相对目录；不需要安装 Git 或浏览器。
+公开 GitHub 仓库也可以直接作为文档源。Loci 会收录默认分支中的 Markdown；不需要安装 Git 或浏览器。
 
 示例：
 
@@ -66,7 +66,7 @@ loci status
 loci source list
 ```
 
-需要在没有桌面端的服务器上执行定时更新时，先设置计划，再显式运行前台计划宿主：
+需要定时更新时，先设置计划，再显式运行前台计划宿主：
 
 ```bash
 loci schedule set rspress '0 2 * * *'
@@ -75,10 +75,10 @@ loci schedule run
 
 ## 下一步
 
-- 查看[基础、浏览器与设置](/cli/commands/basics)。
+- 查看[基础、浏览器与设置](/cli/commands/basics)和[高级配置与自动化](/cli/advanced)。
 - 查看[本地文档库](/cli/commands/local-library)和[云端文档库](/cli/commands/cloud-library)。
 - 查看[页面发现与抓取优先级](/guide/crawling)。
 - 查看[数据备份与运行环境](/cli/commands/integrations)。
-- 需要让 AI 使用本地文档时，查看 [AI 接入概览](/agent/overview)。
+- 需要让 Agent 使用本地文档时，查看 [接入 Agent](/agent/overview)。
 - 如果需要为其他人提供云端文档库，可选阅读 [Admin：部署与管理 Server](/cli/commands/admin)。
 - 遇到环境或浏览器问题，运行 `loci doctor`；浏览器不可用时运行 `loci browser install`。

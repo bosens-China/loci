@@ -54,6 +54,7 @@ describe('SkillManager', () => {
     ])
     expect(readFileSync(join(target, 'SKILL.md'), 'utf8')).toContain('name: use-loci')
     expect(readFileSync(join(target, 'agents/openai.yaml'), 'utf8')).toContain('Loci 文档助手')
+    expect(readFileSync(join(target, 'references/cli.md'), 'utf8')).toContain('loci mcp call')
     expect(manager.list()).toMatchObject([{ targetPath: target, status: 'current' }])
   })
 

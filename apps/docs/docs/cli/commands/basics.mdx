@@ -1,6 +1,6 @@
 # 基础、浏览器与设置
 
-本页介绍通用命令、无头浏览器和 CLI 与桌面应用共用的设置。
+本页介绍通用命令和浏览器运行时。需要调整抓取资源或编写自动化脚本时，请查看[高级配置与自动化](/cli/advanced)。
 
 ## 参数约定
 
@@ -52,7 +52,7 @@ loci update
 
 ### `loci doctor`
 
-检查数据目录、数据库、跨进程锁、无头浏览器、Loci Server 和 MCP 服务，并在发现问题时给出修复建议。
+检查 Loci 运行环境，并在发现问题时给出修复建议。
 
 示例：
 
@@ -66,7 +66,7 @@ loci doctor
 
 ### `loci browser status`
 
-检查无头浏览器是否已安装、是否可以启动，并输出可执行文件路径。
+检查无头浏览器是否已安装且可以启动。
 
 示例：
 
@@ -94,13 +94,13 @@ loci browser install
 loci browser uninstall
 ```
 
-## 共享设置
+## 查看设置
 
-设置保存在与桌面应用共用的本地数据目录中。修改设置会同时影响 CLI 和桌面应用。
+设置保存在 Loci 本地数据目录中。CLI、stdio MCP 和 HTTP MCP 都会读取这些设置。
 
 ### `loci config list`
 
-显示当前全部共享设置。
+显示当前设置，包括云端文档库地址和抓取资源限制。
 
 示例：
 
@@ -110,26 +110,10 @@ loci config list
 
 ### `loci config set [key] [value]`
 
-修改一个共享设置。省略参数时，CLI 会在交互终端中选择设置项并要求输入新值。
-
-| 设置项                     | 用途                           |
-| -------------------------- | ------------------------------ |
-| `mcp-port`                 | HTTP MCP 服务监听端口。        |
-| `http-concurrency`         | HTTP 抓取的默认并发数。        |
-| `browser-concurrency`      | 浏览器抓取的默认并发数。       |
-| `max-retries`              | 页面抓取失败后的默认重试次数。 |
-| `batch-interval-seconds`   | 抓取批次之间的默认等待秒数。   |
-| `github-archive-limit-mb`  | GitHub ZIP 默认下载上限。      |
-| `github-markdown-limit-mb` | GitHub Markdown 默认总量上限。 |
-| `server-url`               | Loci Server 地址。             |
-
-HTTP 并发数和批次间隔适用于普通网页抓取。有效 `llms.txt`、GitHub Pages 和 GitLab Pages 使用整批并发策略，详见[本地文档库](./local-library)。
-
-示例：将 HTTP 抓取默认并发数设为 8。
+修改一个设置。省略参数时，CLI 会在交互终端中选择设置项并要求输入新值。
 
 ```bash
-loci config set http-concurrency 8
-loci config set github-archive-limit-mb 300
+loci config set server-url https://your-loci.example.com
 ```
 
-省略设置名和值时，CLI 会显示每项当前值；输入时会带入当前值，并在字段内校验端口、并发数、重试次数和批次间隔的合法范围。批次间隔输入过程中会实时换算为分钟。
+云端文档库地址请查看[云端文档库](/cli/commands/cloud-library)。抓取并发、重试、下载上限和 HTTP MCP 端口请查看[高级配置与自动化](/cli/advanced)。

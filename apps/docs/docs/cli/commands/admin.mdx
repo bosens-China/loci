@@ -12,7 +12,7 @@ Loci Server 不接收用户的本地文档。它只抓取无需登录即可访�
 
 ## 部署 Loci Server
 
-仓库根目录提供了生产环境使用的 `compose.yaml` 和环境变量示例。GHCR 发布的 Loci Server 镜像内置轻量的 Chromium headless shell，只执行 JavaScript、生成 DOM 并把 HTML 交给现有 Markdown 转换链路，不需要额外启动 Browserless 容器。服务器需要安装 Git、Docker 和 Docker Compose。
+仓库根目录提供了生产环境使用的 `compose.yaml` 和环境变量示例。Loci Server 镜像已包含抓取动态文档所需的浏览器运行时，不需要额外部署浏览器容器。服务器需要安装 Git、Docker 和 Docker Compose。
 
 克隆仓库后，复制环境变量示例：
 
@@ -42,7 +42,7 @@ docker compose up -d
 curl http://127.0.0.1:3000/health
 ```
 
-生产环境应通过 HTTPS 反向代理暴露 Loci Server，并保留 Compose 创建的 `loci-data` 数据卷。当前版本按单实例运行，不要让多个 Server 实例同时写入同一份 SQLite 数据。
+生产环境应通过 HTTPS 反向代理暴露 Loci Server，并保留 Compose 创建的 `loci-data` 数据卷。当前版本按单实例运行。
 
 ## 连接部署后的 Server
 
@@ -74,7 +74,7 @@ CLI 会读取管理员账号和隐藏输入的密码。登录后可以执行以�
 
 创建文档库时，CLI 会先询问第一个公开文档页面 URL，并根据域名生成可编辑的名称默认值。随后可以选择收录整个站点或某级路径；页面上限默认是 1000；自动更新计划可以选择仅手动、常用预设或自定义五段 Linux Cron。
 
-成功操作后的安全偏好会按 Server 地址分别保存：下次登录会填入上次账号，创建会复用页面上限、收录路径层级和更新计划，批量同步会预勾选上次成功选择。只有一个文档库时会默认勾选，直接回车即可提交；上次选择了全部文档库时仍保持“全部文档库”勾选。密码、Token、删除目标和危险确认始终不会保存。
+CLI 会复用最近使用的安全配置，减少重复输入。密码、Token、删除目标和危险确认始终不会保存。
 
 修改基础信息和设置自动更新计划是两个独立操作，不需要为了调整计划重新填写名称和 URL。自定义 Cron 时，CLI 会在输入框底部实时展示最近两次预计执行时间，并在当前字段内提示格式错误。
 
@@ -98,9 +98,7 @@ loci admin jobs
 loci admin cancel <任务 ID>
 ```
 
-`admin sync` 可以接收多个名称、完整 ID 或唯一短 ID；使用 `--all` 提交全部文档库，
-使用 `--wait` 在当前终端等待聚合结果。Server 最多同时运行 3 个文档库，其余任务排队。
-同一文档库只保留一个活动任务；重复提交会返回已有任务及其当前进度，不会再启动一份抓取。
+`admin sync` 可以接收多个名称、完整 ID 或唯一短 ID；使用 `--all` 提交全部文档库，使用 `--wait` 在当前终端等待聚合结果。同一文档库重复提交时，Loci 会复用已有任务并显示当前进度。
 删除命令在非交互环境中必须显式提供 `--yes`。
 
 ## 发布后的用户流程
@@ -120,7 +118,5 @@ loci cloud pull <文档库名称或 ID>
 - 只添加公开且无需登录的文档页面，不要填写 Cookie、Token 或其他站点凭据。
 - Hash Router 文档站依赖 `#` 区分页面，当前不适合作为文档源。
 - 生产机还应通过防火墙或云网络策略阻止容器访问内网和云元数据地址。
-- Chromium headless shell 只在 Server 容器内部启动，不对公网暴露调试端口。
-- Server 仍兼容远程 Browserless，但默认不需要额外的浏览器容器。
 
 如果只需要使用别人已经发布的文档库，请返回[云端文档库](/cli/commands/cloud-library)，无需阅读或执行本页的部署步骤。

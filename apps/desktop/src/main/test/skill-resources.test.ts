@@ -8,6 +8,7 @@ describe('桌面 Skill 静态资源', () => {
     const directory = resolveDesktopSkillResourceDir(false, '/unused')
 
     expect(existsSync(join(directory, 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(directory, 'references/cli.md'))).toBe(true)
   })
 
   it('生产态读取 Electron resources 目录', () => {

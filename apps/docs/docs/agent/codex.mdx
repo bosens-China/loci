@@ -1,8 +1,8 @@
-# Codex 全局与项目规则
+# Codex 规则设置
 
 Codex 会把用户级规则与项目规则合并。Loci 可以把跨项目检索流程写入 Codex Home，同时保留用户已有的其他规则。
 
-如果还不熟悉 MCP、Skill 和全局规则的分工，请先阅读 [AI 接入概览](/agent/overview)。其他客户端的路径请查看[配置客户端全局规则](/agent/global-rules)。
+如果还不熟悉 MCP、Skill 和全局规则的分工，请先阅读 [接入 Agent](/agent/overview)。其他客户端的路径请查看[配置 Agent 全局规则](/agent/global-rules)。
 
 ## 一键配置
 
@@ -20,8 +20,6 @@ loci mcp rules codex
 loci mcp configure codex --yes
 loci mcp rules codex --yes
 ```
-
-桌面应用用户可以打开“系统设置 → Agent 连接”，分别点击 MCP 的“一键写入”和全局规则的“写入全局规则”。桌面端使用本机 HTTP MCP，CLI 默认使用按需启动的 stdio MCP。
 
 ## 什么时候使用 Loci
 
@@ -42,40 +40,17 @@ Loci 管理的规则
 <!-- loci:end -->
 ```
 
-区块之外的个人规则保持不变。自动迁移包括下一节说明的、具有完整标记边界的 Context7 全局规则和旧版 Loci 组合规则。
+区块之外的个人规则保持不变。
 
 ## 已有 Context7
 
-如果 Codex 全局文件中已经存在 Context7 强制规则，直接追加 Loci 会产生冲突。Loci 会识别以下两种完整边界：
+如果 Codex 全局规则已经包含 Context7，运行下面的命令即可让 Loci 重新整理规则优先级：
 
-```md
-<!-- context7 -->
-
-Context7 规则
-<!-- context7 -->
+```bash
+loci mcp rules codex
 ```
 
-```md
-<!-- context7:start -->
-
-Context7 规则
-<!-- context7:end -->
-```
-
-旧版 Loci 接入文档曾生成下面的组合区块，CLI 和桌面端也会自动迁移：
-
-```md
-<!-- loci-context7:start -->
-
-旧版 Loci 与 Context7 组合规则
-<!-- loci-context7:end -->
-```
-
-CLI 和桌面端会用一个 Loci 受管区块替换完整的 Context7 区块。组合规则先执行 Loci 本地、云端和用户授权的官方抓取流程，只在 Loci 不可用、用户拒绝抓取、已授权获取失败或证据不足时调用 Context7。再次写入只升级这个组合区块。
-
-安装顺序不影响最终结果。先写入 Loci、后安装全局 Context7 Skill 时，再执行一次 `loci mcp rules codex` 或点击桌面的“写入全局规则”，Loci 会检测 `~/.agents/skills/context7-mcp/SKILL.md` 与 `~/.codex/skills/context7-mcp/SKILL.md` 并升级已有区块。已经生成组合规则后，如果 Context7 安装器又写入一组具有完整边界的新规则，下一次执行同一操作会去重并保留一个最新的组合区块。Loci 不会在后台监听第三方 Skill 安装。
-
-如果 Context7 标记不完整、重复，或者规则包含 `ctx7` 命令但没有标记，Loci 会停止写入并要求手动整理边界。这个安全检查不会修改项目级 `AGENTS.md`、Context7 Skill 或文件中的其他个人规则。
+Loci 会优先使用本地和官方技术文档，并只在需要时切换到 Context7。它只修改自己识别到的完整规则区块；无法安全合并时会停止写入，并提示你先手动整理规则。项目级 `AGENTS.md`、Context7 Skill 和其他个人规则不会被修改。
 
 ## 项目级规则
 
@@ -93,4 +68,4 @@ codex --ask-for-approval never "说明技术文档的查询流程，以及什么
 
 预期回答会先判断问题是否属于开发者技术文档范围。属于时先查询 Loci 本地库，再查询云端公开目录，并在获得授权后拉取或抓取官方文档；只有 Loci 不可用、用户拒绝官方抓取、获取失败或证据仍不足时，才切换到 Context7、定向网页检索或其他文档来源。非文档任务应直接使用对应来源。
 
-配置入口请查看[配置 MCP](/agent/mcp)，具体工具流程请查看[使用 Loci Skill](/agent/skill)。Codex 的完整加载规则请查看 [Codex AGENTS.md 文档](https://learn.chatgpt.com/docs/agent-configuration/agents-md.md)。
+配置入口请查看[通过 MCP 接入](/agent/mcp)，具体工具流程请查看[使用 use-loci Skill](/agent/skill)。Codex 的完整加载规则请查看 [Codex AGENTS.md 文档](https://learn.chatgpt.com/docs/agent-configuration/agents-md.md)。

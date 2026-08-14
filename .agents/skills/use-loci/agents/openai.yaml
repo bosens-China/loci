@@ -1,4 +1,4 @@
 interface:
   display_name: 'Loci 文档助手'
-  short_description: '通过 Loci 按本地、云端和官方来源查找并阅读技术文档'
-  default_prompt: '使用 $use-loci 查询当前问题所需的技术文档。按本地文档库、云端公开目录、用户确认后的官方文档抓取顺序执行；本地和云端都没有可用内容时，先询问我是否抓取官方文档，只有我拒绝、获取失败或所得证据仍不足时，才使用 Context7 等其他来源。'
+  short_description: '通过 MCP 或 CLI 使用 Loci 查找并阅读技术文档'
+  default_prompt: '使用 $use-loci 查询当前问题所需的技术文档。先判断当前会话是否有 Loci MCP 工具；有则直接调用，没有则按 CLI 参考在取得我的同意后安装并使用 loci mcp call。按本地文档库、云端公开目录、用户确认后的官方文档抓取顺序执行。'

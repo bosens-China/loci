@@ -1,77 +1,68 @@
 # 本地文档库
 
-本页介绍如何在本机创建文档源、同步网页，以及浏览已保存的 Markdown 文档。`source` 命令管理由本机创建和抓取的文档源；`document` 命令可以浏览全部本地文档，包括从云端下载的副本。
+本页介绍如何创建、同步和浏览本机文档库。`source` 命令管理公开网站或仓库，`document` 命令用于浏览已保存的 Markdown。
 
-## 创建和管理文档源
+## 创建文档源
 
 ### `loci source add [url]`
 
-从任意一个公开文档页创建本地文档源。只提供 URL 时，CLI 会直接使用已保存的安全偏好；首次使用或偏好失效时回退到产品基础默认值，不再逐项询问。URL 是抓取入口，不必是网站首页。
-
-示例：
+将任意公开文档页作为入口。只提供 URL 时，Loci 会自动生成名称，以 `auto` 模式抓取整个站点，页面上限为 1,000，并立即开始首次同步。
 
 ```bash
 loci source add https://rspress.rs/guide/introduction.html
 ```
 
-首次使用时，该示例会创建名为 `rspress` 的文档源，并采用以下产品基础默认值：
+常用选项如下：
 
-| 参数                             | 默认值与用途                                                       |
-| -------------------------------- | ------------------------------------------------------------------ |
-| `[url]`                          | 第一个公开文档页的 URL，也是推荐写法。                             |
-| `--url <url>`                    | 与位置 URL 等价，为现有脚本保留。                                  |
-| `--name <name>`                  | 默认从域名生成；例如 `docs.rsbuild.dev` 得到 `rsbuild`。           |
-| `--mode <auto\|http\|browser>`   | 默认 `auto`；CLI 会自动判断使用 HTTP 还是无头浏览器。              |
-| `--page-limit <number>`          | 默认 1,000，取值范围为 1 到 10,000。                               |
-| `--scope <path>`                 | 默认 `/`，表示收录整个 `rspress.rs` 站点；可用 `/guide` 收窄范围。 |
-| `--http-concurrency <number>`    | 默认继承共享的 HTTP 并发设置。                                     |
-| `--browser-concurrency <number>` | 默认继承共享的浏览器并发设置。                                     |
-| `--archive-limit <size>`         | GitHub ZIP 上限，可使用 `250mb`；默认继承共享设置。                |
-| `--markdown-limit <size>`        | GitHub Markdown 总量上限；默认继承共享设置。                       |
-| `--no-sync`                      | 只保存配置，不执行首次同步。                                       |
-| `--background`                   | 用一次性后台进程执行首次同步，完成后自动退出。                     |
+| 参数                           | 用途                                        |
+| ------------------------------ | ------------------------------------------- |
+| `--name <name>`                | 指定文档源名称。                            |
+| `--scope <path>`               | 只收录指定路径，例如 `/guide`。             |
+| `--page-limit <number>`        | 限制最多收录的页面数。                      |
+| `--mode <auto\|http\|browser>` | 选择自动、HTTP 或浏览器抓取。               |
+| `--exclude-path <regex>`       | 排除匹配的 URL 路径，例如不需要的语言目录。 |
+| `--no-sync`                    | 只保存文档源，稍后再同步。                  |
+| `--background`                 | 在后台执行首次同步，使当前终端立即返回。    |
 
-创建成功后默认立即执行一次前台同步，因此脚本与交互终端的语义一致。只运行 `loci source add` 时，CLI 会在交互终端中打开向导：先输入 URL，再确认自动生成的名称、抓取方式、页面上限和收录范围。提交前会展示配置摘要，并询问是否立即开始第一次同步。需要先批量建库时使用 `--no-sync`；希望当前终端立即返回时使用 `--background`，随后通过 `source runs` 和 `source logs` 审查结果。
+例如，只收录指南并排除中文、德文和法文目录：
 
-CLI 会记住上一次成功创建时的抓取方式、页面上限、收录路径层级和首次同步选择。后续向导和省略对应参数的 `source add <url>` 会使用这些安全偏好；显式命令参数始终优先，失效偏好回退到上表的产品基础默认值。密码、删除目标和危险确认不会被记住。
+```bash
+loci source add https://fastapi.tiangolo.com/ --scope /tutorial --exclude-path '^/(zh|de|fr)(?:/|$)'
+```
 
-CLI、桌面和 MCP 共享上述业务字段的基础默认值、取值边界、全局继承和 GitHub 规范化规则，但保留不同交互：CLI 提供提示、确认与前台/后台选项，MCP 提供结构化结果、批量调用、分页和等待开关。CLI 偏好只影响 CLI，不会改变 MCP 省略参数时的行为。
+需要调整并发数、重试次数或 GitHub 大小上限时，请查看[高级配置与自动化](/cli/advanced)。
 
-#### GitHub 仓库 Markdown
+### GitHub 仓库
 
-公开 `github.com/<owner>/<repo>` 仓库会自动切换为 GitHub 文档源，不需要手动选择类型。名称默认使用仓库名，`--page-limit` 表示最多收录的 Markdown 数量；创建和更新输入统一按 `auto` 与根路径规范化，网页抓取方式、路径范围和并发设置不参与 GitHub 同步。
+公开 `github.com/<owner>/<repo>` 仓库可以直接作为文档源：
 
-Loci 会先读取默认分支与当前提交 SHA，再把 ZIP 流式写入临时文件，只逐项解压 `.md` 文件。文件名直接作为标题，仓库相对路径作为知识库目录。相对图片改写为固定提交的 `raw.githubusercontent.com` 地址，相对链接改写为固定提交的 GitHub Blob 地址；不会下载图片到本地。
+```bash
+loci source add https://github.com/vuejs/docs
+```
 
-全局 ZIP 和 Markdown 默认上限分别为 200 MB 与 100 MB，单个 Markdown 最多 5 MB。可以通过 `loci config set github-archive-limit-mb` 和 `loci config set github-markdown-limit-mb` 修改全局值，也可以通过 `--archive-limit` 与 `--markdown-limit` 覆盖单个仓库。提交没有变化时跳过 ZIP 下载；某个提交超限后，在对应上限提高前也不会反复下载。
+Loci 会保留仓库 Markdown 的目录结构，并保持相对文档和图片链接可用。当前只支持公开仓库的默认分支；不支持私有仓库、Git LFS、Git clone、子目录范围和 MDX。
 
-每次成功同步会以新快照替换旧文档，因此仓库中已经删除的 Markdown 会从本地知识库和全文索引中删除。下载、解析或安全校验失败时保留旧快照。当前只支持公开仓库和默认分支，不支持凭据、私有仓库、Git LFS、Git clone、子目录范围、MDX 或 Markdown 内原始 HTML/组件属性的链接改写。
+## 同步和更新文档源
 
 ### `loci source sync [source]`
 
-以前台方式同步一个本地文档源，并显示已处理、成功和失败的页面数。`[source]` 可以是名称、完整 ID 或唯一短 ID；在交互终端中省略时可以从列表选择。
-
-#### GitHub Pages 与 GitLab Pages
-
-Loci 会将 `*.github.io` 和 `*.gitlab.io` 识别为已知静态 Pages 域名。HTTP 抓取会按本次页面上限整批请求已发现页面，不采用普通站点的 HTTP 并发覆盖和批次间隔。有效 `llms.txt` 列出的页面也使用相同策略。
-
-该规则只识别上述托管域名，不推断 GitHub Pages 或 GitLab Pages 的自定义域名。平台返回 HTTP 429 时，Loci 仍会执行通用重试，并优先遵守 `Retry-After`。
-
-`browser` 模式会在同步开始时检查无头浏览器；`auto` 模式会在确实需要比较 HTTP 与浏览器页面时检查。交互终端可以确认并自动安装，脚本环境则需要提前运行 `loci browser install`。
-
-同一进程内重复请求同一个文档源时，Loci 会复用正在运行的抓取和进度。桌面应用或另一个 Loci 进程已经同步该文档源时，当前命令会连接对应的持久抓取记录，并继续显示进度。不同文档源可以独立同步；失败或取消完成后可以重新执行。
-
-示例：
+同步一个本地文档源，并显示成功和失败的页面数：
 
 ```bash
 loci source sync rspress
 ```
 
+`auto` 模式发现页面需要 JavaScript 渲染时，会提示安装浏览器运行时。脚本环境请先执行：
+
+```bash
+loci browser install
+```
+
+重复同步同一文档源时，Loci 会复用正在运行的任务。失败或取消后，可以再次执行同步。
+
 ### `loci source list`
 
-列出全部本地文档源，包括页面数、内容大小、抓取方式、收录范围和短 ID。云端下载的副本不会显示在此列表中。
-
-示例：
+列出本地文档源，包括页面数、内容大小、抓取方式和收录范围：
 
 ```bash
 loci source list
@@ -79,58 +70,47 @@ loci source list
 
 ### `loci source update [source]`
 
-修改已有文档源的名称、入口 URL、抓取方式、页面上限、收录范围、并发覆盖值或 GitHub 大小覆盖值，不改变桌面端的定时同步计划。只要提供任一修改选项，CLI 就只更新该字段，不会继续询问其他字段。完全省略修改选项时，交互终端会进入编辑向导。
-
-示例：
+修改文档源名称、入口 URL、抓取方式、页面上限或收录范围。完全省略修改选项时，CLI 会进入编辑向导：
 
 ```bash
 loci source update rspress --page-limit 300
 ```
 
-交互式更新同样从 URL 开始，只展示可用的收录路径，并在保存前列出实际变化。修改 URL 时会提示现有文档需要重新同步，并可选择保存后立即同步。
+修改 URL 或范围后，建议立即同步以更新已收录内容。
 
-### `loci source runs [source]`
+### `loci source runs [source]` 与 `loci source logs [run]`
 
-显示最近抓取记录，包括来源、开始时间、发现页面数、成功数、失败数、短运行 ID 和错误信息。交互终端省略 `[source]` 时先选择文档源；脚本环境省略时显示所有文档源，显式 `--all` 也会显示全部记录。
-
-示例：
+使用 `source runs` 查看最近的同步记录；使用 `source logs` 排查某次同步的页面失败原因：
 
 ```bash
 loci source runs rspress
-```
-
-### `loci source logs [run]`
-
-查看一次抓取的汇总和页面级失败明细，包括失败 URL、原因、HTTP 状态码和是否可重试。`[run]` 可以使用 `source runs` 中显示的短运行 ID；交互终端省略时会先选择文档源和最近一次运行。
-
-```bash
 loci source logs a1b2c3d4
 ```
 
+## 设置定时更新
+
 ### `loci schedule set [source] [cron]`
 
-设置本地文档源的五段 Linux Cron 更新计划。省略 Cron 时在交互终端选择常用预设；传
-`manual` 可以关闭计划。
+为本地文档源设置五段 Linux Cron 更新计划。传入 `manual` 可以关闭计划：
 
 ```bash
 loci schedule set rspress '0 2 * * *'
 loci schedule list
 ```
 
-计划只有在桌面端运行，或显式启动 CLI 前台计划运行器时才会执行：
+设置计划后，还需要运行前台计划宿主：
 
 ```bash
 loci schedule run
 ```
 
-计划运行器同时负责已开启的云端副本每日同步，按 Ctrl+C 停止。桌面端和 CLI 通过共享锁
-保证同一时间只有一个计划宿主。
+按 `Ctrl+C` 停止计划宿主。
+
+## 删除文档源
 
 ### `loci source delete [source]`
 
-删除一个本地文档源及其全部文档。CLI 默认会再次确认；只有在脚本中确认目标无误时才应使用 `--yes` 跳过确认。
-
-示例：
+删除一个本地文档源及其全部文档。CLI 默认会再次确认：
 
 ```bash
 loci source delete rspress
@@ -140,9 +120,7 @@ loci source delete rspress
 
 ### `loci document list [source]`
 
-列出已保存的文档，包括标题、文档源、语言、更新时间和短 ID。省略 `[source]` 时列出所有本地文档；提供文档源名称或短 ID 时只列出该库的内容。
-
-示例：
+列出已保存的文档：
 
 ```bash
 loci document list rspress
@@ -150,9 +128,7 @@ loci document list rspress
 
 ### `loci document tree [source]`
 
-按 URL 路径显示某个文档库的目录树。在交互终端中省略 `[source]` 时可以从本地文档库列表中选择。
-
-示例：
+按 URL 路径显示文档库目录：
 
 ```bash
 loci document tree rspress
@@ -160,9 +136,7 @@ loci document tree rspress
 
 ### `loci document search [query]`
 
-在文档标题和 Markdown 正文中搜索关键词。省略 `[query]` 时，CLI 会在交互终端中请求输入。
-
-示例：
+在文档标题和正文中搜索关键词：
 
 ```bash
 loci document search "部署配置"
@@ -170,14 +144,10 @@ loci document search "部署配置"
 
 ### `loci document read [document]`
 
-输出一篇文档的完整 Markdown 内容和来源 URL。`[document]` 可以是短 ID、标题或完整 URL；在交互终端中省略时可以从文档列表选择。
-
-示例：
+读取一篇文档的 Markdown 内容和来源 URL。`[document]` 可以是短 ID、标题或完整 URL：
 
 ```bash
 loci document read a1b2c3d4
 ```
 
-省略文档参数时会打开可搜索选择器，可以按标题、文档源或 URL 路径筛选全部文档。
-
-需要使用 Server 上预先发布的公开文档时，查看[云端文档库](/cli/commands/cloud-library)。
+需要使用 Server 上预先发布的公开文档时，请查看[云端文档库](/cli/commands/cloud-library)。

@@ -8,7 +8,7 @@ Loci 将公开技术文档收录为本地 Markdown，提供全文搜索，并通
 
 - 收录网页、公开 GitHub 仓库中的 Markdown、`llms.txt` 和 OpenAPI 文档。
 - 桌面应用与 CLI 共享同一份本地 SQLite 数据和全文索引。
-- 通过 MCP 按需搜索和读取文档，适用于 Codex 等 Agent 客户端。
+- Agent 可通过 MCP 按需搜索和读取文档；只有 Skill 时，也可在授权安装 CLI 后直接调用同一批工具。
 - 同一文档源的重复同步会复用已有任务；不同文档源可并行处理。
 
 ## 快速开始
@@ -28,6 +28,8 @@ loci source sync rspress
 loci document search "Quick start"
 loci mcp configure codex
 loci mcp rules codex
+# 无 MCP 连接时也可直接调用同一工具
+loci mcp call loci_list_libraries
 ```
 
 需要抓取依赖客户端渲染的网站时，再安装浏览器运行时：
@@ -40,8 +42,8 @@ loci browser install
 
 - [使用文档](https://bosens-china.github.io/loci/)
 - [CLI 快速开始](https://bosens-china.github.io/loci/cli/getting-started)
-- [桌面应用快速开始](https://bosens-china.github.io/loci/desktop/getting-started)
-- [MCP 集成](https://bosens-china.github.io/loci/agent/mcp)
+- [接入 Agent](https://bosens-china.github.io/loci/agent/overview)
+- [通过 MCP 接入](https://bosens-china.github.io/loci/agent/mcp)
 
 ## 参与贡献
 

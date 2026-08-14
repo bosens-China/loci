@@ -4,7 +4,7 @@
 
 ## 修改默认的云端文档库地址
 
-正式版 CLI 和桌面应用默认连接 `https://loci.xiaowo.live`。如果使用自行部署的 Loci Server，可以将 `server-url` 改为对应地址。
+正式版 CLI 默认连接 `https://loci.xiaowo.live`。如果使用自行部署的 Loci Server，可以将 `server-url` 改为对应地址。
 
 示例：
 
@@ -19,11 +19,7 @@ loci config list
 loci doctor
 ```
 
-`server-url` 是 CLI 与桌面应用共用的设置。这里修改的是云端文档库的 Server 地址，不会改变本地文档源的网页 URL。
-
-桌面开发版的全新数据默认连接 `http://localhost:7001`。CLI 本地开发可以设置环境变量 `LOCI_SERVER_URL=http://localhost:7001`；npm 安装的正式版不设置该变量时，首次默认使用生产地址，并保留用户后来保存的自定义地址。
-
-已经下载的云端副本会记录原 Server 地址。切换 `server-url` 后，如果需要更新旧副本，应先将地址切回该副本的来源 Server。
+这里修改的是云端文档库的 Server 地址，不会改变本地文档源的网页 URL。已经下载的副本会继续从原 Server 更新；切换地址后，如需更新旧副本，请先切回对应的 Server。
 
 如果你希望自己在服务器上搭建 Loci Server，并向其他人发布文档库，请阅读 [Admin：部署与管理 Server](/cli/commands/admin)。
 
@@ -33,7 +29,7 @@ loci doctor
 
 读取 Server 上公开的文档库目录，显示页面数、内容大小和短 ID，并标记每个文档库在本地是否已经存在或有可用更新。
 
-公开目录不会显示 0 页文档库。旧版或异常 Server 如果返回空快照，CLI 会拒绝导入并保留已有本地副本；Server 暂时不可访问时，已经下载的内容仍可离线读取，不会被清空。
+Server 暂时不可访问时，已经下载的内容仍可离线读取，不会被清空。
 
 示例：
 
@@ -90,7 +86,6 @@ loci cloud auto-sync "React 文档" on
 loci schedule run
 ```
 
-CLI 不会在普通命令结束后偷偷驻留。只有显式运行 `loci schedule run` 时，才会以前台常驻
-方式执行云端每日检查；按 Ctrl+C 可停止。桌面端已经运行计划任务时，CLI 会拒绝启动第二个运行器。
+CLI 不会在普通命令结束后继续运行。只有显式运行 `loci schedule run` 时，才会以前台方式执行云端每日检查；按 Ctrl+C 可停止。
 
 需要自己从公开网站创建和抓取文档时，查看[本地文档库](/cli/commands/local-library)。

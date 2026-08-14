@@ -1,0 +1,62 @@
+# 高级配置与自动化
+
+本页适合需要控制抓取资源、运行定时任务或在脚本中调用 Loci 的用户。日常收录和阅读文档时，使用默认设置即可。
+
+## 调整抓取资源
+
+先查看当前设置：
+
+```bash
+loci config list
+```
+
+常用设置如下。只有遇到网站限流、抓取量很大或需要调整 HTTP MCP 端口时，才需要修改。
+
+| 设置项                     | 适用场景                        |
+| -------------------------- | ------------------------------- |
+| `mcp-port`                 | 为 HTTP MCP 指定本机端口。      |
+| `http-concurrency`         | 调整普通网页抓取的并发数。      |
+| `browser-concurrency`      | 调整浏览器渲染页面的并发数。    |
+| `max-retries`              | 调整页面抓取失败后的重试次数。  |
+| `batch-interval-seconds`   | 降低连续抓取对目标站点的压力。  |
+| `github-archive-limit-mb`  | 调整 GitHub 仓库下载大小上限。  |
+| `github-markdown-limit-mb` | 调整 GitHub Markdown 总量上限。 |
+
+例如：
+
+```bash
+loci config set http-concurrency 8
+loci config set github-archive-limit-mb 300
+```
+
+## 运行定时更新
+
+设置计划后，还需要在希望执行计划的机器上运行前台宿主：
+
+```bash
+loci schedule set rspress '0 2 * * *'
+loci schedule run
+```
+
+按 `Ctrl+C` 会停止计划宿主。重复启动时，Loci 会复用已有的计划运行器。
+
+## 隔离数据目录
+
+测试、演示或自动化任务可以设置 `LOCI_DATA_DIR`，让该次命令使用独立数据目录：
+
+```bash
+LOCI_DATA_DIR=./.loci-test loci status
+```
+
+日常使用不建议设置此变量，以免 CLI 与 MCP 查询到不同的文档库。
+
+## 脚本退出码
+
+| 退出码 | 含义                                 |
+| ------ | ------------------------------------ |
+| `0`    | 操作成功或用户主动取消。             |
+| `1`    | 认证、网络或运行时错误。             |
+| `2`    | 参数或用户输入错误。                 |
+| `3`    | 操作完成，但存在页面失败或诊断异常。 |
+
+需要让 Agent 直接调用工具时，请查看[工具使用参考](/agent/mcp-tools)。

@@ -17,6 +17,7 @@ describe('CLI Skill 静态资源', () => {
 
     expect(existsSync(join(directory, 'SKILL.md'))).toBe(true)
     expect(existsSync(join(directory, 'agents/openai.yaml'))).toBe(true)
+    expect(existsSync(join(directory, 'references/cli.md'))).toBe(true)
   })
 
   it('构建产物优先读取同目录下复制的 resources', () => {
