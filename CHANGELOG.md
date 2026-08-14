@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.14.0](https://github.com/bosens-China/loci/compare/loci-v1.13.0...loci-v1.14.0) (2026-08-14)
+
+
+### Features
+
+* 改进文档源抓取与路径过滤 ([7276659](https://github.com/bosens-China/loci/commit/7276659c0d041b0128b6499ed2adad3486156255))
+
+
+### Bug Fixes
+
+* 修复桌面端浏览器依赖边界 ([d901fee](https://github.com/bosens-China/loci/commit/d901feee80b4a76c4b844bc123324f5126878f8c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.11.0
+    * @loci/runtime bumped to 1.11.0
+    * @loci/shared bumped to 1.17.0
+
 ## [1.13.0](https://github.com/bosens-China/loci/compare/loci-v1.12.1...loci-v1.13.0) (2026-08-13)
 
 
