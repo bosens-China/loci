@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.8.0](https://github.com/bosens-China/loci/compare/server-v1.7.0...server-v1.8.0) (2026-08-14)
+
+
+### Features
+
+* 改进文档源抓取与路径过滤 ([7276659](https://github.com/bosens-China/loci/commit/7276659c0d041b0128b6499ed2adad3486156255))
+
+
+### Bug Fixes
+
+* 修复服务端镜像共享包依赖 ([80aa3da](https://github.com/bosens-China/loci/commit/80aa3dad10dc512df0fcc931cd340d73a884bb12))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.11.0
+
 ## [1.7.0](https://github.com/bosens-China/loci/compare/server-v1.6.0...server-v1.7.0) (2026-08-08)
 
 

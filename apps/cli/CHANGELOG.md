@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.13.0](https://github.com/bosens-China/loci/compare/cli-v1.12.0...cli-v1.13.0) (2026-08-14)
+
+
+### Features
+
+* 支持通过 CLI 调用 Loci MCP 工具 ([7171bf4](https://github.com/bosens-China/loci/commit/7171bf42897c2f6ca8f97473bfa547257c77aeb4))
+* 改进文档源抓取与路径过滤 ([7276659](https://github.com/bosens-China/loci/commit/7276659c0d041b0128b6499ed2adad3486156255))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.11.0
+    * @loci/runtime bumped to 1.11.0
+    * @loci/shared bumped to 1.17.0
+
 ## [1.12.0](https://github.com/bosens-China/loci/compare/cli-v1.11.1...cli-v1.12.0) (2026-08-13)
 
 
