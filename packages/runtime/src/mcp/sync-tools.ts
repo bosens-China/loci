@@ -1,6 +1,5 @@
 import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS, normalizeScopePath } from '@loci/core'
 import { deriveSourceName } from '@loci/shared'
-import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
 import {
   addLibraryOutputSchema,
@@ -23,19 +22,20 @@ import {
   waitForSync,
   writeAnnotations
 } from './server-support.js'
+import type { LociToolRegistrar } from './tool-registry.js'
 
 const WAIT_DESCRIPTION =
   '默认立即返回 syncing；需要在单次调用内等待结果时传 wait_for_completion=true，并设置客户端进度回调。'
 
-export function registerSyncTools(server: McpServer, services: LociMcpServices): void {
-  registerAddLibrary(server, services)
-  registerSyncLibraries(server, services)
-  registerSyncStatus(server, services)
-  registerSyncFailures(server, services)
+export function registerSyncTools(register: LociToolRegistrar, services: LociMcpServices): void {
+  registerAddLibrary(register, services)
+  registerSyncLibraries(register, services)
+  registerSyncStatus(register, services)
+  registerSyncFailures(register, services)
 }
 
-function registerAddLibrary(server: McpServer, services: LociMcpServices): void {
-  server.registerTool(
+function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServices): void {
+  register(
     'loci_add_library',
     {
       title: '添加网页文档库',
@@ -76,6 +76,7 @@ function registerAddLibrary(server: McpServer, services: LociMcpServices): void 
         mode: input.mode,
         pageLimit: input.page_limit,
         scopePath: normalizeScopePath(input.scope_path),
+        excludePathPattern: DOCUMENT_SOURCE_DEFAULTS.excludePathPattern,
         schedule: DOCUMENT_SOURCE_DEFAULTS.schedule,
         httpConcurrency: input.http_concurrency ?? DOCUMENT_SOURCE_DEFAULTS.httpConcurrency,
         browserConcurrency:
@@ -93,7 +94,7 @@ function registerAddLibrary(server: McpServer, services: LociMcpServices): void 
         )
       }
       if (!input.wait_for_completion) {
-        startInBackground(services, source.id)
+        startInBackground(services, source.id, context)
         return result(
           {
             created,
@@ -117,8 +118,8 @@ function registerAddLibrary(server: McpServer, services: LociMcpServices): void 
   )
 }
 
-function registerSyncLibraries(server: McpServer, services: LociMcpServices): void {
-  server.registerTool(
+function registerSyncLibraries(register: LociToolRegistrar, services: LociMcpServices): void {
+  register(
     'loci_sync_libraries',
     {
       title: '同步网页文档库',
@@ -148,7 +149,7 @@ function registerSyncLibraries(server: McpServer, services: LociMcpServices): vo
         } else if (wait_for_completion) {
           items.push(await waitForSync(services, id, context))
         } else {
-          startInBackground(services, id)
+          startInBackground(services, id, context)
           items.push({ library_id: id, sync_status: 'syncing' })
         }
       }
@@ -157,8 +158,8 @@ function registerSyncLibraries(server: McpServer, services: LociMcpServices): vo
   )
 }
 
-function registerSyncStatus(server: McpServer, services: LociMcpServices): void {
-  server.registerTool(
+function registerSyncStatus(register: LociToolRegistrar, services: LociMcpServices): void {
+  register(
     'loci_get_sync_status',
     {
       title: '查看文档库同步状态',
@@ -184,8 +185,8 @@ function registerSyncStatus(server: McpServer, services: LociMcpServices): void 
   )
 }
 
-function registerSyncFailures(server: McpServer, services: LociMcpServices): void {
-  server.registerTool(
+function registerSyncFailures(register: LociToolRegistrar, services: LociMcpServices): void {
+  register(
     'loci_list_sync_failures',
     {
       title: '分页查看同步失败',

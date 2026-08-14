@@ -1,16 +1,16 @@
 import type { DocumentRecord, DocumentSource } from '@loci/shared'
-import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
 import { toSearchTokens } from '../database-values.js'
 import { findBestPassage } from './content.js'
 import { paginationInput, searchOutputSchema } from './schemas.js'
 import type { LociMcpServices } from './services.js'
 import { page, readAnnotations, result } from './server-support.js'
+import type { LociToolRegistrar } from './tool-registry.js'
 
 type RetrievalMode = 'all_terms' | 'any_terms' | 'fuzzy'
 
-export function registerSearchTool(server: McpServer, services: LociMcpServices): void {
-  server.registerTool(
+export function registerSearchTool(register: LociToolRegistrar, services: LociMcpServices): void {
+  register(
     'loci_search_files',
     {
       title: '搜索文件正文',

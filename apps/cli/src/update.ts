@@ -29,7 +29,7 @@ export const CLI_VERSION = readCliVersion()
 
 /** 每天仅派生一次独立检查进程，避免网络请求阻塞用户命令。 */
 export function startDailyUpdateCheck(args: readonly string[]): void {
-  if (!process.stdout.isTTY || isMcpStdio(args) || args[0] === 'update') return
+  if (!process.stdout.isTTY || isMcpMachineCommand(args) || args[0] === 'update') return
   if (!claimDailyUpdateCheck()) return
 
   const entry = process.argv[1]
@@ -99,8 +99,8 @@ function readCliVersion(): string {
   return version
 }
 
-function isMcpStdio(args: readonly string[]): boolean {
-  return args[0] === 'mcp' && args[1] === 'stdio'
+function isMcpMachineCommand(args: readonly string[]): boolean {
+  return args[0] === 'mcp' && (args[1] === 'stdio' || args[1] === 'call')
 }
 
 function cachePath(): string {

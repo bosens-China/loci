@@ -1,11 +1,11 @@
-import type { ServerContext } from '@modelcontextprotocol/server'
 import type { CrawlFailure, CrawlProgress, CrawlRunState, DocumentSource } from '@loci/shared'
 import type { LociMcpServices } from './server.js'
+import type { LociToolContext } from './tool-registry.js'
 
 export async function waitForSync(
   services: LociMcpServices,
   libraryId: string,
-  context: ServerContext
+  context: LociToolContext
 ): Promise<Record<string, unknown>> {
   try {
     const progress = await services.crawlSource(libraryId, progressReporter(context, libraryId))
@@ -30,8 +30,16 @@ export async function waitForSync(
   }
 }
 
-export function startInBackground(services: LociMcpServices, libraryId: string): void {
-  void services.crawlSource(libraryId).catch(() => undefined)
+export function startInBackground(
+  services: LociMcpServices,
+  libraryId: string,
+  context?: LociToolContext
+): void {
+  const task = services
+    .crawlSource(libraryId)
+    .then(() => undefined)
+    .catch(() => undefined)
+  context?.trackBackgroundTask?.(task)
 }
 
 export function stateToSyncItem(
@@ -64,24 +72,25 @@ export function stateToSyncItem(
 }
 
 function progressReporter(
-  context: ServerContext,
+  context: LociToolContext,
   libraryId: string
 ): (progress: CrawlProgress) => void {
-  const progressToken = context.mcpReq._meta?.progressToken
+  const progressToken = context.progressToken
   let lastProcessed = -1
   return (progress) => {
-    if (progressToken === undefined || progress.processed === lastProcessed) return
+    if (
+      progressToken === undefined ||
+      !context.notifyProgress ||
+      progress.processed === lastProcessed
+    )
+      return
     lastProcessed = progress.processed
-    void context.mcpReq
-      .notify({
-        method: 'notifications/progress',
-        params: {
-          progressToken,
-          progress: progress.processed,
-          total: Math.max(progress.queued, progress.processed),
-          message: `${libraryId}: ${progress.succeeded} succeeded, ${progress.failed} failed`
-        }
-      })
+    void context
+      .notifyProgress(
+        progress.processed,
+        Math.max(progress.queued, progress.processed),
+        `${libraryId}: ${progress.succeeded} succeeded, ${progress.failed} failed`
+      )
       .catch(() => undefined)
   }
 }

@@ -39,7 +39,7 @@ describe('Loci CLI command surface', () => {
       program.commands
         .find((command) => command.name() === 'mcp')
         ?.commands.map((command) => command.name())
-    ).toEqual(['stdio', 'serve', 'status', 'config', 'configure', 'rules'])
+    ).toEqual(['call', 'stdio', 'serve', 'status', 'config', 'configure', 'rules'])
     expect(
       program.commands
         .find((command) => command.name() === 'data')

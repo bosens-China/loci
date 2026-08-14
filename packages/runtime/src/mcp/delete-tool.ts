@@ -1,11 +1,14 @@
-import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
 import { deleteLibraryOutputSchema } from './schemas.js'
 import type { LociMcpServices } from './services.js'
 import { failure, result } from './server-support.js'
+import type { LociToolRegistrar } from './tool-registry.js'
 
-export function registerDeleteLibraryTool(server: McpServer, services: LociMcpServices): void {
-  server.registerTool(
+export function registerDeleteLibraryTool(
+  register: LociToolRegistrar,
+  services: LociMcpServices
+): void {
+  register(
     'loci_delete_library',
     {
       title: '删除本地文档库',

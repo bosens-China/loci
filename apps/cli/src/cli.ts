@@ -94,7 +94,11 @@ function isVersionOrHelp(args: readonly string[]): boolean {
 function requiresCleanStdout(args: readonly string[]): boolean {
   return (
     args[0] === 'mcp' &&
-    (args[1] === 'stdio' || args[1] === 'config' || args[1] === 'configure' || args[1] === 'rules')
+    (args[1] === 'stdio' ||
+      args[1] === 'call' ||
+      args[1] === 'config' ||
+      args[1] === 'configure' ||
+      args[1] === 'rules')
   )
 }
 

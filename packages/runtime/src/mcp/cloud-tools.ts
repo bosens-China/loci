@@ -1,4 +1,3 @@
-import type { McpServer } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
 import type { CloudCatalogItem } from '@loci/shared'
 import {
@@ -15,10 +14,11 @@ import {
   writeAnnotations
 } from './server-support.js'
 import type { LociMcpServices } from './server.js'
+import type { LociToolRegistrar } from './tool-registry.js'
 
 /** 注册访问公开 Loci Server 的工具，本地数据库读写仍由共享服务完成。 */
-export function registerCloudTools(server: McpServer, services: LociMcpServices): void {
-  server.registerTool(
+export function registerCloudTools(register: LociToolRegistrar, services: LociMcpServices): void {
+  register(
     'loci_list_cloud_libraries',
     {
       title: '查询云端公开文档库',
@@ -56,7 +56,7 @@ export function registerCloudTools(server: McpServer, services: LociMcpServices)
     }
   )
 
-  server.registerTool(
+  register(
     'loci_pull_cloud_library',
     {
       title: '拉取云端公开文档库',

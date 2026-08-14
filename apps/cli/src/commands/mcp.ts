@@ -11,7 +11,6 @@ import {
   readRuntimeLock,
   resolveAgentMcpConfigPath,
   startMcpHttpServer,
-  type LociMcpServices,
   type McpAgentConnection
 } from '@loci/runtime'
 import {
@@ -37,6 +36,8 @@ import { CliError } from '../errors.js'
 import { readMcpConfigurePreference, saveMcpConfigurePreference } from '../preferences.js'
 import { askConfirm, askSelect, finishUi, info, note, startUi, success } from '../ui.js'
 import { canConnect } from './status.js'
+import { registerMcpCallCommand } from './mcp-call.js'
+import { createMcpServices } from './mcp-services.js'
 
 const agentClients: ReadonlyArray<{ value: AgentClient; label: string }> =
   listImportableAgentClients().map((client) => ({ value: client.id, label: client.label }))
@@ -53,7 +54,9 @@ const globalRulesClients: ReadonlyArray<{ value: McpClient; label: string }> = l
 )
 
 export function registerMcpCommands(program: Command): void {
-  const mcp = program.command('mcp').description('管理唯一的 Loci MCP 服务')
+  const mcp = program.command('mcp').description('调用工具并管理唯一的 Loci MCP 服务')
+
+  registerMcpCallCommand(mcp)
 
   mcp
     .command('stdio')
@@ -294,27 +297,6 @@ async function printManualMcpConfig(
     `请将下面的 ${targetDefinition.label} 配置复制到 ${targetDefinition.configPath}。\n`
   )
   process.stdout.write(`${createMcpClientConfig(target, connection)}\n`)
-}
-
-function createMcpServices(runtime: ReturnType<typeof createCliRuntime>): LociMcpServices {
-  return {
-    listSources: () => runtime.database.listSources(),
-    listDocuments: () => runtime.database.listDocuments(),
-    searchDocuments: (query, mode) => runtime.database.searchDocuments(query, mode),
-    createSource: runtime.createSource,
-    crawlSource: runtime.crawlSource,
-    deleteSource: runtime.deleteSource,
-    isCrawling: runtime.isCrawling,
-    getCrawlState: runtime.getCrawlState,
-    getLatestCrawlRunId: (libraryId) => runtime.database.listCrawlHistory(libraryId)[0]?.id,
-    getCrawlRunLibraryId: (runId) => runtime.database.getCrawlRun(runId)?.sourceId,
-    listCrawlFailures: (runId) => runtime.database.listCrawlFailures(runId),
-    listCloudLibraries: () => runtime.cloud.listCatalog(runtime.database.getSettings().serverUrl),
-    pullCloudLibrary: (libraryId) => {
-      runtime.assertWritable()
-      return runtime.cloud.importLibrary(runtime.database.getSettings().serverUrl, libraryId, false)
-    }
-  }
 }
 
 function waitForStdioTermination(): Promise<void> {
