@@ -17,17 +17,23 @@ describe('Loci CLI command surface', () => {
       'document',
       'cloud',
       'admin',
+      'agent',
       'mcp',
       'browser',
       'config',
       'data',
-      'skills',
       'doctor'
     ])
     expect(program.options.some((option) => option.long === '--json')).toBe(false)
     expect(
       program.commands
-        .find((command) => command.name() === 'skills')
+        .find((command) => command.name() === 'agent')
+        ?.commands.map((command) => command.name())
+    ).toEqual(['configure', 'rules', 'skills', 'config'])
+    expect(
+      program.commands
+        .find((command) => command.name() === 'agent')
+        ?.commands.find((command) => command.name() === 'skills')
         ?.commands.map((command) => command.name())
     ).toEqual(['add', 'list', 'remove', 'clear'])
     expect(
@@ -39,7 +45,7 @@ describe('Loci CLI command surface', () => {
       program.commands
         .find((command) => command.name() === 'mcp')
         ?.commands.map((command) => command.name())
-    ).toEqual(['call', 'stdio', 'serve', 'status', 'config', 'configure', 'rules'])
+    ).toEqual(['call', 'stdio', 'serve', 'status'])
     expect(
       program.commands
         .find((command) => command.name() === 'data')
@@ -50,6 +56,15 @@ describe('Loci CLI command surface', () => {
         .find((command) => command.name() === 'admin')
         ?.commands.map((command) => command.name())
     ).toEqual(['libraries', 'create', 'update', 'delete', 'sync', 'jobs', 'cancel'])
+  })
+
+  it('不再暴露旧的 Agent 集成命令路径', async () => {
+    await expect(createProgram().parseAsync(['mcp', 'config'], { from: 'user' })).rejects.toThrow(
+      "unknown command 'config'"
+    )
+    await expect(createProgram().parseAsync(['skills', 'list'], { from: 'user' })).rejects.toThrow(
+      "unknown command 'skills'"
+    )
   })
 
   it('translates Commander failures into clear Chinese errors', async () => {

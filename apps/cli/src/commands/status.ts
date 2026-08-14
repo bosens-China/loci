@@ -26,7 +26,7 @@ export function registerStatusCommand(program: Command): void {
             [
               '最近同步',
               runs[0]
-                ? `${statusLabel(runs[0].status)}，${runs[0].startedAt ? new Date(runs[0].startedAt).toLocaleString('zh-CN') : '—'}`
+                ? `${statusLabel(runs[0].status)}，${runs[0].sourceName}，${runs[0].startedAt ? new Date(runs[0].startedAt).toLocaleString('zh-CN') : '—'}`
                 : '暂无记录'
             ],
             ['MCP', mcpRunning ? `运行中，端口 ${settings.mcpPort}` : '未运行'],

@@ -27,17 +27,24 @@ export function registerScheduleCommands(program: Command): void {
     .action(() =>
       runWithRuntime('定时同步计划', async (runtime) => {
         const sources = runtime.database.listSources()
-        printTable(
-          ['名称', '类型', '计划', '短 ID'],
-          sources
-            .filter((source) => source.schedule || source.cloud?.autoSync)
-            .map((source) => [
+        const scheduled = sources.filter((source) => source.schedule || source.cloud?.autoSync)
+        if (scheduled.length === 0) {
+          process.stdout.write(
+            sources.some((source) => source.cloud === null)
+              ? '还没有文档源配置定时同步，可运行 loci schedule set <source> <cron> 设置。\n'
+              : '还没有本地文档源，请先运行 loci source add。\n'
+          )
+        } else {
+          printTable(
+            ['名称', '类型', '计划', '短 ID'],
+            scheduled.map((source) => [
               source.name,
               source.cloud ? '云端副本' : '本地文档源',
               source.cloud?.autoSync ? '每日检查' : source.schedule,
               source.id.slice(0, 8)
             ])
-        )
+          )
+        }
         return '定时同步计划读取成功'
       })
     )

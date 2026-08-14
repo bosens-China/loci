@@ -51,7 +51,7 @@ export function registerDoctorCommand(program: Command): void {
           [
             'MCP',
             mcp ? '运行中' : '未运行',
-            mcp ? `端口 ${settings.mcpPort}` : '桌面端会自动启动，或运行 loci mcp serve'
+            mcp ? `端口 ${settings.mcpPort}` : '运行 loci mcp serve；桌面端启动时会自动提供'
           ],
           [
             '计划运行器',

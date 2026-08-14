@@ -9,17 +9,19 @@ import { askSearch, note, printTable } from '../ui.js'
 export function registerSourceHistoryCommands(source: Command): void {
   source
     .command('runs [source]')
-    .description('查看最近抓取记录；交互终端默认先选择文档源')
+    .description('查看最近抓取记录；非交互终端需指定文档源或传入 --all')
     .option('--all', '显示全部文档源的最近记录')
     .action((reference: string | undefined, options: { all?: boolean }) =>
       runWithRuntime('抓取记录', async (runtime) => {
-        const target =
-          options.all || (!process.stdin.isTTY && !reference)
-            ? undefined
-            : await resolveSource(runtime, reference, {
-                localOnly: true,
-                preferenceKey: 'source-runs'
-              })
+        if (!process.stdin.isTTY && !reference && !options.all) {
+          throw new CliError('非交互终端必须指定文档源或传入 --all', 2)
+        }
+        const target = options.all
+          ? undefined
+          : await resolveSource(runtime, reference, {
+              localOnly: true,
+              preferenceKey: 'source-runs'
+            })
         if (target) saveRecentResource(runtime.database, 'source-runs', target.id)
         const runs = runtime.database.listCrawlHistory(target?.id)
         printRuns(runs)

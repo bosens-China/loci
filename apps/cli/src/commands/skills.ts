@@ -1,6 +1,11 @@
 import { Option, type Command } from 'commander'
 import { SkillManager } from '@loci/runtime'
-import { isSkillAgent, type SkillAgent, type SkillOperationInput } from '@loci/shared'
+import {
+  isSkillAgent,
+  type SkillAgent,
+  type SkillInstallationStatus,
+  type SkillOperationInput
+} from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
 import { askConfirm, note, printTable } from '../ui.js'
@@ -10,6 +15,7 @@ import { resolveCliSkillResourceDir } from '../skill-resources.js'
 interface SkillOptions {
   agent?: SkillAgent
   project?: string
+  global?: boolean
   yes?: boolean
   json?: boolean
 }
@@ -17,11 +23,12 @@ interface SkillOptions {
 export function registerSkillsCommands(program: Command): void {
   const skills = program.command('skills').description('安装、查看和删除 Loci Agent Skills')
 
-  skills
-    .command('add [name]')
-    .description('安装或重新安装 Skill；默认写入用户级全局目录')
-    .addOption(agentOption())
-    .option('--project <path>', '显式指定项目根目录；不传则操作全局')
+  addScopeOptions(
+    skills
+      .command('add [name]')
+      .description('安装或重新安装 Skill；默认写入当前目录的项目级配置')
+      .addOption(agentOption())
+  )
     .option('--yes', '跳过替换确认')
     .action((name: string | undefined, options: SkillOptions) =>
       runWithRuntime('安装 Loci Skill', async (runtime) => {
@@ -47,15 +54,16 @@ export function registerSkillsCommands(program: Command): void {
       })
     )
 
-  skills
-    .command('list')
-    .description('查看 SQLite 记录并核对实际 Skill 目录')
-    .addOption(agentOption())
-    .option('--project <path>', '只查看指定项目的安装记录')
+  addScopeOptions(
+    skills
+      .command('list')
+      .description('查看当前项目的 Skill 记录；可切换到其他项目或全局')
+      .addOption(agentOption())
+  )
     .option('--json', '输出 JSON')
     .action((options: SkillOptions) =>
       runWithRuntime('Loci Skills', async (runtime) => {
-        const items = createManager(runtime).list(toInput(undefined, options))
+        const items = listForScope(createManager(runtime), toInput(undefined, options), options)
         if (options.json) process.stdout.write(`${JSON.stringify(items, null, 2)}\n`)
         else
           printTable(
@@ -64,7 +72,7 @@ export function registerSkillsCommands(program: Command): void {
               item.name,
               item.compatibleAgents.join(', '),
               item.scope === 'global' ? '全局' : item.projectRoot,
-              item.status,
+              skillStatusLabel(item.status),
               item.targetPath
             ])
           )
@@ -72,11 +80,12 @@ export function registerSkillsCommands(program: Command): void {
       })
     )
 
-  skills
-    .command('remove [name]')
-    .description('删除 Skill；默认只操作用户级全局目录')
-    .addOption(agentOption())
-    .option('--project <path>', '显式指定要删除 Skill 的项目根目录')
+  addScopeOptions(
+    skills
+      .command('remove [name]')
+      .description('删除 Skill；默认操作当前目录的项目级配置')
+      .addOption(agentOption())
+  )
     .option('--yes', '跳过删除确认')
     .action((name: string | undefined, options: SkillOptions) =>
       runWithRuntime('删除 Loci Skill', async (runtime) => {
@@ -97,17 +106,18 @@ export function registerSkillsCommands(program: Command): void {
       })
     )
 
-  skills
-    .command('clear')
-    .description('批量清空 Loci 记录的 Skill；默认只清空全局')
-    .addOption(agentOption())
-    .option('--project <path>', '显式指定要清空 Skill 的项目根目录')
+  addScopeOptions(
+    skills
+      .command('clear')
+      .description('批量清空 Loci 记录的 Skill；默认只清空当前项目')
+      .addOption(agentOption())
+  )
     .option('--yes', '跳过批量删除确认')
     .action((options: SkillOptions) =>
       runWithRuntime('清空 Loci Skills', async (runtime) => {
         const manager = createManager(runtime)
         const input = toInput(undefined, options)
-        const items = manager.list({ ...input, agent: input.agent ?? 'all' })
+        const items = listForScope(manager, { ...input, agent: input.agent ?? 'all' }, options)
         if (!options.yes) {
           if (!process.stdin.isTTY) throw new CliError('非交互清空必须传入 --yes', 2)
           note(items.map((item) => item.targetPath).join('\n') || '没有匹配记录', 'Skills 清空预览')
@@ -139,11 +149,30 @@ function agentOption(): Option {
   ])
 }
 
+function addScopeOptions(command: Command): Command {
+  return command
+    .addOption(new Option('--project <path>', '指定项目根目录；默认当前目录').conflicts('global'))
+    .addOption(new Option('--global', '改为操作用户级全局目录').conflicts('project'))
+}
+
 function toInput(name: string | undefined, options: SkillOptions): SkillOperationInput {
   if (options.agent !== undefined && !isSkillAgent(options.agent)) {
     throw new CliError(`不支持的 Agent：${String(options.agent)}`, 2)
   }
-  return { name, agent: options.agent, project: options.project }
+  return {
+    name,
+    agent: options.agent,
+    project: options.global ? undefined : (options.project ?? process.cwd())
+  }
+}
+
+function listForScope(
+  manager: SkillManager,
+  input: SkillOperationInput,
+  options: Pick<SkillOptions, 'global'>
+): ReturnType<SkillManager['list']> {
+  const items = manager.list(input)
+  return options.global ? items.filter((item) => item.scope === 'global') : items
 }
 
 function createManager(runtime: Parameters<Parameters<typeof runWithRuntime>[1]>[0]): SkillManager {
@@ -166,4 +195,15 @@ function formatResults(results: Array<{ action: string; targetPath: string }>): 
   return results
     .map((result) => `${labels[result.action] ?? result.action}：${result.targetPath}`)
     .join('\n')
+}
+
+function skillStatusLabel(status: SkillInstallationStatus): string {
+  const labels: Record<SkillInstallationStatus, string> = {
+    current: '已是最新',
+    outdated: '待更新',
+    modified: '本地已修改',
+    missing: '文件缺失',
+    conflict: '路径冲突'
+  }
+  return labels[status]
 }

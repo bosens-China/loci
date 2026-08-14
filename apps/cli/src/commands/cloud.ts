@@ -2,7 +2,7 @@ import type { Command } from 'commander'
 import { formatBytes, type CloudCatalogItem, type DocumentSource } from '@loci/shared'
 import type { LociDatabase } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
-import { CliCanceledError, CliError } from '../errors.js'
+import { CliError } from '../errors.js'
 import { readRecentResource, saveRecentResource } from '../preferences.js'
 import { askConfirm, askSelect, createSpinner, printTable } from '../ui.js'
 
@@ -61,7 +61,7 @@ export function registerCloudCommands(program: Command): void {
 
   cloud
     .command('auto-sync [library] [state]')
-    .description('开启或关闭本地云端副本的每日自动同步')
+    .description('开启或关闭本地云端副本的每日自动同步；state 可传 on/off')
     .action((reference: string | undefined, state: string | undefined) =>
       runWithRuntime('云端副本自动同步', async (runtime) => {
         runtime.assertWritable()
@@ -116,9 +116,14 @@ export function registerCloudCommands(program: Command): void {
     .action((reference: string | undefined, options: { yes?: boolean }) =>
       runWithRuntime('删除云端副本', async (runtime) => {
         runtime.assertWritable()
+        if (!options.yes && !process.stdin.isTTY) {
+          throw new CliError('非交互终端请传入 --yes 跳过删除确认', 2)
+        }
         const source = await selectCloudSource(runtime.database.listSources(), reference)
-        if (!options.yes && !(await askConfirm(`确定删除本地副本“${source.name}”吗？`))) {
-          throw new CliCanceledError()
+        if (!options.yes) {
+          if (!(await askConfirm(`确定删除本地副本“${source.name}”吗？`))) {
+            return `未删除本地云端副本“${source.name}”`
+          }
         }
         runtime.deleteSource(source.id)
         return `已删除本地云端副本“${source.name}”，Server 内容未受影响`

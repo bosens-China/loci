@@ -1,13 +1,12 @@
 import { Option, type Command } from 'commander'
-import { deriveSourceName, formatBytes, type DocumentSource, type FetchMode } from '@loci/shared'
+import { deriveSourceName, formatBytes, type FetchMode } from '@loci/shared'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
   DOCUMENT_SOURCE_LIMITS,
   parseGithubRepositoryUrl
 } from '@loci/core'
-import type { BrowserInstallPrompt } from '../browser.js'
 import { startBackgroundSourceSync } from '../background-sync.js'
-import { runWithRuntime, type CommandResult } from '../command-runtime.js'
+import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
 import { validateExcludePathPattern, validatePublicUrl, validateSourceName } from '../input.js'
 import { resolveSource } from '../resources.js'
@@ -18,9 +17,8 @@ import {
   scopeAtDepth,
   scopeDepth
 } from '../preferences.js'
-import type { CliRuntime } from '../runtime.js'
 import { registerSourceHistoryCommands } from './source-history.js'
-import { askConfirm, askInteger, askText, createSpinner, note, printTable, warning } from '../ui.js'
+import { askConfirm, askInteger, askText, note, printTable, warning } from '../ui.js'
 import {
   askMode,
   askScope,
@@ -31,6 +29,7 @@ import {
   numberValue,
   sameSourceInput
 } from './source-prompts.js'
+import { syncSource } from './source-sync.js'
 
 export { askScope } from './source-prompts.js'
 
@@ -103,8 +102,13 @@ export function registerSourceCommands(program: Command): void {
     .option('--archive-limit <size>', 'GitHub ZIP 上限，例如 200mb', sizeMbValue)
     .option('--markdown-limit <size>', 'GitHub Markdown 总量上限，例如 100mb', sizeMbValue)
     .option('--no-sync', '创建后不执行首次同步')
-    .option('--background', '使用一次性后台进程执行首次同步')
-    .action((urlArgument: string | undefined, options: SourceOptions) =>
+    .addOption(
+      new Option(
+        '--background',
+        '使用一次性后台进程执行首次同步；不能与 --no-sync 同时使用'
+      ).conflicts('sync')
+    )
+    .action((urlArgument: string | undefined, options: SourceOptions, command: Command) =>
       runWithRuntime('添加文档源', async (runtime) => {
         if (options.background && options.sync === false) {
           throw new CliError('--background 不能与 --no-sync 同时使用', 2)
@@ -117,7 +121,13 @@ export function registerSourceCommands(program: Command): void {
               scopeDepth: 0,
               syncAfterCreate: true
             }
-        const guided = process.stdin.isTTY && !urlArgument && !options.url
+        const guided =
+          process.stdin.isTTY &&
+          !urlArgument &&
+          !options.url &&
+          !command.options.some(
+            (option) => command.getOptionValueSource(option.attributeName()) === 'cli'
+          )
         const url =
           options.url ??
           urlArgument ??
@@ -177,7 +187,7 @@ export function registerSourceCommands(program: Command): void {
         }
         let syncAfterSave = options.sync !== false
         if (guided) {
-          note(formatSourceSummary(input), '请确认文档源配置')
+          note(formatSourceSummary(input, runtime.database.getSettings()), '请确认文档源配置')
           if (!(await askConfirm('确认添加这个文档源吗？', true))) throw new CliCanceledError()
           if (options.sync !== false) {
             syncAfterSave = await askConfirm(
@@ -204,7 +214,7 @@ export function registerSourceCommands(program: Command): void {
 
   source
     .command('update [source]')
-    .description('只修改显式提供的字段，不改变桌面端定时计划')
+    .description('修改文档源；无选项时交互编辑，传入选项时只修改指定字段')
     .option('--name <name>', '文档源名称')
     .option('--url <url>', '第一个页面 URL')
     .addOption(new Option('--mode <mode>', '抓取方式').choices(['auto', 'http', 'browser']))
@@ -302,9 +312,12 @@ export function registerSourceCommands(program: Command): void {
     .option('--yes', '跳过确认')
     .action((reference: string | undefined, options: SourceOptions) =>
       runWithRuntime('删除文档源', async (runtime) => {
+        if (!options.yes && !process.stdin.isTTY) {
+          throw new CliError('非交互终端请传入 --yes 跳过删除确认', 2)
+        }
         const target = await resolveSource(runtime, reference, {
           localOnly: true,
-          preferenceKey: 'source-sync'
+          preferenceKey: 'source-delete'
         })
         if (!options.yes) {
           const confirmed = await askConfirm(
@@ -323,7 +336,10 @@ export function registerSourceCommands(program: Command): void {
     .description('在前台同步一个本地文档源')
     .action((reference: string | undefined) =>
       runWithRuntime('同步文档源', async (runtime) => {
-        const target = await resolveSource(runtime, reference, { localOnly: true })
+        const target = await resolveSource(runtime, reference, {
+          localOnly: true,
+          preferenceKey: 'source-sync'
+        })
         const result = await syncSource(runtime, target)
         saveRecentResource(runtime.database, 'source-sync', target.id)
         return result
@@ -336,54 +352,4 @@ function sizeMbValue(value: string): number {
   const match = /^(\d+)(?:\s*(?:m|mb|mib))?$/i.exec(value.trim())
   if (!match) throw new CliError(`无效大小：${value}，请使用整数 MB，例如 200mb`, 2)
   return numberValue(match[1]!)
-}
-
-async function syncSource(
-  runtime: CliRuntime,
-  target: DocumentSource
-): Promise<string | CommandResult> {
-  const spinner = createSpinner()
-  spinner.start(`正在同步“${target.name}”`)
-  try {
-    const progress = await runtime.crawlSource(
-      target.id,
-      (current) => {
-        spinner.message(
-          `已处理 ${current.processed}/${current.queued}，成功 ${current.succeeded}，失败 ${current.failed}`
-        )
-      },
-      createBrowserInstallPrompt(spinner, target.name)
-    )
-    const summary = `同步完成：成功 ${progress.succeeded}，失败 ${progress.failed}${progress.limitReached ? '，已达到页面上限' : ''}`
-    spinner.stop(summary)
-    return progress.failed > 0
-      ? {
-          message: `文档源“${target.name}”已同步，但有 ${progress.failed} 个页面失败`,
-          tone: 'warning'
-        }
-      : `文档源“${target.name}”同步成功`
-  } catch (error) {
-    spinner.error('同步失败')
-    throw error
-  }
-}
-
-function createBrowserInstallPrompt(
-  spinner: ReturnType<typeof createSpinner>,
-  sourceName: string
-): BrowserInstallPrompt | undefined {
-  if (!process.stdin.isTTY) return undefined
-  return async (install) => {
-    spinner.stop('检测到当前环境缺少无头浏览器')
-    const confirmed = await askConfirm(
-      '抓取当前文档源需要 Chromium headless shell，是否现在安装？',
-      true
-    )
-    if (!confirmed) {
-      throw new CliError('已取消安装无头浏览器，本次同步未执行。')
-    }
-    process.stdout.write('正在安装 Chromium headless shell…\n')
-    await install()
-    spinner.start(`继续同步“${sourceName}”`)
-  }
 }

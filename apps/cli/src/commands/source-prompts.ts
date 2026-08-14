@@ -1,5 +1,6 @@
 import {
   getSourceScopeOptions,
+  type AppSettings,
   type CreateSourceInput,
   type DocumentSource,
   type FetchMode,
@@ -39,14 +40,19 @@ export async function askScope(url: string, current: string): Promise<string> {
   )
 }
 
-export function formatSourceSummary(input: CreateSourceInput): string {
+export function formatSourceSummary(
+  input: CreateSourceInput,
+  settings?: Pick<AppSettings, 'githubArchiveLimitMb' | 'githubMarkdownLimitMb'>
+): string {
   if (isGithubRepositoryUrl(input.url)) {
+    const archiveLimit = input.githubArchiveLimitMb ?? settings?.githubArchiveLimitMb
+    const markdownLimit = input.githubMarkdownLimitMb ?? settings?.githubMarkdownLimitMb
     return [
       `名称：${input.name}`,
       `仓库：${input.url}`,
       `Markdown 上限：${input.pageLimit}`,
-      `ZIP 上限：${input.githubArchiveLimitMb ? `${input.githubArchiveLimitMb} MB` : '继承全局设置'}`,
-      `Markdown 总量：${input.githubMarkdownLimitMb ? `${input.githubMarkdownLimitMb} MB` : '继承全局设置'}`
+      `ZIP 上限：${archiveLimit ? `${archiveLimit} MB` : '继承全局设置'}`,
+      `Markdown 总量：${markdownLimit ? `${markdownLimit} MB` : '继承全局设置'}`
     ].join('\n')
   }
   return [

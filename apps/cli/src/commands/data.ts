@@ -34,6 +34,7 @@ export function registerDataCommands(program: Command): void {
     .option('--yes', '跳过确认')
     .action((file: string | undefined, options: { yes?: boolean }) =>
       runWithRuntime('导入 Loci 数据', async (runtime) => {
+        requireYesInNonInteractive(options)
         const source = resolve(
           file ??
             (await askPath('选择 Loci 备份文件', {
@@ -41,7 +42,15 @@ export function registerDataCommands(program: Command): void {
               validate: validateBackupPath
             }))
         )
-        const input = JSON.parse(await readFile(source, 'utf8')) as unknown
+        let input: unknown
+        try {
+          input = JSON.parse(await readFile(source, 'utf8')) as unknown
+        } catch (error) {
+          if (error instanceof SyntaxError) {
+            throw new CliError('备份文件不是有效 JSON，请确认文件来源', 2)
+          }
+          throw error
+        }
         const preview = backupCounts(input)
         if (
           !options.yes &&
@@ -68,6 +77,7 @@ export function registerDataCommands(program: Command): void {
     .option('--yes', '跳过确认')
     .action((options: { yes?: boolean }) =>
       runWithRuntime('清空本地文档', async (runtime) => {
+        requireYesInNonInteractive(options)
         const count = runtime.database.listDocuments().length
         if (!options.yes && !(await askConfirm(`确定清空全部 ${count} 篇文档吗？`))) {
           throw new CliCanceledError()
@@ -88,6 +98,7 @@ export function registerDataCommands(program: Command): void {
     .option('--yes', '跳过确认')
     .action((options: { yes?: boolean }) =>
       runWithRuntime('清空本地文档源', async (runtime) => {
+        requireYesInNonInteractive(options)
         const count = runtime.database.listSources().length
         if (!options.yes && !(await askConfirm(`确定清空全部 ${count} 个文档源及其文档吗？`))) {
           throw new CliCanceledError()
@@ -101,6 +112,12 @@ export function registerDataCommands(program: Command): void {
         }
       })
     )
+}
+
+function requireYesInNonInteractive(options: { yes?: boolean }): void {
+  if (!process.stdin.isTTY && !options.yes) {
+    throw new CliError('非交互终端请传入 --yes 跳过确认', 2)
+  }
 }
 
 function validateBackupPath(value: string | undefined): string | undefined {

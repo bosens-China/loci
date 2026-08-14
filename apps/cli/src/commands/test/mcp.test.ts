@@ -24,7 +24,7 @@ afterEach(() => {
   else process.env.LOCI_CACHE_DIR = originalCacheDir
 })
 
-describe('MCP 手动配置', () => {
+describe('Agent MCP 配置', () => {
   it('默认输出可复制的 stdio mcpServers JSON', async () => {
     let output = ''
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
@@ -33,7 +33,7 @@ describe('MCP 手动配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await createProgram().parseAsync(['mcp', 'config'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'config'], { from: 'user' })
 
     expect(JSON.parse(output)).toEqual({
       mcpServers: {
@@ -54,7 +54,7 @@ describe('MCP 手动配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await createProgram().parseAsync(['mcp', 'config', '--transport', 'http'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'config', '--transport', 'http'], { from: 'user' })
 
     expect(JSON.parse(output)).toEqual({
       mcpServers: {
@@ -75,7 +75,7 @@ describe('MCP 手动配置', () => {
       return true
     })
 
-    await createProgram().parseAsync(['mcp', 'config', 'antigravity'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'config', 'antigravity'], { from: 'user' })
 
     expect(JSON.parse(output)).toEqual({
       mcpServers: {
@@ -94,14 +94,14 @@ describe('MCP 手动配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await createProgram().parseAsync(['mcp', 'config', 'codex'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'config', 'codex'], { from: 'user' })
 
     expect(output.trim()).toBe('[mcp_servers.loci]\ncommand = "loci"\nargs = ["mcp", "stdio"]')
   })
 
   it('拒绝客户端不支持的传输方式', async () => {
     await expect(
-      createProgram().parseAsync(['mcp', 'config', 'antigravity', '--transport', 'stdio'], {
+      createProgram().parseAsync(['agent', 'config', 'antigravity', '--transport', 'stdio'], {
         from: 'user'
       })
     ).rejects.toThrow('Google Antigravity 不支持 stdio 传输')
@@ -109,7 +109,7 @@ describe('MCP 手动配置', () => {
 
   it('不再接受 Gemini CLI 配置目标', async () => {
     await expect(
-      createProgram().parseAsync(['mcp', 'config', 'gemini-cli'], { from: 'user' })
+      createProgram().parseAsync(['agent', 'config', 'gemini-cli'], { from: 'user' })
     ).rejects.toThrow('不支持的 MCP 配置目标：gemini-cli')
   })
 
@@ -126,7 +126,7 @@ describe('MCP 手动配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await runCli(['mcp', 'config'])
+    await runCli(['agent', 'config'])
 
     expect(() => JSON.parse(output)).not.toThrow()
     expect(JSON.parse(output)).toHaveProperty('mcpServers.loci.command', 'loci')
@@ -144,7 +144,7 @@ describe('MCP 手动配置', () => {
       return true
     })
 
-    await createProgram().parseAsync(['mcp', 'rules', 'cursor'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'rules', 'cursor'], { from: 'user' })
 
     expect(output).toContain('<!-- loci:start -->')
     expect(output).toContain('<!-- loci:end -->')
@@ -153,9 +153,9 @@ describe('MCP 手动配置', () => {
 
   it('全局规则命令拒绝未知客户端和非交互省略值', async () => {
     await expect(
-      createProgram().parseAsync(['mcp', 'rules', 'unknown'], { from: 'user' })
+      createProgram().parseAsync(['agent', 'rules', 'unknown'], { from: 'user' })
     ).rejects.toThrow('不支持的 Agent 客户端')
-    await expect(createProgram().parseAsync(['mcp', 'rules'], { from: 'user' })).rejects.toThrow(
+    await expect(createProgram().parseAsync(['agent', 'rules'], { from: 'user' })).rejects.toThrow(
       '非交互终端必须指定'
     )
   })

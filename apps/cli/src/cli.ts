@@ -1,6 +1,7 @@
 import { Command, CommanderError } from 'commander'
 import { CliError } from './errors.js'
 import { registerAdminCommand } from './commands/admin.js'
+import { registerAgentCommands } from './commands/agent.js'
 import { registerBrowserCommands } from './commands/browser.js'
 import { registerCloudCommands } from './commands/cloud.js'
 import { registerConfigCommands } from './commands/config.js'
@@ -11,7 +12,6 @@ import { registerMcpCommands } from './commands/mcp.js'
 import { registerSourceCommands } from './commands/source.js'
 import { registerScheduleCommands } from './commands/schedule.js'
 import { registerStatusCommand } from './commands/status.js'
-import { registerSkillsCommands } from './commands/skills.js'
 import { registerUpdateCommand } from './commands/update.js'
 import {
   CLI_VERSION,
@@ -78,11 +78,11 @@ export function createProgram(): Command {
   registerDocumentCommands(program)
   registerCloudCommands(program)
   registerAdminCommand(program)
+  registerAgentCommands(program)
   registerMcpCommands(program)
   registerBrowserCommands(program)
   registerConfigCommands(program)
   registerDataCommands(program)
-  registerSkillsCommands(program)
   registerDoctorCommand(program)
   return program
 }
@@ -93,12 +93,12 @@ function isVersionOrHelp(args: readonly string[]): boolean {
 
 function requiresCleanStdout(args: readonly string[]): boolean {
   return (
-    args[0] === 'mcp' &&
-    (args[1] === 'stdio' ||
-      args[1] === 'call' ||
-      args[1] === 'config' ||
-      args[1] === 'configure' ||
-      args[1] === 'rules')
+    (args[0] === 'mcp' && (args[1] === 'stdio' || args[1] === 'call')) ||
+    (args[0] === 'agent' &&
+      (args[1] === 'config' ||
+        args[1] === 'configure' ||
+        args[1] === 'rules' ||
+        (args[1] === 'skills' && args.includes('--json'))))
   )
 }
 
