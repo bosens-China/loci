@@ -1,0 +1,58 @@
+# 数据备份与清理
+
+本页介绍本地数据的导出、导入和清理命令。导入或清理会修改现有数据，执行前建议先导出备份。
+
+## 导出与导入
+
+### `loci data export [file]`
+
+导出本地文档库的 JSON 备份。省略文件路径时，CLI 会在当前目录生成带 UTC 毫秒时间的文件，并拒绝覆盖同名文件。
+
+例如：
+
+```bash
+loci data export
+```
+
+生成的文件名类似 `loci-backup-2026-08-04T01-02-03-456Z.json`。显式传入 `[file]` 时，由用户指定目标路径；如果文件已经存在，CLI 会直接覆盖。
+
+### `loci data import [file]`
+
+从 JSON 备份恢复数据，并覆盖当前本地数据。读取成功后，CLI 会显示备份中的文档源和文档数量，再要求确认。
+
+例如：
+
+```bash
+loci data import ./backups/loci-2026-08-04.json
+```
+
+省略文件参数时，交互终端会打开带补全的路径选择器，并只接受实际存在的文件。文件不是有效 JSON 时，CLI 会停止导入并提示检查备份来源。
+
+非交互终端必须同时提供文件路径和 `--yes`：
+
+```bash
+loci data import ./backups/loci.json --yes
+```
+
+## 清理本地数据
+
+### `loci data clear-documents`
+
+清空全部文档和全文索引，但保留文档源配置。之后可以重新同步文档源：
+
+```bash
+loci data clear-documents --yes
+loci source sync <source>
+```
+
+### `loci data clear-sources`
+
+清空全部文档源、文档、全文索引和抓取历史：
+
+```bash
+loci data clear-sources --yes
+```
+
+交互终端省略 `--yes` 时会再次确认。非交互终端执行导入或清理命令时必须传入 `--yes`，避免脚本在无法显示确认提示时继续运行。
+
+需要隔离数据目录或根据退出码处理结果时，请查看[基础命令与运行设置](/cli/commands/basics)。

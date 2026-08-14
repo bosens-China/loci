@@ -24,13 +24,15 @@ loci source add https://rspress.rs/guide/introduction.html
 | `--no-sync`                    | 只保存文档源，稍后再同步。                  |
 | `--background`                 | 在后台执行首次同步，使当前终端立即返回。    |
 
+`--background` 与 `--no-sync` 不能同时使用。CLI 会在执行前直接拒绝这组冲突参数。
+
 例如，只收录指南并排除中文、德文和法文目录：
 
 ```bash
 loci source add https://fastapi.tiangolo.com/ --scope /tutorial --exclude-path '^/(zh|de|fr)(?:/|$)'
 ```
 
-需要调整并发数、重试次数或 GitHub 大小上限时，请查看[高级配置与自动化](/cli/advanced)。
+需要调整并发数、重试次数或 GitHub 大小上限时，请查看[基础命令与运行设置](/cli/commands/basics)。
 
 ### GitHub 仓库
 
@@ -87,6 +89,8 @@ loci source runs rspress
 loci source logs a1b2c3d4
 ```
 
+交互终端可以省略文档源并从列表中选择。非交互终端必须指定文档源，或显式传入 `--all` 查看全部记录。
+
 ## 设置定时更新
 
 ### `loci schedule set [source] [cron]`
@@ -105,6 +109,8 @@ loci schedule run
 ```
 
 按 `Ctrl+C` 停止计划宿主。
+
+重复启动时，Loci 会检测已有的计划运行器，避免为同一数据目录启动重复宿主。计划列表为空时，CLI 会提示先创建文档源或使用 `schedule set` 配置计划。
 
 ## 删除文档源
 

@@ -11,9 +11,10 @@
 
 - 当前决策：Loci CLI 作为通过 npm 分发的独立产品运行，不依赖 Electron、桌面窗口或桌面进程；它与桌面端共享本地数据库和领域实现，覆盖文档源、知识库、云端公开库、远程 Server 管理、数据维护、诊断和 MCP 核心能力。
 - 当前决策：CLI 面向终端用户，命令说明、交互和反馈使用中文；除专门用于复制的 MCP 客户端配置片段和 Agent 专用的 `loci mcp call` 外，常规命令输出只承诺适合人阅读，不提供稳定 JSON 契约。AI Agent 优先使用当前会话中的 Loci MCP；安装了 Skill 但没有 MCP 工具时，可以在用户授权安装 npm CLI 后改用 `loci mcp call`。普通命令前台完成后退出，不隐式启动后台任务。
-- 当前决策：根命令默认显示总帮助。具体命令优先使用位置参数和安全默认值减少输入：新建文档源只需提供第一个页面 URL，名称自动生成，抓取方式、页面上限和收录范围按“显式参数、CLI 安全偏好、产品基础默认值”的顺序解析，并发与 GitHub 大小覆盖留空时继承全局设置；更新时只修改显式提供的字段。省略有歧义的资源时在交互终端中选择；删除、覆盖、清空、客户端写入和管理员凭据不设置可导致误操作的隐式默认。
+- 当前决策：根命令默认显示总帮助。具体命令优先使用位置参数和安全默认值减少输入：新建文档源只需提供第一个页面 URL，名称自动生成，抓取方式、页面上限和收录范围按“显式参数、CLI 安全偏好、产品基础默认值”的顺序解析，并发与 GitHub 大小覆盖留空时继承全局设置；更新命令传入选项时只修改显式字段，在交互终端中完全省略选项时进入逐项编辑。省略有歧义的资源时在交互终端中选择；删除、覆盖、清空、客户端写入和管理员凭据不设置可导致误操作的隐式默认。
+- 当前决策：Agent 客户端集成统一归入 `loci agent`：`configure` 写入 MCP 连接，`config` 打印可复制配置，`rules` 管理全局规则，`skills` 管理内置 Skills。`loci mcp` 只保留工具直调、stdio、HTTP 服务与状态检查，不再承载客户端配置或规则管理。
 - 当前决策：CLI 将安全且可逆的交互偏好保存在共享 SQLite 中：本地创建记住抓取方式、页面上限、收录路径层级和首次同步选择；Admin 按规范化 Server 地址记住账号、创建配置、更新计划和上次批量同步勾选；资源选择、数据目录和 MCP 客户端配置记住最近成功值。单个候选直接使用或默认勾选，多个候选高亮最近值；显式参数优先，失效偏好回退到当前状态或产品默认值。密码、Token、搜索词、删除目标和危险确认不保存。
-- 当前决策：`loci source add` 创建后默认执行一次前台同步；`--no-sync` 只保存配置，`--background` 使用一次性分离子进程同步并在完成后自然退出。显式后台模式不建立长期守护进程，结果通过持久抓取记录审查。
+- 当前决策：`loci source add` 创建后默认执行一次前台同步；`--no-sync` 只保存配置，`--background` 使用一次性分离子进程同步并在完成后自然退出，两者互斥并在参数解析阶段拒绝同时使用。显式后台模式不建立长期守护进程，结果通过持久抓取记录审查。
 - 当前决策：CLI 不维护隐藏守护进程。用户可以显式运行 `loci schedule run`，以前台常驻方式执行本地计划和云端副本自动同步，退出后停止；CLI 不复制主题、窗口、托盘和开机启动等桌面生命周期能力。HTTP 抓取无需浏览器；SPA 抓取使用用户显式安装的 Playwright Chromium headless shell。
 - 当前决策：CLI 管理员交互会话每次读取账号和隐藏密码；脚本化的列表、创建、更新、删除、批量同步、任务查询和取消命令只从 `LOCI_ADMIN_USERNAME` 与 `LOCI_ADMIN_PASSWORD` 环境变量读取凭据。密码与 Token 均只保存在当前进程内存中，命令结束后清除。
 - 当前决策：CLI 数据维护支持导出与覆盖导入、仅清空全部文档并保留文档源，以及清空全部文档源及其关联数据。覆盖和清空操作默认要求确认并使用维护锁，清空文档源不删除应用设置或远程 Server 内容。
@@ -111,18 +112,18 @@
 - 当前决策：`use-loci` Skill 由 Agent 先探测当前会话的工具能力。存在任一 Loci MCP 工具时直接走 MCP 分支，不读取安装说明或重复调用 CLI；不存在时才渐进加载 CLI 参考，先只读检查 `loci` 命令，缺失则取得用户明确同意后执行 `npm install --global @boses/cli`，随后在当前会话用 `loci mcp call` 完成同一流程。安装授权与云端拉取、官网抓取、主动同步和删除授权彼此独立；不通过 `npx` 绕过拒绝，不配置 MCP、不启动服务、不要求新会话，也不使用普通 CLI 命令复制第二套 Agent 流程。
 - 为什么：渐进目录、定位搜索和按需读取可以控制上下文规模；异步任务避免长时间阻塞 Agent 调用。
 - 边界 / 非目标：Agent 工具不允许单独删除同步文件，只允许永久删除整个文档库；HTTP transport 的非本机 Host 或 Origin 不得访问。CLI stdio 与直接工具调用都不作为后台常驻服务。
-- 权威入口：[MCP 与数据管理](../apps/docs/docs/cli/commands/integrations.mdx)、[Agent 全局规则](../apps/docs/docs/agent/global-rules.mdx)、[Codex 全局接入](../apps/docs/docs/agent/codex.mdx)、[Agent 使用 Skill](../.agents/skills/use-loci/SKILL.md)、[共享客户端目录](../packages/shared/src/mcp-clients.ts)。
+- 权威入口：[数据备份与清理](../apps/docs/docs/cli/commands/data.mdx)、[Agent 全局规则](../apps/docs/docs/agent/global-rules.mdx)、[Agent 使用 Skill](../.agents/skills/use-loci/SKILL.md)、[共享客户端目录](../packages/shared/src/mcp-clients.ts)。
 
 ## Skills 管理
 
-- 当前决策：产品只通过 CLI 和桌面管理 Loci 官方内置 Skills。CLI 使用 `loci skills add/list/remove/clear`；桌面侧边栏提供独立“Skills 管理”页面。两端复用同一 runtime、SQLite 安装台账和文件事务，不向 Server 或 MCP 暴露 Skills 写操作。
-- 当前决策：`add` 默认把 `use-loci` 安装到用户级 `~/.agents/skills`，同时承担更新；项目级操作必须显式提供项目根目录。`remove` 和 `clear` 默认只处理用户级全局安装，删除项目内容不得推断当前目录。
+- 当前决策：产品只通过 CLI 和桌面管理 Loci 官方内置 Skills。CLI 使用 `loci agent skills add/list/remove/clear`；桌面侧边栏提供独立“Skills 管理”页面。两端复用同一 runtime、SQLite 安装台账和文件事务，不向 Server 或 MCP 暴露 Skills 写操作。
+- 当前决策：CLI 的 `add`、`list`、`remove` 和 `clear` 默认操作当前工作目录的项目级安装；`--project <path>` 可以明确选择当前项目或其他项目，`--global` 才操作用户级全局目录，两个选项互斥。桌面端没有稳定的项目工作目录，继续由界面显式选择作用域。
 - 当前决策：用户可以选择通用、Codex、Cursor、Claude Code、VS Code、Antigravity 或全部客户端。路径按客户端官方用户级和项目级目录解析，多个客户端落到同一物理目录时自动去重。
 - 当前决策：更新整目录替换，不做文件合并。新内容先在同父目录暂存并校验，再通过旧目录备份和原子重命名切换；失败恢复旧目录。删除先移入隔离目录，SQLite 提交成功后才清理。只有台账与 `.loci-skill.json` 同时确认所有权时才能替换或删除，不接管第三方目录。
 - 当前决策：同一目标使用进程内 single-flight 和跨进程文件锁；并发入口等待正在执行的短事务并复查最终状态，不同目标可以并行。SQLite 台账属于机器本地文件状态，不进入知识库备份导入导出。
 - 当前决策：`.agents/skills/use-loci` 是内置 Skill 的唯一内容源，不维护生成的 TypeScript 副本或第二份 public 目录。CLI 由 tsdown 将完整目录复制到 npm 包的 `dist/resources`，桌面由 electron-builder `extraResources` 原样复制到应用资源目录；两端只负责解析各自资源路径，Runtime 递归读取真实文件并统一执行摘要、安装、更新和事务。
 - 当前决策：`use-loci` 的 Markdown 内容采用两级渐进结构：`SKILL.md` 保存职责、通道路由和公共文档流程，`references/cli.md` 只保存无 MCP 分支的 CLI 检测、安装确认与调用方式。Agent 只有确认当前会话缺少 Loci MCP 工具后才读取第二份文档；`agents/openai.yaml` 继续作为客户端元数据随完整目录分发。
-- 为什么：内置离线分发避免依赖第三方安装命令；显式项目路径和双重所有权校验降低误删风险；共享事务让 CLI 与桌面保持一致并防止并发损坏。
+- 为什么：项目级默认值让 Skill 跟随当前仓库，减少无意影响其他项目；显式 `--global` 和双重所有权校验降低误删风险；共享事务让 CLI 与桌面保持一致并防止并发损坏。
 - 边界 / 非目标：不实现第三方 Skill 市场、Git/npm 下载、自动更新、Server 下发、任意目标目录或手工目录接管。
 - 权威入口：[使用 Loci Skill](../apps/docs/docs/agent/skill.mdx)。
 

@@ -22,17 +22,17 @@ npm install --global @boses/cli
 以下示例为 Codex 写入推荐的 stdio 配置：
 
 ```bash
-loci mcp configure codex
+loci agent configure codex
 loci mcp status
 ```
 
 Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都支持一键配置。可信的自动化环境可以添加 `--yes` 跳过确认。
 
 ```bash
-loci mcp configure cursor
-loci mcp configure vscode
-loci mcp configure claude-code
-loci mcp configure antigravity
+loci agent configure cursor
+loci agent configure vscode
+loci agent configure claude-code
+loci agent configure antigravity
 ```
 
 写入后，新建一个 Agent 会话，使客户端重新加载 MCP 配置。
@@ -42,7 +42,7 @@ loci mcp configure antigravity
 未内置的客户端可以先打印通用配置：
 
 ```bash
-loci mcp config
+loci agent config
 ```
 
 通用 stdio 配置如下。目标文件已有其他 MCP 服务时，只添加 `loci`，不要覆盖整个文件。
@@ -71,7 +71,7 @@ loci mcp serve
 再在另一个终端写入 HTTP 配置：
 
 ```bash
-loci mcp configure codex --transport http
+loci agent configure codex --transport http
 ```
 
 默认服务地址为 `http://127.0.0.1:<mcp-port>/mcp`，只供本机客户端使用。按 `Ctrl+C` 结束服务后，HTTP MCP 将不可用。
@@ -89,9 +89,9 @@ loci doctor
 
 ## 下一步
 
-- [工具使用参考](/agent/mcp-tools)：编写 Agent、Skill 或自动化流程时，查看工具的使用边界。
 - [使用 use-loci Skill](/agent/skill)：为技术文档任务提供完整检索流程。
 - [配置全局规则](/agent/global-rules)：让多个项目遵循相同的查询顺序。
+- [工具使用参考](/agent/mcp-tools)：进阶了解工具 Schema、调用边界和同步流程。
 
 ## 客户端官方配置资料
 

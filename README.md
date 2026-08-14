@@ -26,8 +26,8 @@ npm install --global @boses/cli
 loci source add https://rspress.rs/guide/introduction.html
 loci source sync rspress
 loci document search "Quick start"
-loci mcp configure codex
-loci mcp rules codex
+loci agent configure codex
+loci agent rules codex
 # 无 MCP 连接时也可直接调用同一工具
 loci mcp call loci_list_libraries
 ```

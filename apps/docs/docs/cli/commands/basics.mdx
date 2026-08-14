@@ -1,6 +1,6 @@
-# 基础、浏览器与设置
+# 基础命令与运行设置
 
-本页介绍通用命令和浏览器运行时。需要调整抓取资源或编写自动化脚本时，请查看[高级配置与自动化](/cli/advanced)。
+本页介绍通用命令、浏览器运行时、共享设置和脚本运行环境。日常使用可以保留默认设置；遇到网站限流、抓取量较大或需要隔离数据时，再按需调整。
 
 ## 参数约定
 
@@ -94,13 +94,13 @@ loci browser install
 loci browser uninstall
 ```
 
-## 查看设置
+## 管理运行设置
 
 设置保存在 Loci 本地数据目录中。CLI、stdio MCP 和 HTTP MCP 都会读取这些设置。
 
 ### `loci config list`
 
-显示当前设置，包括云端文档库地址和抓取资源限制。
+显示当前设置，包括云端文档库地址、抓取资源限制和 HTTP MCP 端口。
 
 示例：
 
@@ -110,10 +110,53 @@ loci config list
 
 ### `loci config set [key] [value]`
 
-修改一个设置。省略参数时，CLI 会在交互终端中选择设置项并要求输入新值。
+修改一个设置。省略参数时，CLI 会在交互终端中选择设置项，并要求输入新值。
 
 ```bash
 loci config set server-url https://your-loci.example.com
 ```
 
-云端文档库地址请查看[云端文档库](/cli/commands/cloud-library)。抓取并发、重试、下载上限和 HTTP MCP 端口请查看[高级配置与自动化](/cli/advanced)。
+常用设置如下：
+
+| 设置项                     | 用途                                   |
+| -------------------------- | -------------------------------------- |
+| `server-url`               | 指定云端文档库和 Admin API 的 Server。 |
+| `mcp-port`                 | 指定本机 HTTP MCP 端口。               |
+| `http-concurrency`         | 调整普通网页抓取的并发数。             |
+| `browser-concurrency`      | 调整浏览器渲染页面的并发数。           |
+| `max-retries`              | 调整页面抓取失败后的重试次数。         |
+| `batch-interval-seconds`   | 降低连续抓取对目标站点的压力。         |
+| `github-archive-limit-mb`  | 调整 GitHub 仓库下载大小上限。         |
+| `github-markdown-limit-mb` | 调整 GitHub Markdown 文件的总量上限。  |
+
+例如，遇到网站限流时，可以降低并发数或增加批次间隔：
+
+```bash
+loci config set http-concurrency 4
+loci config set batch-interval-seconds 2
+```
+
+云端文档库地址的作用范围请查看[云端文档库](/cli/commands/cloud-library)。HTTP MCP 的启动方式请查看[通过 MCP 接入](/agent/mcp)。
+
+## 隔离数据目录
+
+测试、演示或自动化任务可以设置 `LOCI_DATA_DIR`，让当前命令使用独立的数据目录：
+
+```bash
+LOCI_DATA_DIR=./.loci-test loci status
+```
+
+日常使用不建议设置此变量，否则 CLI 与 MCP 可能读取不同的文档库。同一套自动化流程需要在每条相关命令中使用相同的数据目录。
+
+## 处理脚本退出码
+
+自动化脚本可以根据退出码判断结果：
+
+| 退出码 | 含义                                 |
+| ------ | ------------------------------------ |
+| `0`    | 操作成功或用户主动取消。             |
+| `1`    | 认证、网络或运行时错误。             |
+| `2`    | 参数或用户输入错误。                 |
+| `3`    | 操作完成，但存在页面失败或诊断异常。 |
+
+涉及删除、导入或清空数据的非交互命令还必须显式传入 `--yes`。具体数据维护命令请查看[数据备份与清理](/cli/commands/data)。

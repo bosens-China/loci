@@ -23,39 +23,48 @@ Skill 会优先使用当前会话中的 MCP 工具。没有工具时，它才检
 
 ## 使用 CLI 管理 Skill
 
-Loci CLI 内置完整的 `use-loci`，无需额外下载。最简命令会安装到用户级通用目录 `~/.agents/skills/use-loci`：
+Loci CLI 内置完整的 `use-loci`，无需额外下载。最简命令默认安装到当前目录的项目级通用路径 `.agents/skills/use-loci`：
 
 ```bash
-loci skills add
+loci agent skills add
 ```
 
 `add` 同时负责安装和更新。Loci 只更新自己安装的 Skill，不会覆盖第三方 Skill。
 
+需要安装到用户级全局目录时，显式传入 `--global`：
+
+```bash
+loci agent skills add --global
+```
+
 指定 Agent 客户端：
 
 ```bash
-loci skills add --agent cursor
-loci skills add --agent claude-code
-loci skills add --agent all
+loci agent skills add --agent cursor
+loci agent skills add --agent claude-code
+loci agent skills add --agent all
 ```
 
-项目级操作必须显式提供项目根目录，不会推断当前文件夹：
+默认项目就是当前工作目录。也可以用 `--project ./` 明确表达当前项目，或传入其他项目目录：
 
 ```bash
-loci skills add --agent all --project /absolute/path/to/project
+loci agent skills add --project ./
+loci agent skills add --agent all --project /absolute/path/to/project
 ```
 
 查看、删除和批量清理：
 
 ```bash
-loci skills list
-loci skills list --json
-loci skills remove --agent cursor
-loci skills remove --agent cursor --project /absolute/path/to/project
-loci skills clear --agent all --yes
+loci agent skills list
+loci agent skills list --json
+loci agent skills remove --agent cursor
+loci agent skills remove --agent cursor --project /absolute/path/to/project
+loci agent skills clear --agent all --yes
+loci agent skills list --global
+loci agent skills remove --global --yes
 ```
 
-`remove` 和 `clear` 未传 `--project` 时只操作用户级全局安装。删除项目 Skill 必须始终指定项目路径。
+`add`、`list`、`remove` 和 `clear` 都默认操作当前项目。`--project <path>` 用于选择其他项目，`--global` 用于选择用户级全局安装；两者不能同时使用。
 
 ## Agent 与安装路径
 
@@ -73,7 +82,7 @@ loci skills clear --agent all --yes
 
 ## 安装结果
 
-手工删除目录后，`loci skills list` 会显示缺失；再次执行删除命令可以清理该记录。Loci 不会扫描、接管或删除第三方 Skill。
+手工删除目录后，`loci agent skills list` 会显示缺失；再次执行删除命令可以清理该记录。Loci 不会扫描、接管或删除第三方 Skill。
 
 安装 Skill 后不强制配置 MCP。推荐为支持 MCP 的客户端配置名为 `loci` 的入口；未配置时，Skill 会在实际技术文档任务中先取得用户许可，再安装 npm CLI 并直接调用工具。具体连接方式请查看[通过 MCP 接入](/agent/mcp)。
 

@@ -32,12 +32,14 @@ CLI 的 stdio MCP 是推荐入口。客户端会按需启动进程，无需维�
 
 ```bash
 npm install --global @boses/cli
-loci mcp configure codex
-loci skills add
-loci mcp rules codex
+loci agent configure codex
+loci agent skills add
+loci agent rules codex
 ```
 
 上例以 Codex 为例。其他客户端的 MCP 写入方式请查看[通过 MCP 接入](/agent/mcp)，Skill 的安装目录和管理命令请查看[使用 use-loci Skill](/agent/skill)，全局规则的客户端差异请查看[配置全局规则](/agent/global-rules)。
+
+`loci agent skills add` 默认把 Skill 安装到当前项目；需要所有项目共享时使用 `loci agent skills add --global`。
 
 ## 一次典型查询
 
@@ -62,7 +64,6 @@ loci mcp rules codex
 ## 继续阅读
 
 - [通过 MCP 接入](/agent/mcp)：选择 stdio 或 HTTP，并连接常见 Agent 客户端。
-- [工具使用参考](/agent/mcp-tools)：编写 Agent、Skill 或自动化流程时，查看工具的使用边界。
 - [使用 use-loci Skill](/agent/skill)：了解 Skill 的职责、触发方式和工作流。
-- [配置全局规则](/agent/global-rules)：设置跨项目生效的文档查询顺序。
-- [Codex 规则设置](/agent/codex)：了解 Codex 的用户级与项目级规则。
+- [配置全局规则](/agent/global-rules)：设置跨项目生效的文档查询顺序，并查看各客户端的规则入口。
+- [工具使用参考](/agent/mcp-tools)：进阶了解工具 Schema、调用边界和同步流程。
