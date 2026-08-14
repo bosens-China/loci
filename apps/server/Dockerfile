@@ -9,6 +9,7 @@ RUN corepack enable && corepack prepare pnpm@11.15.1 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/server/package.json apps/server/package.json
 COPY packages/core/package.json packages/core/package.json
+COPY packages/shared/package.json packages/shared/package.json
 RUN pnpm install --prod --frozen-lockfile --filter @loci/server... --ignore-scripts
 
 FROM node:24-bookworm-slim
@@ -21,6 +22,7 @@ WORKDIR /app
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY --from=dependencies /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=dependencies /app/packages/core/node_modules ./packages/core/node_modules
+COPY --from=dependencies /app/packages/shared/node_modules ./packages/shared/node_modules
 
 # 依赖与浏览器分层，下载中断后重建可直接复用系统依赖层。
 RUN node /app/apps/server/node_modules/playwright-core/cli.js install-deps chromium
@@ -34,6 +36,8 @@ COPY apps/server/package.json ./apps/server/package.json
 COPY apps/server/src ./apps/server/src
 COPY packages/core/package.json ./packages/core/package.json
 COPY packages/core/src ./packages/core/src
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/shared/src ./packages/shared/src
 
 WORKDIR /app/apps/server
 EXPOSE 3000
