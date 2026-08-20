@@ -80,6 +80,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter @boses/cli...
+      # CLI 构建会先完整构建并嵌入 Web UI，无需再启动独立的 Web build job。
       - run: pnpm cli:build
 
   build-server:
@@ -132,29 +133,9 @@ jobs:
             exit 1
           fi
 
-  build-web:
-    name: Build Web UI
-    needs: changes
-    if: ${{ needs.changes.outputs.web == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      HUSKY: '0'
-    steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.15.1
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile --filter @loci/web...
-      - run: pnpm web:build
-
   verify:
     name: Verify
-    needs: [changes, quality, build-cli, build-server, build-web]
+    needs: [changes, quality, build-cli, build-server]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -164,14 +145,12 @@ jobs:
           QUALITY_RESULT: ${{ needs.quality.result }}
           CLI_RESULT: ${{ needs.build-cli.result }}
           SERVER_RESULT: ${{ needs.build-server.result }}
-          WEB_RESULT: ${{ needs.build-web.result }}
         run: |
           for result in \
             "$CHANGES_RESULT" \
             "$QUALITY_RESULT" \
             "$CLI_RESULT" \
-            "$SERVER_RESULT" \
-            "$WEB_RESULT"; do
+            "$SERVER_RESULT"; do
             if [[ "$result" != success && "$result" != skipped ]]; then
               echo "Required CI job finished with: $result"
               exit 1
