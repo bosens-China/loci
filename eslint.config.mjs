@@ -1,5 +1,5 @@
 import { defineConfig } from 'eslint/config'
-import tseslint from '@electron-toolkit/eslint-config-ts'
+import tseslint from 'typescript-eslint'
 import eslintConfigPrettier from 'eslint-config-prettier'
 import eslintPluginReact from 'eslint-plugin-react'
 import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
@@ -14,7 +14,7 @@ export default defineConfig(
   {
     settings: {
       react: {
-        version: 'detect'
+        version: '19.2'
       }
     }
   },
@@ -30,7 +30,7 @@ export default defineConfig(
     }
   },
   {
-    files: ['apps/desktop/src/renderer/**/*.{ts,tsx}'],
+    files: ['apps/web/src/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -38,7 +38,7 @@ export default defineConfig(
           patterns: [
             {
               group: ['@loci/core', '@loci/core/*', '@loci/runtime', '@loci/runtime/*'],
-              message: 'Renderer 只能引用浏览器安全的 @loci/shared 领域契约。'
+              message: 'Web 应用只能引用浏览器安全的 @loci/shared 领域契约。'
             }
           ]
         }

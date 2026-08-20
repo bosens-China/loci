@@ -1,13 +1,4 @@
 import type { AgentClient, AgentGlobalRulesClient } from './mcp-clients.js'
-import type {
-  SkillAgent,
-  SkillClearResult,
-  SkillInstallation,
-  SkillOperationInput,
-  SkillOperationResult,
-  SkillProjectSelection,
-  SkillTargetPreview
-} from './skills.js'
 
 export type FetchMode = 'auto' | 'http' | 'browser'
 
@@ -36,23 +27,6 @@ export interface AppSettingsState {
   mcp: McpServerStatus
 }
 
-export interface OpenAtLoginState {
-  supported: boolean
-  enabled: boolean
-}
-
-export interface DesktopUpdateState {
-  currentVersion: string
-  latestVersion: string | null
-  updateAvailable: boolean
-  checkedAt: string | null
-  autoUpdateSupported: boolean
-  status: 'idle' | 'checking' | 'downloading' | 'ready' | 'error'
-  downloadProgress: number | null
-  error: string | null
-  manualInstallHint: string | null
-}
-
 export interface AgentImportResult {
   client: AgentClient
   message: string
@@ -62,11 +36,6 @@ export interface AgentGlobalRulesResult {
   client: AgentGlobalRulesClient
   path: string
   changed: boolean
-  message: string
-}
-
-export interface DataTransferResult {
-  canceled: boolean
   message: string
 }
 
@@ -231,14 +200,6 @@ export interface CrawlNode {
   parentId?: string
 }
 
-export interface CrawlProgressEvent {
-  sourceId: string
-  progress: CrawlProgress
-  error: string | null
-  running: boolean
-  paused: boolean
-}
-
 export interface CrawlRunState {
   sourceId: string
   progress: CrawlProgress
@@ -246,6 +207,37 @@ export interface CrawlRunState {
   error: string | null
   running: boolean
   paused: boolean
+}
+
+export type LocalJobKind = 'source_sync'
+export type LocalJobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type LocalJobTrigger = 'manual' | 'background' | 'schedule' | 'ui' | 'mcp'
+
+/** 本地持久任务的浏览器安全传输契约。 */
+export interface LocalJob {
+  id: string
+  kind: LocalJobKind
+  resourceKey: string
+  sourceId: string
+  trigger: LocalJobTrigger
+  status: LocalJobStatus
+  scheduledAt: string
+  startedAt: string | null
+  finishedAt: string | null
+  leaseOwner: string | null
+  leaseExpiresAt: string | null
+  heartbeatAt: string | null
+  attemptCount: number
+  cancelRequested: boolean
+  error: string | null
+  result: CrawlProgress | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface EnqueueLocalJobResult {
+  job: LocalJob
+  reused: boolean
 }
 
 export interface DocumentRecord {
@@ -258,53 +250,4 @@ export interface DocumentRecord {
   language: string
   updatedAt: string
   content: string
-}
-
-export interface LociApi {
-  listSources: () => Promise<DocumentSource[]>
-  createSource: (input: CreateSourceInput) => Promise<DocumentSource>
-  updateSource: (id: string, input: UpdateSourceInput) => Promise<DocumentSource>
-  crawlSource: (id: string) => Promise<CrawlProgress>
-  pauseCrawl: (id: string) => Promise<void>
-  resumeCrawl: (id: string) => Promise<void>
-  listCrawlRuns: () => Promise<CrawlRunState[]>
-  onCrawlProgress: (listener: (event: CrawlProgressEvent) => void) => () => void
-  onExternalDataChange: (listener: () => void) => () => void
-  listDocuments: () => Promise<DocumentRecord[]>
-  searchDocuments: (query: string) => Promise<DocumentRecord[]>
-  clearDocuments: () => Promise<number>
-  deleteSource: (id: string) => Promise<void>
-  getSettings: () => Promise<AppSettingsState>
-  saveSettings: (settings: AppSettings) => Promise<AppSettingsState>
-  getOpenAtLogin: () => Promise<OpenAtLoginState>
-  setOpenAtLogin: (enabled: boolean) => Promise<OpenAtLoginState>
-  getDesktopUpdate: () => Promise<DesktopUpdateState>
-  checkDesktopUpdate: () => Promise<DesktopUpdateState>
-  openDesktopRelease: () => Promise<void>
-  importAgentClient: (client: AgentClient) => Promise<AgentImportResult>
-  installAgentGlobalRules: (client: AgentGlobalRulesClient) => Promise<AgentGlobalRulesResult>
-  listSkills: (input?: SkillOperationInput) => Promise<SkillInstallation[]>
-  previewSkills: (input?: SkillOperationInput) => Promise<SkillTargetPreview[]>
-  addSkills: (input?: SkillOperationInput) => Promise<SkillOperationResult[]>
-  removeSkills: (input?: SkillOperationInput) => Promise<SkillOperationResult[]>
-  clearSkills: (input?: { agent?: SkillAgent; project?: string }) => Promise<SkillClearResult>
-  selectSkillProject: () => Promise<SkillProjectSelection>
-  exportData: () => Promise<DataTransferResult>
-  importData: () => Promise<DataTransferResult>
-  cloudAdminLogin: (input: CloudAdminLoginInput) => Promise<CloudAdminSession>
-  cloudAdminLogout: () => Promise<void>
-  getCloudAdminSession: () => Promise<CloudAdminSession | null>
-  listCloudLibraries: () => Promise<CloudLibrary[]>
-  createCloudLibrary: (input: CloudLibraryInput) => Promise<CloudLibrary>
-  updateCloudLibrary: (id: string, input: CloudLibraryInput) => Promise<CloudLibrary>
-  deleteCloudLibrary: (id: string) => Promise<void>
-  syncCloudLibrary: (id: string) => Promise<CloudSyncJob>
-  syncCloudLibraries: (ids: string[]) => Promise<CloudSyncJob[]>
-  listCloudSyncJobs: () => Promise<CloudSyncJob[]>
-  getCloudSyncJob: (id: string) => Promise<CloudSyncJob>
-  cancelCloudSyncJob: (id: string) => Promise<CloudSyncJob>
-  listCloudCatalog: () => Promise<CloudCatalogItem[]>
-  importCloudLibrary: (libraryId: string, autoSync: boolean) => Promise<CloudImportResult>
-  updateCloudLibraryCopy: (sourceId: string) => Promise<CloudImportResult>
-  setCloudLibraryAutoSync: (sourceId: string, enabled: boolean) => Promise<void>
 }

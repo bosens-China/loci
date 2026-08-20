@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
-/** 桌面端和 CLI 必须通过同一规则定位本地数据。 */
+/** 后台服务和 CLI 必须通过同一规则定位本地数据。 */
 export function resolveLociDataDir(): string {
   const override = process.env.LOCI_DATA_DIR?.trim()
   if (override) return resolve(override)

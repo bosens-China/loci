@@ -19,8 +19,6 @@ jobs:
     outputs:
       cli_created: ${{ steps.release.outputs['apps/cli--release_created'] }}
       cli_tag: ${{ steps.release.outputs['apps/cli--tag_name'] }}
-      desktop_created: ${{ steps.release.outputs['apps/desktop--release_created'] }}
-      desktop_tag: ${{ steps.release.outputs['apps/desktop--tag_name'] }}
       server_created: ${{ steps.release.outputs['apps/server--release_created'] }}
       server_tag: ${{ steps.release.outputs['apps/server--tag_name'] }}
       server_version: ${{ steps.release.outputs['apps/server--version'] }}
@@ -37,69 +35,6 @@ jobs:
         uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
-
-  build-desktop:
-    needs: release
-    if: ${{ needs.release.outputs.desktop_created == 'true' }}
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            target: win
-            artifacts: |
-              apps/desktop/dist/*.exe
-              apps/desktop/dist/*.blockmap
-              apps/desktop/dist/latest.yml
-            cache_path: |
-              ~/AppData/Local/electron
-              ~/AppData/Local/electron-builder
-          - os: macos-latest
-            target: mac
-            artifacts: apps/desktop/dist/*.dmg
-            cache_path: |
-              ~/Library/Caches/electron
-              ~/Library/Caches/electron-builder
-          - os: ubuntu-latest
-            target: linux
-            artifacts: |
-              apps/desktop/dist/*.AppImage
-              apps/desktop/dist/*.blockmap
-              apps/desktop/dist/latest-linux.yml
-            cache_path: |
-              ~/.cache/electron
-              ~/.cache/electron-builder
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      HUSKY: '0'
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.release.outputs.desktop_tag }}
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.15.1
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - uses: actions/cache@v4
-        with:
-          path: ${{ matrix.cache_path }}
-          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-electron-
-      - run: pnpm install --frozen-lockfile --filter @loci/desktop...
-      - run: pnpm build:${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.target }}
-          path: ${{ matrix.artifacts }}
-          if-no-files-found: error
-          compression-level: 0
 
   publish-cli:
     needs: release
@@ -171,24 +106,3 @@ jobs:
           cache-to: type=gha,scope=loci-server-amd64,mode=min
           provenance: mode=max
           sbom: true
-
-  publish-desktop:
-    needs: [release, build-desktop]
-    if: ${{ needs.release.outputs.desktop_created == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v5
-        with:
-          pattern: release-*
-          path: artifacts
-          merge-multiple: true
-      - run: gh release upload "$TAG" artifacts/* --clobber --repo "$GITHUB_REPOSITORY"
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release.outputs.desktop_tag }}
-      - run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release.outputs.desktop_tag }}

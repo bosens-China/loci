@@ -52,7 +52,7 @@ export interface SourceCrawlOptions extends Omit<HttpCrawlOptions, 'concurrency'
   githubBlocked?: GithubBlockedState | null
 }
 
-/** 文档源抓取的通用编排；桌面端和服务端只注入不同的浏览器实现。 */
+/** 文档源抓取的通用编排；本地服务和远端 Server 只注入不同的浏览器实现。 */
 export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCrawlResult> {
   throwIfAborted(options.signal)
   const scopePath = options.scopePath ?? '/'

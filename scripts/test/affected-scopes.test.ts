@@ -8,23 +8,31 @@ describe('detectAffectedScopes', () => {
     expect(listQualityScopes(scopes)).toEqual(['cli'])
   })
 
+  it('Web 修改同时检查 Web 和 CLI 分发包', () => {
+    const scopes = detectAffectedScopes(['apps/web/src/App.tsx'])
+
+    expect(listQualityScopes(scopes)).toEqual(['cli', 'web'])
+  })
+
   it('Core 修改传播到全部依赖方', () => {
     const scopes = detectAffectedScopes(['packages/core/src/index.ts'])
 
-    expect(listQualityScopes(scopes)).toEqual([
-      'core',
-      'shared',
-      'runtime',
-      'cli',
-      'server',
-      'desktop'
-    ])
+    expect(listQualityScopes(scopes)).toEqual(['core', 'shared', 'runtime', 'cli', 'server', 'web'])
   })
 
-  it('Shared 修改传播到 Runtime、CLI 和 Desktop', () => {
+  it('Shared 修改传播到全部依赖方', () => {
     const scopes = detectAffectedScopes(['packages/shared/src/index.ts'])
 
-    expect(listQualityScopes(scopes)).toEqual(['shared', 'runtime', 'cli', 'desktop'])
+    expect(listQualityScopes(scopes)).toEqual(['core', 'shared', 'runtime', 'cli', 'server', 'web'])
+  })
+
+  it('内置 Skill 修改触发 CLI 检查和构建', () => {
+    const scopes = detectAffectedScopes([
+      '.agents/skills/use-loci/SKILL.md',
+      '.agents/skills/use-loci/agents/openai.yaml'
+    ])
+
+    expect(listQualityScopes(scopes)).toEqual(['cli'])
   })
 
   it('Server 与部署配置只影响 Server', () => {
@@ -44,13 +52,19 @@ describe('detectAffectedScopes', () => {
       'runtime',
       'cli',
       'server',
-      'desktop',
+      'web',
       'docs'
     ])
   })
 
-  it('纯文档修改不触发代码检查', () => {
-    const scopes = detectAffectedScopes(['apps/docs/docs/cli.mdx', 'README.md'])
+  it('站点文档修改触发文档检查和构建', () => {
+    const scopes = detectAffectedScopes(['apps/docs/docs/cli.mdx'])
+
+    expect(listQualityScopes(scopes)).toEqual(['docs'])
+  })
+
+  it('普通 Markdown 修改不触发代码检查', () => {
+    const scopes = detectAffectedScopes(['docs/PRD.md', 'README.md'])
 
     expect(scopes.code).toBe(false)
     expect(listQualityScopes(scopes)).toEqual([])

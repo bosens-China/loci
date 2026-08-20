@@ -30,22 +30,27 @@ afterEach(() => {
 describe('agent skills command', () => {
   it('默认在当前目录安装、列出并删除项目级 use-loci', async () => {
     const program = createProgram()
-    await program.parseAsync(['agent', 'skills', 'add', '--yes'], { from: 'user' })
+    const projectArgs = ['--agent', 'universal', '--project', directory]
+    await program.parseAsync(['agent', 'skills', 'add', ...projectArgs, '--yes'], { from: 'user' })
     expect(existsSync(join(directory, '.agents/skills/use-loci/SKILL.md'))).toBe(true)
 
     vi.mocked(process.stdout.write).mockClear()
-    await program.parseAsync(['agent', 'skills', 'list'], { from: 'user' })
+    await program.parseAsync(['agent', 'skills', 'list', ...projectArgs], { from: 'user' })
     const tableOutput = vi.mocked(process.stdout.write).mock.calls.flat().join('')
     expect(tableOutput).toContain('已是最新')
     expect(tableOutput).not.toContain('current')
 
     vi.mocked(process.stdout.write).mockClear()
-    await program.parseAsync(['agent', 'skills', 'list', '--json'], { from: 'user' })
+    await program.parseAsync(['agent', 'skills', 'list', ...projectArgs, '--json'], {
+      from: 'user'
+    })
     const output = vi.mocked(process.stdout.write).mock.calls.flat().join('')
     expect(output).toContain('use-loci')
     expect(output).toContain(`"projectRoot": "${realpathSync(directory)}"`)
 
-    await program.parseAsync(['agent', 'skills', 'remove', '--yes'], { from: 'user' })
+    await program.parseAsync(['agent', 'skills', 'remove', ...projectArgs, '--yes'], {
+      from: 'user'
+    })
     expect(vi.mocked(process.stdout.write).mock.calls.flat().join('')).toContain('已删除')
     expect(existsSync(join(directory, '.agents/skills/use-loci'))).toBe(false)
   })
@@ -55,15 +60,22 @@ describe('agent skills command', () => {
     const otherProject = join(directory, 'other-project')
     mkdirSync(otherProject)
 
-    await program.parseAsync(['agent', 'skills', 'add', '--global', '--yes'], { from: 'user' })
-    await program.parseAsync(['agent', 'skills', 'add', '--project', otherProject, '--yes'], {
-      from: 'user'
-    })
+    await program.parseAsync(
+      ['agent', 'skills', 'add', '--agent', 'universal', '--global', '--yes'],
+      { from: 'user' }
+    )
+    await program.parseAsync(
+      ['agent', 'skills', 'add', '--agent', 'universal', '--project', otherProject, '--yes'],
+      { from: 'user' }
+    )
     expect(existsSync(join(directory, 'home/.agents/skills/use-loci/SKILL.md'))).toBe(true)
     expect(existsSync(join(otherProject, '.agents/skills/use-loci/SKILL.md'))).toBe(true)
 
     vi.mocked(process.stdout.write).mockClear()
-    await program.parseAsync(['agent', 'skills', 'list', '--global', '--json'], { from: 'user' })
+    await program.parseAsync(
+      ['agent', 'skills', 'list', '--agent', 'universal', '--global', '--json'],
+      { from: 'user' }
+    )
     const globalOutput = vi.mocked(process.stdout.write).mock.calls.flat().join('')
     expect(globalOutput).toContain('"scope": "global"')
     expect(globalOutput).toContain(join(directory, 'home/.agents/skills/use-loci'))
@@ -71,20 +83,24 @@ describe('agent skills command', () => {
 
     vi.mocked(process.stdout.write).mockClear()
     await program.parseAsync(
-      ['agent', 'skills', 'list', '--project', './other-project', '--json'],
+      ['agent', 'skills', 'list', '--agent', 'universal', '--project', './other-project', '--json'],
       { from: 'user' }
     )
     const projectOutput = vi.mocked(process.stdout.write).mock.calls.flat().join('')
     expect(projectOutput).toContain(`"projectRoot": "${realpathSync(otherProject)}"`)
     expect(projectOutput).not.toContain('"scope": "global"')
 
-    await program.parseAsync(['agent', 'skills', 'clear', '--project', otherProject, '--yes'], {
-      from: 'user'
-    })
+    await program.parseAsync(
+      ['agent', 'skills', 'clear', '--agent', 'universal', '--project', otherProject, '--yes'],
+      { from: 'user' }
+    )
     expect(existsSync(join(otherProject, '.agents/skills/use-loci'))).toBe(false)
     expect(existsSync(join(directory, 'home/.agents/skills/use-loci'))).toBe(true)
 
-    await program.parseAsync(['agent', 'skills', 'clear', '--global', '--yes'], { from: 'user' })
+    await program.parseAsync(
+      ['agent', 'skills', 'clear', '--agent', 'universal', '--global', '--yes'],
+      { from: 'user' }
+    )
     expect(existsSync(join(directory, 'home/.agents/skills/use-loci'))).toBe(false)
   })
 
@@ -95,5 +111,21 @@ describe('agent skills command', () => {
         { from: 'user' }
       )
     ).rejects.toThrow("option '--project <path>' cannot be used with option '--global'")
+  })
+
+  it('非交互命令要求完整的 Agent、作用域和写入确认', async () => {
+    const program = createProgram()
+    await expect(program.parseAsync(['agent', 'skills', 'list'], { from: 'user' })).rejects.toThrow(
+      '必须指定 --agent'
+    )
+    await expect(
+      program.parseAsync(['agent', 'skills', 'list', '--agent', 'universal'], { from: 'user' })
+    ).rejects.toThrow('必须指定 --project 或 --global')
+    await expect(
+      program.parseAsync(
+        ['agent', 'skills', 'add', '--agent', 'universal', '--project', directory],
+        { from: 'user' }
+      )
+    ).rejects.toThrow('必须传入 --yes')
   })
 })

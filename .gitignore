@@ -1,4 +1,5 @@
 node_modules
+.loci-dev/
 dist
 doc_build
 out

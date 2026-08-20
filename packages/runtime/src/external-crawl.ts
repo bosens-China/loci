@@ -1,10 +1,7 @@
 import type { CrawlProgress, CrawlRunState } from '@loci/shared'
 import type { CrawlHistoryDatabase, CrawlRunSnapshot } from './crawl-history-database.js'
 
-interface ExternalCrawlDatabase extends Pick<
-  CrawlHistoryDatabase,
-  'getActiveCrawlRun' | 'getCrawlRun'
-> {}
+type ExternalCrawlDatabase = Pick<CrawlHistoryDatabase, 'getActiveCrawlRun' | 'getCrawlRun'>
 
 /** 发现文件锁对应的持久任务并复用其进度，避免第二个进程重复抓取。 */
 export async function waitForExternalCrawl(

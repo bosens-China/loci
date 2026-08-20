@@ -1,5 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { DEFAULT_APP_SETTINGS, normalizeCronSchedule, PRODUCTION_SERVER_URL } from '@loci/shared'
+import {
+  APP_SETTINGS_LIMITS,
+  DEFAULT_APP_SETTINGS,
+  isValidBatchIntervalSeconds,
+  normalizeCronSchedule,
+  PRODUCTION_SERVER_URL
+} from '@loci/shared'
 import type { AppSettings, CreateSourceInput, DocumentRecord, DocumentSource } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
 import {
@@ -49,25 +55,31 @@ export interface DocumentRow {
 }
 
 export function validateSettings(settings: AppSettings): AppSettings {
-  if (!Number.isInteger(settings.mcpPort) || settings.mcpPort < 1024 || settings.mcpPort > 65535) {
-    throw new Error('MCP 端口必须是 1024 到 65535 之间的整数')
+  if (
+    !Number.isInteger(settings.mcpPort) ||
+    settings.mcpPort < APP_SETTINGS_LIMITS.mcpPort.min ||
+    settings.mcpPort > APP_SETTINGS_LIMITS.mcpPort.max
+  ) {
+    throw new Error(
+      `MCP 端口必须是 ${APP_SETTINGS_LIMITS.mcpPort.min} 到 ${APP_SETTINGS_LIMITS.mcpPort.max} 之间的整数`
+    )
   }
   if (!['auto', 'light', 'dark'].includes(settings.theme)) throw new Error('不支持的主题设置')
   validateConcurrency(settings.httpConcurrency, 'HTTP 默认并发')
   validateConcurrency(settings.browserConcurrency, '浏览器默认并发')
   if (
     !Number.isInteger(settings.maxRetries) ||
-    settings.maxRetries < 0 ||
-    settings.maxRetries > 10
+    settings.maxRetries < APP_SETTINGS_LIMITS.maxRetries.min ||
+    settings.maxRetries > APP_SETTINGS_LIMITS.maxRetries.max
   ) {
-    throw new Error('失败重试次数必须是 0 到 10 之间的整数')
+    throw new Error(
+      `失败重试次数必须是 ${APP_SETTINGS_LIMITS.maxRetries.min} 到 ${APP_SETTINGS_LIMITS.maxRetries.max} 之间的整数`
+    )
   }
-  if (
-    !Number.isInteger(settings.batchIntervalSeconds) ||
-    (settings.batchIntervalSeconds !== 0 &&
-      (settings.batchIntervalSeconds < 100 || settings.batchIntervalSeconds > 3000))
-  ) {
-    throw new Error('批次间隔必须为 0，或 100 到 3000 之间的整数秒')
+  if (!isValidBatchIntervalSeconds(settings.batchIntervalSeconds)) {
+    throw new Error(
+      `批次间隔必须为 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled}，或 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.min} 到 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.max} 之间的整数秒`
+    )
   }
   validateMegabytes(settings.githubArchiveLimitMb, 'GitHub ZIP 默认上限')
   validateMegabytes(settings.githubMarkdownLimitMb, 'GitHub Markdown 默认上限')
@@ -207,7 +219,12 @@ export function migrateDatabase(database: DatabaseSync, previousVersion = 0): vo
     'max_retries',
     `INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.maxRetries}`
   )
-  addColumn(database, 'app_settings', 'batch_interval_seconds', 'INTEGER NOT NULL DEFAULT 0')
+  addColumn(
+    database,
+    'app_settings',
+    'batch_interval_seconds',
+    `INTEGER NOT NULL DEFAULT ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled}`
+  )
   if (addedCrawlDefaults) {
     database.exec(
       `UPDATE app_settings SET browser_concurrency = ${DEFAULT_APP_SETTINGS.browserConcurrency} WHERE browser_concurrency = 2`
@@ -316,11 +333,11 @@ function hasColumn(database: DatabaseSync, table: string, column: string): boole
 function validateConcurrency(value: number, label: string): void {
   if (
     !Number.isInteger(value) ||
-    value < DOCUMENT_SOURCE_LIMITS.concurrency.min ||
-    value > DOCUMENT_SOURCE_LIMITS.concurrency.max
+    value < APP_SETTINGS_LIMITS.concurrency.min ||
+    value > APP_SETTINGS_LIMITS.concurrency.max
   ) {
     throw new Error(
-      `${label}必须是 ${DOCUMENT_SOURCE_LIMITS.concurrency.min} 到 ${DOCUMENT_SOURCE_LIMITS.concurrency.max} 之间的整数`
+      `${label}必须是 ${APP_SETTINGS_LIMITS.concurrency.min} 到 ${APP_SETTINGS_LIMITS.concurrency.max} 之间的整数`
     )
   }
 }
@@ -328,11 +345,11 @@ function validateConcurrency(value: number, label: string): void {
 function validateMegabytes(value: number, label: string): void {
   if (
     !Number.isInteger(value) ||
-    value < DOCUMENT_SOURCE_LIMITS.githubSizeMb.min ||
-    value > DOCUMENT_SOURCE_LIMITS.githubSizeMb.max
+    value < APP_SETTINGS_LIMITS.githubSizeMb.min ||
+    value > APP_SETTINGS_LIMITS.githubSizeMb.max
   ) {
     throw new Error(
-      `${label}必须是 ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.min} 到 ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.max} 之间的整数 MB`
+      `${label}必须是 ${APP_SETTINGS_LIMITS.githubSizeMb.min} 到 ${APP_SETTINGS_LIMITS.githubSizeMb.max} 之间的整数 MB`
     )
   }
 }

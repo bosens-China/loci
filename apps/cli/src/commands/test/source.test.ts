@@ -197,17 +197,19 @@ describe('文档源最短输入', () => {
   })
 
   it('可以用独立命令设置和关闭本地定时计划', async () => {
+    const program = (): ReturnType<typeof createProgram> =>
+      createProgram({ ensureUserService: async () => undefined })
     await createProgram().parseAsync(['source', 'add', 'https://rspress.rs/guide', '--no-sync'], {
       from: 'user'
     })
-    await createProgram().parseAsync(['schedule', 'set', 'rspress', '0 2 * * *'], {
+    await program().parseAsync(['schedule', 'set', 'rspress', '0 2 * * *'], {
       from: 'user'
     })
     let runtime = createCliRuntime()
     expect(runtime.database.listSources()[0]?.schedule).toBe('0 2 * * *')
     await runtime.close()
 
-    await createProgram().parseAsync(['schedule', 'set', 'rspress', 'manual'], { from: 'user' })
+    await program().parseAsync(['schedule', 'set', 'rspress', 'manual'], { from: 'user' })
     runtime = createCliRuntime()
     expect(runtime.database.listSources()[0]?.schedule).toBeNull()
     await runtime.close()
@@ -253,6 +255,11 @@ describe('文档源最短输入', () => {
     const runtime = createCliRuntime()
     expect(runtime.database.listSources()[0]).toMatchObject({ pages: 1, status: 'healthy' })
     expect(runtime.database.listCrawlHistory()[0]).toMatchObject({ succeeded: 1 })
+    expect(runtime.database.listLocalJobs()[0]).toMatchObject({
+      trigger: 'manual',
+      status: 'completed',
+      result: { succeeded: 1, failed: 0 }
+    })
     await runtime.close()
 
     await createProgram().parseAsync(['status'], { from: 'user' })

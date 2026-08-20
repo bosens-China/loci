@@ -11,6 +11,7 @@ import { registerDocumentCommands } from './commands/document.js'
 import { registerMcpCommands } from './commands/mcp.js'
 import { registerSourceCommands } from './commands/source.js'
 import { registerScheduleCommands } from './commands/schedule.js'
+import { registerServiceCommands, registerUiCommand } from './commands/service.js'
 import { registerStatusCommand } from './commands/status.js'
 import { registerUpdateCommand } from './commands/update.js'
 import {
@@ -48,7 +49,11 @@ export async function runCli(args: readonly string[]): Promise<void> {
   }
 }
 
-export function createProgram(): Command {
+export interface CreateProgramOptions {
+  ensureUserService?: () => Promise<unknown>
+}
+
+export function createProgram(options: CreateProgramOptions = {}): Command {
   const program = new Command()
     .name('loci')
     .description('面向终端用户的本地文档知识库')
@@ -74,7 +79,9 @@ export function createProgram(): Command {
   registerStatusCommand(program)
   registerUpdateCommand(program)
   registerSourceCommands(program)
-  registerScheduleCommands(program)
+  registerScheduleCommands(program, options.ensureUserService)
+  registerServiceCommands(program)
+  registerUiCommand(program)
   registerDocumentCommands(program)
   registerCloudCommands(program)
   registerAdminCommand(program)

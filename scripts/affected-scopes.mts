@@ -11,7 +11,7 @@ export const qualityScopeNames = [
   'runtime',
   'cli',
   'server',
-  'desktop',
+  'web',
   'docs'
 ] as const
 
@@ -31,7 +31,7 @@ function createScopes(): AffectedScopes {
     runtime: false,
     cli: false,
     server: false,
-    desktop: false,
+    web: false,
     docs: false
   }
 }
@@ -46,15 +46,15 @@ function markAll(scopes: AffectedScopes): void {
 }
 
 function markCore(scopes: AffectedScopes): void {
-  mark(scopes, 'core', 'shared', 'runtime', 'cli', 'server', 'desktop')
+  mark(scopes, 'core', 'shared', 'runtime', 'cli', 'server', 'web')
 }
 
 function markShared(scopes: AffectedScopes): void {
-  mark(scopes, 'shared', 'runtime', 'cli', 'desktop')
+  mark(scopes, 'core', 'shared', 'runtime', 'cli', 'server', 'web')
 }
 
 function markRuntime(scopes: AffectedScopes): void {
-  mark(scopes, 'runtime', 'cli', 'desktop')
+  mark(scopes, 'runtime', 'cli', 'web')
 }
 
 function isRootConfig(path: string): boolean {
@@ -75,12 +75,18 @@ function isRootConfig(path: string): boolean {
 function applyPath(scopes: AffectedScopes, rawPath: string): void {
   const path = rawPath.replace(/^\.\//, '')
 
-  if (
-    path.startsWith('apps/docs/') ||
-    path.startsWith('docs/') ||
-    path.endsWith('.md') ||
-    path === '.github/workflows/docs-pages.yml'
-  ) {
+  // 内置 Skill 会随 CLI npm 包发布，不能按普通 Markdown 跳过。
+  if (path.startsWith('.agents/skills/use-loci/')) {
+    mark(scopes, 'cli')
+    return
+  }
+
+  if (path.startsWith('apps/docs/') || path === '.github/workflows/docs-pages.yml') {
+    mark(scopes, 'docs')
+    return
+  }
+
+  if (path.startsWith('docs/') || path.endsWith('.md')) {
     return
   }
 
@@ -88,8 +94,9 @@ function applyPath(scopes: AffectedScopes, rawPath: string): void {
     mark(scopes, 'cli')
     return
   }
-  if (path.startsWith('apps/desktop/')) {
-    mark(scopes, 'desktop')
+  if (path.startsWith('apps/web/')) {
+    // Web 产物随 CLI npm 包分发，因此浏览器代码变化也必须重建 CLI。
+    mark(scopes, 'cli', 'web')
     return
   }
   if (path.startsWith('apps/server/')) {

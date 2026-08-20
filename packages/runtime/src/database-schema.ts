@@ -1,7 +1,7 @@
 import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
-import { DEFAULT_APP_SETTINGS, PRODUCTION_SERVER_URL } from '@loci/shared'
+import { APP_SETTINGS_LIMITS, DEFAULT_APP_SETTINGS, PRODUCTION_SERVER_URL } from '@loci/shared'
 
-export const LOCI_SCHEMA_VERSION = 9
+export const LOCI_SCHEMA_VERSION = 11
 
 // 基础表结构集中维护，具体子模块的增量表由各自初始化函数负责。
 export const LOCI_DATABASE_SCHEMA = `
@@ -60,18 +60,18 @@ export const LOCI_DATABASE_SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS app_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    mcp_port INTEGER NOT NULL CHECK (mcp_port BETWEEN 1024 AND 65535),
+    mcp_port INTEGER NOT NULL CHECK (mcp_port BETWEEN ${APP_SETTINGS_LIMITS.mcpPort.min} AND ${APP_SETTINGS_LIMITS.mcpPort.max}),
     theme TEXT NOT NULL CHECK (theme IN ('auto', 'light', 'dark')),
-    http_concurrency INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.httpConcurrency} CHECK (http_concurrency BETWEEN ${DOCUMENT_SOURCE_LIMITS.concurrency.min} AND ${DOCUMENT_SOURCE_LIMITS.concurrency.max}),
-    browser_concurrency INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.browserConcurrency} CHECK (browser_concurrency BETWEEN ${DOCUMENT_SOURCE_LIMITS.concurrency.min} AND ${DOCUMENT_SOURCE_LIMITS.concurrency.max}),
-    max_retries INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.maxRetries} CHECK (max_retries BETWEEN 0 AND 10),
-    batch_interval_seconds INTEGER NOT NULL DEFAULT 0 CHECK (
-      batch_interval_seconds = 0 OR batch_interval_seconds BETWEEN 100 AND 3000
+    http_concurrency INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.httpConcurrency} CHECK (http_concurrency BETWEEN ${APP_SETTINGS_LIMITS.concurrency.min} AND ${APP_SETTINGS_LIMITS.concurrency.max}),
+    browser_concurrency INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.browserConcurrency} CHECK (browser_concurrency BETWEEN ${APP_SETTINGS_LIMITS.concurrency.min} AND ${APP_SETTINGS_LIMITS.concurrency.max}),
+    max_retries INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.maxRetries} CHECK (max_retries BETWEEN ${APP_SETTINGS_LIMITS.maxRetries.min} AND ${APP_SETTINGS_LIMITS.maxRetries.max}),
+    batch_interval_seconds INTEGER NOT NULL DEFAULT ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled} CHECK (
+      batch_interval_seconds = ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled} OR batch_interval_seconds BETWEEN ${APP_SETTINGS_LIMITS.batchIntervalSeconds.min} AND ${APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
     ),
     server_url TEXT NOT NULL DEFAULT '${PRODUCTION_SERVER_URL}',
     server_url_customized INTEGER NOT NULL DEFAULT 0 CHECK (server_url_customized IN (0, 1)),
-    github_archive_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubArchiveLimitMb} CHECK (github_archive_limit_mb BETWEEN ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.min} AND ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.max}),
-    github_markdown_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubMarkdownLimitMb} CHECK (github_markdown_limit_mb BETWEEN ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.min} AND ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.max})
+    github_archive_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubArchiveLimitMb} CHECK (github_archive_limit_mb BETWEEN ${APP_SETTINGS_LIMITS.githubSizeMb.min} AND ${APP_SETTINGS_LIMITS.githubSizeMb.max}),
+    github_markdown_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubMarkdownLimitMb} CHECK (github_markdown_limit_mb BETWEEN ${APP_SETTINGS_LIMITS.githubSizeMb.min} AND ${APP_SETTINGS_LIMITS.githubSizeMb.max})
   ) STRICT;
 
   CREATE TABLE IF NOT EXISTS interaction_preferences (

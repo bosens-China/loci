@@ -6,16 +6,23 @@ import type {
   CrawlRunState,
   CrawlFailure,
   DocumentRecord,
-  DocumentSource
+  DocumentSource,
+  UpdateSourceInput
 } from '@loci/shared'
+import type { InspectSourceOptions, SourceInspection } from '@loci/core'
 import type { DocumentSearchMode } from '../document-content-database.js'
 
-// MCP 仅依赖宿主能力接口，CLI 与桌面端可各自注入实现。
+// MCP 仅依赖宿主能力接口，CLI 与后台服务可各自注入实现。
 export interface LociMcpServices {
   listSources: () => DocumentSource[]
   listDocuments: () => DocumentRecord[]
   searchDocuments: (query: string, mode?: DocumentSearchMode) => DocumentRecord[]
   createSource: (input: CreateSourceInput) => DocumentSource
+  inspectSource: (input: InspectSourceOptions) => Promise<SourceInspection>
+  updateSource: (
+    source: DocumentSource,
+    input: Omit<UpdateSourceInput, 'schedule'>
+  ) => DocumentSource
   crawlSource: (
     id: string,
     onProgress?: (progress: CrawlProgress) => void

@@ -1,6 +1,7 @@
 import type { DocumentSource } from '@loci/shared'
 import type { BrowserInstallPrompt } from '../browser.js'
 import type { CommandResult } from '../command-runtime.js'
+import { runLocalSourceSync } from '@loci/runtime'
 import { CliError } from '../errors.js'
 import type { CliRuntime } from '../runtime.js'
 import { askConfirm, createSpinner } from '../ui.js'
@@ -13,15 +14,15 @@ export async function syncSource(
   const spinner = createSpinner()
   spinner.start(`正在同步“${target.name}”`)
   try {
-    const progress = await runtime.crawlSource(
-      target.id,
-      (current) => {
+    const progress = await runLocalSourceSync(runtime, target.id, {
+      trigger: 'manual',
+      onProgress: (current) => {
         spinner.message(
           `已发现 ${current.queued}，已处理 ${current.processed}，成功 ${current.succeeded}，失败 ${current.failed}`
         )
       },
-      createBrowserInstallPrompt(spinner, target.name)
-    )
+      onBrowserMissing: createBrowserInstallPrompt(spinner, target.name)
+    })
     const summary = `同步完成：成功 ${progress.succeeded}，失败 ${progress.failed}${progress.limitReached ? '，已达到页面上限' : ''}`
     spinner.stop(summary)
     return progress.failed > 0

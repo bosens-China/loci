@@ -45,7 +45,7 @@ export interface SkillManagerOptions {
   homeDir?: string
 }
 
-/** CLI 与桌面共用的 Skill 文件事务和安装台账。 */
+/** CLI 与后台服务共用的 Skill 文件事务和安装台账。 */
 export class SkillManager {
   private readonly tasks = new Map<string, Promise<SkillOperationResult>>()
 

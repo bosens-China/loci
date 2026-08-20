@@ -15,6 +15,7 @@ export const librarySchema = z.object({
   content_size: z.number().int().nonnegative(),
   page_limit: z.number().int(),
   scope_path: z.string(),
+  exclude_path: z.string().nullable(),
   last_updated: z.string(),
   schedule: z.string().nullable(),
   http_concurrency: z.number().int().nullable(),
@@ -69,6 +70,28 @@ export const addLibraryOutputSchema = z.object({
   file_count: z.number().int().optional(),
   progress: progressSchema.optional(),
   error: z.string().optional()
+})
+
+export const inspectSourceOutputSchema = z.object({
+  url: z.string(),
+  hostname: z.string(),
+  kind: z.enum(['web', 'github']),
+  scope_path: z.string(),
+  discovery: z.enum(['github', 'llms', 'openapi', 'sitemap', 'unknown']),
+  estimate_kind: z.enum(['exact', 'lower_bound', 'unknown']),
+  estimated_pages: z.number().int().nullable(),
+  discovered_pages: z.number().int().nonnegative(),
+  excluded_pages: z.number().int().nonnegative(),
+  exceeds_hard_limit: z.boolean(),
+  hard_page_limit: z.number().int().positive(),
+  path_groups: z.array(z.object({ path: z.string(), pages: z.number().int().positive() })),
+  github_default_branch: z.string().optional(),
+  github_revision: z.string().optional()
+})
+
+export const updateLibraryOutputSchema = z.object({
+  changed: z.boolean(),
+  library: librarySchema
 })
 
 const syncItemSchema = z.object({

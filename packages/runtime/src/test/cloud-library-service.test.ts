@@ -1,11 +1,20 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CloudLibraryService } from '../cloud-library-service.js'
 import { createDatabase, type LociDatabase } from '../database.js'
+import { acquireMaintenanceRuntimeLock } from '../runtime-lock.js'
 
 describe('CloudLibraryService', () => {
   let database: LociDatabase | undefined
+  const directories: string[] = []
 
-  afterEach(() => database?.close())
+  afterEach(() => {
+    database?.close()
+    for (const directory of directories.splice(0))
+      rmSync(directory, { recursive: true, force: true })
+  })
 
   it('事务导入快照，并只更新当前后端的同源副本', async () => {
     database = createDatabase(':memory:')
@@ -119,6 +128,21 @@ describe('CloudLibraryService', () => {
 
     expect(fetcher).toHaveBeenCalledOnce()
     expect(duplicateResult.source.id).toBe(firstResult.source.id)
+  })
+
+  it('数据维护期间拒绝云端快照写入', async () => {
+    database = createDatabase(':memory:')
+    const dataDir = mkdtempSync(join(tmpdir(), 'loci-cloud-lock-'))
+    directories.push(dataDir)
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse(snapshot('sha256:v1')))
+    const service = new CloudLibraryService(database, fetcher, dataDir)
+    const maintenance = acquireMaintenanceRuntimeLock(dataDir, '备份导入')
+
+    await expect(
+      service.importLibrary('http://localhost:7001', 'library-1', false)
+    ).rejects.toThrow('数据库正在由备份导入维护')
+    expect(fetcher).not.toHaveBeenCalled()
+    maintenance.release()
   })
 })
 

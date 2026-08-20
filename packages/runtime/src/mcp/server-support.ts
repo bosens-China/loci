@@ -106,6 +106,7 @@ export function serializeLibrary(source: DocumentSource): Record<string, unknown
     content_size: source.contentSize,
     page_limit: source.pageLimit,
     scope_path: source.scopePath,
+    exclude_path: source.excludePathPattern ?? null,
     last_updated: source.lastUpdated,
     schedule: source.schedule,
     http_concurrency: source.httpConcurrency,

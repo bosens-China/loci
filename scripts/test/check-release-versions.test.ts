@@ -13,15 +13,15 @@ async function writeJson(path: string, value: unknown): Promise<void> {
 async function createWorkspace(manifestVersion: string): Promise<string> {
   const workspaceRoot = await mkdtemp(join(tmpdir(), 'loci-release-versions-'))
   temporaryDirectories.push(workspaceRoot)
-  await mkdir(join(workspaceRoot, 'apps/desktop'), { recursive: true })
+  await mkdir(join(workspaceRoot, 'apps/cli'), { recursive: true })
   await writeJson(join(workspaceRoot, 'release-please-config.json'), {
-    packages: { 'apps/desktop': { 'release-type': 'node' } }
+    packages: { 'apps/cli': { 'release-type': 'node' } }
   })
   await writeJson(join(workspaceRoot, '.release-please-manifest.json'), {
-    'apps/desktop': manifestVersion
+    'apps/cli': manifestVersion
   })
-  await writeJson(join(workspaceRoot, 'apps/desktop/package.json'), {
-    name: '@loci/desktop',
+  await writeJson(join(workspaceRoot, 'apps/cli/package.json'), {
+    name: '@boses/cli',
     version: '1.2.1'
   })
   return workspaceRoot
@@ -43,7 +43,7 @@ describe('findReleaseVersionMismatches', () => {
 
     await expect(findReleaseVersionMismatches(workspaceRoot)).resolves.toEqual([
       {
-        packagePath: 'apps/desktop',
+        packagePath: 'apps/cli',
         manifestVersion: '1.2.0',
         packageVersion: '1.2.1'
       }

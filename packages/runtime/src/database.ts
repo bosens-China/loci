@@ -56,6 +56,11 @@ import {
   type SkillInstallationDatabase
 } from './skill-database.js'
 import {
+  createLocalJobDatabase,
+  initializeLocalJobDatabase,
+  type LocalJobDatabase
+} from './local-job-database.js'
+import {
   assertLocalSourceIdentityAvailable,
   createWebSourceIdentity,
   findLocalSourceId,
@@ -90,7 +95,8 @@ export interface LociDatabase
     InteractionPreferencesDatabase,
     CrawlHistoryDatabase,
     DocumentContentDatabase,
-    SkillInstallationDatabase {
+    SkillInstallationDatabase,
+    LocalJobDatabase {
   schemaVersion: number
   listSources: () => DocumentSource[]
   createSource: (input: CreateSourceInput) => DocumentSource
@@ -149,6 +155,7 @@ export function createDatabase(
     }
     database.exec(LOCI_DATABASE_SCHEMA)
     initializeCrawlHistoryDatabase(database)
+    initializeLocalJobDatabase(database)
     migrateDatabase(database, row.user_version)
     initializeSettings(database, options)
     database.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION}`)
@@ -165,6 +172,7 @@ export function createDatabase(
     ...createCrawlHistoryDatabase(database),
     ...createDocumentContentDatabase(database),
     ...createSkillInstallationDatabase(database),
+    ...createLocalJobDatabase(database),
     listSources: () => {
       const rows = database
         .prepare(

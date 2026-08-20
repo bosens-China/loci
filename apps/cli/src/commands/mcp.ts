@@ -2,7 +2,10 @@ import type { Command } from 'commander'
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import {
   acquireRuntimeLock,
+  checkLocalService,
+  createLocalJobRunner,
   createLociMcpServer,
+  readLocalServiceState,
   readRuntimeLock,
   startMcpHttpServer
 } from '@loci/runtime'
@@ -24,25 +27,32 @@ export function registerMcpCommands(program: Command): void {
     .description('通过 Loci MCP stdio 为 Agent 提供本地能力')
     .action(async () => {
       const runtime = createCliRuntime()
-      const handle = serveStdio(() => createLociMcpServer(createMcpServices(runtime)), {
-        onerror: (error) => console.error(`Loci MCP stdio 错误：${error.message}`)
-      })
+      const runner = createLocalJobRunner(runtime)
+      runner.start()
+      const handle = serveStdio(
+        () => createLociMcpServer(createMcpServices(runtime, { durableJobs: true })),
+        {
+          onerror: (error) => console.error(`Loci MCP stdio 错误：${error.message}`)
+        }
+      )
       try {
         await waitForStdioTermination()
       } finally {
         await handle.close()
+        await runner.stop()
         await runtime.close()
       }
     })
 
   mcp
     .command('serve')
-    .description('以前台方式启动 Loci MCP，适用于无桌面环境')
+    .description('以前台方式启动 Loci MCP')
     .action(async () => {
       startUi('Loci MCP')
       const runtime = createCliRuntime()
       const settings = runtime.database.getSettings()
       let lock: ReturnType<typeof acquireRuntimeLock> | undefined
+      let runner: ReturnType<typeof createLocalJobRunner> | undefined
       try {
         if (await canConnect(settings.mcpPort)) {
           info(`现有实例：http://127.0.0.1:${settings.mcpPort}/mcp`)
@@ -50,7 +60,12 @@ export function registerMcpCommands(program: Command): void {
           return
         }
         lock = acquireRuntimeLock(runtime.dataDir, 'mcp', 'CLI')
-        const server = await startMcpHttpServer(settings.mcpPort, createMcpServices(runtime))
+        runner = createLocalJobRunner(runtime)
+        runner.start()
+        const server = await startMcpHttpServer(
+          settings.mcpPort,
+          createMcpServices(runtime, { durableJobs: true })
+        )
         success(`MCP 已启动：${server.endpoint}`)
         info('按 Ctrl+C 停止服务')
         await waitForTermination()
@@ -58,6 +73,7 @@ export function registerMcpCommands(program: Command): void {
         finishUi('MCP 已停止')
       } finally {
         lock?.release()
+        await runner?.stop()
         await runtime.close()
       }
     })
@@ -70,11 +86,17 @@ export function registerMcpCommands(program: Command): void {
         const settings = runtime.database.getSettings()
         const running = await canConnect(settings.mcpPort)
         const lock = readRuntimeLock(runtime.dataDir, 'mcp')
+        const localService = readLocalServiceState(runtime.dataDir)
+        const serviceOwnsMcp = Boolean(
+          running &&
+          localService?.mcpPort === settings.mcpPort &&
+          (await checkLocalService(localService))
+        )
         process.stdout.write('默认 Agent 入口： CLI stdio（loci mcp stdio）\n')
         process.stdout.write(`地址： http://127.0.0.1:${settings.mcpPort}/mcp\n`)
         process.stdout.write(`HTTP 状态： ${running ? '运行中' : '未运行'}\n`)
         process.stdout.write(
-          `宿主： ${lock?.owner ?? (running ? '桌面端或其他 Loci 进程' : '—')}\n`
+          `宿主： ${serviceOwnsMcp ? 'Loci 后台服务' : (lock?.owner ?? (running ? '其他 Loci 进程' : '—'))}\n`
         )
         return running ? 'MCP 服务可访问' : 'MCP 当前未运行'
       })

@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest'
 import { createDatabase } from '../database.js'
 
 describe('shared database', () => {
-  it('makes CLI writes visible to an already-open desktop connection', () => {
+  it('makes CLI writes visible to an already-open service connection', () => {
     const directory = mkdtempSync(join(tmpdir(), 'loci-shared-db-'))
     const path = join(directory, 'loci.sqlite')
-    const desktop = createDatabase(path)
+    const service = createDatabase(path)
     const cli = createDatabase(path)
     try {
       const source = cli.createSource({
@@ -20,7 +20,7 @@ describe('shared database', () => {
         httpConcurrency: null,
         browserConcurrency: null
       })
-      expect(desktop.listSources()).toEqual([source])
+      expect(service.listSources()).toEqual([source])
 
       const runId = cli.startCrawlRun(source.id)
       cli.finishCrawlRun(
@@ -29,14 +29,14 @@ describe('shared database', () => {
         { queued: 1, processed: 1, succeeded: 1, failed: 0, limitReached: false },
         null
       )
-      expect(desktop.listCrawlHistory(source.id)[0]).toMatchObject({
+      expect(service.listCrawlHistory(source.id)[0]).toMatchObject({
         sourceId: source.id,
         status: 'completed',
         succeeded: 1
       })
     } finally {
       cli.close()
-      desktop.close()
+      service.close()
       rmSync(directory, { recursive: true, force: true })
     }
   })

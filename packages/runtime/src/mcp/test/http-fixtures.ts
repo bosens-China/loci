@@ -86,6 +86,21 @@ export function createServices(): LociMcpServices {
     listDocuments: () => [document],
     searchDocuments: () => [document],
     createSource: () => source,
+    inspectSource: async ({ url, scopePath = '/' }) => ({
+      url,
+      hostname: new URL(url).hostname,
+      kind: 'web',
+      scopePath,
+      discovery: 'sitemap',
+      estimateKind: 'exact',
+      estimatedPages: 1,
+      discoveredPages: 1,
+      excludedPages: 0,
+      exceedsHardLimit: false,
+      hardPageLimit: 10_000,
+      pathGroups: [{ path: '/guide', pages: 1 }]
+    }),
+    updateSource: () => source,
     crawlSource: async (_id, onProgress) => {
       onProgress?.({ ...completedProgress, processed: 0, succeeded: 0 })
       onProgress?.(completedProgress)

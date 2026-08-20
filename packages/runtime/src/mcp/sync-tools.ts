@@ -58,6 +58,13 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
             .max(DOCUMENT_SOURCE_LIMITS.pageLimit.max)
             .default(DOCUMENT_SOURCE_DEFAULTS.pageLimit),
           scope_path: z.string().trim().startsWith('/').default(DOCUMENT_SOURCE_DEFAULTS.scopePath),
+          exclude_path: z
+            .string()
+            .trim()
+            .max(DOCUMENT_SOURCE_LIMITS.excludePathPatternLength.max)
+            .nullable()
+            .optional()
+            .describe('可选 pathname 排除正则；省略时不排除'),
           http_concurrency: concurrencySchema('省略时使用全局 HTTP 默认值'),
           browser_concurrency: concurrencySchema('省略时使用全局浏览器默认值'),
           github_archive_limit_mb: sizeSchema('省略时使用全局 GitHub ZIP 默认值'),
@@ -76,7 +83,7 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
         mode: input.mode,
         pageLimit: input.page_limit,
         scopePath: normalizeScopePath(input.scope_path),
-        excludePathPattern: DOCUMENT_SOURCE_DEFAULTS.excludePathPattern,
+        excludePathPattern: input.exclude_path ?? DOCUMENT_SOURCE_DEFAULTS.excludePathPattern,
         schedule: DOCUMENT_SOURCE_DEFAULTS.schedule,
         httpConcurrency: input.http_concurrency ?? DOCUMENT_SOURCE_DEFAULTS.httpConcurrency,
         browserConcurrency:

@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   acquireCrawlRuntimeLock,
+  acquireDatabaseWriteRuntimeLock,
   acquireMaintenanceRuntimeLock,
   acquireRuntimeLock,
   readRuntimeLock,
@@ -65,12 +66,30 @@ describe('runtime lock', () => {
     const dataDir = createDataDir()
     const crawl = acquireCrawlRuntimeLock(dataDir, 'react', 'CLI')
 
-    expect(() => acquireMaintenanceRuntimeLock(dataDir, '桌面端导入')).toThrow('仍有文档源正在同步')
+    expect(() => acquireMaintenanceRuntimeLock(dataDir, '备份导入')).toThrow(
+      '仍有文档源或云端副本正在同步'
+    )
 
     crawl.release()
-    const maintenance = acquireMaintenanceRuntimeLock(dataDir, '桌面端导入')
+    const maintenance = acquireMaintenanceRuntimeLock(dataDir, '备份导入')
     expect(() => acquireCrawlRuntimeLock(dataDir, 'react', 'CLI')).toThrow(
-      '数据库正在由桌面端导入维护'
+      '数据库正在由备份导入维护'
+    )
+    maintenance.release()
+  })
+
+  it('keeps cloud snapshot writes and full-database maintenance mutually exclusive', () => {
+    const dataDir = createDataDir()
+    const cloud = acquireDatabaseWriteRuntimeLock(dataDir, 'cloud-library', '云端同步')
+
+    expect(() => acquireMaintenanceRuntimeLock(dataDir, 'Web 数据维护')).toThrow(
+      '仍有文档源或云端副本正在同步'
+    )
+
+    cloud.release()
+    const maintenance = acquireMaintenanceRuntimeLock(dataDir, 'Web 数据维护')
+    expect(() => acquireDatabaseWriteRuntimeLock(dataDir, 'cloud-library', '云端同步')).toThrow(
+      '数据库正在由Web 数据维护维护'
     )
     maintenance.release()
   })

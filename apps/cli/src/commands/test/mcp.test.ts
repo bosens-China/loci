@@ -25,7 +25,7 @@ afterEach(() => {
 })
 
 describe('Agent MCP 配置', () => {
-  it('默认输出可复制的 stdio mcpServers JSON', async () => {
+  it('完整命令输出可复制的 stdio mcpServers JSON', async () => {
     let output = ''
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
       output += String(chunk)
@@ -33,7 +33,9 @@ describe('Agent MCP 配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await createProgram().parseAsync(['agent', 'config'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'config', 'generic', '--transport', 'stdio'], {
+      from: 'user'
+    })
 
     expect(JSON.parse(output)).toEqual({
       mcpServers: {
@@ -54,7 +56,9 @@ describe('Agent MCP 配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await createProgram().parseAsync(['agent', 'config', '--transport', 'http'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'config', 'generic', '--transport', 'http'], {
+      from: 'user'
+    })
 
     expect(JSON.parse(output)).toEqual({
       mcpServers: {
@@ -63,7 +67,7 @@ describe('Agent MCP 配置', () => {
     })
   })
 
-  it('按客户端输出对应配置，并让 Antigravity 默认使用 HTTP', async () => {
+  it('按客户端和显式传输方式输出对应配置', async () => {
     let output = ''
     let hint = ''
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
@@ -75,7 +79,9 @@ describe('Agent MCP 配置', () => {
       return true
     })
 
-    await createProgram().parseAsync(['agent', 'config', 'antigravity'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'config', 'antigravity', '--transport', 'http'], {
+      from: 'user'
+    })
 
     expect(JSON.parse(output)).toEqual({
       mcpServers: {
@@ -86,7 +92,7 @@ describe('Agent MCP 配置', () => {
     expect(hint).toContain('~/.gemini/config/mcp_config.json')
   })
 
-  it('Codex 配置默认输出 CLI stdio TOML', async () => {
+  it('Codex 配置输出 CLI stdio TOML', async () => {
     let output = ''
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
       output += String(chunk)
@@ -94,7 +100,9 @@ describe('Agent MCP 配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await createProgram().parseAsync(['agent', 'config', 'codex'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'config', 'codex', '--transport', 'stdio'], {
+      from: 'user'
+    })
 
     expect(output.trim()).toBe('[mcp_servers.loci]\ncommand = "loci"\nargs = ["mcp", "stdio"]')
   })
@@ -126,7 +134,7 @@ describe('Agent MCP 配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await runCli(['agent', 'config'])
+    await runCli(['agent', 'config', 'generic', '--transport', 'stdio'])
 
     expect(() => JSON.parse(output)).not.toThrow()
     expect(JSON.parse(output)).toHaveProperty('mcpServers.loci.command', 'loci')
@@ -158,5 +166,19 @@ describe('Agent MCP 配置', () => {
     await expect(createProgram().parseAsync(['agent', 'rules'], { from: 'user' })).rejects.toThrow(
       '非交互终端必须指定'
     )
+  })
+
+  it('非交互模式拒绝根命令和不完整子命令', async () => {
+    await expect(createProgram().parseAsync(['agent'], { from: 'user' })).rejects.toThrow(
+      '请使用完整的 loci agent 子命令和参数'
+    )
+    await expect(
+      createProgram().parseAsync(['agent', 'config', 'codex'], { from: 'user' })
+    ).rejects.toThrow('必须指定 --transport')
+    await expect(
+      createProgram().parseAsync(['agent', 'config', 'codex', '--transport', 'stdio'], {
+        from: 'user'
+      })
+    ).resolves.toBeDefined()
   })
 })

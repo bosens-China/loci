@@ -17,19 +17,9 @@ describe('内置 Skill 静态资源打包配置', () => {
     expect(packageJson.scripts.prebuild).toBeUndefined()
     expect(config).toContain("from: '../../.agents/skills/use-loci'")
     expect(config).toContain("to: 'dist/resources/skills'")
-  })
-
-  it('桌面安装包通过 extraResources 原样携带 Skill', () => {
-    const packageJson = readJson('apps/desktop/package.json')
-    const config = read('apps/desktop/electron-builder.yml')
-
-    expect(packageJson.scripts.build).not.toContain('skills:generate')
-    expect(config).toContain('extraResources:')
-    expect(config).toContain('from: ../../.agents/skills/use-loci')
-    expect(config).toContain('to: skills/use-loci')
-    expect(existsSync(resolve(workspaceRoot, '.agents/skills/use-loci/references/cli.md'))).toBe(
-      true
-    )
+    expect(config).toContain("from: '../web/dist'")
+    expect(config).toContain("to: 'dist/resources/ui'")
+    expect(packageJson.devDependencies?.['@loci/web']).toBe('workspace:*')
   })
 
   it('Runtime 不再维护资源生成命令或生成文件', () => {
@@ -49,6 +39,14 @@ function read(path: string): string {
   return readFileSync(resolve(workspaceRoot, path), 'utf8')
 }
 
-function readJson(path: string): { files?: string[]; scripts: Record<string, string> } {
-  return JSON.parse(read(path)) as { files?: string[]; scripts: Record<string, string> }
+function readJson(path: string): {
+  files?: string[]
+  scripts: Record<string, string>
+  devDependencies?: Record<string, string>
+} {
+  return JSON.parse(read(path)) as {
+    files?: string[]
+    scripts: Record<string, string>
+    devDependencies?: Record<string, string>
+  }
 }

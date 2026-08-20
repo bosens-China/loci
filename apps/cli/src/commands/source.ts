@@ -299,7 +299,7 @@ export function registerSourceCommands(program: Command): void {
             syncAfterSave = await askConfirm('保存后是否立即重新同步？', true)
           }
         }
-        const saved = runtime.updateSourcePreservingDesktopFields(current, input)
+        const saved = runtime.updateSourcePreservingSchedule(current, input)
         saveRecentResource(runtime.database, 'source-update', saved.id)
         if (syncAfterSave) return syncSource(runtime, saved)
         return `已更新文档源“${saved.name}”`

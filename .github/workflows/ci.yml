@@ -20,8 +20,8 @@ jobs:
     outputs:
       code: ${{ steps.scopes.outputs.code }}
       cli: ${{ steps.scopes.outputs.cli }}
-      desktop: ${{ steps.scopes.outputs.desktop }}
       server: ${{ steps.scopes.outputs.server }}
+      web: ${{ steps.scopes.outputs.web }}
       quality_scopes: ${{ steps.scopes.outputs.quality_scopes }}
     steps:
       - uses: actions/checkout@v6
@@ -57,14 +57,6 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - if: needs.changes.outputs.desktop == 'true'
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
-          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-electron-
       - name: Install affected workspaces
         run: node --experimental-strip-types scripts/run-affected-quality.mts install "$AFFECTED_SCOPES"
       - name: Check affected workspaces
@@ -140,14 +132,13 @@ jobs:
             exit 1
           fi
 
-  build-desktop:
-    name: Build desktop
+  build-web:
+    name: Build Web UI
     needs: changes
-    if: ${{ needs.changes.outputs.desktop == 'true' }}
+    if: ${{ needs.changes.outputs.web == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       HUSKY: '0'
     steps:
       - uses: actions/checkout@v6
@@ -158,19 +149,12 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
-          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-electron-
-      - run: pnpm install --frozen-lockfile --filter @loci/desktop...
-      - run: pnpm build:unpack
+      - run: pnpm install --frozen-lockfile --filter @loci/web...
+      - run: pnpm web:build
 
   verify:
     name: Verify
-    needs: [changes, quality, build-cli, build-server, build-desktop]
+    needs: [changes, quality, build-cli, build-server, build-web]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -180,14 +164,14 @@ jobs:
           QUALITY_RESULT: ${{ needs.quality.result }}
           CLI_RESULT: ${{ needs.build-cli.result }}
           SERVER_RESULT: ${{ needs.build-server.result }}
-          DESKTOP_RESULT: ${{ needs.build-desktop.result }}
+          WEB_RESULT: ${{ needs.build-web.result }}
         run: |
           for result in \
             "$CHANGES_RESULT" \
             "$QUALITY_RESULT" \
             "$CLI_RESULT" \
             "$SERVER_RESULT" \
-            "$DESKTOP_RESULT"; do
+            "$WEB_RESULT"; do
             if [[ "$result" != success && "$result" != skipped ]]; then
               echo "Required CI job finished with: $result"
               exit 1

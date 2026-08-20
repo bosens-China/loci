@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { DOCUMENT_SOURCE_LIMITS, normalizeExcludePathPattern } from '@loci/core'
+import { APP_SETTINGS_LIMITS, isValidBatchIntervalSeconds } from '@loci/shared'
 
 const pageLimitSchema = z
   .number()
@@ -112,16 +113,21 @@ const crawlFailureSchema = z
 
 const settingsSchema = z
   .object({
-    mcp_port: z.number().int().min(1024).max(65535),
+    mcp_port: z
+      .number()
+      .int()
+      .min(APP_SETTINGS_LIMITS.mcpPort.min)
+      .max(APP_SETTINGS_LIMITS.mcpPort.max),
     theme: z.enum(['auto', 'light', 'dark']),
     http_concurrency: concurrencySchema,
     browser_concurrency: concurrencySchema,
-    max_retries: z.number().int().min(0).max(10).optional(),
-    batch_interval_seconds: z
+    max_retries: z
       .number()
       .int()
-      .refine((value) => value === 0 || (value >= 100 && value <= 3000))
+      .min(APP_SETTINGS_LIMITS.maxRetries.min)
+      .max(APP_SETTINGS_LIMITS.maxRetries.max)
       .optional(),
+    batch_interval_seconds: z.number().int().refine(isValidBatchIntervalSeconds).optional(),
     server_url: z.string().url().optional(),
     github_archive_limit_mb: githubSizeSchema.optional(),
     github_markdown_limit_mb: githubSizeSchema.optional()

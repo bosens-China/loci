@@ -7,7 +7,7 @@ import type { CloudSnapshot } from './cloud-library-database.js'
 import type { LociDatabase } from './database.js'
 import {
   RuntimeLockedError,
-  acquireRuntimeLock,
+  acquireDatabaseWriteRuntimeLock,
   readRuntimeLock,
   type RuntimeLock
 } from './runtime-lock.js'
@@ -103,16 +103,29 @@ export class CloudLibraryService {
   }
 
   setAutoSync(sourceId: string, currentServerUrl: string, enabled: boolean): void {
-    const source = this.database.getCloudSource(sourceId)
-    if (source.serverUrl !== normalizeServerUrl(currentServerUrl)) {
-      throw new Error('这个云文档来自其他后端，不能启用自动同步')
+    const normalized = normalizeServerUrl(currentServerUrl)
+    const initial = this.database.getCloudSource(sourceId)
+    const lock = this.dataDir
+      ? acquireDatabaseWriteRuntimeLock(
+          this.dataDir,
+          cloudLibraryLockKey(normalized, initial.libraryId),
+          '云文档设置'
+        )
+      : undefined
+    try {
+      const source = this.database.getCloudSource(sourceId)
+      if (source.serverUrl !== normalized) {
+        throw new Error('这个云文档来自其他后端，不能启用自动同步')
+      }
+      this.database.setCloudAutoSync(sourceId, enabled)
+    } finally {
+      lock?.release()
     }
-    this.database.setCloudAutoSync(sourceId, enabled)
   }
 
   async syncEligible(serverUrl: string): Promise<void> {
     const normalized = normalizeServerUrl(serverUrl)
-    // ponytail: 桌面端按库顺序更新；库数量增长到影响耗时后再增加有限并发。
+    // ponytail: 客户端按库顺序更新；库数量增长到影响耗时后再增加有限并发。
     for (const source of this.database.listCloudSourcesForSync(normalized)) {
       try {
         await this.updateLibrary(source.sourceId, normalized)
@@ -132,7 +145,7 @@ export class CloudLibraryService {
     const key = `${serverUrl}\n${libraryId}`
     const active = this.updating.get(key)
     if (active) return active
-    const task = this.downloadOnce(serverUrl, libraryId, sourceId, revision, autoSync, key)
+    const task = this.downloadOnce(serverUrl, libraryId, sourceId, revision, autoSync)
     this.updating.set(key, task)
     try {
       return await task
@@ -146,20 +159,21 @@ export class CloudLibraryService {
     libraryId: string,
     sourceId: string | null,
     revision: string | undefined,
-    autoSync: boolean,
-    key: string
+    autoSync: boolean
   ): Promise<CloudImportResult> {
     let lock: RuntimeLock | undefined
     if (this.dataDir) {
-      const lockKey = cloudLockKey(key)
+      const lockKey = cloudLibraryLockKey(serverUrl, libraryId)
       try {
-        lock = acquireRuntimeLock(this.dataDir, lockKey, '云文档同步')
+        lock = acquireDatabaseWriteRuntimeLock(this.dataDir, lockKey, '云文档同步')
       } catch (error) {
         if (!(error instanceof RuntimeLockedError)) throw error
+        if (readRuntimeLock(this.dataDir, 'maintenance')) throw error
         await waitForRuntimeLock(this.dataDir, lockKey)
         const current = this.database.findCloudSource(serverUrl, libraryId)
         if (current && current.revision !== revision) return this.result(current.sourceId, true)
-        return this.downloadOnce(serverUrl, libraryId, sourceId, revision, autoSync, key)
+        if (sourceId && !current) throw new Error('云文档副本已被删除，请重新拉取')
+        return this.downloadOnce(serverUrl, libraryId, sourceId, revision, autoSync)
       }
     }
     try {
@@ -225,8 +239,8 @@ export class CloudLibraryService {
   }
 }
 
-function cloudLockKey(key: string): string {
-  return `cloud-${createHash('sha256').update(key).digest('hex')}`
+export function cloudLibraryLockKey(serverUrl: string, libraryId: string): string {
+  return `cloud-${createHash('sha256').update(`${serverUrl}\n${libraryId}`).digest('hex')}`
 }
 
 async function waitForRuntimeLock(dataDir: string, key: string): Promise<void> {

@@ -8,6 +8,7 @@ export * from './openapi.js'
 export * from './rendered.js'
 export * from './scope.js'
 export * from './source.js'
+export * from './source-inspection.js'
 export * from './types.js'
 export {
   CUSTOM_SCHEDULE,

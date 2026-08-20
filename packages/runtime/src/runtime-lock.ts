@@ -31,7 +31,7 @@ export class RuntimeLockedError extends Error {
   }
 }
 
-/** 文件锁让桌面端与 CLI 对抓取和 MCP 进行跨进程仲裁。 */
+/** 文件锁让后台服务与 CLI 对抓取和 MCP 进行跨进程仲裁。 */
 export function acquireRuntimeLock(dataDir: string, key: string, owner: string): RuntimeLock {
   const lockDir = join(dataDir, 'locks')
   mkdirSync(lockDir, { recursive: true })
@@ -88,12 +88,27 @@ export function acquireCrawlRuntimeLock(
   throw new RuntimeLockedError(`数据库正在由${currentMaintenance.owner}维护`, currentMaintenance)
 }
 
+/** 获取会修改主数据库的资源锁，并与全库维护锁双向仲裁。 */
+export function acquireDatabaseWriteRuntimeLock(
+  dataDir: string,
+  key: string,
+  owner: string
+): RuntimeLock {
+  const maintenance = readRuntimeLock(dataDir, 'maintenance')
+  if (maintenance) throw new RuntimeLockedError(`数据库正在由${maintenance.owner}维护`, maintenance)
+  const lock = acquireRuntimeLock(dataDir, key, owner)
+  const currentMaintenance = readRuntimeLock(dataDir, 'maintenance')
+  if (!currentMaintenance) return lock
+  lock.release()
+  throw new RuntimeLockedError(`数据库正在由${currentMaintenance.owner}维护`, currentMaintenance)
+}
+
 /** 获取全库维护锁；抓取锁若在竞争窗口中出现，维护操作会主动让出。 */
 export function acquireMaintenanceRuntimeLock(dataDir: string, owner: string): RuntimeLock {
   const lock = acquireRuntimeLock(dataDir, 'maintenance', owner)
-  if (!hasActiveCrawlLocks(dataDir)) return lock
+  if (!hasActiveDatabaseWriteLocks(dataDir)) return lock
   lock.release()
-  throw new RuntimeLockedError('仍有文档源正在同步，请等待完成后重试', null)
+  throw new RuntimeLockedError('仍有文档源或云端副本正在同步，请等待完成后重试', null)
 }
 
 export function readRuntimeLock(dataDir: string, key: string): LockRecord | null {
@@ -110,9 +125,17 @@ export function readRuntimeLock(dataDir: string, key: string): LockRecord | null
 }
 
 export function hasActiveCrawlLocks(dataDir: string): boolean {
+  return hasActiveLocks(dataDir, (file) => file.startsWith('crawl-'))
+}
+
+export function hasActiveDatabaseWriteLocks(dataDir: string): boolean {
+  return hasActiveLocks(dataDir, (file) => file.startsWith('crawl-') || file.startsWith('cloud-'))
+}
+
+function hasActiveLocks(dataDir: string, matches: (file: string) => boolean): boolean {
   try {
     return readdirSync(join(dataDir, 'locks'))
-      .filter((file) => file.startsWith('crawl-') && file.endsWith('.lock'))
+      .filter((file) => matches(file) && file.endsWith('.lock'))
       .some((file) => Boolean(readRuntimeLock(dataDir, file.slice(0, -'.lock'.length))))
   } catch {
     return false

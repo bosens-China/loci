@@ -30,14 +30,14 @@ describe('run-affected-quality', () => {
   })
 
   it('多个 scope 合并为一次测试和类型检查', () => {
-    const scopes = parseQualityScopes('shared,runtime,cli,desktop')
+    const scopes = parseQualityScopes('shared,runtime,cli,web')
     const lines = commandLines(createQualityCommands(scopes))
 
     expect(lines).toContain(
-      '--filter @loci/shared --filter @loci/runtime --filter @boses/cli --filter @loci/desktop test'
+      '--filter @loci/shared --filter @loci/runtime --filter @boses/cli --filter @loci/web test'
     )
     expect(lines).toContain(
-      '--filter @loci/shared --filter @loci/runtime --filter @boses/cli --filter @loci/desktop typecheck'
+      '--filter @loci/shared --filter @loci/runtime --filter @boses/cli --filter @loci/web typecheck'
     )
   })
 
@@ -49,7 +49,19 @@ describe('run-affected-quality', () => {
       'check:release-versions',
       'lint',
       'test',
-      'typecheck'
+      'typecheck',
+      'docs:build'
+    ])
+  })
+
+  it('docs scope 执行类型检查和站点构建', () => {
+    const scopes = parseQualityScopes('docs')
+
+    expect(commandLines(createQualityCommands(scopes))).toEqual([
+      'check:release-versions',
+      'exec eslint --cache apps/docs',
+      '--filter @loci/docs typecheck',
+      '--filter @loci/docs build'
     ])
   })
 

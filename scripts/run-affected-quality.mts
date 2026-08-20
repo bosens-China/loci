@@ -13,7 +13,7 @@ const packageByScope: Partial<Record<QualityScope, string>> = {
   runtime: '@loci/runtime',
   cli: '@boses/cli',
   server: '@loci/server',
-  desktop: '@loci/desktop',
+  web: '@loci/web',
   docs: '@loci/docs'
 }
 
@@ -24,7 +24,7 @@ const directoryByScope: Partial<Record<QualityScope, string>> = {
   runtime: 'packages/runtime',
   cli: 'apps/cli',
   server: 'apps/server',
-  desktop: 'apps/desktop',
+  web: 'apps/web',
   docs: 'apps/docs'
 }
 
@@ -57,7 +57,8 @@ export function createQualityCommands(scopes: readonly QualityScope[]): Command[
       { args: ['check:release-versions'] },
       { args: ['lint'] },
       { args: ['test'] },
-      { args: ['typecheck'] }
+      { args: ['typecheck'] },
+      { args: ['docs:build'] }
     ]
   }
 
@@ -79,6 +80,7 @@ export function createQualityCommands(scopes: readonly QualityScope[]): Command[
   if (typecheckScopes.length > 0) {
     commands.push({ args: [...packageFilters(typecheckScopes), 'typecheck'] })
   }
+  if (scopes.includes('docs')) commands.push({ args: ['--filter', '@loci/docs', 'build'] })
   return commands
 }
 

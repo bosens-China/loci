@@ -1,5 +1,10 @@
 import type { Command } from 'commander'
-import { normalizeServerUrl, type AppSettings } from '@loci/shared'
+import {
+  APP_SETTINGS_LIMITS,
+  isValidBatchIntervalSeconds,
+  normalizeServerUrl,
+  type AppSettings
+} from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { askConfirm, askInteger, askSelect, askText, note, printTable } from '../ui.js'
@@ -15,7 +20,7 @@ type ConfigKey =
   | 'server-url'
 
 export function registerConfigCommands(program: Command): void {
-  const config = program.command('config').description('查看和修改桌面端与 CLI 共享设置')
+  const config = program.command('config').description('查看和修改 Loci 本地设置')
 
   config
     .command('list')
@@ -117,12 +122,16 @@ async function askConfigValue(key: ConfigKey, current: string): Promise<string> 
 function configRange(
   key: Exclude<ConfigKey, 'server-url' | 'batch-interval-seconds'>
 ): [number, number] {
-  if (key === 'mcp-port') return [1024, 65_535]
-  if (key === 'max-retries') return [0, 10]
+  if (key === 'mcp-port') return range(APP_SETTINGS_LIMITS.mcpPort)
+  if (key === 'max-retries') return range(APP_SETTINGS_LIMITS.maxRetries)
   if (key === 'github-archive-limit-mb' || key === 'github-markdown-limit-mb') {
-    return [1, 10_240]
+    return range(APP_SETTINGS_LIMITS.githubSizeMb)
   }
-  return [1, 32]
+  return range(APP_SETTINGS_LIMITS.concurrency)
+}
+
+function range(value: { readonly min: number; readonly max: number }): [number, number] {
+  return [value.min, value.max]
 }
 
 function configValue(settings: AppSettings, key: ConfigKey): string {
@@ -163,8 +172,8 @@ function configLabel(key: ConfigKey): string {
 export function formatBatchIntervalHint(value: string): string {
   const seconds = Number(value)
   if (seconds === 0) return '0 表示批次之间不额外等待'
-  if (!Number.isInteger(seconds) || seconds < 100 || seconds > 3000) {
-    return '允许 0（不等待），或 100 到 3000 之间的整数秒'
+  if (!isValidBatchIntervalSeconds(seconds)) {
+    return `允许 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled}（不等待），或 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.min} 到 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.max} 之间的整数秒`
   }
   const minutes = seconds / 60
   const readableMinutes = Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1)
@@ -180,9 +189,9 @@ function normalizeConfigValue(key: ConfigKey, value: string): string {
 
 function validateBatchInterval(value: string | undefined): string | undefined {
   const number = Number(value)
-  return Number.isInteger(number) && (number === 0 || (number >= 100 && number <= 3000))
+  return isValidBatchIntervalSeconds(number)
     ? undefined
-    : '批次间隔必须为 0，或 100 到 3000 之间的整数秒'
+    : `批次间隔必须为 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled}，或 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.min} 到 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.max} 之间的整数秒`
 }
 
 function validateServerUrl(value: string | undefined): string | undefined {

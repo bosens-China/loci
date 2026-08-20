@@ -44,7 +44,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "pnpm --filter @loci/web build && tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -69,6 +69,7 @@
     "@loci/core": "workspace:*",
     "@loci/runtime": "workspace:*",
     "@loci/shared": "workspace:*",
+    "@loci/web": "workspace:*",
     "@types/node": "^22.19.1",
     "@types/which": "^3.0.4",
     "tsdown": "^0.22.14",

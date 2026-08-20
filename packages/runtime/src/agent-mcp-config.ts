@@ -24,7 +24,7 @@ export interface AgentMcpConfigWriteResult {
 
 type JsonObject = Record<string, unknown>
 
-/** 解析客户端真实的用户级配置路径，供 CLI、桌面和文件回退共同使用。 */
+/** 解析客户端真实的用户级配置路径，供 CLI 和文件回退共同使用。 */
 export function resolveAgentMcpConfigPath(
   client: AgentClient,
   options: AgentMcpConfigPathOptions = {}

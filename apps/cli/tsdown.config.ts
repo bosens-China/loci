@@ -11,6 +11,10 @@ export default defineConfig({
     {
       from: '../../.agents/skills/use-loci',
       to: 'dist/resources/skills'
+    },
+    {
+      from: '../web/dist',
+      to: 'dist/resources/ui'
     }
   ],
   clean: true,

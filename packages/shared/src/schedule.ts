@@ -34,7 +34,7 @@ export function getNextScheduledRun(value: string | null | undefined): Date | nu
   }
 }
 
-/** 计算接下来的执行时间，供桌面和 CLI 实时解释自定义计划。 */
+/** 计算接下来的执行时间，供后台服务和 CLI 实时解释自定义计划。 */
 export function getUpcomingScheduleRuns(
   value: string | null | undefined,
   count = 2,

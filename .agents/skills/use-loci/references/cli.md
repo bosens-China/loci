@@ -37,6 +37,7 @@ CLI 是短进程。调用 `loci_add_library` 或 `loci_sync_libraries` 时优先
 
 - 发现与读取：`loci_list_libraries`、`loci_get_library_tree`、`loci_search_files`、`loci_read_files`
 - 云端获取：`loci_list_cloud_libraries`、`loci_pull_cloud_library`
+- 抓取规划：`loci_inspect_library_source`（只读）、`loci_update_library`（修改配置，不自动同步）
 - 官网抓取与同步：`loci_add_library`、`loci_sync_libraries`、`loci_get_sync_status`、`loci_list_sync_failures`
 - 删除：`loci_delete_library`
 

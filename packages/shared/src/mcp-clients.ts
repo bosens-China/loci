@@ -15,7 +15,7 @@ interface McpClientEntry {
 }
 
 /**
- * MCP 客户端的单一能力目录，桌面端、CLI 与运行时共同消费。
+ * MCP 客户端的单一能力目录，CLI 与运行时共同消费。
  */
 export const MCP_CLIENTS = [
   {

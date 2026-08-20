@@ -14,6 +14,8 @@ describe('Loci CLI command surface', () => {
       'update',
       'source',
       'schedule',
+      'service',
+      'ui',
       'document',
       'cloud',
       'admin',
@@ -46,6 +48,11 @@ describe('Loci CLI command surface', () => {
         .find((command) => command.name() === 'mcp')
         ?.commands.map((command) => command.name())
     ).toEqual(['call', 'stdio', 'serve', 'status'])
+    expect(
+      program.commands
+        .find((command) => command.name() === 'service')
+        ?.commands.map((command) => command.name())
+    ).toEqual(['status', 'start', 'stop', 'restart', 'disable', 'logs', 'run'])
     expect(
       program.commands
         .find((command) => command.name() === 'data')
