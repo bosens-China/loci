@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.15.0](https://github.com/bosens-China/loci/compare/cli-v1.14.0...cli-v1.15.0) (2026-08-20)
+
+
+### Features
+
+* 以 Web UI 重构本机运行时并优化 Agent 工作流 ([3fc934f](https://github.com/bosens-China/loci/commit/3fc934f953883b87caff0828c0b557e6e4d8e741))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.12.0
+    * @loci/runtime bumped to 1.12.0
+    * @loci/shared bumped to 1.18.0
+
 ## [1.14.0](https://github.com/bosens-China/loci/compare/cli-v1.13.0...cli-v1.14.0) (2026-08-14)
 
 ### Features
