@@ -66,16 +66,22 @@ loci status
 loci source list
 ```
 
-需要定时更新时，先设置计划，再显式运行前台计划宿主：
+打开浏览器控制台会启用当前用户的后台服务；关闭浏览器后，任务和定时计划仍会继续：
+
+```bash
+loci ui
+```
+
+需要定时更新时设置计划即可，保存时会确保后台服务可用：
 
 ```bash
 loci schedule set rspress '0 2 * * *'
-loci schedule run
 ```
 
 ## 下一步
 
 - 查看[基础命令与运行设置](/cli/commands/basics)，了解浏览器、共享设置和脚本退出码。
+- 查看[后台服务与 Web UI](/cli/commands/service)，了解任务恢复、服务生命周期和本机安全边界。
 - 查看[本地文档库](/cli/commands/local-library)和[云端文档库](/cli/commands/cloud-library)。
 - 查看[页面发现与抓取](/cli/crawling)，了解 GitHub、`llms.txt`、OpenAPI 和普通网页的识别顺序。
 - 查看[数据备份与清理](/cli/commands/data)。

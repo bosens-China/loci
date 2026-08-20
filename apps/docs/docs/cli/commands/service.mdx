@@ -1,0 +1,48 @@
+# 后台服务与 Web UI
+
+Loci 使用当前用户的后台服务执行持久同步和定时计划。浏览器与终端只是入口；关闭页面或终端不会停止已接受的后台任务。
+
+## 打开 Web UI
+
+```bash
+loci ui
+```
+
+第一次运行会安装当前用户的登录自启动服务，等待本机随机端口可用，再用一次性会话打开浏览器。服务只监听 `127.0.0.1`，不会开放局域网访问。重复运行会复用已有服务。
+
+Web UI 目前覆盖来源、文档阅读与搜索、后台任务、公开云端目录、运行设置和备份恢复。依赖机器路径或敏感凭据的 Agent 配置、Skill 安装、服务治理、浏览器运行时安装和 Server 管理继续使用 CLI。
+
+只需要输出临时访问地址而不自动打开浏览器时：
+
+```bash
+loci ui --no-open
+```
+
+## 管理服务
+
+```bash
+loci service status
+loci service start
+loci service stop
+loci service restart
+loci service logs
+loci service disable
+```
+
+`stop` 停止当前登录会话中的服务但保留登录自启动定义；`disable` 同时移除登录自启动，已保存的计划仍保留，但停用期间不会执行。重新运行 `loci ui` 会再次启用服务。
+
+容器、临时数据目录或调试环境可以以前台方式运行：
+
+```bash
+loci service run
+```
+
+## 任务与计划语义
+
+- CLI 前台/后台同步、Web UI、stdio/HTTP MCP 和定时计划都会写入同一个 SQLite 任务队列；前台入口只是等待持久结果。
+- 同一来源同时触发只保留一个活动任务并复用进度；不同来源可以并行。
+- 服务退出时，运行中任务会释放或在租约过期后恢复；连续中断达到上限后转为失败。
+- 机器休眠、关机或服务停用期间不能按时执行。恢复后，同一计划错过的多个时间点合并为一次补跑。
+- 后台 `auto` 或 `browser` 抓取需要 Chromium；缺少时先运行 `loci browser install`。
+
+Web UI 使用一次性启动令牌交换 HttpOnly 会话，不把控制凭据写入浏览器存储。业务 API 校验本机 Host 与 Origin。

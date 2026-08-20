@@ -25,6 +25,8 @@ loci doctor
 
 ## 浏览和下载文档库
 
+运行 `loci ui` 后，也可以在“云端目录”页面完成浏览、拉取、更新、每日检查开关和本地副本删除。Web 与下列 CLI 命令共用同一数据库和云端副本锁；同时操作同一文档库不会生成两份本地副本。
+
 ### `loci cloud list`
 
 读取 Server 上公开的文档库目录，显示页面数、内容大小和短 ID，并标记每个文档库在本地是否已经存在或有可用更新。
@@ -83,9 +85,8 @@ loci cloud remove "React 文档"
 
 ```bash
 loci cloud auto-sync "React 文档" on
-loci schedule run
 ```
 
-CLI 不会在普通命令结束后继续运行。只有显式运行 `loci schedule run` 时，才会以前台方式执行云端每日检查；按 Ctrl+C 可停止。
+用户级后台服务启动时会检查一次云端更新，之后每天检查。服务停用期间不会更新；运行 `loci ui` 或 `loci service start` 恢复。详见[后台服务与 Web UI](/cli/commands/service)。
 
 需要自己从公开网站创建和抓取文档时，查看[本地文档库](/cli/commands/local-library)。

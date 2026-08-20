@@ -34,6 +34,7 @@ export default defineConfig({
               text: '命令参考',
               items: [
                 { text: '基础命令与运行设置', link: '/cli/commands/basics' },
+                { text: '后台服务与 Web UI', link: '/cli/commands/service' },
                 { text: '本地文档库', link: '/cli/commands/local-library' },
                 { text: '页面发现与抓取', link: '/cli/crawling' },
                 { text: '云端文档库', link: '/cli/commands/cloud-library' },

@@ -23,48 +23,47 @@ Skill 会优先使用当前会话中的 MCP 工具。没有工具时，它才检
 
 ## 使用 CLI 管理 Skill
 
-Loci CLI 内置完整的 `use-loci`，无需额外下载。最简命令默认安装到当前目录的项目级通用路径 `.agents/skills/use-loci`：
+Loci CLI 内置完整的 `use-loci`，无需额外下载。在交互终端中，可以直接进入 Skill 子菜单，再选择 Agent 目标和项目级/全局作用域：
 
 ```bash
 loci agent skills add
 ```
 
-`add` 同时负责安装和更新。Loci 只更新自己安装的 Skill，不会覆盖第三方 Skill。
+`add` 同时负责安装和更新。Loci 只更新自己安装的 Skill，不会覆盖第三方 Skill。非交互命令必须显式提供 `--agent`、`--project` 或 `--global`；安装、删除和清理还必须提供 `--yes`。
 
 需要安装到用户级全局目录时，显式传入 `--global`：
 
 ```bash
-loci agent skills add --global
+loci agent skills add --agent universal --global --yes
 ```
 
 指定 Agent 客户端：
 
 ```bash
-loci agent skills add --agent cursor
-loci agent skills add --agent claude-code
-loci agent skills add --agent all
+loci agent skills add --agent cursor --project /absolute/path/to/project --yes
+loci agent skills add --agent claude-code --global --yes
+loci agent skills add --agent all --project /absolute/path/to/project --yes
 ```
 
-默认项目就是当前工作目录。也可以用 `--project ./` 明确表达当前项目，或传入其他项目目录：
+项目级安装使用 `--project <path>`：
 
 ```bash
-loci agent skills add --project ./
-loci agent skills add --agent all --project /absolute/path/to/project
+loci agent skills add --agent universal --project ./ --yes
+loci agent skills add --agent all --project /absolute/path/to/project --yes
 ```
 
 查看、删除和批量清理：
 
 ```bash
-loci agent skills list
-loci agent skills list --json
-loci agent skills remove --agent cursor
-loci agent skills remove --agent cursor --project /absolute/path/to/project
-loci agent skills clear --agent all --yes
-loci agent skills list --global
-loci agent skills remove --global --yes
+loci agent skills list --agent universal --project ./
+loci agent skills list --agent universal --project ./ --json
+loci agent skills remove --agent cursor --project /absolute/path/to/project --yes
+loci agent skills clear --agent all --project /absolute/path/to/project --yes
+loci agent skills list --agent universal --global
+loci agent skills remove --agent universal --global --yes
 ```
 
-`add`、`list`、`remove` 和 `clear` 都默认操作当前项目。`--project <path>` 用于选择其他项目，`--global` 用于选择用户级全局安装；两者不能同时使用。
+`--project <path>` 用于选择项目级安装，`--global` 用于选择用户级全局安装；两者不能同时使用。交互终端可以省略这些选择，Agent 和脚本则应传入完整参数。
 
 ## Agent 与安装路径
 

@@ -7,7 +7,7 @@
 | 入口      | 适用场景                                         | 运行方式                   |
 | --------- | ------------------------------------------------ | -------------------------- |
 | CLI stdio | Codex、Cursor、VS Code、Claude Code 等本机客户端 | 客户端按需启动，推荐使用。 |
-| CLI HTTP  | 需要由本机前台服务提供 MCP 的环境                | 先运行 `loci mcp serve`。  |
+| 本机 HTTP | 需要固定回环地址或多个客户端共享常驻入口的环境   | 由用户级后台服务提供。     |
 
 两种方式提供相同工具。同一个客户端只保留一个名为 `loci` 的入口。
 
@@ -19,31 +19,33 @@
 npm install --global @boses/cli
 ```
 
-以下示例为 Codex 写入推荐的 stdio 配置：
+以下示例进入 Codex 配置子菜单；交互终端会继续询问传输方式并在写入前预览：
 
 ```bash
 loci agent configure codex
 loci mcp status
 ```
 
-Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都支持一键配置。可信的自动化环境可以添加 `--yes` 跳过确认。
+Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都支持一键配置。可信的自动化环境必须同时显式指定客户端、传输方式和 `--yes`：
 
 ```bash
-loci agent configure cursor
-loci agent configure vscode
-loci agent configure claude-code
-loci agent configure antigravity
+loci agent configure cursor --transport stdio --yes
+loci agent configure vscode --transport stdio --yes
+loci agent configure claude-code --transport stdio --yes
+loci agent configure antigravity --transport http --yes
 ```
 
 写入后，新建一个 Agent 会话，使客户端重新加载 MCP 配置。
 
 ## 手动配置其他客户端
 
-未内置的客户端可以先打印通用配置：
+未内置的客户端可以先进入交互子菜单选择目标和传输方式：
 
 ```bash
 loci agent config
 ```
+
+非交互调用需要完整参数，例如 `loci agent config generic --transport stdio`。
 
 通用 stdio 配置如下。目标文件已有其他 MCP 服务时，只添加 `loci`，不要覆盖整个文件。
 
@@ -62,10 +64,10 @@ loci agent config
 
 ## 使用 HTTP
 
-需要 HTTP 入口时，在一个终端启动服务：
+需要 HTTP 入口时，先启用后台服务：
 
 ```bash
-loci mcp serve
+loci ui
 ```
 
 再在另一个终端写入 HTTP 配置：
@@ -74,7 +76,9 @@ loci mcp serve
 loci agent configure codex --transport http
 ```
 
-默认服务地址为 `http://127.0.0.1:<mcp-port>/mcp`，只供本机客户端使用。按 `Ctrl+C` 结束服务后，HTTP MCP 将不可用。
+默认服务地址为 `http://127.0.0.1:<mcp-port>/mcp`，只供本机客户端使用。HTTP MCP 与 Web UI、调度器共享同一个 runtime；浏览器关闭后仍可用。需要前台调试或容器运行时也可以执行 `loci service run`；`loci mcp serve` 作为独立兼容入口保留。
+
+stdio、独立 HTTP MCP 和后台服务 MCP 的同步写操作都会进入同一持久任务队列。stdio/独立 HTTP 进程会同时启动轻量 worker，因此没有登录服务时也能完成任务；若后台服务已经认领同一来源，它们会等待并读取该任务保存的最终结果。
 
 ## 检查配置
 
@@ -85,7 +89,7 @@ loci mcp status
 loci doctor
 ```
 
-重点检查 CLI 是否在客户端的 `PATH` 中，以及 HTTP 服务是否仍在运行。同一个客户端不要同时注册 stdio 和 HTTP 两个 Loci 入口。
+重点检查 CLI 是否在客户端的 `PATH` 中，以及后台服务是否仍在运行。同一个客户端不要同时注册 stdio 和 HTTP 两个 Loci 入口。
 
 ## 下一步
 

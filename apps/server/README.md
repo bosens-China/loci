@@ -1,6 +1,6 @@
 # Loci Server
 
-Loci Server 是单机 Hono 服务，负责抓取公开文档、定时更新并向桌面端发布只读快照。本地文档不会上传到这里。
+Loci Server 是单机 Hono 服务，负责抓取公开文档、定时更新并向 Web、CLI 和 MCP 客户端发布只读快照。本地文档不会上传到这里。
 
 服务端只支持无需登录即可访问的公开 HTTP/HTTPS 文档，不保存登录态，也不处理验证码、Cloudflare 挑战、代理或其他反爬绕过能力。URL 会移除 Query 和 Fragment，因此不支持使用 `#` 区分页面的 Hash Router 文档站。
 
@@ -18,7 +18,7 @@ docker compose -f compose.local.yaml up --build -d
 - 管理员账号：`admin`
 - 本地默认密码：`loci-local-admin-password`
 
-桌面开发版的全新数据默认连接该地址。复用已有数据或使用 CLI 联调时，可设置
+本地开发环境的全新数据默认连接该地址。复用已有数据或使用 CLI 联调时，可设置
 `LOCI_SERVER_URL=http://localhost:7001`；该覆盖只用于开发启动，正式版默认地址仍为
 `https://loci.xiaowo.live`。
 

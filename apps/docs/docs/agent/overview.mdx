@@ -24,22 +24,24 @@ CLI 的 stdio MCP 是推荐入口。客户端会按需启动进程，无需维�
 
 ## 推荐配置
 
-个人开发者通常按以下顺序接入：
-
-1. 安装 CLI，并配置 stdio MCP。
-2. 安装或引用 `use-loci` Skill，让 Agent 获得完整检索流程和 CLI 兜底能力。
-3. 需要跨项目保持同一优先级时，再配置用户级全局规则。
+人类用户推荐直接运行根命令：
 
 ```bash
 npm install --global @boses/cli
-loci agent configure codex
-loci agent skills add
-loci agent rules codex
+loci agent
+```
+
+`loci agent` 会交互选择 Agent、MCP 传输方式和 Skill 作用域，统一预览后配置 MCP、安装 `use-loci` 并写入全局规则。也可以直接进入 `configure`、`config`、`rules` 或 `skills` 子菜单；在交互终端中，缺少的选择会继续询问。
+
+Agent、CI 和其他非交互调用应使用完整命令，不依赖交互偏好或隐式默认：
+
+```bash
+loci agent configure codex --transport stdio --yes
+loci agent skills add --agent codex --project /absolute/path/to/project --yes
+loci agent rules codex --yes
 ```
 
 上例以 Codex 为例。其他客户端的 MCP 写入方式请查看[通过 MCP 接入](/agent/mcp)，Skill 的安装目录和管理命令请查看[使用 use-loci Skill](/agent/skill)，全局规则的客户端差异请查看[配置全局规则](/agent/global-rules)。
-
-`loci agent skills add` 默认把 Skill 安装到当前项目；需要所有项目共享时使用 `loci agent skills add --global`。
 
 ## 一次典型查询
 

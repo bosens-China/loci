@@ -10,6 +10,13 @@ pnpm --filter @boses/cli test
 pnpm --filter @boses/cli typecheck
 ```
 
+CLI 构建会先构建 `@loci/web`，再把产物复制到 npm 包的 `dist/resources/ui`。本地验证后台服务与浏览器入口：
+
+```bash
+node dist/index.js service run
+node dist/index.js ui --no-open
+```
+
 构建后可直接运行：
 
 ```bash

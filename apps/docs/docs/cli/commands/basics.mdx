@@ -138,6 +138,8 @@ loci config set batch-interval-seconds 2
 
 云端文档库地址的作用范围请查看[云端文档库](/cli/commands/cloud-library)。HTTP MCP 的启动方式请查看[通过 MCP 接入](/agent/mcp)。
 
+修改 `mcp-port` 后运行 `loci service restart`，让后台服务改用新端口。
+
 ## 隔离数据目录
 
 测试、演示或自动化任务可以设置 `LOCI_DATA_DIR`，让当前命令使用独立的数据目录：
