@@ -1,88 +1,84 @@
 # Changelog
 
-## [1.13.0](https://github.com/bosens-China/loci/compare/cli-v1.12.0...cli-v1.13.0) (2026-08-14)
-
+## [1.14.0](https://github.com/bosens-China/loci/compare/cli-v1.13.0...cli-v1.14.0) (2026-08-14)
 
 ### Features
 
-* 支持通过 CLI 调用 Loci MCP 工具 ([7171bf4](https://github.com/bosens-China/loci/commit/7171bf42897c2f6ca8f97473bfa547257c77aeb4))
-* 改进文档源抓取与路径过滤 ([7276659](https://github.com/bosens-China/loci/commit/7276659c0d041b0128b6499ed2adad3486156255))
+- 优化 CLI 命令结构与交互 ([b947e58](https://github.com/bosens-China/loci/commit/b947e5820198671e506120b85fb4dc819ed1b057))
 
+## [1.13.0](https://github.com/bosens-China/loci/compare/cli-v1.12.0...cli-v1.13.0) (2026-08-14)
+
+### Features
+
+- 支持通过 CLI 调用 Loci MCP 工具 ([7171bf4](https://github.com/bosens-China/loci/commit/7171bf42897c2f6ca8f97473bfa547257c77aeb4))
+- 改进文档源抓取与路径过滤 ([7276659](https://github.com/bosens-China/loci/commit/7276659c0d041b0128b6499ed2adad3486156255))
 
 ### Dependencies
 
-* The following workspace dependencies were updated
-  * devDependencies
-    * @loci/core bumped to 1.11.0
-    * @loci/runtime bumped to 1.11.0
-    * @loci/shared bumped to 1.17.0
+- The following workspace dependencies were updated
+  - devDependencies
+    - @loci/core bumped to 1.11.0
+    - @loci/runtime bumped to 1.11.0
+    - @loci/shared bumped to 1.17.0
 
 ## [1.12.0](https://github.com/bosens-China/loci/compare/cli-v1.11.1...cli-v1.12.0) (2026-08-13)
 
-
 ### Features
 
-* 增强 Agent MCP 配置写入 ([f8e03c2](https://github.com/bosens-China/loci/commit/f8e03c24fed286a46d37ba132e875a1893b3dc65))
-* 支持 CLI 与桌面管理 Skills ([e2f50ff](https://github.com/bosens-China/loci/commit/e2f50ff8ecd7138cf288edc0d585ee51c82ef68d))
-
+- 增强 Agent MCP 配置写入 ([f8e03c2](https://github.com/bosens-China/loci/commit/f8e03c24fed286a46d37ba132e875a1893b3dc65))
+- 支持 CLI 与桌面管理 Skills ([e2f50ff](https://github.com/bosens-China/loci/commit/e2f50ff8ecd7138cf288edc0d585ee51c82ef68d))
 
 ### Dependencies
 
-* The following workspace dependencies were updated
-  * devDependencies
-    * @loci/runtime bumped to 1.10.0
-    * @loci/shared bumped to 1.16.0
+- The following workspace dependencies were updated
+  - devDependencies
+    - @loci/runtime bumped to 1.10.0
+    - @loci/shared bumped to 1.16.0
 
 ## [1.11.1](https://github.com/bosens-China/loci/compare/cli-v1.11.0...cli-v1.11.1) (2026-08-10)
 
-
 ### Dependencies
 
-* The following workspace dependencies were updated
-  * devDependencies
-    * @loci/runtime bumped to 1.9.0
-    * @loci/shared bumped to 1.15.0
+- The following workspace dependencies were updated
+  - devDependencies
+    - @loci/runtime bumped to 1.9.0
+    - @loci/shared bumped to 1.15.0
 
 ## [1.11.0](https://github.com/bosens-China/loci/compare/cli-v1.10.1...cli-v1.11.0) (2026-08-08)
 
-
 ### Features
 
-* 优化 MCP 检索与建库契约 ([4be2413](https://github.com/bosens-China/loci/commit/4be241312d11a1a42cc0f6aa5aaafef17fad615b))
-
+- 优化 MCP 检索与建库契约 ([4be2413](https://github.com/bosens-China/loci/commit/4be241312d11a1a42cc0f6aa5aaafef17fad615b))
 
 ### Dependencies
 
-* The following workspace dependencies were updated
-  * devDependencies
-    * @loci/core bumped to 1.10.0
-    * @loci/runtime bumped to 1.8.0
-    * @loci/shared bumped to 1.14.0
+- The following workspace dependencies were updated
+  - devDependencies
+    - @loci/core bumped to 1.10.0
+    - @loci/runtime bumped to 1.8.0
+    - @loci/shared bumped to 1.14.0
 
 ## [1.10.1](https://github.com/bosens-China/loci/compare/cli-v1.10.0...cli-v1.10.1) (2026-08-07)
 
-
 ### Dependencies
 
-* The following workspace dependencies were updated
-  * devDependencies
-    * @loci/runtime bumped to 1.7.0
-    * @loci/shared bumped to 1.13.0
+- The following workspace dependencies were updated
+  - devDependencies
+    - @loci/runtime bumped to 1.7.0
+    - @loci/shared bumped to 1.13.0
 
 ## [1.10.0](https://github.com/bosens-China/loci/compare/cli-v1.9.1...cli-v1.10.0) (2026-08-07)
 
-
 ### Features
 
-* 支持配置 Agent 全局规则 ([76af9f8](https://github.com/bosens-China/loci/commit/76af9f8067336fd331f83d449ebd3aac96f908a9))
-
+- 支持配置 Agent 全局规则 ([76af9f8](https://github.com/bosens-China/loci/commit/76af9f8067336fd331f83d449ebd3aac96f908a9))
 
 ### Dependencies
 
-* The following workspace dependencies were updated
-  * devDependencies
-    * @loci/runtime bumped to 1.6.0
-    * @loci/shared bumped to 1.12.0
+- The following workspace dependencies were updated
+  - devDependencies
+    - @loci/runtime bumped to 1.6.0
+    - @loci/shared bumped to 1.12.0
 
 ## [1.9.1](https://github.com/bosens-China/loci/compare/cli-v1.9.0...cli-v1.9.1) (2026-08-07)
 
