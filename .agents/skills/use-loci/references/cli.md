@@ -45,7 +45,7 @@ JSON 应作为单个 shell 参数传递，避免变量插值或命令替换。�
 
 ## 禁止的替代路径
 
-- 不运行 `loci agent configure`、`loci mcp stdio` 或 `loci mcp serve`；CLI 分支不需要创建 MCP 连接。
+- 不运行 `loci agent configure` 或 `loci mcp stdio`；CLI 分支不需要创建 MCP 连接。
 - 不要求用户重启 Agent 或开启新会话。
 - 不使用普通 `loci source`、`loci cloud`、`loci document` 等命令拼装第二套工作流。
 - 当前会话后来出现 Loci MCP 工具时，不对已经完成的 CLI 操作重复执行；下一项操作可切回 MCP 通道。

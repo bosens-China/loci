@@ -20,7 +20,7 @@ description: 使用 Loci 发现、获取、同步、搜索和阅读开发者技�
 
 - 如果 `loci_list_libraries` 等 Loci MCP 工具可用，直接调用这些工具。不要读取 CLI 参考、检查或安装 npm 包，也不要对同一操作再调用 CLI。
 - 如果当前会话没有任何可调用的 Loci MCP 工具，完整读取 [CLI 调用参考](references/cli.md)，按其中流程检查 CLI、询问安装授权，并通过 `loci mcp call` 调用后续工具。
-- 不要为了进入 CLI 分支而配置 MCP、启动 stdio/HTTP 服务或要求用户重开会话。
+- 不要为了进入 CLI 分支而配置 MCP、启动 stdio 进程或要求用户重开会话。
 - 两条通道使用相同工具名、JSON 输入、结构化结果、检索流程和安全边界。选定通道后，在当前任务中保持一致；只有当前通道实际失效时才重新判定。
 
 ## 与其他文档 Skill 共存

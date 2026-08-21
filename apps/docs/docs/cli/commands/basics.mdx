@@ -32,7 +32,7 @@ loci --version
 
 ### `loci status`
 
-汇总本地文档源、云端副本、已收录文档、最近同步记录、MCP 状态和 Loci Server 地址。
+汇总本地文档源、云端副本、已收录文档、最近同步记录、计划运行器和 Loci Server 地址。
 
 示例：
 
@@ -96,11 +96,11 @@ loci browser uninstall
 
 ## 管理运行设置
 
-设置保存在 Loci 本地数据目录中。CLI、stdio MCP 和 HTTP MCP 都会读取这些设置。
+设置保存在 Loci 本地数据目录中。CLI、Web UI、后台任务和 stdio MCP 都会读取这些设置。
 
 ### `loci config list`
 
-显示当前设置，包括云端文档库地址、抓取资源限制和 HTTP MCP 端口。
+显示当前设置，包括云端文档库地址和抓取资源限制。
 
 示例：
 
@@ -121,7 +121,6 @@ loci config set server-url https://your-loci.example.com
 | 设置项                     | 用途                                   |
 | -------------------------- | -------------------------------------- |
 | `server-url`               | 指定云端文档库和 Admin API 的 Server。 |
-| `mcp-port`                 | 指定本机 HTTP MCP 端口。               |
 | `http-concurrency`         | 调整普通网页抓取的并发数。             |
 | `browser-concurrency`      | 调整浏览器渲染页面的并发数。           |
 | `max-retries`              | 调整页面抓取失败后的重试次数。         |
@@ -136,9 +135,7 @@ loci config set http-concurrency 4
 loci config set batch-interval-seconds 2
 ```
 
-云端文档库地址的作用范围请查看[云端文档库](/cli/commands/cloud-library)。HTTP MCP 的启动方式请查看[通过 MCP 接入](/agent/mcp)。
-
-修改 `mcp-port` 后运行 `loci service restart`，让后台服务改用新端口。
+云端文档库地址的作用范围请查看[云端文档库](/cli/commands/cloud-library)。Agent 的 stdio MCP 配置请查看[通过 MCP 接入](/agent/mcp)。
 
 ## 隔离数据目录
 

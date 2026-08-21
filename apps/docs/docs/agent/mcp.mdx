@@ -1,15 +1,6 @@
 # 通过 MCP 接入
 
-模型上下文协议（Model Context Protocol，MCP）让 Agent 直接使用 Loci 的文档发现、搜索、阅读和管理工具。个人开发环境推荐使用 CLI stdio：客户端会按需启动进程，不需要维护常驻服务。
-
-## 选择连接方式
-
-| 入口      | 适用场景                                         | 运行方式                   |
-| --------- | ------------------------------------------------ | -------------------------- |
-| CLI stdio | Codex、Cursor、VS Code、Claude Code 等本机客户端 | 客户端按需启动，推荐使用。 |
-| 本机 HTTP | 需要固定回环地址或多个客户端共享常驻入口的环境   | 由用户级后台服务提供。     |
-
-两种方式提供相同工具。同一个客户端只保留一个名为 `loci` 的入口。
+模型上下文协议（Model Context Protocol，MCP）让 Agent 直接使用 Loci 的文档发现、搜索、阅读和管理工具。Loci 面向本机 Agent 统一使用 CLI stdio：客户端按需启动进程，不需要维护常驻 MCP 服务或固定端口。
 
 ## 快速配置
 
@@ -19,35 +10,33 @@
 npm install --global @boses/cli
 ```
 
-以下示例进入 Codex 配置子菜单；交互终端会继续询问传输方式并在写入前预览：
+交互终端可以选择客户端并预览写入内容：
 
 ```bash
-loci agent configure codex
-loci mcp status
+loci agent configure
 ```
 
-Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都支持一键配置。可信的自动化环境必须同时显式指定客户端、传输方式和 `--yes`：
+Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都使用同一个 stdio 命令。可信的自动化环境需要显式指定客户端并传入 `--yes`：
 
 ```bash
-loci agent configure cursor --transport stdio --yes
-loci agent configure vscode --transport stdio --yes
-loci agent configure claude-code --transport stdio --yes
-loci agent configure antigravity --transport http --yes
+loci agent configure codex --yes
+loci agent configure cursor --yes
+loci agent configure vscode --yes
+loci agent configure claude-code --yes
+loci agent configure antigravity --yes
 ```
 
 写入后，新建一个 Agent 会话，使客户端重新加载 MCP 配置。
 
-## 手动配置其他客户端
+## 手动配置
 
-未内置的客户端可以先进入交互子菜单选择目标和传输方式：
+未内置的客户端可以打印通用配置：
 
 ```bash
-loci agent config
+loci agent print-config generic
 ```
 
-非交互调用需要完整参数，例如 `loci agent config generic --transport stdio`。
-
-通用 stdio 配置如下。目标文件已有其他 MCP 服务时，只添加 `loci`，不要覆盖整个文件。
+目标文件已有其他 MCP 服务时，只添加 `loci`，不要覆盖整个文件：
 
 ```json
 {
@@ -60,36 +49,28 @@ loci agent config
 }
 ```
 
+Google Antigravity 的本地 MCP 配置同样使用 `command` 和 `args`。Loci 会把配置合并到 `~/.gemini/config/mcp_config.json`；也可以先运行下面的命令查看待复制内容：
+
+```bash
+loci agent print-config antigravity
+```
+
 项目级 MCP 配置会启动本地命令，只应在信任项目时使用。
 
-## 使用 HTTP
+## 运行语义
 
-需要 HTTP 入口时，先启用后台服务：
+Agent 调用 Loci 工具时，客户端启动 `loci mcp stdio`；会话结束后 stdio 进程随之退出。同步写操作进入共享的 SQLite 持久任务队列，并由该进程的轻量 worker 执行；如果后台服务已经认领同一来源，当前进程会等待并读取同一任务的最终结果。
 
-```bash
-loci ui
-```
+`loci service start` 不承载 MCP。定时计划和云端每日同步在开启时会自动准备后台服务；该命令主要用于手动恢复、提前准备后台环境或承载显式后台任务。
 
-再在另一个终端写入 HTTP 配置：
+## 排查连接
 
-```bash
-loci agent configure codex --transport http
-```
+如果客户端没有显示 Loci 工具：
 
-默认服务地址为 `http://127.0.0.1:<mcp-port>/mcp`，只供本机客户端使用。HTTP MCP 与 Web UI、调度器共享同一个 runtime；浏览器关闭后仍可用。需要前台调试或容器运行时也可以执行 `loci service run`；`loci mcp serve` 作为独立兼容入口保留。
-
-stdio、独立 HTTP MCP 和后台服务 MCP 的同步写操作都会进入同一持久任务队列。stdio/独立 HTTP 进程会同时启动轻量 worker，因此没有登录服务时也能完成任务；若后台服务已经认领同一来源，它们会等待并读取该任务保存的最终结果。
-
-## 检查配置
-
-如果客户端没有显示 Loci 工具，先执行：
-
-```bash
-loci mcp status
-loci doctor
-```
-
-重点检查 CLI 是否在客户端的 `PATH` 中，以及后台服务是否仍在运行。同一个客户端不要同时注册 stdio 和 HTTP 两个 Loci 入口。
+1. 运行 `loci agent print-config <client>`，确认客户端格式和配置路径。
+2. 确认 `loci` 在客户端进程的 `PATH` 中。
+3. 在终端运行 `loci mcp stdio`，确认没有启动错误；测试结束后按 `Ctrl+C`。
+4. 重新运行 `loci agent configure <client> --yes`，替换旧配置并新建 Agent 会话。
 
 ## 下一步
 
@@ -103,4 +84,4 @@ loci doctor
 - [Cursor MCP](https://docs.cursor.com/context/model-context-protocol)
 - [VS Code MCP servers](https://code.visualstudio.com/docs/agent-customization/mcp-servers)
 - [Claude Code MCP](https://code.claude.com/docs/en/mcp)
-- [Google Antigravity MCP](https://antigravity.google/docs/mcp)
+- [Google Antigravity MCP](https://antigravity.google/docs/ide-mcp)

@@ -10,12 +10,13 @@ pnpm --filter @boses/cli test
 pnpm --filter @boses/cli typecheck
 ```
 
-CLI 构建会先构建 `@loci/web`，再把产物复制到 npm 包的 `dist/resources/ui`。本地验证后台服务与浏览器入口：
+CLI 构建会先构建 `@loci/web`，再把产物复制到 npm 包的 `dist/resources/ui`。本地验证前台 Web 会话：
 
 ```bash
-node dist/index.js service run
 node dist/index.js ui --no-open
 ```
+
+命令会先打印访问地址并保持运行；验证完成后按 `Ctrl+C` 关闭本地服务。
 
 构建后可直接运行：
 

@@ -7,7 +7,7 @@ Loci 将公开技术文档收录为本地 Markdown，提供全文搜索，并通
 ## 特性
 
 - 收录网页、公开 GitHub 仓库中的 Markdown、`llms.txt` 和 OpenAPI 文档。
-- 用户级后台服务持续执行持久任务和定时计划，Web UI 与 CLI 共享同一份本地 SQLite 数据和全文索引。
+- Web UI 在当前终端前台运行；开启定时抓取或云端每日同步时会自动准备用户级后台服务。两种模式与 CLI 共享同一份本地 SQLite 数据和全文索引。
 - Agent 可通过 MCP 按需搜索和读取文档；只有 Skill 时，也可在授权安装 CLI 后直接调用同一批工具。
 - 同一文档源的重复同步会复用已有任务；不同文档源可并行处理。
 
@@ -28,7 +28,7 @@ loci agent
 loci mcp call loci_list_libraries
 ```
 
-`loci ui` 会启用当前用户的后台服务并打开本机 Web 控制台。关闭浏览器和终端不会停止已排队的同步或定时计划。仓库的 `pnpm dev` 用于联调本地服务与 Web UI，`pnpm build` 构建包含 Web UI 的 CLI 发布包。
+`loci ui` 会先输出本机 Web 地址，再尝试打开浏览器，并在当前终端以前台方式运行后端；按 `Ctrl+C` 会关闭服务并结束本次 Web 会话。浏览器无法自动打开时，复制终端中的地址手动访问即可。在 CLI 或 Web UI 中开启定时抓取或云端每日同步后，Loci 会自动确保后台服务可用；`loci service start` 保留为手动恢复和服务治理入口。仓库的 `pnpm dev` 用于联调本地服务与 Web UI，`pnpm build` 构建包含 Web UI 的 CLI 发布包。
 
 需要抓取依赖客户端渲染的网站时，再安装浏览器运行时：
 

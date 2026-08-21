@@ -93,12 +93,13 @@ export LOCI_ADMIN_PASSWORD='replace-with-secret'
 loci admin libraries
 loci admin create --url https://vueuse.org/guide/ --scope /guide --page-limit 2000 --schedule '0 2 * * *'
 loci admin update vueuse --scope /guide
+loci admin update vueuse --schedule off
 loci admin sync --all --wait
 loci admin jobs
 loci admin cancel <任务 ID>
 ```
 
-`admin sync` 可以接收多个名称、完整 ID 或唯一短 ID；使用 `--all` 提交全部文档库，使用 `--wait` 在当前终端等待聚合结果。同一文档库重复提交时，Loci 会复用已有任务并显示当前进度。
+`--schedule off` 关闭 Server 自动更新计划；旧脚本中的 `manual` 仍可作为兼容别名。`admin sync` 可以接收多个名称、完整 ID 或唯一短 ID；使用 `--all` 提交全部文档库，使用 `--wait` 在当前终端等待聚合结果。同一文档库重复提交时，Loci 会复用已有任务并显示当前进度。
 删除命令在非交互环境中必须显式提供 `--yes`。
 
 ## 发布后的用户流程

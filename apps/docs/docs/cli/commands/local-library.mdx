@@ -16,6 +16,7 @@ loci source add https://rspress.rs/guide/introduction.html
 
 | 参数                           | 用途                                        |
 | ------------------------------ | ------------------------------------------- |
+| `--url <url>`                  | 覆盖位置参数中的入口 URL。                  |
 | `--name <name>`                | 指定文档源名称。                            |
 | `--scope <path>`               | 只收录指定路径，例如 `/guide`。             |
 | `--page-limit <number>`        | 限制最多收录的页面数。                      |
@@ -95,14 +96,15 @@ loci source logs a1b2c3d4
 
 ### `loci schedule set [source] [cron]`
 
-为本地文档源设置五段 Linux Cron 更新计划。传入 `manual` 可以关闭计划：
+为本地文档源设置五段 Linux Cron 更新计划。传入 `off` 可以关闭计划：
 
 ```bash
 loci schedule set rspress '0 2 * * *'
+loci schedule set rspress off
 loci schedule list
 ```
 
-保存启用的计划时，CLI 会确保用户级后台服务可用。之后无需保持终端或 Web UI 打开；机器恢复或服务重新启用后，错过的多个时间点最多合并补跑一次。`loci schedule run` 仅作为兼容入口提示改用 `loci service run`。
+保存启用的计划时，CLI 会确保用户级后台服务可用；从 Web UI 新开启计划时，当前前台服务先执行，正常结束 `loci ui` 后自动交接给后台服务。之后无需保持终端或浏览器打开；机器恢复或服务重新启用后，错过的多个时间点最多合并补跑一次。旧脚本中的 `manual` 仍可作为 `off` 的兼容别名。
 
 服务状态和停用方式请查看[后台服务与 Web UI](/cli/commands/service)。计划列表为空时，CLI 会提示先创建文档源或使用 `schedule set` 配置计划。
 

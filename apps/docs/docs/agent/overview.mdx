@@ -20,7 +20,7 @@ Skill 与全局规则不互相依赖。Skill 根据任务匹配按需加载，�
 - 客户端只支持 Skill：安装 `use-loci`。Skill 会在技术文档任务中检测 MCP；缺少工具时，它会在取得许可后安装 CLI，并通过 `loci mcp call` 直接调用工具。
 - 希望每个项目遵循同一来源优先级：在前两种方式的基础上，再配置用户级全局规则。
 
-CLI 的 stdio MCP 是推荐入口。客户端会按需启动进程，无需维护常驻服务。同一个客户端只应保留一个名为 `loci` 的 MCP；如果改用 HTTP，先移除已有的 stdio 配置。
+CLI stdio 是唯一的本机 MCP 入口。客户端会按需启动进程，无需维护常驻服务或固定端口。同一个客户端只应保留一个名为 `loci` 的 MCP。
 
 ## 推荐配置
 
@@ -31,12 +31,12 @@ npm install --global @boses/cli
 loci agent
 ```
 
-`loci agent` 会交互选择 Agent、MCP 传输方式和 Skill 作用域，统一预览后配置 MCP、安装 `use-loci` 并写入全局规则。也可以直接进入 `configure`、`config`、`rules` 或 `skills` 子菜单；在交互终端中，缺少的选择会继续询问。
+`loci agent` 会交互选择 Agent 和 Skill 作用域，统一预览后配置 MCP、安装 `use-loci` 并写入全局规则。也可以直接进入 `configure`、`config`、`rules` 或 `skills` 子菜单；在交互终端中，缺少的选择会继续询问。
 
 Agent、CI 和其他非交互调用应使用完整命令，不依赖交互偏好或隐式默认：
 
 ```bash
-loci agent configure codex --transport stdio --yes
+loci agent configure codex --yes
 loci agent skills add --agent codex --project /absolute/path/to/project --yes
 loci agent rules codex --yes
 ```
@@ -65,7 +65,7 @@ loci agent rules codex --yes
 
 ## 继续阅读
 
-- [通过 MCP 接入](/agent/mcp)：选择 stdio 或 HTTP，并连接常见 Agent 客户端。
+- [通过 MCP 接入](/agent/mcp)：使用 stdio 连接常见 Agent 客户端。
 - [使用 use-loci Skill](/agent/skill)：了解 Skill 的职责、触发方式和工作流。
 - [配置全局规则](/agent/global-rules)：设置跨项目生效的文档查询顺序，并查看各客户端的规则入口。
 - [工具使用参考](/agent/mcp-tools)：进阶了解工具 Schema、调用边界和同步流程。
