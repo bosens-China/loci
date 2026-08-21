@@ -7,7 +7,7 @@ Loci 将公开技术文档收录为本地 Markdown，提供全文搜索，并通
 ## 特性
 
 - 收录网页、公开 GitHub 仓库中的 Markdown、`llms.txt` 和 OpenAPI 文档。
-- Web UI 在当前终端前台运行；开启定时抓取或云端每日同步时会自动准备用户级后台服务。两种模式与 CLI 共享同一份本地 SQLite 数据和全文索引。
+- Web UI 的本机 HTTP 只在当前终端会话期间运行；抓取由独立的无 HTTP worker 执行。定时抓取或云端每日同步会自动准备用户级常驻 worker，普通后台任务使用空闲后退出的按需 worker。各入口共享同一份本地 SQLite 数据和全文索引。
 - Agent 可通过 MCP 按需搜索和读取文档；只有 Skill 时，也可在授权安装 CLI 后直接调用同一批工具。
 - 同一文档源的重复同步会复用已有任务；不同文档源可并行处理。
 
@@ -28,7 +28,7 @@ loci agent
 loci mcp call loci_list_libraries
 ```
 
-`loci ui` 会先输出本机 Web 地址，再尝试打开浏览器，并在当前终端以前台方式运行后端；按 `Ctrl+C` 会关闭服务并结束本次 Web 会话。浏览器无法自动打开时，复制终端中的地址手动访问即可。在 CLI 或 Web UI 中开启定时抓取或云端每日同步后，Loci 会自动确保后台服务可用；`loci service start` 保留为手动恢复和服务治理入口。仓库的 `pnpm dev` 用于联调本地服务与 Web UI，`pnpm build` 构建包含 Web UI 的 CLI 发布包。
+`loci ui` 会先输出本机 Web 地址，再尝试打开浏览器，并在当前终端运行仅服务本次会话的回环 HTTP；按 `Ctrl+C` 会关闭 HTTP，但已经提交的后台任务继续由独立 worker 执行。浏览器无法自动打开时，复制终端中的地址手动访问即可。在 CLI 或 Web UI 中开启定时抓取或云端每日同步后，Loci 会立即确保无 HTTP 的常驻 worker 可用；`loci service start` 保留为手动恢复和服务治理入口。仓库的 `pnpm dev` 用于联调本机 Web 会话与 worker，`pnpm build` 构建包含 Web UI 的 CLI 发布包。
 
 需要抓取依赖客户端渲染的网站时，再安装浏览器运行时：
 

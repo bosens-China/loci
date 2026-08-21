@@ -25,11 +25,12 @@ loci browser install
 
 以下示例使用最短命令收录 Rspress 文档。只提供 URL 时，名称从域名生成，抓取方式为 `auto`，页面上限为 1,000，收录范围为整个站点。
 
+`loci source add` 默认会立即开始首次同步。只有需要先检查或调整配置时，才添加 `--no-sync`，再手动执行同步。
+
 示例：
 
 ```bash
 loci source add https://rspress.rs/guide/introduction.html
-loci source sync rspress
 ```
 
 接口文档同样只需提供正在阅读的地址。输入 Swagger UI、Knife4j、ReDoc、FastAPI `/docs` 或常见 OpenAPI JSON 地址时，Loci 会自动发现同站的 OpenAPI/Swagger JSON，并直接整理接口、参数、响应、认证和数据模型；没有发现规范时继续按普通网页收录。
@@ -66,7 +67,7 @@ loci status
 loci source list
 ```
 
-打开浏览器控制台时，Loci 会先打印访问地址、尝试打开浏览器，并在当前终端保持前台服务；按 `Ctrl+C` 会结束本次会话：
+打开浏览器控制台时，Loci 会先打印访问地址、尝试打开浏览器，并在当前终端保持仅用于 Web 会话的本机 HTTP；按 `Ctrl+C` 会结束本次会话：
 
 ```bash
 loci ui
@@ -78,7 +79,7 @@ loci ui
 loci schedule set rspress '0 2 * * *'
 ```
 
-云端每日同步同样会自动准备后台服务。在 Web UI 中开启定时抓取或每日同步时，当前会话先负责执行；按 `Ctrl+C` 正常结束后自动交接给后台服务，无需再补一条启动命令。
+云端每日同步同样会自动准备无 HTTP 的常驻 worker。在 Web UI 中开启定时抓取或每日同步时会立即确保 worker 可用，无需等待或保持 Web 会话；普通后台同步则使用队列空闲后自动退出的按需 worker。
 
 ## 下一步
 

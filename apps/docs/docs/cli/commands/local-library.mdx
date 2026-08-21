@@ -90,6 +90,12 @@ loci source runs rspress
 loci source logs a1b2c3d4
 ```
 
+`source logs` 中的 `[run]` 是 `source runs` 输出的短 ID。如需查看所有文档源的记录，使用 `--all`：
+
+```bash
+loci source runs --all
+```
+
 交互终端可以省略文档源并从列表中选择。非交互终端必须指定文档源，或显式传入 `--all` 查看全部记录。
 
 ## 设置定时更新
@@ -104,7 +110,7 @@ loci schedule set rspress off
 loci schedule list
 ```
 
-保存启用的计划时，CLI 会确保用户级后台服务可用；从 Web UI 新开启计划时，当前前台服务先执行，正常结束 `loci ui` 后自动交接给后台服务。之后无需保持终端或浏览器打开；机器恢复或服务重新启用后，错过的多个时间点最多合并补跑一次。旧脚本中的 `manual` 仍可作为 `off` 的兼容别名。
+保存启用的计划时，CLI 或 Web UI 会立即确保无 HTTP 的用户级常驻 worker 可用。Web 会话与 worker 可以同时运行，之后无需保持终端或浏览器打开；机器恢复或服务重新启用后，错过的多个时间点最多合并补跑一次。旧脚本中的 `manual` 仍可作为 `off` 的兼容别名。
 
 服务状态和停用方式请查看[后台服务与 Web UI](/cli/commands/service)。计划列表为空时，CLI 会提示先创建文档源或使用 `schedule set` 配置计划。
 

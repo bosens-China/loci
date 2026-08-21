@@ -61,7 +61,7 @@ loci agent print-config antigravity
 
 Agent 调用 Loci 工具时，客户端启动 `loci mcp stdio`；会话结束后 stdio 进程随之退出。同步写操作进入共享的 SQLite 持久任务队列，并由该进程的轻量 worker 执行；如果后台服务已经认领同一来源，当前进程会等待并读取同一任务的最终结果。
 
-`loci service start` 不承载 MCP。定时计划和云端每日同步在开启时会自动准备后台服务；该命令主要用于手动恢复、提前准备后台环境或承载显式后台任务。
+`loci service start` 启动的是不监听 HTTP、也不承载 MCP 的常驻 worker。定时计划和云端每日同步在开启时会自动准备它；普通后台同步使用队列空闲后自动退出的按需 worker。
 
 ## 排查连接
 

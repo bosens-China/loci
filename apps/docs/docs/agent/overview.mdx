@@ -31,7 +31,7 @@ npm install --global @boses/cli
 loci agent
 ```
 
-`loci agent` 会交互选择 Agent 和 Skill 作用域，统一预览后配置 MCP、安装 `use-loci` 并写入全局规则。也可以直接进入 `configure`、`config`、`rules` 或 `skills` 子菜单；在交互终端中，缺少的选择会继续询问。
+`loci agent` 会交互选择 Agent 和 Skill 作用域，统一预览后配置 MCP、安装 `use-loci` 并写入全局规则。需要只执行其中一项时，使用 `configure`、`print-config`、`rules` 或 `skills` 子命令；在交互终端中，缺少的选择会继续询问。
 
 Agent、CI 和其他非交互调用应使用完整命令，不依赖交互偏好或隐式默认：
 
