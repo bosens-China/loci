@@ -27,7 +27,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps): React.JSX.Eleme
     <div className="mx-auto max-w-6xl px-8 py-8">
       <PageHeader
         title="概览"
-        description="浏览器是控制面板。来源抓取、定时计划与任务恢复由后台服务持续处理。"
+        description="浏览器是控制面板。抓取由独立 worker 执行，关闭 Web 不会中断已接受的任务。"
       />
       <AsyncState
         loading={sources.isLoading || documents.isLoading || jobs.isLoading}

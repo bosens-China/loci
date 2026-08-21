@@ -7,7 +7,7 @@ export async function listCloudCatalog(): Promise<CloudCatalogItem[]> {
 
 export async function pullCloudLibrary(
   libraryId: string,
-  autoSync = true
+  autoSync = false
 ): Promise<CloudImportResult> {
   return (
     await request.post<CloudImportResult>(

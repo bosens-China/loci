@@ -63,9 +63,9 @@ export function registerScheduleCommands(
 
   schedule
     .command('run', { hidden: true })
-    .description('兼容入口：提示使用统一后台服务')
+    .description('兼容入口：提示使用无 HTTP 后台 worker')
     .action(() => {
-      process.stdout.write('请运行 loci service run 以前台方式启动统一后台服务。\n')
+      process.stdout.write('请运行 loci service run 以前台方式启动无 HTTP 后台 worker。\n')
     })
 }
 

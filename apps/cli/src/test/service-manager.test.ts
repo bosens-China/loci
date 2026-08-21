@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { acquireRuntimeLock } from '@loci/runtime'
 import {
+  ensureLocalJobWorkerRunning,
   ensureUserServiceRunning,
   renderLaunchdPlist,
   renderSystemdUnit,
@@ -16,6 +17,15 @@ const command = {
   args: ['/opt/loci/dist/index.js', 'service', 'run', '--managed'],
   environment: { LOCI_DATA_DIR: '/tmp/loci data' }
 }
+
+const persistentState = {
+  pid: 42,
+  mode: 'persistent' as const,
+  startedAt: '2026-08-20T00:00:00.000Z',
+  heartbeatAt: new Date().toISOString()
+}
+
+const onDemandState = { ...persistentState, mode: 'on-demand' as const }
 
 const temporaryDirectories: string[] = []
 
@@ -85,12 +95,7 @@ describe('service manager definitions', () => {
       definitionPath: '/tmp/loci.service',
       logPaths: []
     }
-    const state = {
-      pid: 42,
-      port: 43123,
-      controlToken: 'control-token',
-      startedAt: '2026-08-20T00:00:00.000Z'
-    }
+    const state = persistentState
     const waitForService = vi.fn(async () => state)
 
     await ensureUserServiceRunning(manager, directory, waitForService)
@@ -102,15 +107,10 @@ describe('service manager definitions', () => {
     expect(waitForService).toHaveBeenNthCalledWith(2, directory)
   })
 
-  it('前台 UI 已承载当前数据目录时不启动第二个服务', async () => {
+  it('已有持久 worker 时不启动第二个服务', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'loci-service-start-'))
     temporaryDirectories.push(directory)
-    const state = {
-      pid: 42,
-      port: 43123,
-      controlToken: 'control-token',
-      startedAt: '2026-08-20T00:00:00.000Z'
-    }
+    const state = persistentState
     const manager = createManager()
     manager.status = vi.fn(async () => ({
       installed: false,
@@ -130,15 +130,66 @@ describe('service manager definitions', () => {
     expect(waitForService).not.toHaveBeenCalled()
   })
 
+  it('按需 worker 运行时仍会安装持久后台宿主', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-service-start-'))
+    temporaryDirectories.push(directory)
+    const manager = createManager()
+    manager.status = vi.fn(async () => ({
+      installed: false,
+      running: true,
+      state: onDemandState,
+      definitionPath: '/tmp/loci.service',
+      logPaths: []
+    }))
+    const waitForService = vi.fn(async () => persistentState)
+
+    await ensureUserServiceRunning(manager, directory, waitForService)
+
+    expect(manager.install).toHaveBeenCalledOnce()
+    expect(waitForService).not.toHaveBeenCalled()
+  })
+
+  it('并发启动按需 worker 时复用同一次跨进程启动', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-worker-start-'))
+    temporaryDirectories.push(directory)
+    let releaseSpawn = (): void => undefined
+    const spawnGate = new Promise<void>((resolvePromise) => {
+      releaseSpawn = resolvePromise
+    })
+    const spawnWorker = vi.fn(async () => spawnGate)
+    const waitForWorker = vi.fn(async () => onDemandState)
+
+    const first = ensureLocalJobWorkerRunning(directory, spawnWorker, waitForWorker)
+    const second = ensureLocalJobWorkerRunning(directory, spawnWorker, waitForWorker)
+    expect(first).toBe(second)
+    releaseSpawn()
+
+    await expect(Promise.all([first, second])).resolves.toEqual([onDemandState, onDemandState])
+    expect(spawnWorker).toHaveBeenCalledOnce()
+    expect(waitForWorker).toHaveBeenCalledOnce()
+  })
+
+  it('worker 跨进程激活锁占用时等待现有 worker', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-worker-start-'))
+    temporaryDirectories.push(directory)
+    const lock = acquireRuntimeLock(directory, 'worker-start', '另一个 worker 激活流程')
+    const spawnWorker = vi.fn(async () => undefined)
+    const waitForWorker = vi.fn(async () => onDemandState)
+    try {
+      await expect(
+        ensureLocalJobWorkerRunning(directory, spawnWorker, waitForWorker)
+      ).resolves.toEqual(onDemandState)
+      expect(spawnWorker).not.toHaveBeenCalled()
+      expect(waitForWorker).toHaveBeenCalledWith(directory)
+    } finally {
+      lock.release()
+    }
+  })
+
   it('同进程并发调用复用同一次服务安装', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'loci-service-start-'))
     temporaryDirectories.push(directory)
-    const state = {
-      pid: 42,
-      port: 43123,
-      controlToken: 'control-token',
-      startedAt: '2026-08-20T00:00:00.000Z'
-    }
+    const state = persistentState
     let releaseStatus = (): void => undefined
     const statusGate = new Promise<void>((resolvePromise) => {
       releaseStatus = resolvePromise
@@ -172,12 +223,7 @@ describe('service manager definitions', () => {
     mkdirSync(join(directory, 'locks'), { recursive: true })
     const lock = acquireRuntimeLock(directory, 'service-start', '另一个激活流程')
     const manager = createManager()
-    const state = {
-      pid: 42,
-      port: 43123,
-      controlToken: 'control-token',
-      startedAt: '2026-08-20T00:00:00.000Z'
-    }
+    const state = persistentState
     const waitForService = vi.fn(async () => state)
     try {
       await expect(ensureUserServiceRunning(manager, directory, waitForService)).resolves.toEqual(
@@ -204,12 +250,7 @@ describe('service manager definitions', () => {
         definitionPath: '/tmp/loci.service',
         logPaths: []
       })
-    const state = {
-      pid: 42,
-      port: 43123,
-      controlToken: 'control-token',
-      startedAt: '2026-08-20T00:00:00.000Z'
-    }
+    const state = persistentState
     const waitForService = vi.fn(async () => state)
 
     await expect(ensureUserServiceRunning(manager, directory, waitForService)).rejects.toThrow(

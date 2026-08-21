@@ -1,18 +1,36 @@
-import { useEffect } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { LocalJob } from '@loci/shared'
+import { listJobs } from '@/api/jobs'
 
-/** 服务推送只承担失效通知，页面数据仍统一由 Query 缓存读取。 */
+/** 轮询持久任务，使独立 worker 的跨进程更新能刷新 Web Query 缓存。 */
 export function useJobEvents(enabled: boolean): void {
   const queryClient = useQueryClient()
+  const previousSignature = useRef('')
+  const jobs = useQuery({
+    queryKey: ['jobs'],
+    queryFn: listJobs,
+    enabled,
+    refetchInterval: (query) => (hasActiveJobs(query.state.data) ? 1_000 : 5_000)
+  })
+
   useEffect(() => {
-    if (!enabled) return
-    const events = new EventSource('/api/events', { withCredentials: true })
-    const refresh = (): void => {
-      void queryClient.invalidateQueries({ queryKey: ['jobs'] })
-      void queryClient.invalidateQueries({ queryKey: ['sources'] })
-      void queryClient.invalidateQueries({ queryKey: ['documents'] })
-    }
-    events.addEventListener('job', refresh)
-    return () => events.close()
-  }, [enabled, queryClient])
+    if (!enabled || !jobs.data) return
+    const signature = jobs.data.map((job) => `${job.id}:${job.status}:${job.updatedAt}`).join('|')
+    if (signature === previousSignature.current) return
+    previousSignature.current = signature
+    void queryClient.invalidateQueries({ queryKey: ['sources'] })
+    void queryClient.invalidateQueries({ queryKey: ['documents'] })
+  }, [enabled, jobs.data, queryClient])
+}
+
+function hasActiveJobs(value: unknown): boolean {
+  if (!Array.isArray(value)) return false
+  return value.some(
+    (job): job is LocalJob =>
+      Boolean(job) &&
+      typeof job === 'object' &&
+      'status' in job &&
+      (job.status === 'pending' || job.status === 'running')
+  )
 }

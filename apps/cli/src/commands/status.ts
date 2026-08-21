@@ -21,6 +21,7 @@ export function registerStatusCommand(program: Command): void {
         const settings = runtime.database.getSettings()
         const serviceState = readLocalServiceState(runtime.dataDir)
         const serviceRunning = Boolean(serviceState && (await checkLocalService(serviceState)))
+        const persistentRunning = serviceRunning && serviceState?.mode === 'persistent'
         const background = inspectPersistentBackgroundRequirements(sources)
         printTable(
           ['项目', '状态'],
@@ -36,11 +37,13 @@ export function registerStatusCommand(program: Command): void {
             ],
             [
               '后台服务',
-              serviceRunning
-                ? `运行中，PID ${serviceState!.pid}`
+              persistentRunning
+                ? `无 HTTP worker 运行中，PID ${serviceState!.pid}`
                 : background.required
                   ? '需要启动：loci service start'
-                  : '无需运行'
+                  : serviceRunning
+                    ? `按需抓取 worker 运行中，PID ${serviceState!.pid}`
+                    : '无需运行'
             ],
             ['Server', settings.serverUrl]
           ]

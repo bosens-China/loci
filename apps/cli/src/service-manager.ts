@@ -48,7 +48,7 @@ export interface UserServiceManager {
 }
 
 const activeServiceStarts = new Map<string, Promise<LocalServiceState>>()
-
+const activeWorkerStarts = new Map<string, Promise<LocalServiceState>>()
 export function resolveServiceCommand(): ServiceCommand {
   const entry = process.argv[1]
   if (!entry) throw new Error('无法定位 Loci CLI 入口，不能注册后台服务')
@@ -85,9 +85,10 @@ export function ensureUserServiceRunning(
   return runServiceStartSingleFlight(dataDir, () =>
     withServiceStartLock(dataDir, waitForService, async () => {
       const status = await manager.status()
-      if (status.running && status.state) return status.state
+      if (status.running && status.state?.mode === 'persistent') return status.state
       if (!status.installed) await manager.install()
-      else if (!status.running) await manager.start()
+      else await manager.start()
+      if (status.running && status.state?.mode === 'on-demand') return status.state
       return waitForService(dataDir)
     })
   )
@@ -100,7 +101,7 @@ export function ensureLocalServiceRunning(): Promise<LocalServiceState> {
   return runServiceStartSingleFlight(dataDir, () =>
     withServiceStartLock(dataDir, waitForUserService, async () => {
       const existing = readLocalServiceState(dataDir)
-      if (existing && (await checkLocalService(existing))) return existing
+      if (existing?.mode === 'persistent' && (await checkLocalService(existing))) return existing
       const entry = process.argv[1]
       if (!entry) throw new Error('无法定位 Loci CLI 入口，不能启动后台服务')
       const child = spawn(process.execPath, [entry, 'service', 'run', '--managed'], {
@@ -114,7 +115,24 @@ export function ensureLocalServiceRunning(): Promise<LocalServiceState> {
         child.once('error', reject)
       })
       child.unref()
+      if (existing?.mode === 'on-demand' && (await checkLocalService(existing))) return existing
       return waitForUserService(dataDir)
+    })
+  )
+}
+
+/** 启动队列空闲后自动退出的无 HTTP worker，不安装登录自启动服务。 */
+export function ensureLocalJobWorkerRunning(
+  dataDir = resolveLociDataDir(),
+  spawnWorker: () => Promise<void> = spawnLocalJobWorker,
+  waitForWorker: (dataDir: string) => Promise<LocalServiceState> = waitForLocalWorker
+): Promise<LocalServiceState> {
+  return runStartSingleFlight(activeWorkerStarts, dataDir, () =>
+    withStartLock(dataDir, 'worker-start', 'Loci 任务 worker 激活', waitForWorker, async () => {
+      const existing = readLocalServiceState(dataDir)
+      if (existing && (await checkLocalService(existing))) return existing
+      await spawnWorker()
+      return waitForWorker(dataDir)
     })
   )
 }
@@ -123,12 +141,20 @@ function runServiceStartSingleFlight(
   dataDir: string,
   start: () => Promise<LocalServiceState>
 ): Promise<LocalServiceState> {
-  const active = activeServiceStarts.get(dataDir)
+  return runStartSingleFlight(activeServiceStarts, dataDir, start)
+}
+
+function runStartSingleFlight(
+  activeStarts: Map<string, Promise<LocalServiceState>>,
+  dataDir: string,
+  start: () => Promise<LocalServiceState>
+): Promise<LocalServiceState> {
+  const active = activeStarts.get(dataDir)
   if (active) return active
   const task = start()
-  activeServiceStarts.set(dataDir, task)
+  activeStarts.set(dataDir, task)
   const cleanup = (): void => {
-    if (activeServiceStarts.get(dataDir) === task) activeServiceStarts.delete(dataDir)
+    if (activeStarts.get(dataDir) === task) activeStarts.delete(dataDir)
   }
   void task.then(cleanup, cleanup)
   return task
@@ -139,11 +165,21 @@ async function withServiceStartLock(
   waitForService: (dataDir: string) => Promise<LocalServiceState>,
   start: () => Promise<LocalServiceState>
 ): Promise<LocalServiceState> {
+  return withStartLock(dataDir, 'service-start', 'Loci 后台服务激活', waitForService, start)
+}
+
+async function withStartLock(
+  dataDir: string,
+  lockKey: string,
+  owner: string,
+  waitForResult: (dataDir: string) => Promise<LocalServiceState>,
+  start: () => Promise<LocalServiceState>
+): Promise<LocalServiceState> {
   let lock: ReturnType<typeof acquireRuntimeLock>
   try {
-    lock = acquireRuntimeLock(dataDir, 'service-start', 'Loci 后台服务激活')
+    lock = acquireRuntimeLock(dataDir, lockKey, owner)
   } catch (error) {
-    if (error instanceof RuntimeLockedError) return waitForService(dataDir)
+    if (error instanceof RuntimeLockedError) return waitForResult(dataDir)
     throw error
   }
   try {
@@ -160,10 +196,39 @@ export async function waitForUserService(
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const state = readLocalServiceState(dataDir)
-    if (state && (await checkLocalService(state))) return state
+    if (state?.mode === 'persistent' && (await checkLocalService(state))) return state
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 150))
   }
   throw new Error('Loci 后台服务启动超时，请运行 loci service logs 查看日志')
+}
+
+export async function waitForLocalWorker(
+  dataDir = resolveLociDataDir(),
+  timeoutMs = 12_000
+): Promise<LocalServiceState> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const state = readLocalServiceState(dataDir)
+    if (state && (await checkLocalService(state))) return state
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 150))
+  }
+  throw new Error('Loci 任务 worker 启动超时')
+}
+
+async function spawnLocalJobWorker(): Promise<void> {
+  const entry = process.argv[1]
+  if (!entry) throw new Error('无法定位 Loci CLI 入口，不能启动任务 worker')
+  const child = spawn(process.execPath, [entry, 'service', 'worker'], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    env: process.env
+  })
+  await new Promise<void>((resolvePromise, reject) => {
+    child.once('spawn', resolvePromise)
+    child.once('error', reject)
+  })
+  child.unref()
 }
 
 function createLaunchdManager(

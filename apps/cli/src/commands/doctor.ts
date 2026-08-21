@@ -24,6 +24,7 @@ export function registerDoctorCommand(program: Command): void {
         const maintenance = readRuntimeLock(runtime.dataDir, 'maintenance')
         const serviceState = readLocalServiceState(runtime.dataDir)
         const serviceRunning = Boolean(serviceState && (await checkLocalService(serviceState)))
+        const persistentRunning = serviceRunning && serviceState?.mode === 'persistent'
         const background = inspectPersistentBackgroundRequirements(runtime.database.listSources())
         const crawling = hasActiveCrawlLocks(runtime.dataDir)
         let writable = true
@@ -56,12 +57,14 @@ export function registerDoctorCommand(program: Command): void {
           ['Loci Server', server.ok ? '正常' : '不可访问', server.message],
           [
             '后台服务',
-            serviceRunning ? '运行中' : background.required ? '需要处理' : '无需运行',
-            serviceRunning
-              ? `PID ${serviceState!.pid}`
+            persistentRunning ? '运行中' : background.required ? '需要处理' : '无需运行',
+            persistentRunning
+              ? `无 HTTP worker，PID ${serviceState!.pid}`
               : background.required
                 ? '运行 loci service start'
-                : '没有定时抓取或云端每日自动同步'
+                : serviceRunning
+                  ? `按需抓取 worker 正在运行，PID ${serviceState!.pid}`
+                  : '没有定时抓取或云端每日自动同步'
           ]
         ]
         printTable(['检查项', '结果', '说明'], rows)

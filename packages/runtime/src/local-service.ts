@@ -1,19 +1,17 @@
 import { randomBytes } from 'node:crypto'
 import { resolveLociDataDir } from './data-path.js'
-import { startLocalHttpServer, type LocalHttpServer } from './local-http-server.js'
-import { createLocalJobRunner, type LocalJobRunner } from './local-job-runner.js'
 import { createLocalRuntime, type LocalRuntime } from './local-runtime.js'
+import { startLocalHttpServer, type LocalHttpServer } from './local-http-server.js'
 import {
-  removeLocalServiceState,
-  writeLocalServiceState,
-  type LocalServiceState
+  removeLocalWebServiceState,
+  writeLocalWebServiceState,
+  type LocalWebServiceState
 } from './local-service-state.js'
 import { acquireRuntimeLock, type RuntimeLock } from './runtime-lock.js'
 
 export interface LocalService {
-  state: LocalServiceState
+  state: LocalWebServiceState
   runtime: LocalRuntime
-  runner: LocalJobRunner
   http: LocalHttpServer
   close: () => Promise<void>
 }
@@ -23,70 +21,60 @@ export interface LocalServiceOptions {
   cacheDir?: string
   port?: number
   assetsDir?: string
+  startJobWorker?: () => Promise<void>
+  ensurePersistentBackground?: () => Promise<void>
 }
 
+/**
+ * 启动只跟随 `loci ui` 生命周期的回环 Web 服务。
+ * 抓取任务由独立 worker 执行，因此关闭 Web 不会中止已接受的任务。
+ */
 export async function startLocalService(options: LocalServiceOptions = {}): Promise<LocalService> {
   const dataDir = options.dataDir ?? resolveLociDataDir()
-  let serviceLock: RuntimeLock | undefined
+  const webLock: RuntimeLock = acquireRuntimeLock(dataDir, 'web', 'Loci Web 服务')
   let runtime: LocalRuntime | undefined
   let http: LocalHttpServer | undefined
-  let runner: LocalJobRunner | undefined
-  let cloudTimer: ReturnType<typeof setInterval> | undefined
   let closed = false
   try {
-    serviceLock = acquireRuntimeLock(dataDir, 'service', 'Loci 后台服务')
-    runtime = createLocalRuntime({
+    const createdRuntime = createLocalRuntime({
       dataDir,
       cacheDir: options.cacheDir,
-      owner: '后台服务'
+      owner: 'Web UI'
     })
-    let publishJob: LocalHttpServer['publishJob'] = () => undefined
-    runner = createLocalJobRunner(runtime, { onJobChange: (job) => publishJob(job) })
+    runtime = createdRuntime
     const controlToken = randomBytes(32).toString('base64url')
-    http = await startLocalHttpServer(runtime, {
+    http = await startLocalHttpServer(createdRuntime, {
       port: options.port,
       controlToken,
       assetsDir: options.assetsDir,
-      runMaintenance: (action) => runner!.runMaintenance(action)
+      startJobWorker: options.startJobWorker,
+      ensurePersistentBackground: options.ensurePersistentBackground
     })
-    publishJob = http.publishJob
-    const state: LocalServiceState = {
+    const state: LocalWebServiceState = {
       pid: process.pid,
       port: http.port,
       controlToken,
       startedAt: new Date().toISOString()
     }
-    writeLocalServiceState(dataDir, state)
-    runner.start()
-    const syncCloudCopies = (): void => {
-      const serverUrl = runtime?.database.getSettings().serverUrl
-      if (serverUrl) void runtime?.cloud.syncEligible(serverUrl)
-    }
-    syncCloudCopies()
-    cloudTimer = setInterval(syncCloudCopies, 24 * 60 * 60 * 1_000)
-    cloudTimer.unref?.()
+    writeLocalWebServiceState(dataDir, state)
     return {
       state,
-      runtime,
-      runner,
+      runtime: createdRuntime,
       http,
       close: async () => {
         if (closed) return
         closed = true
-        if (cloudTimer) clearInterval(cloudTimer)
-        await runner?.stop()
         await http?.close()
-        await runtime?.close()
-        removeLocalServiceState(dataDir)
-        serviceLock?.release()
+        await createdRuntime.close()
+        removeLocalWebServiceState(dataDir)
+        webLock.release()
       }
     }
   } catch (error) {
-    if (cloudTimer) clearInterval(cloudTimer)
-    await runner?.stop()
     await http?.close()
     await runtime?.close()
-    serviceLock?.release()
+    removeLocalWebServiceState(dataDir)
+    webLock.release()
     throw error
   }
 }

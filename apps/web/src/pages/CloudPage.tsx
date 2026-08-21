@@ -143,13 +143,7 @@ export function CloudPage(): React.JSX.Element {
                       size="small"
                       icon={<CloudDownloadOutlined />}
                       loading={busyId === item.id}
-                      onClick={() =>
-                        run(
-                          item,
-                          () => pullCloudLibrary(item.id),
-                          '云端文档已拉取；结束当前 Loci UI 会话后，后台服务会自动执行每日检查'
-                        )
-                      }
+                      onClick={() => run(item, () => pullCloudLibrary(item.id), '云端文档已拉取')}
                     >
                       拉取到本机
                     </Button>
@@ -167,9 +161,7 @@ export function CloudPage(): React.JSX.Element {
                         run(
                           item,
                           () => setCloudAutoSync(item.localSourceId!, enabled),
-                          enabled
-                            ? '已启用云端自动更新；结束当前 Loci UI 会话后由后台服务接管'
-                            : '已停用云端自动更新'
+                          enabled ? '已启用云端自动更新；后台 worker 已就绪' : '已停用云端自动更新'
                         )
                       }
                     />

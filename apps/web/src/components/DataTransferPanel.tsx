@@ -20,6 +20,12 @@ export function DataTransferPanel(): React.JSX.Element {
     mutationFn: async (file: File) => importBackup(await readBackupFile(file)),
     onSuccess: async (result) => {
       await queryClient.invalidateQueries()
+      if (result.backgroundError) {
+        void message.warning(
+          `已恢复 ${result.sources} 个来源和 ${result.documents} 篇文档，但常驻 worker 启动失败：${result.backgroundError}`
+        )
+        return
+      }
       void message.success(`已恢复 ${result.sources} 个来源和 ${result.documents} 篇文档`)
     },
     onError: (error: Error) => void message.error(error.message)
@@ -51,7 +57,7 @@ export function DataTransferPanel(): React.JSX.Element {
         </TransferAction>
         <TransferAction
           title="从备份恢复"
-          description="恢复会替换当前本地库。正在同步时服务会拒绝操作；持久后台能力会在当前 UI 会话结束后自动交接。"
+          description="恢复会替换当前本地库。正在同步时会拒绝操作；需要持久后台能力时会立即确保无 HTTP 的常驻 worker 可用。"
           danger
         >
           <Popconfirm

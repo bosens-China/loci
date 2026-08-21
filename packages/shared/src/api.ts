@@ -227,6 +227,12 @@ export interface EnqueueLocalJobResult {
   reused: boolean
 }
 
+export interface CreateSourceResult {
+  source: DocumentSource
+  sync: EnqueueLocalJobResult | null
+  workerError: string | null
+}
+
 export interface DocumentRecord {
   id: string
   sourceId: string

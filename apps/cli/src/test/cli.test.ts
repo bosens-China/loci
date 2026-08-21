@@ -52,7 +52,7 @@ describe('Loci CLI command surface', () => {
       program.commands
         .find((command) => command.name() === 'service')
         ?.commands.map((command) => command.name())
-    ).toEqual(['status', 'start', 'stop', 'restart', 'disable', 'logs', 'run'])
+    ).toEqual(['status', 'start', 'stop', 'restart', 'disable', 'logs', 'run', 'worker'])
     expect(
       program.commands
         .find((command) => command.name() === 'data')
@@ -69,14 +69,14 @@ describe('Loci CLI command surface', () => {
     const program = createProgram()
     const rootHelp = program.helpInformation()
     const schedule = program.commands.find((command) => command.name() === 'schedule')!
-    const serviceRun = program.commands
-      .find((command) => command.name() === 'service')!
-      .commands.find((command) => command.name() === 'run')!
+    const service = program.commands.find((command) => command.name() === 'service')!
+    const serviceRun = service.commands.find((command) => command.name() === 'run')!
     const agent = program.commands.find((command) => command.name() === 'agent')!
 
     expect(rootHelp.match(/命令：/g)).toHaveLength(1)
     expect(schedule.helpInformation().match(/命令：/g)).toHaveLength(1)
     expect(schedule.helpInformation()).not.toContain('run')
+    expect(service.helpInformation()).not.toMatch(/\n\s+worker\b/u)
     expect(serviceRun.helpInformation()).not.toContain('--managed')
     expect(agent.helpInformation()).toContain('print-config')
     expect(agent.helpInformation()).not.toMatch(/\n\s+config \[client\]/)

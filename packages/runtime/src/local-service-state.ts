@@ -4,6 +4,13 @@ import { writeFileAtomically } from './atomic-file.js'
 
 export interface LocalServiceState {
   pid: number
+  mode: 'persistent' | 'on-demand'
+  startedAt: string
+  heartbeatAt: string
+}
+
+export interface LocalWebServiceState {
+  pid: number
   port: number
   controlToken: string
   startedAt: string
@@ -17,11 +24,43 @@ export function writeLocalServiceState(dataDir: string, state: LocalServiceState
   writeFileAtomically(localServiceStatePath(dataDir), `${JSON.stringify(state, null, 2)}\n`)
 }
 
+export function localWebServiceStatePath(dataDir: string): string {
+  return join(dataDir, 'web.json')
+}
+
+export function writeLocalWebServiceState(dataDir: string, state: LocalWebServiceState): void {
+  writeFileAtomically(localWebServiceStatePath(dataDir), `${JSON.stringify(state, null, 2)}\n`)
+}
+
 export function readLocalServiceState(dataDir: string): LocalServiceState | null {
   const path = localServiceStatePath(dataDir)
   if (!existsSync(path)) return null
   try {
     const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<LocalServiceState>
+    if (
+      typeof value.pid !== 'number' ||
+      !['persistent', 'on-demand'].includes(value.mode ?? '') ||
+      typeof value.startedAt !== 'string' ||
+      typeof value.heartbeatAt !== 'string'
+    ) {
+      return null
+    }
+    return {
+      pid: value.pid,
+      mode: value.mode as LocalServiceState['mode'],
+      startedAt: value.startedAt,
+      heartbeatAt: value.heartbeatAt
+    }
+  } catch {
+    return null
+  }
+}
+
+export function readLocalWebServiceState(dataDir: string): LocalWebServiceState | null {
+  const path = localWebServiceStatePath(dataDir)
+  if (!existsSync(path)) return null
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<LocalWebServiceState>
     if (
       typeof value.pid !== 'number' ||
       typeof value.port !== 'number' ||
@@ -47,8 +86,27 @@ export function removeLocalServiceState(dataDir: string, pid = process.pid): voi
   rmSync(localServiceStatePath(dataDir), { force: true })
 }
 
+export function removeLocalWebServiceState(dataDir: string, pid = process.pid): void {
+  const state = readLocalWebServiceState(dataDir)
+  if (!state || state.pid !== pid) return
+  rmSync(localWebServiceStatePath(dataDir), { force: true })
+}
+
 export async function checkLocalService(
   state: LocalServiceState,
+  staleAfterMs = 10_000
+): Promise<boolean> {
+  try {
+    if (Date.now() - new Date(state.heartbeatAt).getTime() > staleAfterMs) return false
+    process.kill(state.pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function checkLocalWebService(
+  state: LocalWebServiceState,
   timeoutMs = 800
 ): Promise<boolean> {
   try {
@@ -61,7 +119,7 @@ export async function checkLocalService(
       body &&
       typeof body === 'object' &&
       'service' in body &&
-      body.service === 'loci-local-service' &&
+      body.service === 'loci-local-web' &&
       'pid' in body &&
       body.pid === state.pid
     )
@@ -70,7 +128,7 @@ export async function checkLocalService(
   }
 }
 
-export async function createLocalWebSession(state: LocalServiceState): Promise<string> {
+export async function createLocalWebSession(state: LocalWebServiceState): Promise<string> {
   const response = await fetch(`http://127.0.0.1:${state.port}/control/session`, {
     method: 'POST',
     headers: { authorization: `Bearer ${state.controlToken}` },
@@ -79,7 +137,7 @@ export async function createLocalWebSession(state: LocalServiceState): Promise<s
   if (!response.ok) throw new Error('无法创建 Loci Web 会话')
   const body = (await response.json()) as unknown
   if (!body || typeof body !== 'object' || !('token' in body) || typeof body.token !== 'string') {
-    throw new Error('Loci 后台服务返回了无效会话')
+    throw new Error('Loci Web 服务返回了无效会话')
   }
   return body.token
 }

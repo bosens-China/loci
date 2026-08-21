@@ -1,5 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { AppSettings, CreateSourceInput, UpdateSourceInput } from '@loci/shared'
+import type {
+  AppSettings,
+  CreateSourceInput,
+  CreateSourceResult,
+  UpdateSourceInput
+} from '@loci/shared'
+import { inspectPersistentBackgroundRequirements } from './background-requirements.js'
 import { acquireMaintenanceRuntimeLock } from './runtime-lock.js'
 import type { LocalRuntime } from './local-runtime.js'
 import { json, mutationJson, readJson, safeClientError } from './local-http-response.js'
@@ -8,6 +14,8 @@ const BACKUP_LIMIT_BYTES = 256 * 1024 * 1024
 
 export interface LocalApiOptions {
   runMaintenance?: <T>(action: () => T | Promise<T>) => Promise<T>
+  startJobWorker?: () => Promise<void>
+  ensurePersistentBackground?: () => Promise<void>
 }
 
 export async function handleLocalApi(
@@ -15,13 +23,12 @@ export async function handleLocalApi(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  events: Set<ServerResponse>,
   options: LocalApiOptions
 ): Promise<void> {
-  if (await handleSources(runtime, request, response, url)) return
-  if (await handleDocumentsAndJobs(runtime, request, response, url, events)) return
+  if (await handleSources(runtime, request, response, url, options)) return
+  if (await handleDocumentsAndJobs(runtime, request, response, url, options)) return
   if (await handleSettings(runtime, request, response, url)) return
-  if (await handleCloud(runtime, request, response, url)) return
+  if (await handleCloud(runtime, request, response, url, options)) return
   if (await handleDataTransfer(runtime, request, response, url, options)) return
   response.writeHead(404).end()
 }
@@ -30,16 +37,32 @@ async function handleSources(
   runtime: LocalRuntime,
   request: IncomingMessage,
   response: ServerResponse,
-  url: URL
+  url: URL,
+  options: LocalApiOptions
 ): Promise<boolean> {
   if (request.method === 'GET' && url.pathname === '/api/sources') {
     json(response, 200, runtime.database.listSources())
     return true
   }
   if (request.method === 'POST' && url.pathname === '/api/sources') {
-    await mutationJson(response, 201, async () =>
-      runtime.createSource((await readJson(request)) as CreateSourceInput)
-    )
+    await mutationJson(response, 201, async () => {
+      const input = (await readJson(request)) as CreateSourceInput
+      if (input.schedule) await options.ensurePersistentBackground?.()
+      const source = runtime.createSource(input)
+      const sync =
+        url.searchParams.get('sync') === 'true'
+          ? runtime.database.enqueueSourceSync(source.id, 'ui')
+          : null
+      let workerError: string | null = null
+      if (sync) {
+        try {
+          await options.startJobWorker?.()
+        } catch (error) {
+          workerError = safeClientError(error)
+        }
+      }
+      return { source, sync, workerError } satisfies CreateSourceResult
+    })
     return true
   }
   const match = /^\/api\/sources\/([^/]+)$/u.exec(url.pathname)
@@ -50,6 +73,7 @@ async function handleSources(
     else {
       await mutationJson(response, 200, async () => {
         const input = (await readJson(request)) as UpdateSourceInput
+        if (input.schedule) await options.ensurePersistentBackground?.()
         const updated = runtime.updateSourcePreservingSchedule(source, input)
         return runtime.updateSourceSchedule(updated, input.schedule)
       })
@@ -71,7 +95,7 @@ async function handleDocumentsAndJobs(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  events: Set<ServerResponse>
+  options: LocalApiOptions
 ): Promise<boolean> {
   if (request.method === 'GET' && url.pathname === '/api/documents') {
     const query = url.searchParams.get('query')?.trim()
@@ -90,22 +114,12 @@ async function handleDocumentsAndJobs(
     json(response, 200, runtime.database.listLocalJobs())
     return true
   }
-  if (request.method === 'GET' && url.pathname === '/api/events') {
-    response.writeHead(200, {
-      'content-type': 'text/event-stream; charset=utf-8',
-      'cache-control': 'no-cache, no-transform',
-      connection: 'keep-alive'
-    })
-    response.write(': connected\n\n')
-    events.add(response)
-    request.once('close', () => events.delete(response))
-    return true
-  }
   if (request.method === 'POST' && url.pathname === '/api/jobs/source-sync') {
     const body = await readJson(request)
     if (!isStringField(body, 'sourceId')) json(response, 400, { error: '缺少文档源 ID' })
     else {
       const result = runtime.database.enqueueSourceSync(body.sourceId, 'ui')
+      await options.startJobWorker?.()
       json(response, result.reused ? 200 : 202, result)
     }
     return true
@@ -143,7 +157,8 @@ async function handleCloud(
   runtime: LocalRuntime,
   request: IncomingMessage,
   response: ServerResponse,
-  url: URL
+  url: URL,
+  options: LocalApiOptions
 ): Promise<boolean> {
   const serverUrl = runtime.database.getSettings().serverUrl
   if (request.method === 'GET' && url.pathname === '/api/cloud/catalog') {
@@ -154,12 +169,10 @@ async function handleCloud(
   if (request.method === 'POST' && pull) {
     await mutationJson(response, 200, async () => {
       const body = await readJson(request)
+      const enabled = readBooleanField(body, 'autoSync', false)
+      if (enabled) await options.ensurePersistentBackground?.()
       runtime.assertWritable()
-      return runtime.cloud.importLibrary(
-        serverUrl,
-        decodeURIComponent(pull[1]!),
-        readBooleanField(body, 'autoSync', true)
-      )
+      return runtime.cloud.importLibrary(serverUrl, decodeURIComponent(pull[1]!), enabled)
     })
     return true
   }
@@ -176,6 +189,7 @@ async function handleCloud(
     await mutationJson(response, 200, async () => {
       const body = await readJson(request)
       if (!isBooleanField(body, 'enabled')) throw new Error('缺少自动同步状态')
+      if (body.enabled) await options.ensurePersistentBackground?.()
       runtime.assertWritable()
       runtime.cloud.setAutoSync(decodeURIComponent(autoSync[1]!), serverUrl, body.enabled)
       return { enabled: body.enabled }
@@ -212,7 +226,15 @@ async function handleDataTransfer(
         runtime.database.refreshSourceSchedules()
         return imported
       })
-      return summary
+      let backgroundError: string | null = null
+      if (inspectPersistentBackgroundRequirements(runtime.database.listSources()).required) {
+        try {
+          await options.ensurePersistentBackground?.()
+        } catch (error) {
+          backgroundError = safeClientError(error)
+        }
+      }
+      return { ...summary, backgroundError }
     })
     return true
   }

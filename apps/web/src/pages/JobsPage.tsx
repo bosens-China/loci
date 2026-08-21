@@ -26,7 +26,7 @@ export function JobsPage(): React.JSX.Element {
     <div className="mx-auto max-w-6xl px-8 py-8">
       <PageHeader
         title="后台任务"
-        description="任务写入本机数据库。关闭 UI 或服务短暂重启，已接受的工作不会丢失。"
+        description="任务写入本机数据库并由独立 worker 执行，关闭 UI 不会中断抓取。"
       />
       <AsyncState
         loading={jobs.isLoading}

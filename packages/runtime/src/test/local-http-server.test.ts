@@ -19,7 +19,13 @@ describe('本机 HTTP 服务', () => {
       dataDir: join(root, 'data'),
       cacheDir: join(root, 'cache')
     })
-    const server = await startLocalHttpServer(runtime, { controlToken: 'control-secret' })
+    const startJobWorker = vi.fn(async () => undefined)
+    const ensurePersistentBackground = vi.fn(async () => undefined)
+    const server = await startLocalHttpServer(runtime, {
+      controlToken: 'control-secret',
+      startJobWorker,
+      ensurePersistentBackground
+    })
     cleanups.push(async () => {
       await server.close()
       await runtime.close()
@@ -27,7 +33,7 @@ describe('本机 HTTP 服务', () => {
     })
 
     const health = await fetch(`${server.endpoint}/health`)
-    expect(await health.json()).toEqual({ service: 'loci-local-service', pid: process.pid })
+    expect(await health.json()).toEqual({ service: 'loci-local-web', pid: process.pid })
     expect((await fetch(`${server.endpoint}/api/sources`)).status).toBe(401)
 
     const tokenResponse = await fetch(`${server.endpoint}/control/session`, {
@@ -57,17 +63,69 @@ describe('本机 HTTP 服务', () => {
       mode: 'auto',
       pageLimit: 10,
       scopePath: '/docs',
-      schedule: null,
+      schedule: '0 2 * * *',
       httpConcurrency: null,
       browserConcurrency: null
     }
-    const created = await fetch(`${server.endpoint}/api/sources`, {
+    const created = await fetch(`${server.endpoint}/api/sources?sync=true`, {
       method: 'POST',
       headers: { cookie: cookie!, origin: server.endpoint, 'content-type': 'application/json' },
       body: JSON.stringify(input)
     })
     expect(created.status).toBe(201)
-    expect(((await created.json()) as { name: string }).name).toBe('Example')
+    const result = (await created.json()) as {
+      source: { name: string }
+      sync: { reused: boolean }
+      workerError: string | null
+    }
+    expect(result.source.name).toBe('Example')
+    expect(result.sync.reused).toBe(false)
+    expect(result.workerError).toBeNull()
+    expect(startJobWorker).toHaveBeenCalledOnce()
+    expect(ensurePersistentBackground).toHaveBeenCalledOnce()
+  })
+
+  it('worker 启动失败时仍确认来源和任务已保存', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'loci-http-worker-error-'))
+    const runtime = createLocalRuntime({
+      dataDir: join(root, 'data'),
+      cacheDir: join(root, 'cache')
+    })
+    const server = await startLocalHttpServer(runtime, {
+      controlToken: 'control-secret',
+      startJobWorker: async () => {
+        throw new Error('worker unavailable')
+      }
+    })
+    cleanups.push(async () => {
+      await server.close()
+      await runtime.close()
+      rmSync(root, { recursive: true, force: true })
+    })
+    const cookie = await createSession(server.endpoint)
+    const response = await fetch(`${server.endpoint}/api/sources?sync=true`, {
+      method: 'POST',
+      headers: { cookie, origin: server.endpoint, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Saved source',
+        url: 'https://example.com',
+        mode: 'http',
+        pageLimit: 1,
+        scopePath: '/',
+        schedule: null,
+        httpConcurrency: null,
+        browserConcurrency: null
+      } satisfies CreateSourceInput)
+    })
+
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      source: { name: 'Saved source' },
+      sync: { reused: false },
+      workerError: 'worker unavailable'
+    })
+    expect(runtime.database.listSources()).toHaveLength(1)
+    expect(runtime.database.listLocalJobs()).toHaveLength(1)
   })
 
   it('重复同步同一来源时复用活动任务', async () => {
@@ -104,7 +162,7 @@ describe('本机 HTTP 服务', () => {
       url: 'https://example.com/docs',
       mode: 'http',
       pageLimit: 10,
-      schedule: null,
+      schedule: '0 2 * * *',
       httpConcurrency: null,
       browserConcurrency: null
     })
@@ -125,7 +183,10 @@ describe('本机 HTTP 服务', () => {
     vi.spyOn(runtime.cloud, 'listCatalog').mockResolvedValue([cloudItem])
     const server = await startLocalHttpServer(runtime, {
       controlToken: 'control-secret',
-      runMaintenance: async (action) => action()
+      runMaintenance: async (action) => action(),
+      ensurePersistentBackground: async () => {
+        throw new Error('persistent worker unavailable')
+      }
     })
     cleanups.push(async () => {
       await server.close()
@@ -149,7 +210,11 @@ describe('本机 HTTP 服务', () => {
       headers,
       body: JSON.stringify(backup)
     })
-    expect(await imported.json()).toEqual({ sources: 1, documents: 0 })
+    expect(await imported.json()).toEqual({
+      sources: 1,
+      documents: 0,
+      backgroundError: 'persistent worker unavailable'
+    })
     expect(runtime.database.listSources()[0]?.name).toBe('Local docs')
   })
 })

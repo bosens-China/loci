@@ -1,7 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select } from 'antd'
 import { SyncOutlined } from '@ant-design/icons'
-import type { CreateSourceInput, DocumentSource, FetchMode, UpdateSourceInput } from '@loci/shared'
+import {
+  DOCUMENT_SOURCE_DEFAULTS,
+  DOCUMENT_SOURCE_LIMITS,
+  type CreateSourceInput,
+  type CreateSourceResult,
+  type DocumentSource,
+  type FetchMode,
+  type UpdateSourceInput
+} from '@loci/shared'
 import { enqueueSourceSync } from '@/api/jobs'
 import { createSource, deleteSource, updateSource } from '@/api/sources'
 
@@ -13,6 +21,10 @@ interface SourceFormValue {
   scopePath: string
   excludePathPattern?: string
   schedule?: string
+  httpConcurrency?: number
+  browserConcurrency?: number
+  githubArchiveLimitMb?: number
+  githubMarkdownLimitMb?: number
 }
 
 interface SourceFormModalProps {
@@ -31,19 +43,24 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
   }
   const save = useMutation({
     mutationFn: async (value: SourceFormValue) => {
-      const input = toInput(value, props.editing === 'new' ? null : props.editing)
-      return props.editing === 'new' ? createSource(input) : updateSource(props.editing!.id, input)
+      const input = toInput(value)
+      if (props.editing === 'new') return createSource(input)
+      const source = await updateSource(props.editing!.id, input)
+      return { source, sync: null, workerError: null } satisfies CreateSourceResult
     },
-    onSuccess: (saved) => {
+    onSuccess: ({ sync, workerError }) => {
       props.onClose()
       refresh()
       props.onSaved()
-      const newlyScheduled =
-        Boolean(saved.schedule) &&
-        (props.editing === 'new' || !props.editing || !props.editing.schedule)
+      if (workerError) {
+        void message.warning(`文档来源已保存，首次同步已排队，但后台启动失败：${workerError}`)
+        return
+      }
       void message.success(
-        newlyScheduled
-          ? '文档来源已保存；结束当前 Loci UI 会话后，后台服务会自动接管定时更新'
+        sync
+          ? sync.reused
+            ? '文档来源已保存；已复用正在进行的首次同步'
+            : '文档来源已保存；首次同步已在后台开始'
           : '文档来源已保存'
       )
     },
@@ -68,7 +85,14 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
       }}
     >
       <Form form={form} layout="vertical" className="pt-2" requiredMark="optional">
-        <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入名称' }]}>
+        <Form.Item
+          name="name"
+          label="名称"
+          rules={[
+            { required: true, message: '请输入名称' },
+            { max: DOCUMENT_SOURCE_LIMITS.nameLength.max, message: '名称过长' }
+          ]}
+        >
           <Input autoFocus />
         </Form.Item>
         <Form.Item
@@ -89,18 +113,34 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
             />
           </Form.Item>
           <Form.Item name="pageLimit" label="页面上限">
-            <InputNumber min={1} max={100000} className="w-full" />
+            <InputNumber {...DOCUMENT_SOURCE_LIMITS.pageLimit} className="w-full" />
           </Form.Item>
         </div>
         <Form.Item name="scopePath" label="收录路径">
           <Input placeholder="/docs" />
         </Form.Item>
-        <Form.Item name="excludePathPattern" label="排除路径（可选）">
-          <Input placeholder="/archive/**" />
+        <Form.Item
+          name="excludePathPattern"
+          label="排除路径正则（可选）"
+          rules={[
+            { max: DOCUMENT_SOURCE_LIMITS.excludePathPatternLength.max, message: '正则过长' }
+          ]}
+        >
+          <Input placeholder="^/(zh|de|fr)(?:/|$)" />
         </Form.Item>
         <Form.Item name="schedule" label="定时计划（可选）" extra="5 段 cron，例如 0 9 * * 1">
           <Input placeholder="0 9 * * 1" />
         </Form.Item>
+        <div className="grid grid-cols-2 gap-3">
+          <OptionalNumberField name="httpConcurrency" label="HTTP 并发覆盖" />
+          <OptionalNumberField name="browserConcurrency" label="浏览器并发覆盖" />
+          <OptionalNumberField name="githubArchiveLimitMb" label="GitHub ZIP 上限（MB）" size />
+          <OptionalNumberField
+            name="githubMarkdownLimitMb"
+            label="GitHub Markdown 上限（MB）"
+            size
+          />
+        </div>
       </Form>
     </Modal>
   )
@@ -190,9 +230,9 @@ export function SourceActions(props: SourceActionsProps): React.JSX.Element {
 const emptyForm: SourceFormValue = {
   name: '',
   url: '',
-  mode: 'auto',
-  pageLimit: 100,
-  scopePath: '/'
+  mode: DOCUMENT_SOURCE_DEFAULTS.mode,
+  pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
+  scopePath: DOCUMENT_SOURCE_DEFAULTS.scopePath
 }
 
 function fromSource(source: DocumentSource): SourceFormValue {
@@ -203,14 +243,15 @@ function fromSource(source: DocumentSource): SourceFormValue {
     pageLimit: source.pageLimit,
     scopePath: source.scopePath,
     excludePathPattern: source.excludePathPattern ?? undefined,
-    schedule: source.schedule ?? undefined
+    schedule: source.schedule ?? undefined,
+    httpConcurrency: source.httpConcurrency ?? undefined,
+    browserConcurrency: source.browserConcurrency ?? undefined,
+    githubArchiveLimitMb: source.githubArchiveLimitMb ?? undefined,
+    githubMarkdownLimitMb: source.githubMarkdownLimitMb ?? undefined
   }
 }
 
-function toInput(
-  value: SourceFormValue,
-  source: DocumentSource | null
-): CreateSourceInput | UpdateSourceInput {
+function toInput(value: SourceFormValue): CreateSourceInput | UpdateSourceInput {
   return {
     name: value.name.trim(),
     url: value.url.trim(),
@@ -219,9 +260,24 @@ function toInput(
     scopePath: value.scopePath.trim() || '/',
     excludePathPattern: value.excludePathPattern?.trim() || null,
     schedule: value.schedule?.trim() || null,
-    httpConcurrency: source?.httpConcurrency ?? null,
-    browserConcurrency: source?.browserConcurrency ?? null,
-    githubArchiveLimitMb: source?.githubArchiveLimitMb ?? null,
-    githubMarkdownLimitMb: source?.githubMarkdownLimitMb ?? null
+    httpConcurrency: value.httpConcurrency ?? null,
+    browserConcurrency: value.browserConcurrency ?? null,
+    githubArchiveLimitMb: value.githubArchiveLimitMb ?? null,
+    githubMarkdownLimitMb: value.githubMarkdownLimitMb ?? null
   }
+}
+
+function OptionalNumberField(props: {
+  name: keyof SourceFormValue
+  label: string
+  size?: boolean
+}): React.JSX.Element {
+  const limits = props.size
+    ? DOCUMENT_SOURCE_LIMITS.githubSizeMb
+    : DOCUMENT_SOURCE_LIMITS.concurrency
+  return (
+    <Form.Item name={props.name} label={props.label}>
+      <InputNumber {...limits} placeholder="继承全局设置" className="w-full" />
+    </Form.Item>
+  )
 }

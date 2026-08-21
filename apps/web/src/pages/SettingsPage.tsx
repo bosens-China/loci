@@ -29,7 +29,7 @@ export function SettingsPage(): React.JSX.Element {
     <div className="mx-auto max-w-6xl px-8 py-8">
       <PageHeader
         title="服务设置"
-        description="这些参数由后台服务统一读取，CLI、Web UI 和定时任务共用同一份配置。"
+        description="CLI、Web UI、按需 worker 和定时任务共用同一份本机配置。"
       />
       <AsyncState
         loading={query.isLoading}

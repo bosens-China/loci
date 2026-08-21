@@ -3,7 +3,6 @@ import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
 import { localhostHostValidation, localhostOriginValidation } from '@modelcontextprotocol/node'
-import type { LocalJob } from './local-job-database.js'
 import type { LocalRuntime } from './local-runtime.js'
 import { handleLocalApi, type LocalApiOptions } from './local-http-api.js'
 import { json } from './local-http-response.js'
@@ -11,7 +10,6 @@ import { json } from './local-http-response.js'
 export interface LocalHttpServer {
   port: number
   endpoint: string
-  publishJob: (job: LocalJob) => void
   close: () => Promise<void>
 }
 
@@ -33,7 +31,6 @@ export async function startLocalHttpServer(
   const validateOrigin = localhostOriginValidation()
   const webTokens = new Map<string, number>()
   const sessions = new Set<string>()
-  const events = new Set<ServerResponse>()
   const server = createServer((request, response) => {
     void handleRequest(request, response).catch((error: unknown) => {
       console.error('本地 Web 请求处理失败', error)
@@ -53,7 +50,7 @@ export async function startLocalHttpServer(
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     if (request.method === 'GET' && url.pathname === '/health') {
       json(response, 200, {
-        service: 'loci-local-service',
+        service: 'loci-local-web',
         pid: process.pid
       })
       return
@@ -91,7 +88,7 @@ export async function startLocalHttpServer(
         return
       }
       if (request.method !== 'GET' && !validateOrigin(request, response)) return
-      await handleLocalApi(runtime, request, response, url, events, options)
+      await handleLocalApi(runtime, request, response, url, options)
       return
     }
     if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -107,15 +104,7 @@ export async function startLocalHttpServer(
   return {
     port,
     endpoint: `http://127.0.0.1:${port}`,
-    publishJob: (job) => {
-      const payload = `event: job\ndata: ${JSON.stringify(job)}\n\n`
-      for (const response of events) response.write(payload)
-    },
-    close: async () => {
-      for (const response of events) response.end()
-      events.clear()
-      await close(server)
-    }
+    close: () => close(server)
   }
 }
 
@@ -220,4 +209,4 @@ function close(server: Server): Promise<void> {
 
 const fallbackHtml = `<!doctype html>
 <html lang="zh-CN"><meta charset="utf-8"><title>Loci</title>
-<body><main><h1>Loci 后台服务已启动</h1><p>Web UI 资源尚未安装，请重新安装或构建 Loci CLI。</p></main></body></html>`
+<body><main><h1>Loci Web 服务已启动</h1><p>Web UI 资源尚未安装，请重新安装或构建 Loci CLI。</p></main></body></html>`
