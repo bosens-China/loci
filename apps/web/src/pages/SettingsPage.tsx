@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Form, Input, InputNumber, Select } from 'antd'
+import { App, Button, Form, Input, InputNumber } from 'antd'
 import { APP_SETTINGS_LIMITS, isValidBatchIntervalSeconds, type AppSettings } from '@loci/shared'
 import { getSettings, saveSettings } from '@/api/settings'
 import { AsyncState } from '@/components/AsyncState'
@@ -24,12 +24,12 @@ export function SettingsPage(): React.JSX.Element {
     },
     onError: (error: Error) => void message.error(error.message)
   })
+
   return (
-    <>
+    <div className="mx-auto max-w-6xl px-8 py-8">
       <PageHeader
-        eyebrow="Runtime policy"
         title="服务设置"
-        description="这些参数由后台服务统一读取，CLI、Web UI 和定时任务不会各自维护一份。"
+        description="这些参数由后台服务统一读取，CLI、Web UI 和定时任务共用同一份配置。"
       />
       <AsyncState
         loading={query.isLoading}
@@ -37,10 +37,9 @@ export function SettingsPage(): React.JSX.Element {
         onRetry={() => void query.refetch()}
       >
         <Form form={form} layout="vertical" onFinish={(value) => save.mutate(value)}>
-          <div className="grid gap-5 xl:grid-cols-2">
-            <section className="panel p-5 sm:p-6">
-              <div className="eyebrow">Crawling</div>
-              <h2 className="mb-5 mt-1 text-lg font-700">抓取并发</h2>
+          <div className="grid grid-cols-2 gap-5">
+            <section className="panel p-5">
+              <h2 className="mb-4 mt-0 text-base font-700">抓取并发</h2>
               <div className="grid grid-cols-2 gap-4">
                 <NumberField
                   name="httpConcurrency"
@@ -66,9 +65,8 @@ export function SettingsPage(): React.JSX.Element {
                 />
               </div>
             </section>
-            <section className="panel p-5 sm:p-6">
-              <div className="eyebrow">Limits</div>
-              <h2 className="mb-5 mt-1 text-lg font-700">GitHub 体积限制</h2>
+            <section className="panel p-5">
+              <h2 className="mb-4 mt-0 text-base font-700">GitHub 体积限制</h2>
               <div className="grid grid-cols-2 gap-4">
                 <NumberField
                   name="githubArchiveLimitMb"
@@ -81,32 +79,13 @@ export function SettingsPage(): React.JSX.Element {
                   {...APP_SETTINGS_LIMITS.githubSizeMb}
                 />
               </div>
-              <Form.Item name="serverUrl" label="云服务地址">
+              <Form.Item name="serverUrl" label="云服务地址" className="mt-2">
                 <Input />
               </Form.Item>
             </section>
-            <section className="panel p-5 sm:p-6 xl:col-span-2">
-              <div className="eyebrow">Interface</div>
-              <h2 className="mb-5 mt-1 text-lg font-700">界面与兼容端口</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Form.Item name="theme" label="主题">
-                  <Select
-                    options={[
-                      { value: 'auto', label: '跟随系统' },
-                      { value: 'light', label: '浅色' },
-                      { value: 'dark', label: '深色' }
-                    ]}
-                  />
-                </Form.Item>
-                <NumberField name="mcpPort" label="MCP 端口" {...APP_SETTINGS_LIMITS.mcpPort} />
-              </div>
-              <div className="mt-2 rounded-xl bg-[#edf5f4] px-4 py-3 text-sm leading-6 text-[#466163]">
-                后台服务的 Web 端口默认随机分配，只监听 127.0.0.1；这里的端口仅保留给 MCP
-                兼容入口。修改后运行 loci service restart 生效。
-              </div>
-            </section>
           </div>
-          <div className="mt-6 flex justify-end">
+          <div className="mt-5 flex items-center justify-between">
+            <p className="mb-0 text-xs text-muted">Web 端口默认随机分配，仅监听 127.0.0.1。</p>
             <Button type="primary" htmlType="submit" loading={save.isPending}>
               保存设置
             </Button>
@@ -114,7 +93,7 @@ export function SettingsPage(): React.JSX.Element {
         </Form>
         <DataTransferPanel />
       </AsyncState>
-    </>
+    </div>
   )
 }
 

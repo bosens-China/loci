@@ -3,9 +3,14 @@ import { resolveRoute, routePath } from '@/routing'
 
 describe('Web 路由', () => {
   it('为主页面生成可刷新路径', () => {
-    expect(routePath('library')).toBe('/library')
+    expect(routePath('documents')).toBe('/documents')
     expect(routePath('cloud')).toBe('/cloud')
     expect(resolveRoute('/jobs')).toBe('jobs')
+  })
+
+  it('旧路径映射到文档工作区', () => {
+    expect(resolveRoute('/sources')).toBe('documents')
+    expect(resolveRoute('/library')).toBe('documents')
   })
 
   it('未知路径回到概览', () => {

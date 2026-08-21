@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App as AntApp, ConfigProvider } from 'antd'
 import '@unocss/reset/tailwind.css'
 import 'uno.css'
+import '@/styles/ant-fix.css'
 import { App } from '@/App'
 
 const queryClient = new QueryClient({

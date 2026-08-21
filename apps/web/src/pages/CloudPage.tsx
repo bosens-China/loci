@@ -40,17 +40,19 @@ export function CloudPage(): React.JSX.Element {
     action.mutate({ item, run: task, success })
   }
   const openLibrary = (sourceId: string): void => {
-    window.history.pushState({}, '', `/library?source=${encodeURIComponent(sourceId)}`)
+    const url = new URL(window.location.origin)
+    url.pathname = '/documents'
+    url.searchParams.set('source', sourceId)
+    window.history.pushState({}, '', url)
     window.dispatchEvent(new PopStateEvent('popstate'))
   }
   const busyId = action.isPending ? action.variables?.item.id : null
 
   return (
-    <>
+    <div className="mx-auto max-w-6xl px-8 py-8">
       <PageHeader
-        eyebrow="Remote shelf"
         title="云端目录"
-        description="从公开目录拉取只读快照到本机；阅读仍走本地 SQLite，离线时也能继续使用。"
+        description="从公开目录拉取只读快照到本机。阅读走本地 SQLite，离线可用。"
         action={
           <Button
             icon={<ReloadOutlined />}
@@ -68,17 +70,14 @@ export function CloudPage(): React.JSX.Element {
         emptyText="当前云服务没有可用的公开文档库"
         onRetry={() => void query.refetch()}
       >
-        <div className="grid gap-4 xl:grid-cols-2">
-          {query.data?.map((item, index) => (
-            <article key={item.id} className="panel relative overflow-hidden p-5 sm:p-6">
-              <div
-                className={`absolute inset-y-0 left-0 w-1.5 ${index % 2 ? 'bg-[#d38a22]' : 'bg-[#3e88a0]'}`}
-              />
-              <div className="flex items-start justify-between gap-4 pl-2">
+        <div className="grid grid-cols-2 gap-4">
+          {query.data?.map((item) => (
+            <article key={item.id} className="panel p-5">
+              <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="m-0 truncate font-serif text-xl">{item.name}</h2>
+                  <h2 className="m-0 truncate font-serif text-lg font-600">{item.name}</h2>
                   <a
-                    className="mt-1 block truncate text-xs text-[#0a727b] hover:underline"
+                    className="mt-1 block truncate font-mono text-[11px] text-accent hover:underline"
                     href={item.url}
                     target="_blank"
                     rel="noreferrer"
@@ -88,16 +87,17 @@ export function CloudPage(): React.JSX.Element {
                 </div>
                 <CatalogStatus item={item} />
               </div>
-              <div className="my-5 flex flex-wrap gap-2 pl-2">
+              <div className="my-4 flex flex-wrap gap-2">
                 <Tag bordered={false}>{item.pages} 页</Tag>
                 <Tag bordered={false}>{formatBytes(item.contentSize)}</Tag>
                 <Tag bordered={false}>发布 {formatDate(item.publishedAt)}</Tag>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e5ebeb] pl-2 pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e5ebeb] pt-4">
                 <div className="flex flex-wrap gap-2">
                   {item.localSourceId ? (
                     <>
                       <Button
+                        size="small"
                         icon={<FileSearchOutlined />}
                         onClick={() => openLibrary(item.localSourceId!)}
                       >
@@ -106,6 +106,7 @@ export function CloudPage(): React.JSX.Element {
                       {item.updateAvailable && (
                         <Button
                           type="primary"
+                          size="small"
                           loading={busyId === item.id}
                           onClick={() =>
                             run(
@@ -128,6 +129,7 @@ export function CloudPage(): React.JSX.Element {
                       >
                         <Button
                           danger
+                          size="small"
                           type="text"
                           icon={<DeleteOutlined />}
                           aria-label="移除本地副本"
@@ -138,10 +140,15 @@ export function CloudPage(): React.JSX.Element {
                   ) : (
                     <Button
                       type="primary"
+                      size="small"
                       icon={<CloudDownloadOutlined />}
                       loading={busyId === item.id}
                       onClick={() =>
-                        run(item, () => pullCloudLibrary(item.id), '云端文档已拉取到本机')
+                        run(
+                          item,
+                          () => pullCloudLibrary(item.id),
+                          '云端文档已拉取；结束当前 Loci UI 会话后，后台服务会自动执行每日检查'
+                        )
                       }
                     >
                       拉取到本机
@@ -149,7 +156,7 @@ export function CloudPage(): React.JSX.Element {
                   )}
                 </div>
                 {item.localSourceId && (
-                  <label className="flex items-center gap-2 text-xs text-[#617577]">
+                  <label className="flex items-center gap-2 text-xs text-muted">
                     每日检查
                     <Switch
                       size="small"
@@ -160,7 +167,9 @@ export function CloudPage(): React.JSX.Element {
                         run(
                           item,
                           () => setCloudAutoSync(item.localSourceId!, enabled),
-                          enabled ? '已启用云端自动更新' : '已停用云端自动更新'
+                          enabled
+                            ? '已启用云端自动更新；结束当前 Loci UI 会话后由后台服务接管'
+                            : '已停用云端自动更新'
                         )
                       }
                     />
@@ -171,7 +180,7 @@ export function CloudPage(): React.JSX.Element {
           ))}
         </div>
       </AsyncState>
-    </>
+    </div>
   )
 }
 

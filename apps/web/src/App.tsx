@@ -1,18 +1,15 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Button, Result } from 'antd'
 import { exchangeLaunchToken, readLaunchToken, verifySession } from '@/api/session'
 import { AppShell } from '@/components/AppShell'
 import { useJobEvents } from '@/hooks/use-job-events'
+import { migrateLegacyDocumentPath } from '@/pages/documents/use-document-route'
 import { resolveRoute, routePath, type AppRoute } from '@/routing'
 
 const OverviewPage = lazy(() =>
   import('@/pages/OverviewPage').then((module) => ({ default: module.OverviewPage }))
 )
-const SourcesPage = lazy(() =>
-  import('@/pages/SourcesPage').then((module) => ({ default: module.SourcesPage }))
-)
-const LibraryPage = lazy(() =>
-  import('@/pages/LibraryPage').then((module) => ({ default: module.LibraryPage }))
+const DocumentsPage = lazy(() =>
+  import('@/pages/DocumentsPage').then((module) => ({ default: module.DocumentsPage }))
 )
 const CloudPage = lazy(() =>
   import('@/pages/CloudPage').then((module) => ({ default: module.CloudPage }))
@@ -28,22 +25,21 @@ type SessionState = { status: 'loading' } | { status: 'ready' } | { status: 'err
 
 export function App(): React.JSX.Element {
   const [session, setSession] = useState<SessionState>({ status: 'loading' })
-  const [route, setRoute] = useState<AppRoute>(() => resolveRoute(window.location.pathname))
-  const retryAuthentication = (): void => {
-    setSession({ status: 'loading' })
-    void authenticateSession()
-      .then(() => {
-        setSession({ status: 'ready' })
-      })
-      .catch((error: unknown) => setSession({ status: 'error', error: toError(error) }))
-  }
+  const [route, setRoute] = useState<AppRoute>(() => {
+    migrateLegacyDocumentPath(window.location.pathname)
+    return resolveRoute(window.location.pathname)
+  })
+
   useEffect(() => {
     void authenticateSession()
       .then(() => setSession({ status: 'ready' }))
       .catch((error: unknown) => setSession({ status: 'error', error: toError(error) }))
   }, [])
   useEffect(() => {
-    const update = (): void => setRoute(resolveRoute(window.location.pathname))
+    const update = (): void => {
+      migrateLegacyDocumentPath(window.location.pathname)
+      setRoute(resolveRoute(window.location.pathname))
+    }
     window.addEventListener('popstate', update)
     return () => window.removeEventListener('popstate', update)
   }, [])
@@ -51,51 +47,86 @@ export function App(): React.JSX.Element {
 
   if (session.status === 'loading') {
     return (
-      <div className="grid min-h-screen place-items-center px-6">
+      <div className="grid min-h-screen min-w-1200px place-items-center bg-canvas">
         <div className="text-center">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-3 border-[#bdd2d2] border-t-[#0a7c86] motion-reduce:animate-none" />
-          <div className="mt-4 text-sm text-[#5f7375]">正在连接本地服务…</div>
+          <div className="mx-auto h-9 w-9 animate-spin rounded-full border-3 border-[#bdd2d2] border-t-accent motion-reduce:animate-none" />
+          <div className="mt-3 text-sm text-muted">正在连接本地服务…</div>
         </div>
       </div>
     )
   }
   if (session.status === 'error') {
-    return (
-      <div className="grid min-h-screen place-items-center px-6">
-        <Result
-          status="403"
-          title="需要新的本地会话"
-          subTitle={session.error.message}
-          extra={
-            <div className="flex justify-center gap-2">
-              <Button onClick={retryAuthentication}>重试</Button>
-              <Button type="primary" onClick={() => void navigator.clipboard.writeText('loci ui')}>
-                复制 loci ui
-              </Button>
-            </div>
-          }
-        />
-      </div>
-    )
+    return <SessionError error={session.error} onRetry={() => void retry(setSession)} />
   }
+
   const navigate = (next: AppRoute): void => {
     window.history.pushState({}, '', routePath(next))
     setRoute(next)
   }
   return (
     <AppShell route={route} onNavigate={navigate}>
-      <Suspense fallback={<PageLoading />}>{pageFor(route)}</Suspense>
+      <Suspense fallback={<PageLoading route={route} />}>{pageFor(route)}</Suspense>
     </AppShell>
   )
 }
 
+function SessionError(props: { error: Error; onRetry: () => void }): React.JSX.Element {
+  const [copied, setCopied] = useState(false)
+  const copyCommand = (): void => {
+    void navigator.clipboard.writeText('loci ui').then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <div className="grid min-h-screen min-w-1200px place-items-center bg-canvas px-8">
+      <div className="panel max-w-md p-8 text-center">
+        <div className="font-serif text-2xl text-ink">需要新的本地会话</div>
+        <p className="mt-3 text-sm leading-6 text-muted">{props.error.message}</p>
+        <p className="mt-2 text-sm text-muted">在终端运行以下命令重新打开控制台：</p>
+        <code className="mt-4 block rounded-lg bg-[#edf3f2] px-4 py-3 font-mono text-sm text-ink">
+          loci ui
+        </code>
+        <div className="mt-6 flex justify-center gap-3">
+          <button
+            type="button"
+            className="focus-ring rounded-lg border border-[#d8e0e0] bg-white px-4 py-2 text-sm font-600 text-ink transition-colors hover:bg-[#f3f7f6]"
+            onClick={props.onRetry}
+          >
+            重试
+          </button>
+          <button
+            type="button"
+            className="focus-ring rounded-lg bg-accent px-4 py-2 text-sm font-600 text-white transition-colors hover:bg-[#086570]"
+            onClick={copyCommand}
+          >
+            {copied ? '已复制' : '复制命令'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function pageFor(route: AppRoute): React.JSX.Element {
-  if (route === 'sources') return <SourcesPage />
-  if (route === 'library') return <LibraryPage />
+  if (route === 'documents') return <DocumentsPage />
   if (route === 'cloud') return <CloudPage />
   if (route === 'jobs') return <JobsPage />
   if (route === 'settings') return <SettingsPage />
   return <OverviewPage />
+}
+
+function PageLoading({ route }: { route: AppRoute }): React.JSX.Element {
+  if (route === 'documents') {
+    return (
+      <div className="h-[calc(100vh-3.25rem)] animate-pulse bg-[#f3f7f6] motion-reduce:animate-none" />
+    )
+  }
+  return (
+    <div className="mx-auto max-w-6xl px-8 py-8">
+      <div className="panel h-48 animate-pulse bg-white motion-reduce:animate-none" />
+    </div>
+  )
 }
 
 function toError(error: unknown): Error {
@@ -112,11 +143,9 @@ async function authenticateSession(): Promise<void> {
   }
 }
 
-function PageLoading(): React.JSX.Element {
-  return (
-    <div
-      className="panel h-48 animate-pulse bg-white/70 motion-reduce:animate-none"
-      aria-label="正在加载页面"
-    />
-  )
+function retry(setSession: (state: SessionState) => void): void {
+  setSession({ status: 'loading' })
+  void authenticateSession()
+    .then(() => setSession({ status: 'ready' }))
+    .catch((error: unknown) => setSession({ status: 'error', error: toError(error) }))
 }

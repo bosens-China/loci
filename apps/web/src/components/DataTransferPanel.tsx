@@ -20,9 +20,7 @@ export function DataTransferPanel(): React.JSX.Element {
     mutationFn: async (file: File) => importBackup(await readBackupFile(file)),
     onSuccess: async (result) => {
       await queryClient.invalidateQueries()
-      void message.success(
-        `已恢复 ${result.sources} 个来源和 ${result.documents} 篇文档；请运行 loci service restart`
-      )
+      void message.success(`已恢复 ${result.sources} 个来源和 ${result.documents} 篇文档`)
     },
     onError: (error: Error) => void message.error(error.message)
   })
@@ -35,11 +33,10 @@ export function DataTransferPanel(): React.JSX.Element {
 
   return (
     <section className="panel mt-5 overflow-hidden">
-      <div className="border-b border-[#e1e8e8] bg-[#f7faf9] px-5 py-4 sm:px-6">
-        <div className="eyebrow">Data vault</div>
-        <h2 className="mb-0 mt-1 text-lg font-700">备份与恢复</h2>
+      <div className="pane-header">
+        <span className="pane-title">备份与恢复</span>
       </div>
-      <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
+      <div className="grid grid-cols-2 gap-5 p-5">
         <TransferAction
           title="下载完整备份"
           description="包含来源、文档、抓取记录和运行设置，文件只保存到你选择的浏览器下载位置。"
@@ -54,7 +51,7 @@ export function DataTransferPanel(): React.JSX.Element {
         </TransferAction>
         <TransferAction
           title="从备份恢复"
-          description="恢复会替换当前本地库。正在同步时服务会拒绝操作，导入成功后需重启服务。"
+          description="恢复会替换当前本地库。正在同步时服务会拒绝操作；持久后台能力会在当前 UI 会话结束后自动交接。"
           danger
         >
           <Popconfirm
@@ -90,10 +87,10 @@ function TransferAction(props: {
 }): React.JSX.Element {
   return (
     <div
-      className={`rounded-xl border-l-3 bg-[#f8faf9] p-4 ${props.danger ? 'border-[#b6423c]' : 'border-[#0a7c86]'}`}
+      className={`rounded-xl border-l-3 bg-[#f8faf9] p-4 ${props.danger ? 'border-[#b6423c]' : 'border-accent'}`}
     >
       <h3 className="m-0 text-sm font-700">{props.title}</h3>
-      <p className="mb-4 mt-2 text-xs leading-5 text-[#617577]">{props.description}</p>
+      <p className="mb-4 mt-2 text-xs leading-5 text-muted">{props.description}</p>
       {props.children}
     </div>
   )

@@ -28,11 +28,12 @@ export function AsyncState(props: AsyncStateProps): React.JSX.Element {
       />
     )
   }
-  if (props.empty)
+  if (props.empty) {
     return (
-      <div className="panel py-12">
+      <div className="panel py-16">
         <Empty description={props.emptyText} />
       </div>
     )
+  }
   return <>{props.children}</>
 }

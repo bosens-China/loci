@@ -5,7 +5,6 @@ export const BACKUP_FILE_LIMIT_BYTES = 256 * 1024 * 1024
 export interface BackupImportResult {
   sources: number
   documents: number
-  restartRequired: boolean
 }
 
 export interface BackupDownload {
