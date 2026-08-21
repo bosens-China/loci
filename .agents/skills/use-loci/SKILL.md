@@ -100,7 +100,7 @@ description: 使用 Loci 发现、获取、同步、搜索和阅读开发者技�
 
 `loci_sync_libraries` 只用于已经存在的网页文档库；不存在的文档库必须通过云端拉取或添加官方入口获取。不要为每个问题同步文档库，仅在用户要求最新信息、文档库长期没有成功更新、本地结果明显缺失或可能与官网不一致时建议同步。
 
-用户已授权同步，但另一个工具或 Agent 可能已经启动任务时，先用 `library_id` 调用 `loci_get_sync_status`。`sync_status=syncing` 时跟随已有任务，不要并行启动第二份抓取；确实需要在当前调用中等待时，对同一文档库调用 `loci_sync_libraries` 并设置 `wait_for_completion: true`。Loci 会复用当前进程中的任务，跨进程调用则由文档源锁阻止重复写入。
+用户已授权同步，但另一个工具或 Agent 可能已经启动任务时，先以 `{"library_ids":["目标文档库 ID"]}` 调用 `loci_get_sync_status`。`sync_status=syncing` 时跟随已有任务，不要并行启动第二份抓取；确实需要在当前调用中等待时，对同一文档库调用 `loci_sync_libraries` 并设置 `wait_for_completion: true`。Loci 会复用当前进程中的任务，跨进程调用则由文档源锁阻止重复写入。
 
 同步响应只返回失败总数、原因统计和少量样例。需要完整失败详情时，取返回的 `run_id` 调用 `loci_list_sync_failures` 分页读取；`library_id` 用于实时状态，`run_id` 用于特定同步历史。不要因为摘要省略了其余失败就反复启动同步。
 
