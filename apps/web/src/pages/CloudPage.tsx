@@ -88,9 +88,9 @@ export function CloudPage(): React.JSX.Element {
                 <CatalogStatus item={item} />
               </div>
               <div className="my-4 flex flex-wrap gap-2">
-                <Tag bordered={false}>{item.pages} 页</Tag>
-                <Tag bordered={false}>{formatBytes(item.contentSize)}</Tag>
-                <Tag bordered={false}>发布 {formatDate(item.publishedAt)}</Tag>
+                <Tag variant="filled">{item.pages} 页</Tag>
+                <Tag variant="filled">{formatBytes(item.contentSize)}</Tag>
+                <Tag variant="filled">发布 {formatDate(item.publishedAt)}</Tag>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e5ebeb] pt-4">
                 <div className="flex flex-wrap gap-2">

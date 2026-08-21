@@ -2,12 +2,13 @@ import { useDeferredValue } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Input } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
-import type { DocumentRecord } from '@loci/shared'
+import type { DocumentRecord, DocumentSource } from '@loci/shared'
 import { listDocuments } from '@/api/documents'
+import { LibraryOriginTag } from '@/components/library/LibraryOriginTag'
 
 interface DocumentListPanelProps {
   sourceId: string
-  sourceName: string
+  source: DocumentSource | undefined
   query: string
   selectedId: string
   onQueryChange: (query: string) => void
@@ -26,7 +27,12 @@ export function DocumentListPanel(props: DocumentListPanelProps): React.JSX.Elem
   return (
     <div className="workspace-pane h-full w-72 shrink-0 border-r xl:w-80">
       <div className="pane-header">
-        <span className="pane-title truncate">{props.sourceName || '选择来源'}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="pane-title truncate">{props.source?.name || '选择来源'}</span>
+          {props.source?.cloud && (
+            <LibraryOriginTag origin="cloud" autoSync={props.source.cloud.autoSync} />
+          )}
+        </div>
         <span className="font-mono text-[11px] text-muted">{documents.data?.length ?? 0}</span>
       </div>
       <div className="border-b border-[#e4eaea] px-3 py-2">

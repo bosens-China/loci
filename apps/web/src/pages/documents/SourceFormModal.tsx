@@ -4,6 +4,7 @@ import { SyncOutlined } from '@ant-design/icons'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
   DOCUMENT_SOURCE_LIMITS,
+  normalizeCronSchedule,
   type CreateSourceInput,
   type CreateSourceResult,
   type DocumentSource,
@@ -12,15 +13,14 @@ import {
 } from '@loci/shared'
 import { enqueueSourceSync } from '@/api/jobs'
 import { createSource, deleteSource, updateSource } from '@/api/sources'
+import {
+  LibraryCoreFields,
+  type LibraryCoreFormValue
+} from '@/components/library/LibraryCoreFields'
 
-interface SourceFormValue {
-  name: string
-  url: string
+interface SourceFormValue extends LibraryCoreFormValue {
   mode: FetchMode
-  pageLimit: number
-  scopePath: string
   excludePathPattern?: string
-  schedule?: string
   httpConcurrency?: number
   browserConcurrency?: number
   githubArchiveLimitMb?: number
@@ -85,39 +85,15 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
       }}
     >
       <Form form={form} layout="vertical" className="pt-2" requiredMark="optional">
-        <Form.Item
-          name="name"
-          label="名称"
-          rules={[
-            { required: true, message: '请输入名称' },
-            { max: DOCUMENT_SOURCE_LIMITS.nameLength.max, message: '名称过长' }
-          ]}
-        >
-          <Input autoFocus />
-        </Form.Item>
-        <Form.Item
-          name="url"
-          label="起始 URL"
-          rules={[{ required: true, type: 'url', message: '请输入完整 URL' }]}
-        >
-          <Input placeholder="https://example.com/docs" />
-        </Form.Item>
-        <div className="grid grid-cols-2 gap-3">
-          <Form.Item name="mode" label="抓取方式">
-            <Select
-              options={[
-                { value: 'auto', label: '自动检测' },
-                { value: 'http', label: 'HTTP' },
-                { value: 'browser', label: '浏览器' }
-              ]}
-            />
-          </Form.Item>
-          <Form.Item name="pageLimit" label="页面上限">
-            <InputNumber {...DOCUMENT_SOURCE_LIMITS.pageLimit} className="w-full" />
-          </Form.Item>
-        </div>
-        <Form.Item name="scopePath" label="收录路径">
-          <Input placeholder="/docs" />
+        <LibraryCoreFields autoFocusUrl suggestName={props.editing === 'new'} />
+        <Form.Item name="mode" label="抓取方式">
+          <Select
+            options={[
+              { value: 'auto', label: '自动检测' },
+              { value: 'http', label: 'HTTP' },
+              { value: 'browser', label: '浏览器' }
+            ]}
+          />
         </Form.Item>
         <Form.Item
           name="excludePathPattern"
@@ -127,9 +103,6 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
           ]}
         >
           <Input placeholder="^/(zh|de|fr)(?:/|$)" />
-        </Form.Item>
-        <Form.Item name="schedule" label="定时计划（可选）" extra="5 段 cron，例如 0 9 * * 1">
-          <Input placeholder="0 9 * * 1" />
         </Form.Item>
         <div className="grid grid-cols-2 gap-3">
           <OptionalNumberField name="httpConcurrency" label="HTTP 并发覆盖" />
@@ -180,7 +153,7 @@ export function SourceActions(props: SourceActionsProps): React.JSX.Element {
   })
 
   if (props.source.cloud) {
-    return <span className="text-[11px] text-muted">云端副本</span>
+    return <span className="text-[11px] text-muted">只读快照</span>
   }
 
   return (
@@ -259,7 +232,7 @@ function toInput(value: SourceFormValue): CreateSourceInput | UpdateSourceInput 
     pageLimit: value.pageLimit,
     scopePath: value.scopePath.trim() || '/',
     excludePathPattern: value.excludePathPattern?.trim() || null,
-    schedule: value.schedule?.trim() || null,
+    schedule: normalizeCronSchedule(value.schedule),
     httpConcurrency: value.httpConcurrency ?? null,
     browserConcurrency: value.browserConcurrency ?? null,
     githubArchiveLimitMb: value.githubArchiveLimitMb ?? null,

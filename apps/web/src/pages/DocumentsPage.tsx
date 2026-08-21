@@ -38,7 +38,7 @@ export function DocumentsPage(): React.JSX.Element {
         <SourcePanel selectedId={route.state.sourceId} onSelect={route.selectSource} />
         <DocumentListPanel
           sourceId={route.state.sourceId}
-          sourceName={selectedSource?.name ?? ''}
+          source={selectedSource}
           query={route.state.query}
           selectedId={readerDocument?.id ?? ''}
           onQueryChange={route.setQuery}

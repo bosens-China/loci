@@ -5,6 +5,7 @@ import { PlusOutlined } from '@ant-design/icons'
 import type { DocumentSource } from '@loci/shared'
 import { listSources } from '@/api/sources'
 import { StatusPill } from '@/components/StatusPill'
+import { LibraryOriginTag } from '@/components/library/LibraryOriginTag'
 import { FETCH_MODE_LABELS } from '@/utils/status-labels'
 import { SourceActions, SourceFormModal } from '@/pages/documents/SourceFormModal'
 
@@ -98,9 +99,13 @@ function SourceGroup(props: {
           <div className="mt-1 truncate font-mono text-[11px] text-muted">{source.url}</div>
           <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted">
             <span>
-              {source.pages} 页 · {FETCH_MODE_LABELS[source.mode]}
+              {source.pages} 页{source.cloud ? '' : ` · ${FETCH_MODE_LABELS[source.mode]}`}
             </span>
-            {source.schedule && <span>{source.schedule}</span>}
+            {source.cloud ? (
+              <LibraryOriginTag origin="cloud" autoSync={source.cloud.autoSync} />
+            ) : (
+              source.schedule && <span>{source.schedule}</span>
+            )}
           </div>
           {props.selectedId === source.id && (
             <SourceActions source={source} onEdit={() => props.onEdit(source)} />
