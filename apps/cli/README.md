@@ -5,10 +5,14 @@
 ## 本地开发
 
 ```bash
+pnpm dev
+pnpm dev:user
 pnpm --filter @boses/cli build
 pnpm --filter @boses/cli test
 pnpm --filter @boses/cli typecheck
 ```
+
+`pnpm dev` 默认使用仓库内的 `.loci-dev` 隔离数据与缓存，适合日常开发。需要直接复现正式 `loci ui` 中的数据问题时，显式运行 `pnpm dev:user`；它遵循 Runtime 的正式数据目录规则以及 `LOCI_DATA_DIR`、`LOCI_CACHE_DIR` 覆盖，并且 Web 中的写操作会直接修改对应数据。
 
 CLI 构建会先构建 `@loci/web`，再把产物复制到 npm 包的 `dist/resources/ui`。本地验证前台 Web 会话：
 
