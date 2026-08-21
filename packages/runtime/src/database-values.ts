@@ -55,15 +55,6 @@ export interface DocumentRow {
 }
 
 export function validateSettings(settings: AppSettings): AppSettings {
-  if (
-    !Number.isInteger(settings.mcpPort) ||
-    settings.mcpPort < APP_SETTINGS_LIMITS.mcpPort.min ||
-    settings.mcpPort > APP_SETTINGS_LIMITS.mcpPort.max
-  ) {
-    throw new Error(
-      `MCP 端口必须是 ${APP_SETTINGS_LIMITS.mcpPort.min} 到 ${APP_SETTINGS_LIMITS.mcpPort.max} 之间的整数`
-    )
-  }
   if (!['auto', 'light', 'dark'].includes(settings.theme)) throw new Error('不支持的主题设置')
   validateConcurrency(settings.httpConcurrency, 'HTTP 默认并发')
   validateConcurrency(settings.browserConcurrency, '浏览器默认并发')
@@ -180,6 +171,9 @@ export function toDocumentRecord(row: DocumentRow): DocumentRecord {
 }
 
 export function migrateDatabase(database: DatabaseSync, previousVersion = 0): void {
+  if (previousVersion < 12 && hasColumn(database, 'app_settings', 'mcp_port')) {
+    database.exec('ALTER TABLE app_settings DROP COLUMN mcp_port')
+  }
   addColumn(database, 'document_sources', 'icon_url', 'TEXT')
   addColumn(
     database,

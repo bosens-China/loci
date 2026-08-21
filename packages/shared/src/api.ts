@@ -5,7 +5,6 @@ export type FetchMode = 'auto' | 'http' | 'browser'
 export type ThemeMode = 'auto' | 'light' | 'dark'
 
 export interface AppSettings {
-  mcpPort: number
   theme: ThemeMode
   httpConcurrency: number
   browserConcurrency: number
@@ -14,17 +13,6 @@ export interface AppSettings {
   serverUrl: string
   githubArchiveLimitMb: number
   githubMarkdownLimitMb: number
-}
-
-export interface McpServerStatus {
-  running: boolean
-  endpoint: string
-  error: string | null
-}
-
-export interface AppSettingsState {
-  settings: AppSettings
-  mcp: McpServerStatus
 }
 
 export interface AgentImportResult {
@@ -107,7 +95,6 @@ export const PRODUCTION_SERVER_URL = 'https://loci.xiaowo.live'
 export const DEVELOPMENT_SERVER_URL = 'http://localhost:7001'
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  mcpPort: 37373,
   theme: 'auto',
   httpConcurrency: 9,
   browserConcurrency: 5,

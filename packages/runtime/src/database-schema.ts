@@ -1,7 +1,7 @@
 import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import { APP_SETTINGS_LIMITS, DEFAULT_APP_SETTINGS, PRODUCTION_SERVER_URL } from '@loci/shared'
 
-export const LOCI_SCHEMA_VERSION = 11
+export const LOCI_SCHEMA_VERSION = 12
 
 // 基础表结构集中维护，具体子模块的增量表由各自初始化函数负责。
 export const LOCI_DATABASE_SCHEMA = `
@@ -60,7 +60,6 @@ export const LOCI_DATABASE_SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS app_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    mcp_port INTEGER NOT NULL CHECK (mcp_port BETWEEN ${APP_SETTINGS_LIMITS.mcpPort.min} AND ${APP_SETTINGS_LIMITS.mcpPort.max}),
     theme TEXT NOT NULL CHECK (theme IN ('auto', 'light', 'dark')),
     http_concurrency INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.httpConcurrency} CHECK (http_concurrency BETWEEN ${APP_SETTINGS_LIMITS.concurrency.min} AND ${APP_SETTINGS_LIMITS.concurrency.max}),
     browser_concurrency INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.browserConcurrency} CHECK (browser_concurrency BETWEEN ${APP_SETTINGS_LIMITS.concurrency.min} AND ${APP_SETTINGS_LIMITS.concurrency.max}),

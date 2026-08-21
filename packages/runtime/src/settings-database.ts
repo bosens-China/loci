@@ -27,13 +27,12 @@ export function initializeSettings(
   database
     .prepare(
       `INSERT OR IGNORE INTO app_settings
-       (id, mcp_port, theme, http_concurrency, browser_concurrency, max_retries,
+       (id, theme, http_concurrency, browser_concurrency, max_retries,
         batch_interval_seconds, server_url, server_url_customized, github_archive_limit_mb,
         github_markdown_limit_mb)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+       VALUES (1, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
     )
     .run(
-      DEFAULT_APP_SETTINGS.mcpPort,
       DEFAULT_APP_SETTINGS.theme,
       DEFAULT_APP_SETTINGS.httpConcurrency,
       DEFAULT_APP_SETTINGS.browserConcurrency,
@@ -61,13 +60,12 @@ export function createSettingsDatabase(
     getSettings: () => {
       const row = database
         .prepare(
-          `SELECT mcp_port, theme, http_concurrency, browser_concurrency, max_retries,
+          `SELECT theme, http_concurrency, browser_concurrency, max_retries,
              batch_interval_seconds, server_url, github_archive_limit_mb,
              github_markdown_limit_mb FROM app_settings WHERE id = 1`
         )
         .get() as unknown as SettingsRow
       return {
-        mcpPort: Number(row.mcp_port),
         theme: row.theme,
         httpConcurrency: Number(row.http_concurrency),
         browserConcurrency: Number(row.browser_concurrency),
@@ -92,7 +90,7 @@ export function createSettingsDatabase(
       database
         .prepare(
           `UPDATE app_settings
-           SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?,
+           SET theme = ?, http_concurrency = ?, browser_concurrency = ?,
                max_retries = ?, batch_interval_seconds = ?,
                github_archive_limit_mb = ?, github_markdown_limit_mb = ?,
                server_url_customized = CASE WHEN server_url = ? THEN server_url_customized ELSE 1 END,
@@ -100,7 +98,6 @@ export function createSettingsDatabase(
            WHERE id = 1`
         )
         .run(
-          normalized.mcpPort,
           normalized.theme,
           normalized.httpConcurrency,
           normalized.browserConcurrency,
@@ -117,7 +114,6 @@ export function createSettingsDatabase(
 }
 
 interface SettingsRow {
-  mcp_port: number
   theme: AppSettings['theme']
   http_concurrency: number
   browser_concurrency: number

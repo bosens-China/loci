@@ -197,8 +197,9 @@ describe('文档源最短输入', () => {
   })
 
   it('可以用独立命令设置和关闭本地定时计划', async () => {
+    const ensureService = vi.fn(async () => undefined)
     const program = (): ReturnType<typeof createProgram> =>
-      createProgram({ ensureUserService: async () => undefined })
+      createProgram({ ensureUserService: ensureService })
     await createProgram().parseAsync(['source', 'add', 'https://rspress.rs/guide', '--no-sync'], {
       from: 'user'
     })
@@ -207,11 +208,85 @@ describe('文档源最短输入', () => {
     })
     let runtime = createCliRuntime()
     expect(runtime.database.listSources()[0]?.schedule).toBe('0 2 * * *')
+    expect(ensureService).toHaveBeenCalledOnce()
     await runtime.close()
 
-    await program().parseAsync(['schedule', 'set', 'rspress', 'manual'], { from: 'user' })
+    await program().parseAsync(['schedule', 'set', 'rspress', 'off'], { from: 'user' })
     runtime = createCliRuntime()
     expect(runtime.database.listSources()[0]?.schedule).toBeNull()
+    expect(ensureService).toHaveBeenCalledOnce()
+    await runtime.close()
+  })
+
+  it('开启云端每日同步时确保后台服务，关闭时不重复启动', async () => {
+    process.env.LOCI_SERVER_URL = 'https://cloud.example.com'
+    const events: string[] = []
+    const ensureService = vi.fn(async () => {
+      events.push('ensure')
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input)
+        if (url.endsWith('/api/v1/libraries')) {
+          events.push('catalog')
+          return Response.json({
+            libraries: [
+              {
+                id: 'cloud-docs',
+                name: 'Cloud Docs',
+                url: 'https://example.com/docs',
+                revision: 'revision-1',
+                pages: 1,
+                contentSize: 10,
+                lastCrawledAt: '2026-08-21T00:00:00.000Z',
+                publishedAt: '2026-08-21T00:00:00.000Z'
+              }
+            ]
+          })
+        }
+        events.push('snapshot')
+        return Response.json({
+          schemaVersion: 1,
+          library: {
+            id: 'cloud-docs',
+            name: 'Cloud Docs',
+            url: 'https://example.com/docs',
+            revision: 'revision-1',
+            publishedAt: '2026-08-21T00:00:00.000Z'
+          },
+          documents: [
+            {
+              id: 'page-1',
+              title: 'Guide',
+              url: 'https://example.com/docs/guide',
+              language: 'en',
+              markdown: '# Guide'
+            }
+          ]
+        })
+      })
+    )
+    const program = (): ReturnType<typeof createProgram> =>
+      createProgram({ ensureUserService: ensureService })
+
+    await program().parseAsync(['cloud', 'pull', 'cloud-docs', '--auto-sync'], { from: 'user' })
+
+    let runtime = createCliRuntime()
+    const cloudSource = runtime.database.listSources().find((item) => item.cloud)
+    expect(cloudSource?.cloud?.autoSync).toBe(true)
+    expect(events).toEqual(['catalog', 'ensure', 'snapshot'])
+    await runtime.close()
+
+    await program().parseAsync(['cloud', 'auto-sync', cloudSource!.id, 'off'], { from: 'user' })
+    expect(ensureService).toHaveBeenCalledOnce()
+    await program().parseAsync(['cloud', 'auto-sync', cloudSource!.id, 'on'], { from: 'user' })
+    expect(ensureService).toHaveBeenCalledTimes(2)
+
+    runtime = createCliRuntime()
+    expect(
+      runtime.database.listSources().find((item) => item.id === cloudSource!.id)?.cloud
+    ).toMatchObject({ autoSync: true })
     await runtime.close()
   })
 

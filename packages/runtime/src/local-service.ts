@@ -2,9 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { resolveLociDataDir } from './data-path.js'
 import { startLocalHttpServer, type LocalHttpServer } from './local-http-server.js'
 import { createLocalJobRunner, type LocalJobRunner } from './local-job-runner.js'
-import { createLocalMcpServices } from './local-mcp-services.js'
 import { createLocalRuntime, type LocalRuntime } from './local-runtime.js'
-import { isLociMcpAvailable, startMcpHttpServer, type McpHttpServer } from './mcp/http.js'
 import {
   removeLocalServiceState,
   writeLocalServiceState,
@@ -17,7 +15,6 @@ export interface LocalService {
   runtime: LocalRuntime
   runner: LocalJobRunner
   http: LocalHttpServer
-  mcp: McpHttpServer | null
   close: () => Promise<void>
 }
 
@@ -34,9 +31,7 @@ export async function startLocalService(options: LocalServiceOptions = {}): Prom
   let runtime: LocalRuntime | undefined
   let http: LocalHttpServer | undefined
   let runner: LocalJobRunner | undefined
-  let mcp: McpHttpServer | undefined
   let cloudTimer: ReturnType<typeof setInterval> | undefined
-  const closing = new AbortController()
   let closed = false
   try {
     serviceLock = acquireRuntimeLock(dataDir, 'service', 'Loci 后台服务')
@@ -55,21 +50,9 @@ export async function startLocalService(options: LocalServiceOptions = {}): Prom
       runMaintenance: (action) => runner!.runMaintenance(action)
     })
     publishJob = http.publishJob
-    const mcpPort = runtime.database.getSettings().mcpPort
-    if (!(await isLociMcpAvailable(mcpPort))) {
-      try {
-        mcp = await startMcpHttpServer(
-          mcpPort,
-          createLocalMcpServices(runtime, { durableJobs: true, signal: closing.signal })
-        )
-      } catch (error) {
-        console.error(`后台服务无法监听 MCP 端口 ${mcpPort}`, error)
-      }
-    }
     const state: LocalServiceState = {
       pid: process.pid,
       port: http.port,
-      mcpPort,
       controlToken,
       startedAt: new Date().toISOString()
     }
@@ -87,13 +70,10 @@ export async function startLocalService(options: LocalServiceOptions = {}): Prom
       runtime,
       runner,
       http,
-      mcp: mcp ?? null,
       close: async () => {
         if (closed) return
         closed = true
-        closing.abort(new Error('后台服务正在停止'))
         if (cloudTimer) clearInterval(cloudTimer)
-        await mcp?.close()
         await runner?.stop()
         await http?.close()
         await runtime?.close()
@@ -102,10 +82,8 @@ export async function startLocalService(options: LocalServiceOptions = {}): Prom
       }
     }
   } catch (error) {
-    closing.abort(error)
     if (cloudTimer) clearInterval(cloudTimer)
     await runner?.stop()
-    await mcp?.close()
     await http?.close()
     await runtime?.close()
     serviceLock?.release()

@@ -2,7 +2,6 @@ import { DOCUMENT_SOURCE_LIMITS } from './source-policy.js'
 
 /** CLI、Web UI、后台服务和备份协议共享的设置边界。 */
 export const APP_SETTINGS_LIMITS = {
-  mcpPort: { min: 1024, max: 65_535 },
   concurrency: DOCUMENT_SOURCE_LIMITS.concurrency,
   maxRetries: { min: 0, max: 10 },
   batchIntervalSeconds: { disabled: 0, min: 100, max: 3000 },

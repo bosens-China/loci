@@ -1,12 +1,16 @@
 import type { Command } from 'commander'
 import { formatBytes, type CloudCatalogItem, type DocumentSource } from '@loci/shared'
 import type { LociDatabase } from '@loci/runtime'
+import { applyPersistentBackgroundSetting } from '../background-host.js'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { readRecentResource, saveRecentResource } from '../preferences.js'
 import { askConfirm, askSelect, createSpinner, printTable } from '../ui.js'
 
-export function registerCloudCommands(program: Command): void {
+export function registerCloudCommands(
+  program: Command,
+  ensureService?: () => Promise<unknown>
+): void {
   const cloud = program.command('cloud').description('使用云端公开文档库')
 
   cloud
@@ -31,7 +35,7 @@ export function registerCloudCommands(program: Command): void {
   cloud
     .command('pull [library]')
     .description('下载云端文档库到本地')
-    .option('--auto-sync', '启用计划运行器每日自动同步')
+    .option('--auto-sync', '启用每日自动同步并自动准备后台服务')
     .action((reference: string | undefined, options: { autoSync?: boolean }) =>
       runWithRuntime('下载云端文档库', async (runtime) => {
         runtime.assertWritable()
@@ -44,10 +48,11 @@ export function registerCloudCommands(program: Command): void {
         const spinner = createSpinner()
         spinner.start(`正在下载“${item.name}”`)
         try {
-          const result = await runtime.cloud.importLibrary(
-            serverUrl,
-            item.id,
-            options.autoSync === true
+          const autoSync = options.autoSync === true
+          const result = await applyPersistentBackgroundSetting(
+            autoSync,
+            () => runtime.cloud.importLibrary(serverUrl, item.id, autoSync),
+            ensureService
           )
           saveRecentResource(runtime.database, 'cloud-pull', item.id)
           spinner.stop(result.updated ? `已保存 ${result.documents} 篇文档` : '本地已经是最新版本')
@@ -61,7 +66,7 @@ export function registerCloudCommands(program: Command): void {
 
   cloud
     .command('auto-sync [library] [state]')
-    .description('开启或关闭本地云端副本的每日自动同步；state 可传 on/off')
+    .description('开启或关闭每日自动同步；开启时自动准备后台服务，state 可传 on/off')
     .action((reference: string | undefined, state: string | undefined) =>
       runWithRuntime('云端副本自动同步', async (runtime) => {
         runtime.assertWritable()
@@ -74,9 +79,16 @@ export function registerCloudCommands(program: Command): void {
         const enabled = state
           ? parseAutoSyncState(state)
           : await askConfirm('启用每日自动同步？', true)
-        runtime.cloud.setAutoSync(source.id, runtime.database.getSettings().serverUrl, enabled)
+        await applyPersistentBackgroundSetting(
+          enabled,
+          () =>
+            runtime.cloud.setAutoSync(source.id, runtime.database.getSettings().serverUrl, enabled),
+          ensureService
+        )
         saveRecentResource(runtime.database, 'cloud-auto-sync', source.id)
-        return `已${enabled ? '开启' : '关闭'}“${source.name}”的每日自动同步`
+        return enabled
+          ? `已开启“${source.name}”的每日自动同步，后台服务已就绪`
+          : `已关闭“${source.name}”的每日自动同步`
       })
     )
 

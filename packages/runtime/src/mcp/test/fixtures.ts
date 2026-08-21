@@ -1,4 +1,3 @@
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import type {
   CloudCatalogItem,
   CrawlFailure,
@@ -7,7 +6,6 @@ import type {
   DocumentRecord,
   DocumentSource
 } from '@loci/shared'
-import type { McpHttpServer } from '../http.js'
 import type { LociMcpServices } from '../server.js'
 
 export const source: DocumentSource = {
@@ -115,12 +113,6 @@ export function createServices(): LociMcpServices {
     listCloudLibraries: async () => [cloudLibrary],
     pullCloudLibrary: async () => ({ source, updated: true, documents: source.pages })
   }
-}
-
-export async function connect(server: McpHttpServer): Promise<Client> {
-  const connected = new Client({ name: 'loci-test', version: '1.0.0' })
-  await connected.connect(new StreamableHTTPClientTransport(new URL(server.endpoint)))
-  return connected
 }
 
 export function runningState(): CrawlRunState {

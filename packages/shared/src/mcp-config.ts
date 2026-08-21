@@ -1,23 +1,28 @@
 import {
   GENERIC_MCP_CONFIG_TARGET,
   getMcpClientDefinition,
-  supportsMcpTransport,
   type McpConfigTarget
 } from './mcp-clients.js'
 
-export type McpAgentConnection =
-  { type: 'http'; endpoint: string } | { type: 'stdio'; command: string; args: readonly string[] }
+export interface McpAgentConnection {
+  type: 'stdio'
+  command: string
+  args: readonly string[]
+}
 
 /**
  * 生成 Cursor 风格的通用 MCP 配置，供没有内置导入能力的客户端手动接入。
  */
 export function createCursorMcpConfig(connection: McpAgentConnection): string {
-  const server =
-    connection.type === 'http'
-      ? { url: connection.endpoint }
-      : { command: connection.command, args: [...connection.args] }
-
-  return JSON.stringify({ mcpServers: { loci: server } }, null, 2)
+  return JSON.stringify(
+    {
+      mcpServers: {
+        loci: { command: connection.command, args: [...connection.args] }
+      }
+    },
+    null,
+    2
+  )
 }
 
 /**
@@ -29,10 +34,7 @@ export function createMcpClientConfig(
 ): string {
   if (target === GENERIC_MCP_CONFIG_TARGET.id) return createCursorMcpConfig(connection)
 
-  const definition = getMcpClientDefinition(target)
-  if (!supportsMcpTransport(target, connection.type)) {
-    throw new Error(`${definition.label} 不支持 ${connection.type} 传输`)
-  }
+  getMcpClientDefinition(target)
 
   switch (target) {
     case 'codex':
@@ -49,30 +51,28 @@ export function createMcpClientConfig(
 }
 
 function createCodexConfig(connection: McpAgentConnection): string {
-  if (connection.type === 'http') {
-    return `[mcp_servers.loci]\nurl = ${JSON.stringify(connection.endpoint)}`
-  }
   const args = connection.args.map((argument) => JSON.stringify(argument)).join(', ')
   return `[mcp_servers.loci]\ncommand = ${JSON.stringify(connection.command)}\nargs = [${args}]`
 }
 
 function createVsCodeConfig(connection: McpAgentConnection): string {
-  const server =
-    connection.type === 'http'
-      ? { type: 'http', url: connection.endpoint }
-      : { type: 'stdio', command: connection.command, args: [...connection.args] }
+  const server = { type: 'stdio', command: connection.command, args: [...connection.args] }
   return JSON.stringify({ servers: { loci: server } }, null, 2)
 }
 
 function createClaudeConfig(connection: McpAgentConnection): string {
-  const server =
-    connection.type === 'http'
-      ? { type: 'http', url: connection.endpoint }
-      : { type: 'stdio', command: connection.command, args: [...connection.args] }
+  const server = { type: 'stdio', command: connection.command, args: [...connection.args] }
   return JSON.stringify({ mcpServers: { loci: server } }, null, 2)
 }
 
 function createAntigravityConfig(connection: McpAgentConnection): string {
-  if (connection.type !== 'http') throw new Error('Google Antigravity 不支持 stdio 传输')
-  return JSON.stringify({ mcpServers: { loci: { serverUrl: connection.endpoint } } }, null, 2)
+  return JSON.stringify(
+    {
+      mcpServers: {
+        loci: { command: connection.command, args: [...connection.args] }
+      }
+    },
+    null,
+    2
+  )
 }

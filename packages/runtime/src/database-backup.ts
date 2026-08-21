@@ -37,7 +37,7 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
       crawlFailures: database.prepare('SELECT * FROM crawl_failures ORDER BY rowid').all(),
       settings: database
         .prepare(
-          `SELECT mcp_port, theme, http_concurrency, browser_concurrency, max_retries,
+          `SELECT theme, http_concurrency, browser_concurrency, max_retries,
              batch_interval_seconds, server_url, github_archive_limit_mb,
              github_markdown_limit_mb FROM app_settings WHERE id = 1`
         )
@@ -174,14 +174,13 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
     database
       .prepare(
         `UPDATE app_settings
-         SET mcp_port = ?, theme = ?, http_concurrency = ?, browser_concurrency = ?,
+         SET theme = ?, http_concurrency = ?, browser_concurrency = ?,
              max_retries = ?, batch_interval_seconds = ?, server_url = ?,
              server_url_customized = ?, github_archive_limit_mb = ?,
              github_markdown_limit_mb = ?
          WHERE id = 1`
       )
       .run(
-        settings.mcp_port,
         settings.theme,
         settings.http_concurrency,
         settings.browser_concurrency,

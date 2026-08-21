@@ -2,13 +2,20 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { existsSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import type { Command } from 'commander'
-import { acquireMaintenanceRuntimeLock } from '@loci/runtime'
+import {
+  acquireMaintenanceRuntimeLock,
+  inspectPersistentBackgroundRequirements
+} from '@loci/runtime'
+import { ensurePersistentBackgroundService } from '../background-host.js'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
 import { readRecentResource, saveRecentResource } from '../preferences.js'
 import { askConfirm, askPath } from '../ui.js'
 
-export function registerDataCommands(program: Command): void {
+export function registerDataCommands(
+  program: Command,
+  ensureService?: () => Promise<unknown>
+): void {
   const data = program.command('data').description('备份、恢复和清理本地数据')
 
   data
@@ -30,7 +37,7 @@ export function registerDataCommands(program: Command): void {
 
   data
     .command('import [file]')
-    .description('使用备份覆盖当前本地数据')
+    .description('使用备份覆盖当前本地数据，并恢复所需后台服务')
     .option('--yes', '跳过确认')
     .action((file: string | undefined, options: { yes?: boolean }) =>
       runWithRuntime('导入 Loci 数据', async (runtime) => {
@@ -61,13 +68,16 @@ export function registerDataCommands(program: Command): void {
           throw new CliCanceledError()
         }
         const lock = acquireMaintenanceRuntimeLock(runtime.dataDir, 'CLI 数据导入')
+        let summary: ReturnType<typeof runtime.database.importBackup>
         try {
-          const summary = runtime.database.importBackup(input)
+          summary = runtime.database.importBackup(input)
           saveRecentResource(runtime.database, 'data-directory', dirname(source))
-          return `已导入 ${summary.sources} 个文档源和 ${summary.documents} 篇文档`
         } finally {
           lock.release()
         }
+        const background = inspectPersistentBackgroundRequirements(runtime.database.listSources())
+        if (background.required) await ensurePersistentBackgroundService(ensureService)
+        return `已导入 ${summary.sources} 个文档源和 ${summary.documents} 篇文档${background.required ? '，后台服务已就绪' : ''}`
       })
     )
 

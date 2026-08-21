@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProgram, runCli } from '../../cli.js'
-import { createCliRuntime } from '../../runtime.js'
 
 const originalDataDir = process.env.LOCI_DATA_DIR
 const originalCacheDir = process.env.LOCI_CACHE_DIR
@@ -33,7 +32,7 @@ describe('Agent MCP 配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await createProgram().parseAsync(['agent', 'config', 'generic', '--transport', 'stdio'], {
+    await createProgram().parseAsync(['agent', 'print-config', 'generic'], {
       from: 'user'
     })
 
@@ -44,30 +43,7 @@ describe('Agent MCP 配置', () => {
     })
   })
 
-  it('HTTP 配置读取共享设置中的实际端口', async () => {
-    const runtime = createCliRuntime()
-    const settings = runtime.database.getSettings()
-    runtime.database.saveSettings({ ...settings, mcpPort: 41234 })
-    await runtime.close()
-    let output = ''
-    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
-      output += String(chunk)
-      return true
-    })
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-
-    await createProgram().parseAsync(['agent', 'config', 'generic', '--transport', 'http'], {
-      from: 'user'
-    })
-
-    expect(JSON.parse(output)).toEqual({
-      mcpServers: {
-        loci: { url: 'http://127.0.0.1:41234/mcp' }
-      }
-    })
-  })
-
-  it('按客户端和显式传输方式输出对应配置', async () => {
+  it('为 Google Antigravity 输出 stdio 配置', async () => {
     let output = ''
     let hint = ''
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
@@ -79,13 +55,13 @@ describe('Agent MCP 配置', () => {
       return true
     })
 
-    await createProgram().parseAsync(['agent', 'config', 'antigravity', '--transport', 'http'], {
+    await createProgram().parseAsync(['agent', 'print-config', 'antigravity'], {
       from: 'user'
     })
 
     expect(JSON.parse(output)).toEqual({
       mcpServers: {
-        loci: { serverUrl: 'http://127.0.0.1:37373/mcp' }
+        loci: { command: 'loci', args: ['mcp', 'stdio'] }
       }
     })
     expect(hint).toContain('Google Antigravity')
@@ -100,24 +76,16 @@ describe('Agent MCP 配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await createProgram().parseAsync(['agent', 'config', 'codex', '--transport', 'stdio'], {
+    await createProgram().parseAsync(['agent', 'print-config', 'codex'], {
       from: 'user'
     })
 
     expect(output.trim()).toBe('[mcp_servers.loci]\ncommand = "loci"\nargs = ["mcp", "stdio"]')
   })
 
-  it('拒绝客户端不支持的传输方式', async () => {
-    await expect(
-      createProgram().parseAsync(['agent', 'config', 'antigravity', '--transport', 'stdio'], {
-        from: 'user'
-      })
-    ).rejects.toThrow('Google Antigravity 不支持 stdio 传输')
-  })
-
   it('不再接受 Gemini CLI 配置目标', async () => {
     await expect(
-      createProgram().parseAsync(['agent', 'config', 'gemini-cli'], { from: 'user' })
+      createProgram().parseAsync(['agent', 'print-config', 'gemini-cli'], { from: 'user' })
     ).rejects.toThrow('不支持的 MCP 配置目标：gemini-cli')
   })
 
@@ -134,7 +102,7 @@ describe('Agent MCP 配置', () => {
     })
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-    await runCli(['agent', 'config', 'generic', '--transport', 'stdio'])
+    await runCli(['agent', 'print-config', 'generic'])
 
     expect(() => JSON.parse(output)).not.toThrow()
     expect(JSON.parse(output)).toHaveProperty('mcpServers.loci.command', 'loci')
@@ -174,11 +142,6 @@ describe('Agent MCP 配置', () => {
     )
     await expect(
       createProgram().parseAsync(['agent', 'config', 'codex'], { from: 'user' })
-    ).rejects.toThrow('必须指定 --transport')
-    await expect(
-      createProgram().parseAsync(['agent', 'config', 'codex', '--transport', 'stdio'], {
-        from: 'user'
-      })
     ).resolves.toBeDefined()
   })
 })

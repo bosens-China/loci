@@ -30,8 +30,7 @@ const adminCreateSchema = z.object({
 })
 
 const mcpConfigureSchema = z.object({
-  client: z.enum(['codex', 'cursor', 'vscode', 'claude-code', 'antigravity']),
-  transport: z.enum(['stdio', 'http'])
+  client: z.enum(['codex', 'cursor', 'vscode', 'claude-code', 'antigravity'])
 })
 
 export interface SourceCreatePreference {
@@ -49,7 +48,6 @@ export interface AdminCreatePreference {
 
 export interface McpConfigurePreference {
   client: AgentClient
-  transport: 'stdio' | 'http'
 }
 
 const CLI_SCOPE = 'cli'
@@ -127,8 +125,7 @@ export function saveRecentResource(database: LociDatabase, key: string, id: stri
 
 export function readMcpConfigurePreference(database: LociDatabase): McpConfigurePreference {
   return readPreference(database, CLI_SCOPE, 'mcp-configure', mcpConfigureSchema, {
-    client: 'codex',
-    transport: 'stdio'
+    client: 'codex'
   })
 }
 

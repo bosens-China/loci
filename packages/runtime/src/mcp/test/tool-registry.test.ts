@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { callLociMcpTool, LociToolNotFoundError } from '../tool-registry.js'
-import { completedProgress, createServices, source } from './http-fixtures.js'
+import { completedProgress, createServices, source } from './fixtures.js'
 
 describe('Loci MCP 工具注册表', () => {
   it('可绕过传输层调用同一工具并应用输入默认值', async () => {

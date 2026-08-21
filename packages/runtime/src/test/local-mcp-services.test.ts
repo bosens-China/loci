@@ -6,7 +6,7 @@ import { createLocalMcpServices } from '../local-mcp-services.js'
 import type { LocalRuntime } from '../local-runtime.js'
 
 describe('后台服务 MCP', () => {
-  it('把 HTTP MCP 同步提交到持久队列并等待同一个 worker', async () => {
+  it('把 MCP 同步提交到持久队列并等待同一个 worker', async () => {
     const database = createDatabase(':memory:')
     const source = database.createSource({
       name: 'Vite',

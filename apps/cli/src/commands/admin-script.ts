@@ -2,7 +2,6 @@ import type { Command } from 'commander'
 import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/core'
 import {
   deriveSourceName,
-  normalizeCronSchedule,
   type CloudLibrary,
   type CloudLibraryInput,
   type CloudSyncJob
@@ -10,6 +9,7 @@ import {
 import type { CloudAdminClient } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
+import { parseScheduleInput } from '../schedule-input.js'
 import { askConfirm, printTable } from '../ui.js'
 
 interface LibraryOptions {
@@ -59,7 +59,7 @@ export function registerAdminSubcommands(admin: Command, waitForSync: WaitForSyn
     .option('--name <name>', '文档源名称')
     .option('--scope <path>', '收录范围')
     .option('--page-limit <number>', '页面上限', integerValue)
-    .option('--schedule <cron>', '5 段 Cron；传 manual 关闭计划')
+    .option('--schedule <cron>', '5 段 Cron；传 off 关闭计划')
     .action((reference: string, options: LibraryOptions) =>
       withAdmin('修改 Server 文档库', async (client) => {
         const current = await resolveLibrary(client, reference)
@@ -158,7 +158,7 @@ function createInput(options: LibraryOptions): CloudLibraryInput {
 
 function scheduleValue(value: string | undefined, fallback: string | null): string | null {
   if (value === undefined) return fallback
-  return value === 'manual' ? null : normalizeCronSchedule(value)
+  return parseScheduleInput(value)
 }
 
 async function resolveLibrary(client: CloudAdminClient, reference: string): Promise<CloudLibrary> {

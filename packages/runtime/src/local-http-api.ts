@@ -212,7 +212,7 @@ async function handleDataTransfer(
         runtime.database.refreshSourceSchedules()
         return imported
       })
-      return { ...summary, restartRequired: true }
+      return summary
     })
     return true
   }

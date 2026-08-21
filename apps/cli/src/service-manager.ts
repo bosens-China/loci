@@ -5,19 +5,28 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   checkLocalService,
+  acquireRuntimeLock,
   readLocalServiceState,
   resolveLociDataDir,
+  RuntimeLockedError,
   writeFileAtomically,
   type LocalServiceState
 } from '@loci/runtime'
+import {
+  LOCI_SERVICE_LABEL,
+  renderLaunchdPlist,
+  renderSystemdUnit,
+  renderWindowsServiceScript,
+  type ServiceCommand
+} from './service-definition.js'
 
-export const LOCI_SERVICE_LABEL = 'com.loci.service'
-
-export interface ServiceCommand {
-  executable: string
-  args: string[]
-  environment?: Record<string, string>
-}
+export {
+  LOCI_SERVICE_LABEL,
+  renderLaunchdPlist,
+  renderSystemdUnit,
+  renderWindowsServiceScript,
+  type ServiceCommand
+} from './service-definition.js'
 
 export interface ServiceStatus {
   installed: boolean
@@ -37,6 +46,8 @@ export interface UserServiceManager {
   definitionPath: string
   logPaths: string[]
 }
+
+const activeServiceStarts = new Map<string, Promise<LocalServiceState>>()
 
 export function resolveServiceCommand(): ServiceCommand {
   const entry = process.argv[1]
@@ -66,36 +77,80 @@ export function createUserServiceManager(
   throw new Error(`当前平台 ${platform} 不支持 Loci 后台服务`)
 }
 
-export async function ensureUserServiceRunning(
+export function ensureUserServiceRunning(
   manager = createUserServiceManager(),
-  dataDir = resolveLociDataDir()
+  dataDir = resolveLociDataDir(),
+  waitForService = waitForUserService
 ): Promise<LocalServiceState> {
-  const status = await manager.status()
-  if (!status.installed) await manager.install()
-  else if (!status.running) await manager.start()
-  return waitForUserService(dataDir)
+  return runServiceStartSingleFlight(dataDir, () =>
+    withServiceStartLock(dataDir, waitForService, async () => {
+      const status = await manager.status()
+      if (status.running && status.state) return status.state
+      if (!status.installed) await manager.install()
+      else if (!status.running) await manager.start()
+      return waitForService(dataDir)
+    })
+  )
 }
 
 /** 自定义数据目录不污染登录服务定义，只为当前环境启动独立后台进程。 */
-export async function ensureLocalServiceRunning(): Promise<LocalServiceState> {
+export function ensureLocalServiceRunning(): Promise<LocalServiceState> {
   if (!process.env.LOCI_DATA_DIR?.trim()) return ensureUserServiceRunning()
   const dataDir = resolveLociDataDir()
-  const existing = readLocalServiceState(dataDir)
-  if (existing && (await checkLocalService(existing))) return existing
-  const entry = process.argv[1]
-  if (!entry) throw new Error('无法定位 Loci CLI 入口，不能启动后台服务')
-  const child = spawn(process.execPath, [entry, 'service', 'run', '--managed'], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-    env: process.env
-  })
-  await new Promise<void>((resolvePromise, reject) => {
-    child.once('spawn', resolvePromise)
-    child.once('error', reject)
-  })
-  child.unref()
-  return waitForUserService(dataDir)
+  return runServiceStartSingleFlight(dataDir, () =>
+    withServiceStartLock(dataDir, waitForUserService, async () => {
+      const existing = readLocalServiceState(dataDir)
+      if (existing && (await checkLocalService(existing))) return existing
+      const entry = process.argv[1]
+      if (!entry) throw new Error('无法定位 Loci CLI 入口，不能启动后台服务')
+      const child = spawn(process.execPath, [entry, 'service', 'run', '--managed'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+        env: process.env
+      })
+      await new Promise<void>((resolvePromise, reject) => {
+        child.once('spawn', resolvePromise)
+        child.once('error', reject)
+      })
+      child.unref()
+      return waitForUserService(dataDir)
+    })
+  )
+}
+
+function runServiceStartSingleFlight(
+  dataDir: string,
+  start: () => Promise<LocalServiceState>
+): Promise<LocalServiceState> {
+  const active = activeServiceStarts.get(dataDir)
+  if (active) return active
+  const task = start()
+  activeServiceStarts.set(dataDir, task)
+  const cleanup = (): void => {
+    if (activeServiceStarts.get(dataDir) === task) activeServiceStarts.delete(dataDir)
+  }
+  void task.then(cleanup, cleanup)
+  return task
+}
+
+async function withServiceStartLock(
+  dataDir: string,
+  waitForService: (dataDir: string) => Promise<LocalServiceState>,
+  start: () => Promise<LocalServiceState>
+): Promise<LocalServiceState> {
+  let lock: ReturnType<typeof acquireRuntimeLock>
+  try {
+    lock = acquireRuntimeLock(dataDir, 'service-start', 'Loci 后台服务激活')
+  } catch (error) {
+    if (error instanceof RuntimeLockedError) return waitForService(dataDir)
+    throw error
+  }
+  try {
+    return await start()
+  } finally {
+    lock.release()
+  }
 }
 
 export async function waitForUserService(
@@ -109,70 +164,6 @@ export async function waitForUserService(
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 150))
   }
   throw new Error('Loci 后台服务启动超时，请运行 loci service logs 查看日志')
-}
-
-export function renderLaunchdPlist(command: ServiceCommand, dataDir: string): string {
-  const out = join(dataDir, 'logs', 'service.log')
-  const error = join(dataDir, 'logs', 'service-error.log')
-  const args = [command.executable, ...command.args]
-    .map((argument) => `      <string>${escapeXml(argument)}</string>`)
-    .join('\n')
-  const environment = renderLaunchdEnvironment(command.environment)
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>${LOCI_SERVICE_LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-${args}
-  </array>
-  <key>KeepAlive</key>
-  <true/>
-  <key>ProcessType</key>
-  <string>Background</string>
-  <key>ThrottleInterval</key>
-  <integer>10</integer>
-${environment}
-  <key>StandardOutPath</key>
-  <string>${escapeXml(out)}</string>
-  <key>StandardErrorPath</key>
-  <string>${escapeXml(error)}</string>
-</dict>
-</plist>
-`
-}
-
-export function renderSystemdUnit(command: ServiceCommand, dataDir: string): string {
-  const executable = [command.executable, ...command.args].map(quoteSystemd).join(' ')
-  const environment = Object.entries(command.environment ?? {})
-    .map(([key, value]) => `Environment=${quoteSystemd(`${key}=${value}`)}`)
-    .join('\n')
-  return `[Unit]
-Description=Loci local background service
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=${executable}
-${environment}
-Restart=on-failure
-RestartSec=5
-StandardOutput=append:${join(dataDir, 'logs', 'service.log')}
-StandardError=append:${join(dataDir, 'logs', 'service-error.log')}
-
-[Install]
-WantedBy=default.target
-`
-}
-
-export function renderWindowsServiceScript(command: ServiceCommand): string {
-  const environment = Object.entries(command.environment ?? {})
-    .map(([key, value]) => `set "${key}=${value.replaceAll('"', '""')}"`)
-    .join('\r\n')
-  const start = [command.executable, ...command.args].map(quoteWindows).join(' ')
-  return `@echo off\r\n${environment}${environment ? '\r\n' : ''}:loci_service_loop\r\n${start}\r\ntimeout /t 5 /nobreak >nul\r\ngoto loci_service_loop\r\n`
 }
 
 function createLaunchdManager(
@@ -330,34 +321,6 @@ async function run(command: string, args: string[], allowFailure = false): Promi
 
 async function runOrThrow(command: string, args: string[]): Promise<void> {
   await run(command, args)
-}
-
-function quoteSystemd(value: string): string {
-  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`
-}
-
-function quoteWindows(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;')
-}
-
-function renderLaunchdEnvironment(environment: Record<string, string> | undefined): string {
-  const entries = Object.entries(environment ?? {})
-  if (entries.length === 0) return ''
-  const values = entries
-    .map(
-      ([key, value]) => `    <key>${escapeXml(key)}</key>\n    <string>${escapeXml(value)}</string>`
-    )
-    .join('\n')
-  return `  <key>EnvironmentVariables</key>\n  <dict>\n${values}\n  </dict>`
 }
 
 export function resolveWebAssetsDir(): string | undefined {

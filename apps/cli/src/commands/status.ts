@@ -1,12 +1,16 @@
 import type { Command } from 'commander'
-import { isLociMcpAvailable, readRuntimeLock } from '@loci/runtime'
+import {
+  checkLocalService,
+  inspectPersistentBackgroundRequirements,
+  readLocalServiceState
+} from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { printTable } from '../ui.js'
 
 export function registerStatusCommand(program: Command): void {
   program
     .command('status')
-    .description('显示本地知识库、任务、云端副本和 MCP 摘要')
+    .description('显示本地知识库、任务和云端副本摘要')
     .action(() =>
       runWithRuntime('Loci 状态', async (runtime) => {
         const sources = runtime.database.listSources()
@@ -15,8 +19,9 @@ export function registerStatusCommand(program: Command): void {
         const cloud = sources.filter((item) => item.cloud !== null)
         const runs = runtime.database.listCrawlHistory()
         const settings = runtime.database.getSettings()
-        const mcpRunning = await canConnect(settings.mcpPort)
-        const scheduleHost = readRuntimeLock(runtime.dataDir, 'schedule')
+        const serviceState = readLocalServiceState(runtime.dataDir)
+        const serviceRunning = Boolean(serviceState && (await checkLocalService(serviceState)))
+        const background = inspectPersistentBackgroundRequirements(sources)
         printTable(
           ['项目', '状态'],
           [
@@ -29,8 +34,14 @@ export function registerStatusCommand(program: Command): void {
                 ? `${statusLabel(runs[0].status)}，${runs[0].sourceName}，${runs[0].startedAt ? new Date(runs[0].startedAt).toLocaleString('zh-CN') : '—'}`
                 : '暂无记录'
             ],
-            ['MCP', mcpRunning ? `运行中，端口 ${settings.mcpPort}` : '未运行'],
-            ['计划运行器', scheduleHost?.owner ?? '未运行'],
+            [
+              '后台服务',
+              serviceRunning
+                ? `运行中，PID ${serviceState!.pid}`
+                : background.required
+                  ? '需要启动：loci service start'
+                  : '无需运行'
+            ],
             ['Server', settings.serverUrl]
           ]
         )
@@ -38,8 +49,6 @@ export function registerStatusCommand(program: Command): void {
       })
     )
 }
-
-export const canConnect = isLociMcpAvailable
 
 function statusLabel(status: string): string {
   return { queued: '等待', running: '进行中', completed: '成功', failed: '失败' }[status] ?? status

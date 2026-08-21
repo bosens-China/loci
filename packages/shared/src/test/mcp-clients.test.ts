@@ -6,8 +6,7 @@ import {
   isMcpClient,
   listAgentGlobalRulesClients,
   listImportableAgentClients,
-  listMcpClients,
-  supportsMcpTransport
+  listMcpClients
 } from '../mcp-clients.js'
 
 describe('MCP 客户端共享目录', () => {
@@ -28,14 +27,12 @@ describe('MCP 客户端共享目录', () => {
     ])
   })
 
-  it('区分具名客户端、可自动写入客户端和传输能力', () => {
+  it('区分具名客户端和可自动写入客户端', () => {
     expect(isMcpClient('antigravity')).toBe(true)
     expect(isAgentClient('antigravity')).toBe(true)
     expect(isAgentClient('codex')).toBe(true)
     expect(isMcpClient('unknown')).toBe(false)
     expect(isMcpClient('gemini-cli')).toBe(false)
-    expect(supportsMcpTransport('antigravity', 'http')).toBe(true)
-    expect(supportsMcpTransport('antigravity', 'stdio')).toBe(false)
     expect(getMcpClientDefinition('codex').executable).toBe('codex')
     expect(listAgentGlobalRulesClients().map((client) => client.id)).toEqual([
       'codex',

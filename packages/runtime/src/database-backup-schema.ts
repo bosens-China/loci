@@ -113,11 +113,8 @@ const crawlFailureSchema = z
 
 const settingsSchema = z
   .object({
-    mcp_port: z
-      .number()
-      .int()
-      .min(APP_SETTINGS_LIMITS.mcpPort.min)
-      .max(APP_SETTINGS_LIMITS.mcpPort.max),
+    // 兼容旧备份；HTTP MCP 已移除，导入时忽略该字段。
+    mcp_port: z.number().int().optional(),
     theme: z.enum(['auto', 'light', 'dark']),
     http_concurrency: concurrencySchema,
     browser_concurrency: concurrencySchema,

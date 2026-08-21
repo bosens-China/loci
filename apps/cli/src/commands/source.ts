@@ -82,7 +82,7 @@ export function registerSourceCommands(program: Command): void {
     .command('add [url]')
     .description('添加本地文档源')
     .option('--name <name>', '文档源名称，默认根据域名生成')
-    .option('--url <url>', '第一个公开文档页面 URL')
+    .option('--url <url>', '第一个公开文档页面 URL；提供时覆盖位置参数 url')
     .addOption(
       new Option('--mode <mode>', `抓取方式，默认 ${DOCUMENT_SOURCE_DEFAULTS.mode}`).choices([
         'auto',
@@ -105,7 +105,7 @@ export function registerSourceCommands(program: Command): void {
     .addOption(
       new Option(
         '--background',
-        '使用一次性后台进程执行首次同步；不能与 --no-sync 同时使用'
+        '使用用户级后台服务执行首次同步；不能与 --no-sync 同时使用'
       ).conflicts('sync')
     )
     .action((urlArgument: string | undefined, options: SourceOptions, command: Command) =>

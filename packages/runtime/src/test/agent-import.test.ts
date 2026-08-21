@@ -5,7 +5,6 @@ import which from 'which'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createAgentImportCommand,
-  createHttpMcpConnection,
   importAgentClient,
   LOCI_CLI_STDIO_CONNECTION
 } from '../agent-import.js'
@@ -28,25 +27,6 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 describe('Agent MCP 导入命令', () => {
-  it('为四种客户端生成本机 HTTP 配置', () => {
-    const endpoint = 'http://127.0.0.1:37373/mcp'
-    const connection = createHttpMcpConnection(endpoint)
-
-    expect(createAgentImportCommand('codex', connection)).toMatchObject({
-      command: 'codex',
-      args: ['mcp', 'add', 'loci', '--url', endpoint]
-    })
-    expect(createAgentImportCommand('vscode', connection).args[1]).toBe(
-      JSON.stringify({ name: 'loci', type: 'http', url: endpoint })
-    )
-    expect(createAgentImportCommand('cursor', connection).command).toBe('cursor')
-    expect(createAgentImportCommand('claude-code', connection).args).toContain('--scope')
-    expect(() => createAgentImportCommand('unknown', connection)).toThrow('不支持')
-    expect(() =>
-      createAgentImportCommand('codex', createHttpMcpConnection('https://example.com/mcp'))
-    ).toThrow('本机地址')
-  })
-
   it('为四种客户端生成同名 loci 的 CLI stdio 配置', () => {
     expect(createAgentImportCommand('codex', LOCI_CLI_STDIO_CONNECTION).args).toEqual([
       'mcp',
@@ -84,9 +64,9 @@ describe('Agent MCP 导入命令', () => {
   })
 
   it('区分不支持命令导入与未知客户端', () => {
-    expect(() =>
-      createAgentImportCommand('antigravity', createHttpMcpConnection('http://127.0.0.1:37373/mcp'))
-    ).toThrow('不支持命令导入')
+    expect(() => createAgentImportCommand('antigravity', LOCI_CLI_STDIO_CONNECTION)).toThrow(
+      '不支持命令导入'
+    )
     expect(() => createAgentImportCommand('gemini-cli', LOCI_CLI_STDIO_CONNECTION)).toThrow(
       '不支持这个 Agent 客户端'
     )
@@ -121,11 +101,13 @@ describe('Agent MCP 导入命令', () => {
   })
 
   it('不支持命令的客户端直接写入，并复用同进程并发任务', async () => {
-    const endpoint = 'http://127.0.0.1:37373/mcp'
-    const connection = createHttpMcpConnection(endpoint)
     const [first, second] = await Promise.all(
       [1, 2].map(() =>
-        importAgentClient('antigravity', connection, { homeDir, dataDir, owner: '测试' })
+        importAgentClient('antigravity', LOCI_CLI_STDIO_CONNECTION, {
+          homeDir,
+          dataDir,
+          owner: '测试'
+        })
       )
     )
     const config = JSON.parse(
@@ -134,7 +116,10 @@ describe('Agent MCP 导入命令', () => {
 
     expect(first).toEqual(second)
     expect(first.message).toContain('不支持配置命令')
-    expect(config).toHaveProperty('mcpServers.loci.serverUrl', endpoint)
+    expect(config).toHaveProperty('mcpServers.loci', {
+      command: 'loci',
+      args: ['mcp', 'stdio']
+    })
     expect(which).not.toHaveBeenCalled()
   })
 

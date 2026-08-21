@@ -5,7 +5,6 @@ import { writeFileAtomically } from './atomic-file.js'
 export interface LocalServiceState {
   pid: number
   port: number
-  mcpPort?: number
   controlToken: string
   startedAt: string
 }
@@ -26,7 +25,6 @@ export function readLocalServiceState(dataDir: string): LocalServiceState | null
     if (
       typeof value.pid !== 'number' ||
       typeof value.port !== 'number' ||
-      (value.mcpPort !== undefined && typeof value.mcpPort !== 'number') ||
       typeof value.controlToken !== 'string' ||
       typeof value.startedAt !== 'string'
     ) {
@@ -35,7 +33,6 @@ export function readLocalServiceState(dataDir: string): LocalServiceState | null
     return {
       pid: value.pid,
       port: value.port,
-      ...(value.mcpPort === undefined ? {} : { mcpPort: value.mcpPort }),
       controlToken: value.controlToken,
       startedAt: value.startedAt
     }

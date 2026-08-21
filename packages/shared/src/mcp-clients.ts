@@ -1,5 +1,3 @@
-export type McpTransport = 'stdio' | 'http'
-
 export type McpImportStrategy = 'codex-cli' | 'cursor-cli' | 'vscode-cli' | 'claude-cli' | 'manual'
 
 interface McpClientEntry {
@@ -8,7 +6,6 @@ interface McpClientEntry {
   configPath: string
   globalRulesPath: string
   globalRulesWrite: boolean
-  transports: readonly McpTransport[]
   quickImport: boolean
   executable: string | null
   importStrategy: McpImportStrategy
@@ -24,7 +21,6 @@ export const MCP_CLIENTS = [
     configPath: '~/.codex/config.toml',
     globalRulesPath: '~/.codex/AGENTS.md',
     globalRulesWrite: true,
-    transports: ['stdio', 'http'],
     quickImport: true,
     executable: 'codex',
     importStrategy: 'codex-cli'
@@ -35,7 +31,6 @@ export const MCP_CLIENTS = [
     configPath: '~/.cursor/mcp.json',
     globalRulesPath: 'Customize → Rules → User Rules',
     globalRulesWrite: false,
-    transports: ['stdio', 'http'],
     quickImport: true,
     executable: 'cursor',
     importStrategy: 'cursor-cli'
@@ -46,7 +41,6 @@ export const MCP_CLIENTS = [
     configPath: '用户配置 mcp.json',
     globalRulesPath: '~/.copilot/instructions/loci.instructions.md',
     globalRulesWrite: true,
-    transports: ['stdio', 'http'],
     quickImport: true,
     executable: 'code',
     importStrategy: 'vscode-cli'
@@ -57,7 +51,6 @@ export const MCP_CLIENTS = [
     configPath: '~/.claude.json',
     globalRulesPath: '~/.claude/CLAUDE.md',
     globalRulesWrite: true,
-    transports: ['stdio', 'http'],
     quickImport: true,
     executable: 'claude',
     importStrategy: 'claude-cli'
@@ -68,7 +61,6 @@ export const MCP_CLIENTS = [
     configPath: '~/.gemini/config/mcp_config.json',
     globalRulesPath: '~/.gemini/GEMINI.md',
     globalRulesWrite: true,
-    transports: ['http'],
     quickImport: false,
     executable: null,
     importStrategy: 'manual'
@@ -78,8 +70,7 @@ export const MCP_CLIENTS = [
 export const GENERIC_MCP_CONFIG_TARGET = {
   id: 'generic',
   label: '其他 MCP 客户端',
-  configPath: '客户端 MCP 配置文件',
-  transports: ['stdio', 'http']
+  configPath: '客户端 MCP 配置文件'
 } as const
 
 export type McpClientDefinition = (typeof MCP_CLIENTS)[number]
@@ -121,8 +112,4 @@ export function getMcpClientDefinition(client: McpClient): McpClientDefinition {
   const definition = MCP_CLIENTS.find((item) => item.id === client)
   if (!definition) throw new Error(`未知 MCP 客户端：${client}`)
   return definition
-}
-
-export function supportsMcpTransport(client: McpClient, transport: McpTransport): boolean {
-  return getMcpClientDefinition(client).transports.some((item) => item === transport)
 }

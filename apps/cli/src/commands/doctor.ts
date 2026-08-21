@@ -1,24 +1,30 @@
 import { accessSync, constants } from 'node:fs'
 import { join } from 'node:path'
 import type { Command } from 'commander'
-import { hasActiveCrawlLocks, readRuntimeLock } from '@loci/runtime'
+import {
+  checkLocalService,
+  hasActiveCrawlLocks,
+  inspectPersistentBackgroundRequirements,
+  readLocalServiceState,
+  readRuntimeLock
+} from '@loci/runtime'
 import { browserStatus } from '../browser.js'
 import { runWithRuntime } from '../command-runtime.js'
-import { canConnect } from './status.js'
 import { printTable } from '../ui.js'
 
 export function registerDoctorCommand(program: Command): void {
   program
     .command('doctor')
-    .description('检查数据库、浏览器、Server 和 MCP 并给出修复建议')
+    .description('检查数据库、浏览器和 Server 并给出修复建议')
     .action(() =>
       runWithRuntime('Loci 诊断', async (runtime) => {
         const settings = runtime.database.getSettings()
         const browser = await browserStatus(join(runtime.cacheDir, 'playwright'))
         const server = await checkServer(settings.serverUrl)
-        const mcp = await canConnect(settings.mcpPort)
         const maintenance = readRuntimeLock(runtime.dataDir, 'maintenance')
-        const scheduleHost = readRuntimeLock(runtime.dataDir, 'schedule')
+        const serviceState = readLocalServiceState(runtime.dataDir)
+        const serviceRunning = Boolean(serviceState && (await checkLocalService(serviceState)))
+        const background = inspectPersistentBackgroundRequirements(runtime.database.listSources())
         const crawling = hasActiveCrawlLocks(runtime.dataDir)
         let writable = true
         try {
@@ -49,14 +55,13 @@ export function registerDoctorCommand(program: Command): void {
           ],
           ['Loci Server', server.ok ? '正常' : '不可访问', server.message],
           [
-            'MCP',
-            mcp ? '运行中' : '未运行',
-            mcp ? `端口 ${settings.mcpPort}` : '运行 loci mcp serve，或启动 Loci 后台服务'
-          ],
-          [
-            '计划运行器',
-            scheduleHost ? '运行中' : '未运行',
-            scheduleHost?.owner ?? '运行 loci schedule run'
+            '后台服务',
+            serviceRunning ? '运行中' : background.required ? '需要处理' : '无需运行',
+            serviceRunning
+              ? `PID ${serviceState!.pid}`
+              : background.required
+                ? '运行 loci service start'
+                : '没有定时抓取或云端每日自动同步'
           ]
         ]
         printTable(['检查项', '结果', '说明'], rows)

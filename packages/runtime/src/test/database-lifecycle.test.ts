@@ -107,7 +107,7 @@ describe('database lifecycle', () => {
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       ) STRICT;
       CREATE TABLE app_settings (
-        id INTEGER PRIMARY KEY, mcp_port INTEGER NOT NULL, theme TEXT NOT NULL,
+        id INTEGER PRIMARY KEY, mcp_port INTEGER NOT NULL CHECK (mcp_port BETWEEN 1024 AND 65535), theme TEXT NOT NULL,
         http_concurrency INTEGER NOT NULL, browser_concurrency INTEGER NOT NULL
       ) STRICT;
       INSERT INTO app_settings VALUES (1, 37373, 'auto', 9, 2);

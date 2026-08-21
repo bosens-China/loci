@@ -27,7 +27,6 @@ describe('database backup', () => {
         crawledAt: new Date().toISOString()
       })
       sourceDatabase.saveSettings({
-        mcpPort: 41000,
         theme: 'dark',
         httpConcurrency: 12,
         browserConcurrency: 3,
@@ -70,6 +69,7 @@ describe('database backup', () => {
       })
 
       const backup = sourceDatabase.exportBackup()
+      Object.assign(backup.data.settings, { mcp_port: 41000 })
       const invalid = structuredClone(backup)
       invalid.data.documents[0]!.source_id = 'missing-source'
       expect(() => targetDatabase.importBackup(invalid)).toThrow('引用的文档源不存在')
@@ -89,7 +89,6 @@ describe('database backup', () => {
       })
       expect(targetDatabase.searchDocuments('Components')[0]?.title).toBe('Learn React')
       expect(targetDatabase.getSettings()).toMatchObject({
-        mcpPort: 41000,
         theme: 'dark',
         maxRetries: 4,
         batchIntervalSeconds: 100

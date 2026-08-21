@@ -70,7 +70,6 @@ describe('createDatabase', () => {
         status: 'attention'
       })
       expect(database.getSettings()).toEqual({
-        mcpPort: 37373,
         theme: 'auto',
         httpConcurrency: 9,
         browserConcurrency: 5,
@@ -82,7 +81,6 @@ describe('createDatabase', () => {
       })
       expect(
         database.saveSettings({
-          mcpPort: 41000,
           theme: 'dark',
           httpConcurrency: 12,
           browserConcurrency: 3,
@@ -93,7 +91,6 @@ describe('createDatabase', () => {
           githubMarkdownLimitMb: 100
         })
       ).toEqual({
-        mcpPort: 41000,
         theme: 'dark',
         httpConcurrency: 12,
         browserConcurrency: 3,
@@ -104,7 +101,6 @@ describe('createDatabase', () => {
         githubMarkdownLimitMb: 100
       })
       expect(database.getSettings()).toEqual({
-        mcpPort: 41000,
         theme: 'dark',
         httpConcurrency: 12,
         browserConcurrency: 3,
@@ -127,9 +123,8 @@ describe('createDatabase', () => {
       expect(database.searchDocuments('Components')).toEqual([])
       expect(() =>
         database.saveSettings({
-          mcpPort: 80,
           theme: 'auto',
-          httpConcurrency: 9,
+          httpConcurrency: 0,
           browserConcurrency: 5,
           maxRetries: 3,
           batchIntervalSeconds: 0,
@@ -137,7 +132,7 @@ describe('createDatabase', () => {
           githubArchiveLimitMb: 200,
           githubMarkdownLimitMb: 100
         })
-      ).toThrow('MCP 端口必须是 1024 到 65535 之间的整数')
+      ).toThrow('HTTP 默认并发必须是')
     } finally {
       database.close()
     }

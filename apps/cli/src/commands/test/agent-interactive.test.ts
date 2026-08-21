@@ -35,31 +35,24 @@ afterEach(() => {
 })
 
 describe('loci agent 交互入口', () => {
-  it('根命令询问 Agent、transport 和 Skill 作用域', async () => {
-    vi.mocked(askSelect)
-      .mockResolvedValueOnce('codex')
-      .mockResolvedValueOnce('stdio')
-      .mockResolvedValueOnce('project')
+  it('根命令询问 Agent 和 Skill 作用域', async () => {
+    vi.mocked(askSelect).mockResolvedValueOnce('codex').mockResolvedValueOnce('project')
     vi.mocked(askConfirm).mockResolvedValue(false)
 
     await createProgram().parseAsync(['agent'], { from: 'user' })
 
-    expect(askSelect).toHaveBeenCalledTimes(3)
+    expect(askSelect).toHaveBeenCalledTimes(2)
     expect(vi.mocked(askSelect).mock.calls.map(([message]) => message)).toEqual([
       '请选择需要接入 Loci 的 Agent',
-      '请选择 MCP 传输方式',
       '请选择 use-loci Skill 作用域'
     ])
   })
 
   it('子菜单缺参时继续交互补全', async () => {
-    vi.mocked(askSelect).mockResolvedValueOnce('manual').mockResolvedValueOnce('stdio')
+    vi.mocked(askSelect).mockResolvedValueOnce('manual')
 
-    await createProgram().parseAsync(['agent', 'config'], { from: 'user' })
+    await createProgram().parseAsync(['agent', 'print-config'], { from: 'user' })
 
-    expect(vi.mocked(askSelect).mock.calls.map(([message]) => message)).toEqual([
-      '请选择配置目标',
-      '请选择 MCP 传输方式'
-    ])
+    expect(vi.mocked(askSelect).mock.calls.map(([message]) => message)).toEqual(['请选择配置目标'])
   })
 })

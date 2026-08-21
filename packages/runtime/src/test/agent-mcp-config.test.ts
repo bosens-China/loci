@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { LOCI_CLI_STDIO_CONNECTION, createHttpMcpConnection } from '../agent-import.js'
+import { LOCI_CLI_STDIO_CONNECTION } from '../agent-import.js'
 import { resolveAgentMcpConfigPath, writeAgentMcpConfigFile } from '../agent-mcp-config.js'
 
 let root = ''
@@ -83,19 +83,21 @@ describe('Agent MCP 用户配置文件', () => {
     expect(content.match(/\[mcp_servers\.loci\]/g)).toHaveLength(1)
   })
 
-  it('按官方字段写入 Claude Code 与 Antigravity HTTP 配置', () => {
-    const connection = createHttpMcpConnection('http://127.0.0.1:37373/mcp')
-    const claude = writeAgentMcpConfigFile('claude-code', connection, { homeDir })
-    const antigravity = writeAgentMcpConfigFile('antigravity', connection, { homeDir })
+  it('按官方字段写入 Claude Code 与 Antigravity stdio 配置', () => {
+    const claude = writeAgentMcpConfigFile('claude-code', LOCI_CLI_STDIO_CONNECTION, { homeDir })
+    const antigravity = writeAgentMcpConfigFile('antigravity', LOCI_CLI_STDIO_CONNECTION, {
+      homeDir
+    })
 
     expect(JSON.parse(readFileSync(claude.path, 'utf8'))).toHaveProperty('mcpServers.loci', {
-      type: 'http',
-      url: 'http://127.0.0.1:37373/mcp'
+      type: 'stdio',
+      command: 'loci',
+      args: ['mcp', 'stdio']
     })
-    expect(JSON.parse(readFileSync(antigravity.path, 'utf8'))).toHaveProperty(
-      'mcpServers.loci.serverUrl',
-      'http://127.0.0.1:37373/mcp'
-    )
+    expect(JSON.parse(readFileSync(antigravity.path, 'utf8'))).toHaveProperty('mcpServers.loci', {
+      command: 'loci',
+      args: ['mcp', 'stdio']
+    })
   })
 
   it('已有配置无法解析或结构冲突时保持原文件', () => {

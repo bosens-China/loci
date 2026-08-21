@@ -1,12 +1,10 @@
-import { Option, type Command } from 'commander'
+import type { Command } from 'commander'
 import {
   createAgentImportCommand,
-  createHttpMcpConnection,
   importAgentClient,
   installAgentGlobalRules,
   LOCI_CLI_STDIO_CONNECTION,
-  resolveAgentMcpConfigPath,
-  type McpAgentConnection
+  resolveAgentMcpConfigPath
 } from '@loci/runtime'
 import {
   GENERIC_MCP_CONFIG_TARGET,
@@ -19,11 +17,9 @@ import {
   isSkillAgent,
   listImportableAgentClients,
   listMcpClients,
-  supportsMcpTransport,
   type AgentClient,
   type McpClient,
-  type McpConfigTarget,
-  type McpTransport
+  type McpConfigTarget
 } from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
@@ -53,26 +49,23 @@ export function registerAgentCommands(program: Command): void {
   registerConfigureCommand(agent)
   registerRulesCommand(agent)
   registerSkillsCommands(agent)
-  registerConfigCommand(agent)
+  registerPrintConfigCommand(agent)
 }
 
 function registerConfigureCommand(agent: Command): void {
   agent
     .command('configure [client]')
     .description('将 Loci MCP 连接写入 Agent 客户端配置')
-    .addOption(
-      new Option('--transport <transport>', '选择 MCP 传输方式').choices(['stdio', 'http'])
-    )
     .option('--yes', '跳过写入前确认')
     .action(configureAgentClient)
 }
 
 async function configureAgentClient(
   client: string | undefined,
-  options: { transport?: McpTransport; yes?: boolean }
+  options: { yes?: boolean }
 ): Promise<void> {
-  let remembered = { client: 'codex' as AgentClient, transport: 'stdio' as McpTransport }
-  if (process.stdin.isTTY && (!client || !options.transport)) {
+  let remembered = { client: 'codex' as AgentClient }
+  if (process.stdin.isTTY && !client) {
     const preferenceRuntime = createCliRuntime()
     try {
       remembered = readMcpConfigurePreference(preferenceRuntime.database)
@@ -86,29 +79,21 @@ async function configureAgentClient(
       ? await askSelect<AgentSelection>('请选择 Agent 客户端', clients, remembered.client)
       : undefined)
   if (!selected) throw new CliError('非交互终端必须指定 Agent 客户端', 2)
-  const transport =
-    options.transport ??
-    (process.stdin.isTTY ? await askTransport(selected, remembered.transport) : undefined)
-  if (!transport) throw new CliError('非交互终端必须指定 --transport', 2)
   if (selected === 'manual') {
-    await printManualMcpConfig(transport, GENERIC_MCP_CONFIG_TARGET.id)
+    printManualMcpConfig(GENERIC_MCP_CONFIG_TARGET.id)
     return
   }
   if (!isAgentClient(selected)) {
-    throw new CliError(`不支持的 Agent 客户端：${selected}；请运行 loci agent config 复制配置`, 2)
-  }
-  if (!supportsMcpTransport(selected, transport)) {
-    const definition = getMcpClientDefinition(selected)
-    throw new CliError(`${definition.label} 不支持 ${transport} 传输`, 2)
+    throw new CliError(
+      `不支持的 Agent 客户端：${selected}；请运行 loci agent print-config 复制配置`,
+      2
+    )
   }
   if (!process.stdin.isTTY && !options.yes) {
     throw new CliError('非交互写入 Agent 配置必须传入 --yes', 2)
   }
   await runWithRuntime('配置 Agent 客户端', async (runtime) => {
-    const connection =
-      transport === 'stdio'
-        ? LOCI_CLI_STDIO_CONNECTION
-        : createHttpMcpConnection(`http://127.0.0.1:${runtime.database.getSettings().mcpPort}/mcp`)
+    const connection = LOCI_CLI_STDIO_CONNECTION
     if (process.stdin.isTTY && !options.yes) {
       const definition = getMcpClientDefinition(selected)
       const path = resolveAgentMcpConfigPath(selected)
@@ -122,11 +107,7 @@ async function configureAgentClient(
           })()
         : [`直接合并：${path}`]
       note(
-        [
-          `客户端：${definition.label}`,
-          `传输方式：${transport === 'stdio' ? 'CLI stdio' : '本地 HTTP'}`,
-          ...action
-        ].join('\n'),
+        [`客户端：${definition.label}`, '传输方式：CLI stdio', ...action].join('\n'),
         'MCP 配置写入预览'
       )
       if (!(await askConfirm('确认写入这个客户端的用户配置吗？', true))) {
@@ -137,7 +118,7 @@ async function configureAgentClient(
       dataDir: runtime.dataDir,
       owner: 'CLI Agent MCP 配置写入'
     })
-    saveMcpConfigurePreference(runtime.database, { client: selected, transport })
+    saveMcpConfigurePreference(runtime.database, { client: selected })
     return result.message
   })
 }
@@ -194,20 +175,15 @@ async function configureAgentRules(
   )
 }
 
-function registerConfigCommand(agent: Command): void {
+function registerPrintConfigCommand(agent: Command): void {
   agent
-    .command('config [client]')
+    .command('print-config [client]')
     .description('打印 Agent 客户端或通用 MCP 配置，不修改文件')
-    .addOption(
-      new Option('--transport <transport>', '选择 MCP 传输方式').choices(['stdio', 'http'])
-    )
     .action(printAgentConfig)
+  agent.command('config [client]', { hidden: true }).action(printAgentConfig)
 }
 
-async function printAgentConfig(
-  client: string | undefined,
-  options: { transport?: McpTransport }
-): Promise<void> {
+async function printAgentConfig(client: string | undefined): Promise<void> {
   const selected =
     client ??
     (process.stdin.isTTY
@@ -215,10 +191,7 @@ async function printAgentConfig(
       : undefined)
   if (!selected) throw new CliError('非交互终端必须指定配置目标', 2)
   const target = resolveMcpConfigTarget(selected === 'manual' ? 'generic' : selected)
-  const transport =
-    options.transport ?? (process.stdin.isTTY ? await askTransport(selected, 'stdio') : undefined)
-  if (!transport) throw new CliError('非交互终端必须指定 --transport', 2)
-  await printManualMcpConfig(transport, target)
+  printManualMcpConfig(target)
 }
 
 async function runAgentOnboarding(): Promise<void> {
@@ -230,7 +203,6 @@ async function runAgentOnboarding(): Promise<void> {
     label: client.label
   }))
   const selected = await askSelect<AgentClient>('请选择需要接入 Loci 的 Agent', available, 'codex')
-  const transport = await askTransport(selected, selected === 'antigravity' ? 'http' : 'stdio')
   const scope = await askSelect<'project' | 'global'>(
     '请选择 use-loci Skill 作用域',
     [
@@ -243,7 +215,7 @@ async function runAgentOnboarding(): Promise<void> {
   note(
     [
       `Agent：${definition.label}`,
-      `MCP：${transport === 'stdio' ? 'CLI stdio' : '本地 HTTP'}`,
+      'MCP：CLI stdio',
       `Skill：${scope === 'project' ? process.cwd() : '用户级全局目录'}`,
       `全局规则：${definition.globalRulesPath}`
     ].join('\n'),
@@ -251,7 +223,7 @@ async function runAgentOnboarding(): Promise<void> {
   )
   if (!(await askConfirm('确认配置 MCP、安装 Skill 并写入全局规则吗？', true))) return
 
-  await configureAgentClient(selected, { transport, yes: true })
+  await configureAgentClient(selected, { yes: true })
   await installLociSkill({
     agent: isSkillAgent(selected) ? selected : 'universal',
     project: scope === 'project' ? process.cwd() : undefined,
@@ -259,24 +231,6 @@ async function runAgentOnboarding(): Promise<void> {
     yes: true
   })
   await configureAgentRules(selected, { yes: true })
-}
-
-async function askTransport(selected: string, initial: McpTransport): Promise<McpTransport> {
-  const options = (['stdio', 'http'] as const)
-    .filter(
-      (transport) =>
-        selected === 'manual' ||
-        selected === GENERIC_MCP_CONFIG_TARGET.id ||
-        (isMcpClient(selected) && supportsMcpTransport(selected, transport))
-    )
-    .map((transport) => ({
-      value: transport,
-      label: transport === 'stdio' ? 'CLI stdio' : '本地 HTTP'
-    }))
-  const initialValue = options.some((option) => option.value === initial)
-    ? initial
-    : options[0]!.value
-  return askSelect('请选择 MCP 传输方式', options, initialValue)
 }
 
 function formatCommand(command: string, args: readonly string[]): string {
@@ -291,25 +245,7 @@ function resolveMcpConfigTarget(value: string | undefined): McpConfigTarget {
   throw new CliError(`不支持的 MCP 配置目标：${value}`, 2)
 }
 
-async function printManualMcpConfig(
-  transport: McpTransport,
-  target: McpConfigTarget
-): Promise<void> {
-  if (target !== GENERIC_MCP_CONFIG_TARGET.id && !supportsMcpTransport(target, transport)) {
-    const definition = getMcpClientDefinition(target)
-    throw new CliError(`${definition.label} 不支持 ${transport} 传输`, 2)
-  }
-  let connection: McpAgentConnection = LOCI_CLI_STDIO_CONNECTION
-  if (transport === 'http') {
-    const runtime = createCliRuntime()
-    try {
-      connection = createHttpMcpConnection(
-        `http://127.0.0.1:${runtime.database.getSettings().mcpPort}/mcp`
-      )
-    } finally {
-      await runtime.close()
-    }
-  }
+function printManualMcpConfig(target: McpConfigTarget): void {
   const targetDefinition =
     target === GENERIC_MCP_CONFIG_TARGET.id
       ? GENERIC_MCP_CONFIG_TARGET
@@ -317,5 +253,5 @@ async function printManualMcpConfig(
   process.stderr.write(
     `请将下面的 ${targetDefinition.label} 配置复制到 ${targetDefinition.configPath}。\n`
   )
-  process.stdout.write(`${createMcpClientConfig(target, connection)}\n`)
+  process.stdout.write(`${createMcpClientConfig(target, LOCI_CLI_STDIO_CONNECTION)}\n`)
 }

@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProgram } from '../../cli.js'
 import { CliError } from '../../errors.js'
+import { createCliRuntime } from '../../runtime.js'
 import { defaultBackupFilename } from '../data.js'
 
 let directory = ''
@@ -41,5 +42,33 @@ describe('数据导出默认文件名', () => {
     await expect(
       createProgram().parseAsync(['data', 'clear-documents'], { from: 'user' })
     ).rejects.toThrow('非交互终端请传入 --yes')
+  })
+
+  it('恢复包含定时能力的备份后确保后台服务', async () => {
+    const backup = join(directory, 'scheduled.json')
+    let runtime = createCliRuntime()
+    runtime.database.createSource({
+      name: 'Scheduled docs',
+      url: 'https://example.com/docs',
+      mode: 'auto',
+      pageLimit: 1000,
+      schedule: '0 2 * * *',
+      httpConcurrency: null,
+      browserConcurrency: null
+    })
+    writeFileSync(backup, JSON.stringify(runtime.database.exportBackup()), 'utf8')
+    runtime.database.clearSources()
+    await runtime.close()
+    const ensureService = vi.fn(async () => undefined)
+
+    await createProgram({ ensureUserService: ensureService }).parseAsync(
+      ['data', 'import', backup, '--yes'],
+      { from: 'user' }
+    )
+
+    expect(ensureService).toHaveBeenCalledOnce()
+    runtime = createCliRuntime()
+    expect(runtime.database.listSources()[0]?.schedule).toBe('0 2 * * *')
+    await runtime.close()
   })
 })

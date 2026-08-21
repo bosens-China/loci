@@ -60,8 +60,6 @@ export function createProgram(options: CreateProgramOptions = {}): Command {
     .version(CLI_VERSION, '-V, --version', '显示 CLI 版本')
     .helpOption('-h, --help', '显示帮助')
     .addHelpCommand('help [command]', '显示指定命令的帮助')
-    .optionsGroup('选项：')
-    .commandsGroup('命令：')
     .showHelpAfterError()
     .showSuggestionAfterError()
     .exitOverride()
@@ -83,13 +81,13 @@ export function createProgram(options: CreateProgramOptions = {}): Command {
   registerServiceCommands(program)
   registerUiCommand(program)
   registerDocumentCommands(program)
-  registerCloudCommands(program)
+  registerCloudCommands(program, options.ensureUserService)
   registerAdminCommand(program)
   registerAgentCommands(program)
   registerMcpCommands(program)
   registerBrowserCommands(program)
   registerConfigCommands(program)
-  registerDataCommands(program)
+  registerDataCommands(program, options.ensureUserService)
   registerDoctorCommand(program)
   return program
 }
@@ -102,7 +100,8 @@ function requiresCleanStdout(args: readonly string[]): boolean {
   return (
     (args[0] === 'mcp' && (args[1] === 'stdio' || args[1] === 'call')) ||
     (args[0] === 'agent' &&
-      (args[1] === 'config' ||
+      (args[1] === 'print-config' ||
+        args[1] === 'config' ||
         args[1] === 'configure' ||
         args[1] === 'rules' ||
         (args[1] === 'skills' && args.includes('--json'))))

@@ -31,7 +31,7 @@ describe('Loci CLI command surface', () => {
       program.commands
         .find((command) => command.name() === 'agent')
         ?.commands.map((command) => command.name())
-    ).toEqual(['configure', 'rules', 'skills', 'config'])
+    ).toEqual(['configure', 'rules', 'skills', 'print-config', 'config'])
     expect(
       program.commands
         .find((command) => command.name() === 'agent')
@@ -47,7 +47,7 @@ describe('Loci CLI command surface', () => {
       program.commands
         .find((command) => command.name() === 'mcp')
         ?.commands.map((command) => command.name())
-    ).toEqual(['call', 'stdio', 'serve', 'status'])
+    ).toEqual(['call', 'stdio'])
     expect(
       program.commands
         .find((command) => command.name() === 'service')
@@ -63,6 +63,27 @@ describe('Loci CLI command surface', () => {
         .find((command) => command.name() === 'admin')
         ?.commands.map((command) => command.name())
     ).toEqual(['libraries', 'create', 'update', 'delete', 'sync', 'jobs', 'cancel'])
+  })
+
+  it('帮助只展示推荐命令和用户参数，同时保留旧入口', async () => {
+    const program = createProgram()
+    const rootHelp = program.helpInformation()
+    const schedule = program.commands.find((command) => command.name() === 'schedule')!
+    const serviceRun = program.commands
+      .find((command) => command.name() === 'service')!
+      .commands.find((command) => command.name() === 'run')!
+    const agent = program.commands.find((command) => command.name() === 'agent')!
+
+    expect(rootHelp.match(/命令：/g)).toHaveLength(1)
+    expect(schedule.helpInformation().match(/命令：/g)).toHaveLength(1)
+    expect(schedule.helpInformation()).not.toContain('run')
+    expect(serviceRun.helpInformation()).not.toContain('--managed')
+    expect(agent.helpInformation()).toContain('print-config')
+    expect(agent.helpInformation()).not.toMatch(/\n\s+config \[client\]/)
+
+    await expect(
+      createProgram().parseAsync(['schedule', 'run'], { from: 'user' })
+    ).resolves.toBeDefined()
   })
 
   it('不再暴露旧的 Agent 集成命令路径', async () => {

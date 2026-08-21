@@ -4,7 +4,6 @@ import which from 'which'
 import {
   getMcpClientDefinition,
   isAgentClient,
-  supportsMcpTransport,
   type AgentClient,
   type AgentImportResult,
   type McpAgentConnection,
@@ -42,10 +41,6 @@ export const LOCI_CLI_STDIO_CONNECTION: McpAgentConnection = {
   type: 'stdio',
   command: 'loci',
   args: ['mcp', 'stdio']
-}
-
-export function createHttpMcpConnection(endpoint: string): McpAgentConnection {
-  return { type: 'http', endpoint }
 }
 
 export async function importAgentClient(
@@ -89,7 +84,7 @@ async function performAgentImport(
         await runCommand(executable, command.args, command.label)
         return {
           client,
-          message: `已通过 ${command.label} 命令写入 ${transportLabel(connection)} MCP`
+          message: `已通过 ${command.label} 命令写入 CLI stdio MCP`
         }
       } catch (error) {
         commandError = toError(error)
@@ -138,71 +133,44 @@ function requireAgentClient(client: unknown): AgentClient {
 function createImportArgs(strategy: McpImportStrategy, connection: McpAgentConnection): string[] {
   switch (strategy) {
     case 'codex-cli':
-      return connection.type === 'http'
-        ? ['mcp', 'add', 'loci', '--url', connection.endpoint]
-        : ['mcp', 'add', 'loci', '--', connection.command, ...connection.args]
+      return ['mcp', 'add', 'loci', '--', connection.command, ...connection.args]
     case 'cursor-cli':
     case 'vscode-cli':
       return ['--add-mcp', createEditorConfig(connection)]
     case 'claude-cli':
-      return connection.type === 'http'
-        ? ['mcp', 'add', '--transport', 'http', '--scope', 'user', 'loci', connection.endpoint]
-        : [
-            'mcp',
-            'add',
-            '--transport',
-            'stdio',
-            '--scope',
-            'user',
-            'loci',
-            '--',
-            connection.command,
-            ...connection.args
-          ]
+      return [
+        'mcp',
+        'add',
+        '--transport',
+        'stdio',
+        '--scope',
+        'user',
+        'loci',
+        '--',
+        connection.command,
+        ...connection.args
+      ]
     case 'manual':
       throw new Error('这个 Agent 客户端不支持自动写入')
   }
 }
 
 function createEditorConfig(connection: McpAgentConnection): string {
-  return JSON.stringify(
-    connection.type === 'http'
-      ? { name: 'loci', type: 'http', url: connection.endpoint }
-      : {
-          name: 'loci',
-          type: 'stdio',
-          command: connection.command,
-          args: [...connection.args]
-        }
-  )
+  return JSON.stringify({
+    name: 'loci',
+    type: 'stdio',
+    command: connection.command,
+    args: [...connection.args]
+  })
 }
 
 function validateConnection(connection: McpAgentConnection): void {
-  if (connection.type === 'stdio') {
-    if (!connection.command.trim()) throw new Error('MCP stdio 命令不能为空')
-    return
-  }
-  const url = new URL(connection.endpoint)
-  if (
-    url.protocol !== 'http:' ||
-    url.hostname !== '127.0.0.1' ||
-    !url.port ||
-    url.pathname !== '/mcp' ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
-    throw new Error('MCP 地址不是有效的本机地址')
-  }
+  if (!connection.command.trim()) throw new Error('MCP stdio 命令不能为空')
 }
 
 function validateClientConnection(client: AgentClient, connection: McpAgentConnection): void {
   validateConnection(connection)
-  if (!supportsMcpTransport(client, connection.type)) {
-    const definition = getMcpClientDefinition(client)
-    throw new Error(`${definition.label} 不支持 ${connection.type} 传输`)
-  }
+  getMcpClientDefinition(client)
 }
 
 async function resolveExecutable(command: AgentImportCommand): Promise<string> {
@@ -284,10 +252,6 @@ function lastOutputLine(output: string): string {
     .filter(Boolean)
     .at(-1)
   return line ? `：${line.slice(0, 240)}` : ''
-}
-
-function transportLabel(connection: McpAgentConnection): string {
-  return connection.type === 'stdio' ? 'CLI stdio' : '本地 HTTP'
 }
 
 function toError(error: unknown): Error {

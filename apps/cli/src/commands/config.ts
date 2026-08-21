@@ -10,7 +10,6 @@ import { CliError } from '../errors.js'
 import { askConfirm, askInteger, askSelect, askText, note, printTable } from '../ui.js'
 
 type ConfigKey =
-  | 'mcp-port'
   | 'http-concurrency'
   | 'browser-concurrency'
   | 'max-retries'
@@ -31,7 +30,6 @@ export function registerConfigCommands(program: Command): void {
         printTable(
           ['设置', '当前值'],
           [
-            ['mcp-port', settings.mcpPort],
             ['http-concurrency', settings.httpConcurrency],
             ['browser-concurrency', settings.browserConcurrency],
             ['max-retries', settings.maxRetries],
@@ -78,7 +76,6 @@ function configOptions(settings: AppSettings): Array<{
 }> {
   return (
     [
-      'mcp-port',
       'http-concurrency',
       'browser-concurrency',
       'max-retries',
@@ -122,7 +119,6 @@ async function askConfigValue(key: ConfigKey, current: string): Promise<string> 
 function configRange(
   key: Exclude<ConfigKey, 'server-url' | 'batch-interval-seconds'>
 ): [number, number] {
-  if (key === 'mcp-port') return range(APP_SETTINGS_LIMITS.mcpPort)
   if (key === 'max-retries') return range(APP_SETTINGS_LIMITS.maxRetries)
   if (key === 'github-archive-limit-mb' || key === 'github-markdown-limit-mb') {
     return range(APP_SETTINGS_LIMITS.githubSizeMb)
@@ -135,7 +131,6 @@ function range(value: { readonly min: number; readonly max: number }): [number, 
 }
 
 function configValue(settings: AppSettings, key: ConfigKey): string {
-  if (key === 'mcp-port') return String(settings.mcpPort)
   if (key === 'http-concurrency') return String(settings.httpConcurrency)
   if (key === 'browser-concurrency') return String(settings.browserConcurrency)
   if (key === 'max-retries') return String(settings.maxRetries)
@@ -147,7 +142,6 @@ function configValue(settings: AppSettings, key: ConfigKey): string {
 
 function applyConfigValue(settings: AppSettings, key: ConfigKey, value: string): void {
   if (key === 'server-url') settings.serverUrl = value
-  if (key === 'mcp-port') settings.mcpPort = Number(value)
   if (key === 'http-concurrency') settings.httpConcurrency = Number(value)
   if (key === 'browser-concurrency') settings.browserConcurrency = Number(value)
   if (key === 'max-retries') settings.maxRetries = Number(value)
@@ -158,7 +152,6 @@ function applyConfigValue(settings: AppSettings, key: ConfigKey, value: string):
 
 function configLabel(key: ConfigKey): string {
   return {
-    'mcp-port': 'MCP 端口',
     'http-concurrency': 'HTTP 默认并发',
     'browser-concurrency': '浏览器默认并发',
     'max-retries': '失败重试次数',
@@ -205,7 +198,6 @@ function validateServerUrl(value: string | undefined): string | undefined {
 
 function isConfigKey(value: string): value is ConfigKey {
   return [
-    'mcp-port',
     'http-concurrency',
     'browser-concurrency',
     'max-retries',

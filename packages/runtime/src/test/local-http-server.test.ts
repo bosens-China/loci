@@ -149,7 +149,7 @@ describe('本机 HTTP 服务', () => {
       headers,
       body: JSON.stringify(backup)
     })
-    expect(await imported.json()).toEqual({ sources: 1, documents: 0, restartRequired: true })
+    expect(await imported.json()).toEqual({ sources: 1, documents: 0 })
     expect(runtime.database.listSources()[0]?.name).toBe('Local docs')
   })
 })
