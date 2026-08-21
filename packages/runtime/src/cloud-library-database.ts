@@ -16,7 +16,7 @@ export interface CloudSnapshot {
     url: string
     language: string
     markdown: string
-    relativePath?: string
+    relativePath?: string | null
   }>
 }
 

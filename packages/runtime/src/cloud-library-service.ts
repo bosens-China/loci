@@ -40,7 +40,7 @@ const snapshotSchema = z.object({
         url: z.string().url(),
         language: z.string(),
         markdown: z.string(),
-        relativePath: z.string().optional()
+        relativePath: z.string().nullable().optional()
       })
     )
     .min(1)

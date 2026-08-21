@@ -176,7 +176,8 @@ function snapshot(revision: string): Record<string, unknown> {
         title: `Document ${revision}`,
         url: `https://docs.example.com/${revision.replace(':', '-')}`,
         language: 'en',
-        markdown: `version-${version}`
+        markdown: `version-${version}`,
+        relativePath: null
       }
     ]
   }
