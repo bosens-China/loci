@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.16.0](https://github.com/bosens-China/loci/compare/cli-v1.15.0...cli-v1.16.0) (2026-08-21)
+
+
+### Features
+
+* 增加 Web Server 管理与安全开发入口 ([0c15a2f](https://github.com/bosens-China/loci/commit/0c15a2ff10abff405f5ce556f27edea130c6f5b0))
+* 统一本地运行时与 CLI 服务工作流 ([1d7a2a4](https://github.com/bosens-China/loci/commit/1d7a2a4f404bf6be8afc31a94e7856a35f8a3afe))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.12.1
+    * @loci/runtime bumped to 1.13.0
+    * @loci/shared bumped to 1.19.0
+
 ## [1.15.0](https://github.com/bosens-China/loci/compare/cli-v1.14.0...cli-v1.15.0) (2026-08-20)
 
 

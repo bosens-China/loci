@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.8.2](https://github.com/bosens-China/loci/compare/server-v1.8.1...server-v1.8.2) (2026-08-21)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.12.1
+
 ## [1.8.1](https://github.com/bosens-China/loci/compare/server-v1.8.0...server-v1.8.1) (2026-08-20)
 
 
