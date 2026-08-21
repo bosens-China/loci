@@ -43,6 +43,7 @@
     "server:typecheck": "pnpm --filter @loci/server typecheck",
     "start": "pnpm dev",
     "dev": "tsx scripts/dev-web.mts",
+    "dev:user": "tsx scripts/dev-web.mts --user-data",
     "build": "pnpm cli:build",
     "prepare": "husky"
   },

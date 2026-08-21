@@ -27,6 +27,8 @@ import {
 import { askScope } from './source.js'
 import { registerAdminSubcommands } from './admin-script.js'
 import { selectLibraries, syncLibraries } from './admin-sync.js'
+import { createAdminLibraryTable } from './admin-output.js'
+import { cancelAdminJobInteractive, showAdminJobs } from './admin-tasks.js'
 import {
   askConfirm,
   askInteger,
@@ -42,7 +44,8 @@ import {
   warning
 } from '../ui.js'
 
-type AdminAction = 'list' | 'create' | 'update' | 'schedule' | 'delete' | 'sync' | 'exit'
+type AdminAction =
+  'list' | 'create' | 'update' | 'schedule' | 'delete' | 'sync' | 'jobs' | 'cancel' | 'exit'
 
 const MANUAL_SCHEDULE = 'manual'
 const CUSTOM_SCHEDULE = 'custom'
@@ -101,6 +104,8 @@ async function adminLoop(
       { value: 'schedule', label: '设置自动更新计划' },
       { value: 'delete', label: '删除 Server 文档库' },
       { value: 'sync', label: '手动同步文档库' },
+      { value: 'jobs', label: '查看同步任务' },
+      { value: 'cancel', label: '取消同步任务' },
       { value: 'exit', label: '退出管理员会话' }
     ])
     if (action === 'exit') {
@@ -185,6 +190,8 @@ async function adminLoop(
           selected.map((library) => library.id)
         )
       }
+      if (action === 'jobs') await showAdminJobs(client)
+      if (action === 'cancel') await cancelAdminJobInteractive(client)
     } catch (error) {
       if (error instanceof CliCanceledError) continue
       failure(errorMessage(error))
@@ -280,19 +287,8 @@ function printLibraries(libraries: CloudLibrary[]): void {
     info('Server 还没有文档库，可选择“创建 Server 文档库”开始')
     return
   }
-  printTable(
-    ['名称', '范围', '页面', '计划', '发布状态', '最近同步', '错误', '短 ID'],
-    libraries.map((library) => [
-      library.name,
-      library.scopePath,
-      library.pages,
-      formatScheduleLabel(library.schedule),
-      library.publishedAt ? '已发布' : '未发布',
-      library.lastCrawledAt ?? '—',
-      library.lastError ?? '—',
-      library.id.slice(0, 8)
-    ])
-  )
+  const table = createAdminLibraryTable(libraries)
+  printTable(table.headers, table.rows)
   success(`共 ${libraries.length} 个 Server 文档库`)
 }
 

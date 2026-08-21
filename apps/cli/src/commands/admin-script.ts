@@ -11,6 +11,8 @@ import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { parseScheduleInput } from '../schedule-input.js'
 import { askConfirm, printTable } from '../ui.js'
+import { createAdminJobTable, createAdminLibraryTable } from './admin-output.js'
+import { resolveAdminJob } from './admin-tasks.js'
 
 interface LibraryOptions {
   name?: string
@@ -118,10 +120,11 @@ export function registerAdminSubcommands(admin: Command, waitForSync: WaitForSyn
   admin
     .command('cancel <job>')
     .description('取消排队或运行中的 Server 同步任务')
-    .action((jobId: string) =>
+    .action((reference: string) =>
       withAdmin('取消 Server 同步任务', async (client) => {
-        const job = await client.cancelSyncJob(jobId)
-        return `任务 ${job.id.slice(0, 8)} 状态：${job.status}`
+        const job = resolveAdminJob(await client.listSyncJobs(), reference)
+        const canceled = await client.cancelSyncJob(job.id)
+        return `任务 ${canceled.id.slice(0, 8)} 状态：${canceled.status}`
       })
     )
 }
@@ -200,32 +203,14 @@ function resolveFromList(libraries: CloudLibrary[], reference: string): CloudLib
 }
 
 function printLibraries(libraries: CloudLibrary[]): string {
-  printTable(
-    ['名称', '范围', '页面', '计划', '最近同步', '短 ID'],
-    libraries.map((library) => [
-      library.name,
-      library.scopePath,
-      library.pages,
-      library.schedule ?? '仅手动',
-      library.lastCrawledAt ?? '—',
-      library.id.slice(0, 8)
-    ])
-  )
+  const table = createAdminLibraryTable(libraries)
+  printTable(table.headers, table.rows)
   return `共 ${libraries.length} 个 Server 文档库`
 }
 
 function printJobs(jobs: CloudSyncJob[]): string {
-  printTable(
-    ['任务', '文档库', '状态', '创建时间', '完成时间', '错误'],
-    jobs.map((job) => [
-      job.id.slice(0, 8),
-      job.libraryId.slice(0, 8),
-      job.status,
-      job.createdAt,
-      job.finishedAt ?? '—',
-      job.error ?? '—'
-    ])
-  )
+  const table = createAdminJobTable(jobs)
+  printTable(table.headers, table.rows)
   return `共 ${jobs.length} 个同步任务`
 }
 

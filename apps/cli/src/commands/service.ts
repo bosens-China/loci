@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process'
 import { Option, type Command } from 'commander'
 import {
-  createLocalWebSession,
   startLocalService,
   startLocalWorker,
   RuntimeLockedError,
@@ -26,7 +25,6 @@ interface UiService {
 
 export interface UiSessionDependencies {
   startService: () => Promise<UiService>
-  createWebSession: (state: LocalWebServiceState) => Promise<string>
   printAddress: (url: string) => void
   openBrowser: (url: string) => Promise<boolean>
   reportBrowserOpenFailure: () => void
@@ -179,7 +177,6 @@ export async function runUiSession(
         close: local.close
       }
     },
-    createWebSession: createLocalWebSession,
     printAddress: (url) => process.stdout.write(`Web 地址：${url}\n`),
     openBrowser,
     reportBrowserOpenFailure: () => warning('无法自动打开浏览器，请复制上方 Web 地址手动打开'),
@@ -189,8 +186,7 @@ export async function runUiSession(
   }
   const local = await dependencies.startService()
   try {
-    const token = await dependencies.createWebSession(local.state)
-    const url = `http://127.0.0.1:${local.state.port}/#token=${encodeURIComponent(token)}`
+    const url = `http://127.0.0.1:${local.state.port}/`
     const termination = dependencies.waitForTermination()
     dependencies.printAddress(url)
     if (options.open) {

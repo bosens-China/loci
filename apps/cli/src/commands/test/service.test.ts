@@ -5,7 +5,6 @@ import { runUiSession, type UiSessionDependencies } from '../service.js'
 const state: LocalWebServiceState = {
   pid: 42,
   port: 43123,
-  controlToken: 'control-token',
   startedAt: '2026-08-20T00:00:00.000Z'
 }
 
@@ -24,7 +23,6 @@ function createSession(
         events.push('close')
       }
     }),
-    createWebSession: async () => 'launch token',
     printAddress: (url) => events.push(`address:${url}`),
     openBrowser: async (url) => {
       events.push(`open:${url}`)
@@ -48,7 +46,7 @@ describe('loci ui foreground session', () => {
     const result = runUiSession({ open: true }, session.dependencies)
     await vi.waitFor(() => expect(events).toContain('ready'))
 
-    const url = 'http://127.0.0.1:43123/#token=launch%20token'
+    const url = 'http://127.0.0.1:43123/'
     expect(events).not.toContain('close')
     session.terminate()
     await result
@@ -67,8 +65,8 @@ describe('loci ui foreground session', () => {
 
     expect(events).toEqual([
       'listen',
-      'address:http://127.0.0.1:43123/#token=launch%20token',
-      'open:http://127.0.0.1:43123/#token=launch%20token',
+      'address:http://127.0.0.1:43123/',
+      'open:http://127.0.0.1:43123/',
       'open-failed',
       'ready',
       'close'
@@ -88,12 +86,7 @@ describe('loci ui foreground session', () => {
     expect(events).not.toContain('close')
     session.terminate()
     await result
-    expect(events).toEqual([
-      'listen',
-      'address:http://127.0.0.1:43123/#token=launch%20token',
-      'ready',
-      'close'
-    ])
+    expect(events).toEqual(['listen', 'address:http://127.0.0.1:43123/', 'ready', 'close'])
   })
 
   it('浏览器启动抛错时仍会等待并只关闭一次服务', async () => {
@@ -113,7 +106,7 @@ describe('loci ui foreground session', () => {
 
     expect(events).toEqual([
       'listen',
-      'address:http://127.0.0.1:43123/#token=launch%20token',
+      'address:http://127.0.0.1:43123/',
       'open',
       'open-failed',
       'ready',

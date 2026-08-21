@@ -1,10 +1,11 @@
-export type AppRoute = 'overview' | 'documents' | 'cloud' | 'jobs' | 'settings'
+export type AppRoute = 'overview' | 'documents' | 'cloud' | 'jobs' | 'admin' | 'settings'
 
 const routes: Record<AppRoute, string> = {
   overview: '/',
   documents: '/documents',
   cloud: '/cloud',
   jobs: '/jobs',
+  admin: '/admin',
   settings: '/settings'
 }
 

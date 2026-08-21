@@ -13,7 +13,6 @@ export class ApiError extends Error {
 export const request = axios.create({
   baseURL: '/',
   timeout: 20_000,
-  withCredentials: true,
   headers: { 'content-type': 'application/json' }
 })
 

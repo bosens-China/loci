@@ -12,7 +12,6 @@ export interface LocalServiceState {
 export interface LocalWebServiceState {
   pid: number
   port: number
-  controlToken: string
   startedAt: string
 }
 
@@ -64,7 +63,6 @@ export function readLocalWebServiceState(dataDir: string): LocalWebServiceState 
     if (
       typeof value.pid !== 'number' ||
       typeof value.port !== 'number' ||
-      typeof value.controlToken !== 'string' ||
       typeof value.startedAt !== 'string'
     ) {
       return null
@@ -72,7 +70,6 @@ export function readLocalWebServiceState(dataDir: string): LocalWebServiceState 
     return {
       pid: value.pid,
       port: value.port,
-      controlToken: value.controlToken,
       startedAt: value.startedAt
     }
   } catch {
@@ -126,18 +123,4 @@ export async function checkLocalWebService(
   } catch {
     return false
   }
-}
-
-export async function createLocalWebSession(state: LocalWebServiceState): Promise<string> {
-  const response = await fetch(`http://127.0.0.1:${state.port}/control/session`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${state.controlToken}` },
-    signal: AbortSignal.timeout(1_500)
-  })
-  if (!response.ok) throw new Error('无法创建 Loci Web 会话')
-  const body = (await response.json()) as unknown
-  if (!body || typeof body !== 'object' || !('token' in body) || typeof body.token !== 'string') {
-    throw new Error('Loci Web 服务返回了无效会话')
-  }
-  return body.token
 }

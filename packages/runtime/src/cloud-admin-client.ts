@@ -56,7 +56,7 @@ interface PrivateSession extends CloudAdminSession {
   token: string
 }
 
-/** 云端令牌只保存在主进程内存中，渲染进程只能读取脱敏会话。 */
+/** 云端令牌只保存在 Runtime 内存中，CLI 与 Web 只能读取脱敏会话。 */
 export class CloudAdminClient {
   private session: PrivateSession | null = null
 

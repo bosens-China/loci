@@ -6,6 +6,11 @@ import { getSettings, saveSettings } from '@/api/settings'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTransferPanel } from '@/components/DataTransferPanel'
+import {
+  ADMIN_JOBS_KEY,
+  ADMIN_LIBRARIES_KEY,
+  ADMIN_SESSION_KEY
+} from '@/pages/admin/admin-query-keys'
 
 export function SettingsPage(): React.JSX.Element {
   const { message } = App.useApp()
@@ -18,9 +23,18 @@ export function SettingsPage(): React.JSX.Element {
   const save = useMutation({
     mutationFn: saveSettings,
     onSuccess: (settings) => {
+      const changedServer = settings.serverUrl !== query.data?.serverUrl
+      const hadAdminSession = Boolean(client.getQueryData(ADMIN_SESSION_KEY))
       form.setFieldsValue(settings)
       client.setQueryData(['settings'], settings)
-      void message.success('设置已保存')
+      if (changedServer) {
+        client.setQueryData(ADMIN_SESSION_KEY, null)
+        client.removeQueries({ queryKey: ADMIN_LIBRARIES_KEY })
+        client.removeQueries({ queryKey: ADMIN_JOBS_KEY })
+      }
+      void message.success(
+        changedServer && hadAdminSession ? '设置已保存，管理员会话已重置' : '设置已保存'
+      )
     },
     onError: (error: Error) => void message.error(error.message)
   })
@@ -79,8 +93,17 @@ export function SettingsPage(): React.JSX.Element {
                   {...APP_SETTINGS_LIMITS.githubSizeMb}
                 />
               </div>
-              <Form.Item name="serverUrl" label="云服务地址" className="mt-2">
-                <Input />
+              <Form.Item
+                name="serverUrl"
+                label="云服务地址"
+                className="mt-2"
+                extra="云端目录、云端副本更新和管理员登录共用这个地址。"
+                rules={[
+                  { required: true, message: '请输入云服务地址' },
+                  { type: 'url', message: '请输入完整的 HTTP 或 HTTPS 地址' }
+                ]}
+              >
+                <Input placeholder="https://loci.example.com" />
               </Form.Item>
             </section>
           </div>

@@ -1,4 +1,3 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
@@ -15,22 +14,16 @@ export interface LocalHttpServer {
 
 export interface LocalHttpServerOptions extends LocalApiOptions {
   port?: number
-  controlToken: string
   assetsDir?: string
 }
 
-const SESSION_COOKIE = 'loci_session'
-const TOKEN_TTL_MS = 60_000
-
-/** 本机 Web transport：静态页面可公开加载，读取和写入 API 都要求进程内会话。 */
+/** 本机 Web transport：只绑定回环地址，写请求额外校验 Origin。 */
 export async function startLocalHttpServer(
   runtime: LocalRuntime,
   options: LocalHttpServerOptions
 ): Promise<LocalHttpServer> {
   const validateHost = localhostHostValidation()
   const validateOrigin = localhostOriginValidation()
-  const webTokens = new Map<string, number>()
-  const sessions = new Set<string>()
   const server = createServer((request, response) => {
     void handleRequest(request, response).catch((error: unknown) => {
       console.error('本地 Web 请求处理失败', error)
@@ -55,38 +48,7 @@ export async function startLocalHttpServer(
       })
       return
     }
-    if (request.method === 'POST' && url.pathname === '/control/session') {
-      if (!matchesBearer(request, options.controlToken)) {
-        json(response, 401, { error: '控制凭据无效' })
-        return
-      }
-      const token = randomToken()
-      webTokens.set(token, Date.now() + TOKEN_TTL_MS)
-      json(response, 200, { token })
-      return
-    }
-    if (request.method === 'POST' && url.pathname === '/api/session') {
-      const token = readBearer(request)
-      const expiresAt = token ? webTokens.get(token) : undefined
-      if (!token || !expiresAt || expiresAt < Date.now()) {
-        json(response, 401, { error: '启动会话已失效，请重新运行 loci ui' })
-        return
-      }
-      webTokens.delete(token)
-      const session = randomToken()
-      sessions.add(session)
-      response.setHeader(
-        'set-cookie',
-        `${SESSION_COOKIE}=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400`
-      )
-      json(response, 200, { authenticated: true })
-      return
-    }
     if (url.pathname.startsWith('/api/')) {
-      if (!hasSession(request, sessions)) {
-        json(response, 401, { error: '请通过 loci ui 打开页面' })
-        return
-      }
       if (request.method !== 'GET' && !validateOrigin(request, response)) return
       await handleLocalApi(runtime, request, response, url, options)
       return
@@ -145,35 +107,6 @@ function serveAsset(
   })
   if (headOnly) response.end()
   else createReadStream(file).pipe(response)
-}
-
-function hasSession(request: IncomingMessage, sessions: Set<string>): boolean {
-  const cookie = request.headers.cookie ?? ''
-  const value = cookie
-    .split(';')
-    .map((item) => item.trim())
-    .find((item) => item.startsWith(`${SESSION_COOKIE}=`))
-    ?.slice(SESSION_COOKIE.length + 1)
-  return Boolean(value && sessions.has(value))
-}
-
-function matchesBearer(request: IncomingMessage, expected: string): boolean {
-  const actual = readBearer(request)
-  if (!actual) return false
-  const actualBuffer = Buffer.from(actual)
-  const expectedBuffer = Buffer.from(expected)
-  return (
-    actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
-  )
-}
-
-function readBearer(request: IncomingMessage): string | null {
-  const header = request.headers.authorization
-  return header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null
-}
-
-function randomToken(): string {
-  return randomBytes(32).toString('base64url')
 }
 
 function contentType(path: string): string {

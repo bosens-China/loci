@@ -8,6 +8,7 @@ import type {
 import { inspectPersistentBackgroundRequirements } from './background-requirements.js'
 import { acquireMaintenanceRuntimeLock } from './runtime-lock.js'
 import type { LocalRuntime } from './local-runtime.js'
+import { handleLocalAdmin } from './local-http-admin.js'
 import { json, mutationJson, readJson, safeClientError } from './local-http-response.js'
 
 const BACKUP_LIMIT_BYTES = 256 * 1024 * 1024
@@ -25,6 +26,7 @@ export async function handleLocalApi(
   url: URL,
   options: LocalApiOptions
 ): Promise<void> {
+  if (await handleLocalAdmin(runtime, request, response, url)) return
   if (await handleSources(runtime, request, response, url, options)) return
   if (await handleDocumentsAndJobs(runtime, request, response, url, options)) return
   if (await handleSettings(runtime, request, response, url)) return
@@ -145,9 +147,14 @@ async function handleSettings(
     return true
   }
   if (request.method === 'PUT' && url.pathname === '/api/settings') {
-    await mutationJson(response, 200, async () =>
-      runtime.database.saveSettings((await readJson(request)) as AppSettings)
-    )
+    await mutationJson(response, 200, async () => {
+      const previous = runtime.database.getSettings()
+      const saved = runtime.database.saveSettings((await readJson(request)) as AppSettings)
+      if (saved.serverUrl !== previous.serverUrl) {
+        await runtime.admin.logout().catch(() => undefined)
+      }
+      return saved
+    })
     return true
   }
   return false

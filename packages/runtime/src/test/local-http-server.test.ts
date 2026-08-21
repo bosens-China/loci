@@ -13,7 +13,7 @@ afterEach(async () => {
 })
 
 describe('本机 HTTP 服务', () => {
-  it('只通过一次性启动令牌建立会话，并保护业务 API', async () => {
+  it('直接开放回环 API，并继续保护跨来源写请求', async () => {
     const root = mkdtempSync(join(tmpdir(), 'loci-http-'))
     const runtime = createLocalRuntime({
       dataDir: join(root, 'data'),
@@ -22,7 +22,6 @@ describe('本机 HTTP 服务', () => {
     const startJobWorker = vi.fn(async () => undefined)
     const ensurePersistentBackground = vi.fn(async () => undefined)
     const server = await startLocalHttpServer(runtime, {
-      controlToken: 'control-secret',
       startJobWorker,
       ensurePersistentBackground
     })
@@ -34,28 +33,9 @@ describe('本机 HTTP 服务', () => {
 
     const health = await fetch(`${server.endpoint}/health`)
     expect(await health.json()).toEqual({ service: 'loci-local-web', pid: process.pid })
-    expect((await fetch(`${server.endpoint}/api/sources`)).status).toBe(401)
-
-    const tokenResponse = await fetch(`${server.endpoint}/control/session`, {
-      method: 'POST',
-      headers: { authorization: 'Bearer control-secret' }
-    })
-    const { token } = (await tokenResponse.json()) as { token: string }
-    const sessionResponse = await fetch(`${server.endpoint}/api/session`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}` }
-    })
-    expect(sessionResponse.status).toBe(200)
-    const cookie = sessionResponse.headers.get('set-cookie')
-    expect(cookie).toContain('HttpOnly')
-    expect(
-      (
-        await fetch(`${server.endpoint}/api/session`, {
-          method: 'POST',
-          headers: { authorization: `Bearer ${token}` }
-        })
-      ).status
-    ).toBe(401)
+    const sources = await fetch(`${server.endpoint}/api/sources`)
+    expect(sources.status).toBe(200)
+    expect(await sources.json()).toEqual([])
 
     const input: CreateSourceInput = {
       name: 'Example',
@@ -67,9 +47,16 @@ describe('本机 HTTP 服务', () => {
       httpConcurrency: null,
       browserConcurrency: null
     }
+    const rejected = await fetch(`${server.endpoint}/api/sources?sync=true`, {
+      method: 'POST',
+      headers: { origin: 'https://example.com', 'content-type': 'application/json' },
+      body: JSON.stringify(input)
+    })
+    expect(rejected.status).toBe(403)
+
     const created = await fetch(`${server.endpoint}/api/sources?sync=true`, {
       method: 'POST',
-      headers: { cookie: cookie!, origin: server.endpoint, 'content-type': 'application/json' },
+      headers: { origin: server.endpoint, 'content-type': 'application/json' },
       body: JSON.stringify(input)
     })
     expect(created.status).toBe(201)
@@ -92,7 +79,6 @@ describe('本机 HTTP 服务', () => {
       cacheDir: join(root, 'cache')
     })
     const server = await startLocalHttpServer(runtime, {
-      controlToken: 'control-secret',
       startJobWorker: async () => {
         throw new Error('worker unavailable')
       }
@@ -102,10 +88,9 @@ describe('本机 HTTP 服务', () => {
       await runtime.close()
       rmSync(root, { recursive: true, force: true })
     })
-    const cookie = await createSession(server.endpoint)
     const response = await fetch(`${server.endpoint}/api/sources?sync=true`, {
       method: 'POST',
-      headers: { cookie, origin: server.endpoint, 'content-type': 'application/json' },
+      headers: { origin: server.endpoint, 'content-type': 'application/json' },
       body: JSON.stringify({
         name: 'Saved source',
         url: 'https://example.com',
@@ -182,7 +167,6 @@ describe('本机 HTTP 服务', () => {
     }
     vi.spyOn(runtime.cloud, 'listCatalog').mockResolvedValue([cloudItem])
     const server = await startLocalHttpServer(runtime, {
-      controlToken: 'control-secret',
       runMaintenance: async (action) => action(),
       ensurePersistentBackground: async () => {
         throw new Error('persistent worker unavailable')
@@ -193,13 +177,12 @@ describe('本机 HTTP 服务', () => {
       await runtime.close()
       rmSync(root, { recursive: true, force: true })
     })
-    const cookie = await createSession(server.endpoint)
-    const headers = { cookie, origin: server.endpoint, 'content-type': 'application/json' }
+    const headers = { origin: server.endpoint, 'content-type': 'application/json' }
 
-    const catalog = await fetch(`${server.endpoint}/api/cloud/catalog`, { headers: { cookie } })
+    const catalog = await fetch(`${server.endpoint}/api/cloud/catalog`)
     expect(await catalog.json()).toEqual([cloudItem])
 
-    const exported = await fetch(`${server.endpoint}/api/data/export`, { headers: { cookie } })
+    const exported = await fetch(`${server.endpoint}/api/data/export`)
     expect(exported.headers.get('content-disposition')).toContain('loci-backup-')
     const backup = await exported.json()
     runtime.deleteSource(source.id)
@@ -218,16 +201,3 @@ describe('本机 HTTP 服务', () => {
     expect(runtime.database.listSources()[0]?.name).toBe('Local docs')
   })
 })
-
-async function createSession(endpoint: string): Promise<string> {
-  const tokenResponse = await fetch(`${endpoint}/control/session`, {
-    method: 'POST',
-    headers: { authorization: 'Bearer control-secret' }
-  })
-  const { token } = (await tokenResponse.json()) as { token: string }
-  const response = await fetch(`${endpoint}/api/session`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` }
-  })
-  return response.headers.get('set-cookie')!
-}

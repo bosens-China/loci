@@ -1,10 +1,8 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
 import {
   checkLocalWebService,
-  createLocalWebSession,
   readLocalWebServiceState,
   RuntimeLockedError,
   startLocalService,
@@ -13,23 +11,22 @@ import {
   type LocalWebServiceState,
   type LocalWorker
 } from '../packages/runtime/src/index.js'
+import { parseDevDataMode, resolveDevRuntimePaths } from './dev-web-paths.mts'
 
 /** 本地 Web / API 开发端口（固定，与 apps/web/vite.config.ts 默认值一致） */
 const WEB_PORT = 12_333
 const API_PORT = 12_334
 
 const root = process.cwd()
-const devRoot = join(root, '.loci-dev')
-const dataDir = join(devRoot, 'data')
-const cacheDir = join(devRoot, 'cache')
-mkdirSync(devRoot, { recursive: true })
+const dataMode = parseDevDataMode(process.argv.slice(2))
+const { dataDir, cacheDir, rootDir } = resolveDevRuntimePaths(root, dataMode)
+mkdirSync(rootDir, { recursive: true })
 
 let worker: LocalWorker | null = null
 let keepWorker = false
 
 const { service, state, owned } = await ensureDevService()
-const token = await createLocalWebSession(state)
-const webUrl = `http://127.0.0.1:${WEB_PORT}/#token=${encodeURIComponent(token)}`
+const webUrl = `http://127.0.0.1:${WEB_PORT}/`
 
 const web = spawn(
   'pnpm',
@@ -68,6 +65,10 @@ process.once('SIGTERM', () => void close())
 web.once('spawn', () => {
   process.stdout.write(`\nLoci Web 开发地址：${webUrl}\n`)
   process.stdout.write(`本地 API：http://127.0.0.1:${state.port}\n`)
+  process.stdout.write(`数据目录：${dataDir}\n`)
+  if (dataMode === 'user') {
+    process.stdout.write('注意：当前为真实用户数据模式，Web 中的写操作会直接修改正式 Loci 数据。\n')
+  }
   if (!owned) {
     process.stdout.write('已复用正在运行的开发服务（仅启动 Vite）。\n')
   }
@@ -77,7 +78,7 @@ const [code] = (await once(web, 'exit')) as [number | null]
 await close()
 if (code && code !== 0) process.exitCode = code
 
-/** 启动或复用 .loci-dev 下的本地服务，避免重复 pnpm dev 时锁冲突。 */
+/** 启动或复用当前数据模式下的本地服务，避免重复启动时锁冲突。 */
 async function ensureDevService(): Promise<{
   service: LocalService | null
   state: LocalWebServiceState

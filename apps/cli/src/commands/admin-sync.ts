@@ -63,7 +63,7 @@ export async function selectLibraries(
   return libraries.filter((library) => selected.has(library.id))
 }
 
-function isActiveJob(job: CloudSyncJob): boolean {
+export function isActiveJob(job: CloudSyncJob): boolean {
   return job.status === 'queued' || job.status === 'running' || job.status === 'canceling'
 }
 

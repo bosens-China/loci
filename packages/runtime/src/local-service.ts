@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto'
 import { resolveLociDataDir } from './data-path.js'
 import { createLocalRuntime, type LocalRuntime } from './local-runtime.js'
 import { startLocalHttpServer, type LocalHttpServer } from './local-http-server.js'
@@ -42,10 +41,8 @@ export async function startLocalService(options: LocalServiceOptions = {}): Prom
       owner: 'Web UI'
     })
     runtime = createdRuntime
-    const controlToken = randomBytes(32).toString('base64url')
     http = await startLocalHttpServer(createdRuntime, {
       port: options.port,
-      controlToken,
       assetsDir: options.assetsDir,
       startJobWorker: options.startJobWorker,
       ensurePersistentBackground: options.ensurePersistentBackground
@@ -53,7 +50,6 @@ export async function startLocalService(options: LocalServiceOptions = {}): Prom
     const state: LocalWebServiceState = {
       pid: process.pid,
       port: http.port,
-      controlToken,
       startedAt: new Date().toISOString()
     }
     writeLocalWebServiceState(dataDir, state)

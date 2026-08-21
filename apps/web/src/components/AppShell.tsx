@@ -2,6 +2,7 @@ import {
   CloudOutlined,
   FileTextOutlined,
   HomeOutlined,
+  SafetyCertificateOutlined,
   SettingOutlined,
   SyncOutlined
 } from '@ant-design/icons'
@@ -12,6 +13,7 @@ const items: Array<{ route: AppRoute; label: string; icon: React.ReactNode }> = 
   { route: 'documents', label: '文档', icon: <FileTextOutlined /> },
   { route: 'cloud', label: '云端', icon: <CloudOutlined /> },
   { route: 'jobs', label: '任务', icon: <SyncOutlined /> },
+  { route: 'admin', label: '管理', icon: <SafetyCertificateOutlined /> },
   { route: 'settings', label: '设置', icon: <SettingOutlined /> }
 ]
 
