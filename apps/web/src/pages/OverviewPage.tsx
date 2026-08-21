@@ -25,10 +25,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps): React.JSX.Eleme
 
   return (
     <div className="mx-auto max-w-6xl px-8 py-8">
-      <PageHeader
-        title="概览"
-        description="浏览器是控制面板。抓取由独立 worker 执行，关闭 Web 不会中断已接受的任务。"
-      />
+      <PageHeader title="概览" />
       <AsyncState
         loading={sources.isLoading || documents.isLoading || jobs.isLoading}
         error={error}
@@ -50,7 +47,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps): React.JSX.Eleme
             label="活动任务"
             value={active.length}
             note="支持重启后恢复"
-            accent
+            accent={active.length > 0}
             onClick={() => navigate('jobs')}
           />
           <MetricCard

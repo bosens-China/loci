@@ -50,13 +50,6 @@ export function AppShell({ route, onNavigate, children }: AppShellProps): React.
             </button>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-2 text-xs text-[#b8cbcc]">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#62c4ad] opacity-50 motion-reduce:animate-none" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#62c4ad]" />
-          </span>
-          本地服务在线
-        </div>
       </header>
       <main className="min-h-0 flex-1">{children}</main>
     </div>
