@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { exchangeLaunchToken, readLaunchToken, verifySession } from '@/api/session'
+import { authenticateSession } from '@/api/session'
 import { AppShell } from '@/components/AppShell'
 import { useJobEvents } from '@/hooks/use-job-events'
 import { migrateLegacyDocumentPath } from '@/pages/documents/use-document-route'
@@ -131,16 +131,6 @@ function PageLoading({ route }: { route: AppRoute }): React.JSX.Element {
 
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error('本地服务会话建立失败')
-}
-
-async function authenticateSession(): Promise<void> {
-  const token = readLaunchToken()
-  if (token) {
-    await exchangeLaunchToken(token)
-    window.history.replaceState({}, '', `${window.location.pathname}${window.location.search}`)
-  } else {
-    await verifySession()
-  }
 }
 
 function retry(setSession: (state: SessionState) => void): void {
