@@ -27,19 +27,23 @@ let keepWorker = false
 
 const { service, state, owned } = await ensureDevService()
 const webUrl = `http://127.0.0.1:${WEB_PORT}/`
+const webArgs = [
+  '--filter',
+  '@loci/web',
+  'dev',
+  '--host',
+  '127.0.0.1',
+  '--port',
+  String(WEB_PORT),
+  '--strictPort'
+]
+const webCommand = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'pnpm'
+const webCommandArgs =
+  process.platform === 'win32' ? ['/d', '/s', '/c', `pnpm ${webArgs.join(' ')}`] : webArgs
 
 const web = spawn(
-  'pnpm',
-  [
-    '--filter',
-    '@loci/web',
-    'dev',
-    '--host',
-    '127.0.0.1',
-    '--port',
-    String(WEB_PORT),
-    '--strictPort'
-  ],
+  webCommand,
+  webCommandArgs,
   {
     cwd: root,
     stdio: 'inherit',
