@@ -181,9 +181,6 @@ importers:
       axios:
         specifier: ^1.12.2
         version: 1.19.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
-      dayjs:
-        specifier: ^1.11.21
-        version: 1.11.21
       react:
         specifier: ^19.2.1
         version: 19.2.8

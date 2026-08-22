@@ -1,12 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button } from 'antd'
-import dayjs from 'dayjs'
 import { cancelJob, listJobs } from '@/api/jobs'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusPill } from '@/components/StatusPill'
 import { triggerLabel } from '@/utils/status-labels'
+
+const jobDateTimeFormatter = new Intl.DateTimeFormat('sv-SE', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23'
+})
 
 export function JobsPage(): React.JSX.Element {
   const { message } = App.useApp()
@@ -65,7 +73,7 @@ export function JobsPage(): React.JSX.Element {
                     </td>
                     <td className="px-5 py-3.5 text-muted">{triggerLabel(job.trigger)}</td>
                     <td className="px-5 py-3.5 whitespace-nowrap text-muted">
-                      {dayjs(job.createdAt).format('YYYY-MM-DD HH:mm')}
+                      {jobDateTimeFormatter.format(new Date(job.createdAt))}
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       {(job.status === 'pending' || job.status === 'running') && (
