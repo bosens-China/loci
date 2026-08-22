@@ -6,7 +6,13 @@ import {
   normalizeCronSchedule,
   PRODUCTION_SERVER_URL
 } from '@loci/shared'
-import type { AppSettings, CreateSourceInput, DocumentRecord, DocumentSource } from '@loci/shared'
+import type {
+  AppSettings,
+  CreateSourceInput,
+  DocumentRecord,
+  DocumentSource,
+  DocumentSummary
+} from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
@@ -53,6 +59,8 @@ export interface DocumentRow {
   markdown: string
   relative_path: string | null
 }
+
+export type DocumentSummaryRow = Omit<DocumentRow, 'markdown'>
 
 export function validateSettings(settings: AppSettings): AppSettings {
   if (!['auto', 'light', 'dark'].includes(settings.theme)) throw new Error('不支持的主题设置')
@@ -153,7 +161,7 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
   }
 }
 
-export function toDocumentRecord(row: DocumentRow): DocumentRecord {
+export function toDocumentSummary(row: DocumentSummaryRow): DocumentSummary {
   const path = row.relative_path
     ? row.relative_path.split('/').filter(Boolean)
     : new URL(row.url).pathname.split('/').filter(Boolean)
@@ -165,9 +173,12 @@ export function toDocumentRecord(row: DocumentRow): DocumentRecord {
     url: row.url,
     folder: path.slice(0, -1).join(' / ') || row.source_name,
     language: row.language,
-    updatedAt: formatDate(row.crawled_at),
-    content: row.markdown
+    updatedAt: formatDate(row.crawled_at)
   }
+}
+
+export function toDocumentRecord(row: DocumentRow): DocumentRecord {
+  return { ...toDocumentSummary(row), content: row.markdown }
 }
 
 export function migrateDatabase(database: DatabaseSync, previousVersion = 0): void {

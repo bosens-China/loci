@@ -92,9 +92,11 @@ function SourceGroup(props: {
               : 'border-transparent hover:bg-[#f3f7f6]'
           }`}
         >
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-650">{source.name}</span>
-            <StatusPill status={source.status} />
+          <div className="flex items-start justify-between gap-2">
+            <span className="min-w-0 truncate text-sm font-650">{source.name}</span>
+            <span className="shrink-0">
+              <StatusPill status={source.status} />
+            </span>
           </div>
           <div className="mt-1 truncate font-mono text-[11px] text-muted">{source.url}</div>
           <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted">

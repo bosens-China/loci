@@ -13,6 +13,76 @@ afterEach(async () => {
 })
 
 describe('本机 HTTP 服务', () => {
+  it('文档列表只返回元数据，并在选中时按 ID 读取正文', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'loci-http-documents-'))
+    const runtime = createLocalRuntime({
+      dataDir: join(root, 'data'),
+      cacheDir: join(root, 'cache')
+    })
+    const firstSource = runtime.createSource({
+      name: 'First docs',
+      url: 'https://first.example.com',
+      mode: 'http',
+      pageLimit: 1,
+      schedule: null,
+      httpConcurrency: null,
+      browserConcurrency: null
+    })
+    const secondSource = runtime.createSource({
+      name: 'Second docs',
+      url: 'https://second.example.com',
+      mode: 'http',
+      pageLimit: 1,
+      schedule: null,
+      httpConcurrency: null,
+      browserConcurrency: null
+    })
+    runtime.database.saveDocument({
+      sourceId: firstSource.id,
+      url: 'https://first.example.com/guide',
+      title: 'First guide',
+      markdown: '# First body',
+      language: 'en',
+      fetchMode: 'http',
+      crawledAt: '2026-08-22T00:00:00.000Z'
+    })
+    runtime.database.saveDocument({
+      sourceId: secondSource.id,
+      url: 'https://second.example.com/guide',
+      title: 'Second guide',
+      markdown: '# Second body',
+      language: 'en',
+      fetchMode: 'http',
+      crawledAt: '2026-08-22T00:00:00.000Z'
+    })
+    const server = await startLocalHttpServer(runtime, {})
+    cleanups.push(async () => {
+      await server.close()
+      await runtime.close()
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    const list = await fetch(
+      `${server.endpoint}/api/documents?source=${encodeURIComponent(firstSource.id)}`
+    )
+    expect(list.status).toBe(200)
+    const summaries = (await list.json()) as Array<Record<string, unknown>>
+    expect(summaries).toEqual([
+      expect.objectContaining({ sourceId: firstSource.id, title: 'First guide' })
+    ])
+    expect(summaries[0]).not.toHaveProperty('content')
+
+    const documentId = summaries[0]?.id
+    expect(typeof documentId).toBe('string')
+    if (typeof documentId !== 'string') throw new Error('文档列表未返回文档 ID')
+    const document = await fetch(`${server.endpoint}/api/documents/${documentId}`)
+    expect(await document.json()).toMatchObject({
+      sourceId: firstSource.id,
+      content: '# First body'
+    })
+    expect((await fetch(`${server.endpoint}/api/documents/missing`)).status).toBe(404)
+  })
+
   it('直接开放回环 API，并继续保护跨来源写请求', async () => {
     const root = mkdtempSync(join(tmpdir(), 'loci-http-'))
     const runtime = createLocalRuntime({

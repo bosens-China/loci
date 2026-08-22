@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import type { DocumentRecord } from '@loci/shared'
+import type { DocumentRecord, DocumentSummary } from '@loci/shared'
 import {
   type DocumentRow,
+  type DocumentSummaryRow,
   toDocumentRecord,
+  toDocumentSummary,
   toFtsExpression,
   toSearchTokens
 } from './database-values.js'
@@ -30,7 +32,21 @@ export interface DocumentContentDatabase {
   clearSources: () => number
   listDocuments: () => DocumentRecord[]
   searchDocuments: (query: string, mode?: DocumentSearchMode) => DocumentRecord[]
+  listDocumentSummaries: (sourceId?: string) => DocumentSummary[]
+  searchDocumentSummaries: (
+    query: string,
+    sourceId?: string,
+    mode?: DocumentSearchMode
+  ) => DocumentSummary[]
+  getDocument: (id: string) => DocumentRecord | null
 }
+
+const DOCUMENT_SUMMARY_COLUMNS = `d.id, d.source_id, s.name AS source_name, d.title, d.url,
+  d.language, d.crawled_at, d.relative_path`
+const DOCUMENT_SUMMARY_QUERY = `SELECT ${DOCUMENT_SUMMARY_COLUMNS}
+  FROM documents d JOIN document_sources s ON s.id = d.source_id`
+const DOCUMENT_RECORD_QUERY = `SELECT ${DOCUMENT_SUMMARY_COLUMNS}, d.markdown
+  FROM documents d JOIN document_sources s ON s.id = d.source_id`
 
 export function createDocumentContentDatabase(database: DatabaseSync): DocumentContentDatabase {
   return {
@@ -66,10 +82,7 @@ export function createDocumentContentDatabase(database: DatabaseSync): DocumentC
     listDocuments: () => {
       const rows = database
         .prepare(
-          `SELECT d.id, d.source_id, s.name AS source_name, d.title, d.url,
-             d.language, d.crawled_at, d.markdown, d.relative_path
-           FROM documents d
-           JOIN document_sources s ON s.id = d.source_id
+          `${DOCUMENT_RECORD_QUERY}
            ORDER BY d.crawled_at DESC`
         )
         .all() as unknown as DocumentRow[]
@@ -79,8 +92,28 @@ export function createDocumentContentDatabase(database: DatabaseSync): DocumentC
       (mode === 'fuzzy'
         ? searchDocumentMetadata(database, query)
         : searchFts(database, query, mode)
-      ).map(toDocumentRecord)
+      ).map(toDocumentRecord),
+    listDocumentSummaries: (sourceId) => listDocumentSummaries(database, sourceId),
+    searchDocumentSummaries: (query, sourceId, mode = 'all') =>
+      (mode === 'fuzzy'
+        ? searchDocumentMetadataSummaries(database, query, sourceId)
+        : searchFtsSummaries(database, query, mode, sourceId)
+      ).map(toDocumentSummary),
+    getDocument: (id) => {
+      const row = database.prepare(`${DOCUMENT_RECORD_QUERY} WHERE d.id = ?`).get(id) as unknown as
+        DocumentRow | undefined
+      return row ? toDocumentRecord(row) : null
+    }
   }
+}
+
+function listDocumentSummaries(database: DatabaseSync, sourceId?: string): DocumentSummary[] {
+  const statement = database.prepare(
+    `${DOCUMENT_SUMMARY_QUERY}${sourceId ? ' WHERE d.source_id = ?' : ''}
+     ORDER BY d.crawled_at DESC`
+  )
+  const rows = (sourceId ? statement.all(sourceId) : statement.all()) as DocumentSummaryRow[]
+  return rows.map(toDocumentSummary)
 }
 
 function searchFts(
@@ -103,25 +136,70 @@ function searchFts(
     .all(expression) as unknown as DocumentRow[]
 }
 
+function searchFtsSummaries(
+  database: DatabaseSync,
+  query: string,
+  mode: Exclude<DocumentSearchMode, 'fuzzy'>,
+  sourceId?: string
+): DocumentSummaryRow[] {
+  const expression = toFtsExpression(query, mode === 'all' ? 'AND' : 'OR')
+  if (!expression) return []
+  const statement = database.prepare(
+    `SELECT ${DOCUMENT_SUMMARY_COLUMNS}
+     FROM documents_fts f
+     JOIN documents d ON d.id = f.document_id
+     JOIN document_sources s ON s.id = d.source_id
+     WHERE documents_fts MATCH ?${sourceId ? ' AND d.source_id = ?' : ''}
+     ORDER BY bm25(documents_fts, 0, 0, 8, 1)`
+  )
+  return (
+    sourceId ? statement.all(expression, sourceId) : statement.all(expression)
+  ) as DocumentSummaryRow[]
+}
+
 function searchDocumentMetadata(database: DatabaseSync, query: string): DocumentRow[] {
+  const search = metadataSearch(query)
+  if (!search) return []
+  return database
+    .prepare(
+      `${DOCUMENT_RECORD_QUERY}
+       WHERE ${search.conditions}
+       ORDER BY d.crawled_at DESC LIMIT 500`
+    )
+    .all(...search.values) as unknown as DocumentRow[]
+}
+
+function searchDocumentMetadataSummaries(
+  database: DatabaseSync,
+  query: string,
+  sourceId?: string
+): DocumentSummaryRow[] {
+  const search = metadataSearch(query)
+  if (!search) return []
+  const statement = database.prepare(
+    `${DOCUMENT_SUMMARY_QUERY}
+     WHERE (${search.conditions})${sourceId ? ' AND d.source_id = ?' : ''}
+     ORDER BY d.crawled_at DESC LIMIT 500`
+  )
+  return (
+    sourceId ? statement.all(...search.values, sourceId) : statement.all(...search.values)
+  ) as DocumentSummaryRow[]
+}
+
+function metadataSearch(query: string): { conditions: string; values: string[] } | null {
   const tokens = toSearchTokens(query)
     .filter((token) => token.length >= 2)
     .slice(0, 10)
-  if (!tokens.length) return []
-  const conditions = tokens.map(() => `(d.title LIKE ? ESCAPE '\\' OR d.url LIKE ? ESCAPE '\\')`)
-  const values = tokens.flatMap((token) => {
-    const pattern = `%${escapeLike(token)}%`
-    return [pattern, pattern]
-  })
-  return database
-    .prepare(
-      `SELECT d.id, d.source_id, s.name AS source_name, d.title, d.url,
-         d.language, d.crawled_at, d.markdown, d.relative_path
-       FROM documents d JOIN document_sources s ON s.id = d.source_id
-       WHERE ${conditions.join(' OR ')}
-       ORDER BY d.crawled_at DESC LIMIT 500`
-    )
-    .all(...values) as unknown as DocumentRow[]
+  if (!tokens.length) return null
+  return {
+    conditions: tokens
+      .map(() => `(d.title LIKE ? ESCAPE '\\' OR d.url LIKE ? ESCAPE '\\')`)
+      .join(' OR '),
+    values: tokens.flatMap((token) => {
+      const pattern = `%${escapeLike(token)}%`
+      return [pattern, pattern]
+    })
+  }
 }
 
 function escapeLike(value: string): string {

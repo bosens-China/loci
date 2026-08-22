@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface DocumentRouteState {
   sourceId: string
@@ -13,13 +13,17 @@ export function useDocumentRoute(): {
   selectDocument: (documentId: string) => void
   setQuery: (query: string) => void
 } {
-  const [, tick] = useState(0)
+  const [state, setState] = useState(readDocumentRoute)
+  const rememberedDocuments = useRef(new Map<string, string>())
   useEffect(() => {
-    const update = (): void => tick((value) => value + 1)
+    const update = (): void => setState(readDocumentRoute())
     window.addEventListener('popstate', update)
     return () => window.removeEventListener('popstate', update)
   }, [])
-  const state = readDocumentRoute()
+  useEffect(() => {
+    if (state.sourceId && state.documentId)
+      rememberedDocuments.current.set(state.sourceId, state.documentId)
+  }, [state.documentId, state.sourceId])
   const write = useCallback((next: Partial<DocumentRouteState>) => {
     const url = new URL(window.location.href)
     url.pathname = '/documents'
@@ -31,13 +35,20 @@ export function useDocumentRoute(): {
     if (merged.query) url.searchParams.set('q', merged.query)
     else url.searchParams.delete('q')
     window.history.replaceState({}, '', url)
-    window.dispatchEvent(new PopStateEvent('popstate'))
+    setState(readDocumentRoute())
   }, [])
+  const selectSource = useCallback(
+    (sourceId: string) =>
+      write({ sourceId, documentId: rememberedDocuments.current.get(sourceId) ?? '' }),
+    [write]
+  )
+  const selectDocument = useCallback((documentId: string) => write({ documentId }), [write])
+  const setQuery = useCallback((query: string) => write({ query, documentId: '' }), [write])
   return {
     state,
-    selectSource: (sourceId) => write({ sourceId, documentId: '' }),
-    selectDocument: (documentId) => write({ documentId }),
-    setQuery: (query) => write({ query, documentId: '' })
+    selectSource,
+    selectDocument,
+    setQuery
   }
 }
 

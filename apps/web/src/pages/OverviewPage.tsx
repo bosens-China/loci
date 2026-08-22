@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query'
-import { listDocuments } from '@/api/documents'
 import { listJobs } from '@/api/jobs'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
@@ -14,22 +13,19 @@ interface OverviewPageProps {
 export function OverviewPage({ onNavigate }: OverviewPageProps): React.JSX.Element {
   const navigate = onNavigate ?? defaultNavigate
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
-  const documents = useQuery({ queryKey: ['documents', ''], queryFn: () => listDocuments() })
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: listJobs })
-  const error = sources.error ?? documents.error ?? jobs.error
+  const error = sources.error ?? jobs.error
   const active =
     jobs.data?.filter((job) => job.status === 'pending' || job.status === 'running') ?? []
   const attention = sources.data?.filter((source) => source.status === 'attention').length ?? 0
   const scheduled =
     sources.data?.filter((source) => source.schedule || source.cloud?.autoSync) ?? []
+  const documentCount = sources.data?.reduce((count, source) => count + source.pages, 0) ?? 0
 
   return (
     <div className="mx-auto max-w-6xl px-8 py-8">
       <PageHeader title="概览" />
-      <AsyncState
-        loading={sources.isLoading || documents.isLoading || jobs.isLoading}
-        error={error}
-      >
+      <AsyncState loading={sources.isLoading || jobs.isLoading} error={error}>
         <section className="grid grid-cols-4 gap-4">
           <MetricCard
             label="文档来源"
@@ -39,7 +35,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps): React.JSX.Eleme
           />
           <MetricCard
             label="已收录页面"
-            value={documents.data?.length ?? 0}
+            value={documentCount}
             note="本机 SQLite 索引"
             onClick={() => navigate('documents')}
           />

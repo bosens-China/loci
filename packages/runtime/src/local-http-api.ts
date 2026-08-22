@@ -103,13 +103,16 @@ async function handleDocumentsAndJobs(
     const query = url.searchParams.get('query')?.trim()
     const sourceId = url.searchParams.get('source')?.trim()
     const documents = query
-      ? runtime.database.searchDocuments(query)
-      : runtime.database.listDocuments()
-    json(
-      response,
-      200,
-      sourceId ? documents.filter((item) => item.sourceId === sourceId) : documents
-    )
+      ? runtime.database.searchDocumentSummaries(query, sourceId)
+      : runtime.database.listDocumentSummaries(sourceId)
+    json(response, 200, documents)
+    return true
+  }
+  const documentMatch = /^\/api\/documents\/([^/]+)$/u.exec(url.pathname)
+  if (request.method === 'GET' && documentMatch) {
+    const document = runtime.database.getDocument(decodeURIComponent(documentMatch[1]!))
+    if (!document) json(response, 404, { error: '文档不存在' })
+    else json(response, 200, document)
     return true
   }
   if (request.method === 'GET' && url.pathname === '/api/jobs') {

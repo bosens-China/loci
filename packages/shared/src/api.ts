@@ -233,7 +233,7 @@ export interface CreateSourceResult {
   workerError: string | null
 }
 
-export interface DocumentRecord {
+export interface DocumentSummary {
   id: string
   sourceId: string
   sourceName: string
@@ -242,5 +242,8 @@ export interface DocumentRecord {
   folder: string
   language: string
   updatedAt: string
+}
+
+export interface DocumentRecord extends DocumentSummary {
   content: string
 }

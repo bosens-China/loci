@@ -2,6 +2,44 @@ import { describe, expect, it } from 'vitest'
 import { createDatabase } from '../database.js'
 
 describe('createDatabase', () => {
+  it('模糊搜索多个关键词时始终限制在指定来源', () => {
+    const database = createDatabase(':memory:')
+    try {
+      const createSource = (name: string, url: string) =>
+        database.createSource({
+          name,
+          url,
+          mode: 'http',
+          pageLimit: 10,
+          schedule: null,
+          httpConcurrency: null,
+          browserConcurrency: null
+        })
+      const first = createSource('First', 'https://first.example.com')
+      const second = createSource('Second', 'https://second.example.com')
+      for (const [sourceId, url, title] of [
+        [first.id, 'https://first.example.com/alpha', 'alpha'],
+        [second.id, 'https://second.example.com/beta', 'beta']
+      ]) {
+        database.saveDocument({
+          sourceId,
+          url,
+          title,
+          markdown: '# body',
+          language: 'en',
+          fetchMode: 'http',
+          crawledAt: '2026-08-22T00:00:00.000Z'
+        })
+      }
+
+      expect(database.searchDocumentSummaries('alpha beta', second.id, 'fuzzy')).toMatchObject([
+        { sourceId: second.id, title: 'beta' }
+      ])
+    } finally {
+      database.close()
+    }
+  })
+
   it('creates and lists a document source', () => {
     const database = createDatabase(':memory:')
     try {
@@ -57,6 +95,13 @@ describe('createDatabase', () => {
         fetchMode: 'http'
       })
       expect(database.listDocuments()).toHaveLength(1)
+      expect(database.listDocumentSummaries(source.id)).toEqual([
+        expect.objectContaining({ id: expect.any(String), title: 'Learn React' })
+      ])
+      expect(database.listDocumentSummaries(source.id)[0]).not.toHaveProperty('content')
+      expect(database.getDocument(database.listDocumentSummaries(source.id)[0]!.id)?.content).toBe(
+        markdown
+      )
       expect(database.searchDocuments('reusable')[0]?.title).toBe('Learn React')
       expect(database.searchDocuments('reusable missing')).toEqual([])
       expect(database.searchDocuments('reusable,missing', 'any')[0]?.title).toBe('Learn React')
