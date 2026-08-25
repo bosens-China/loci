@@ -17,6 +17,8 @@ import {
   waitForUserService
 } from '../service-manager.js'
 import { finishUi, info, printTable, startUi, warning } from '../ui.js'
+import { resolveCliSkillResourceDir } from '../skill-resources.js'
+import { CLI_VERSION } from '../update.js'
 
 interface UiService {
   state: LocalWebServiceState
@@ -170,7 +172,11 @@ export async function runUiSession(
       const local = await startLocalService({
         assetsDir: resolveWebAssetsDir(),
         startJobWorker: async () => void (await ensureLocalJobWorkerRunning()),
-        ensurePersistentBackground: ensurePersistentBackgroundService
+        ensurePersistentBackground: ensurePersistentBackgroundService,
+        agentIntegration: {
+          packageVersion: CLI_VERSION,
+          skillResourceDir: resolveCliSkillResourceDir()
+        }
       })
       return {
         state: local.state,

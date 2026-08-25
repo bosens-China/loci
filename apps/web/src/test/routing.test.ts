@@ -6,8 +6,10 @@ describe('Web 路由', () => {
     expect(routePath('documents')).toBe('/documents')
     expect(routePath('cloud')).toBe('/cloud')
     expect(routePath('admin')).toBe('/admin')
+    expect(routePath('agents')).toBe('/agents')
     expect(resolveRoute('/jobs')).toBe('jobs')
     expect(resolveRoute('/admin')).toBe('admin')
+    expect(resolveRoute('/agents')).toBe('agents')
   })
 
   it('旧路径映射到文档工作区', () => {

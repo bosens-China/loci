@@ -4,18 +4,26 @@ import { resolve } from 'node:path'
 import {
   getMcpClientDefinition,
   hasContext7Compatibility,
+  hasLociAgentInstructions,
   isAgentGlobalRulesClient,
   mergeLociAgentInstructions,
+  removeLociAgentInstructions,
   type AgentGlobalRulesClient,
   type AgentGlobalRulesResult
 } from '@loci/shared'
 import { writeFileAtomically } from './atomic-file.js'
 import { acquireRuntimeLock } from './runtime-lock.js'
 
-interface InstallAgentGlobalRulesOptions {
+export interface InstallAgentGlobalRulesOptions {
   dataDir: string
   owner: string
   homeDir?: string
+}
+
+export interface AgentGlobalRulesState {
+  path: string
+  status: 'missing' | 'current' | 'outdated' | 'conflict'
+  message: string | null
 }
 
 const VSCODE_INSTRUCTIONS_HEADER = `---
@@ -63,6 +71,61 @@ export function installAgentGlobalRules(
             : hasContext7
               ? `${label} 的 Loci 与 Context7 组合规则已是最新版本：${path}`
               : `${label} 的 Loci 全局规则已是最新版本：${path}`
+    }
+  } finally {
+    lock.release()
+  }
+}
+
+/** 只读检查规则区块是否存在、是否为当前版本。 */
+export function inspectAgentGlobalRules(
+  client: AgentGlobalRulesClient,
+  options: Pick<InstallAgentGlobalRulesOptions, 'homeDir'>
+): AgentGlobalRulesState {
+  const homeDir = options.homeDir ?? homedir()
+  const path = resolveAgentGlobalRulesPath(client, homeDir)
+  if (!existsSync(path)) return { path, status: 'missing', message: null }
+  const current = readFileSync(path, 'utf8')
+  try {
+    if (!hasLociAgentInstructions(current)) return { path, status: 'missing', message: null }
+    const expected = mergeLociAgentInstructions(current, {
+      migrateContext7: client === 'codex',
+      context7Available: client === 'codex' && isContext7SkillInstalled(homeDir)
+    })
+    return {
+      path,
+      status: current === expected ? 'current' : 'outdated',
+      message: null
+    }
+  } catch (error) {
+    return {
+      path,
+      status: 'conflict',
+      message: error instanceof Error ? error.message : '全局规则无法安全识别'
+    }
+  }
+}
+
+/** 只删除 Loci 受管区块；调用方不需要处理其他用户规则。 */
+export function removeAgentGlobalRules(
+  client: AgentGlobalRulesClient,
+  options: InstallAgentGlobalRulesOptions
+): AgentGlobalRulesResult {
+  const lock = acquireRuntimeLock(options.dataDir, `agent-global-rules-${client}`, options.owner)
+  try {
+    const homeDir = options.homeDir ?? homedir()
+    const path = resolveAgentGlobalRulesPath(client, homeDir)
+    if (!existsSync(path)) {
+      return { client, path, changed: false, message: `Loci 全局规则不存在：${path}` }
+    }
+    const current = readFileSync(path, 'utf8')
+    const next = removeLociAgentInstructions(current)
+    if (next.removed) writeFileAtomically(path, next.content)
+    return {
+      client,
+      path,
+      changed: next.removed,
+      message: next.removed ? `已移除 Loci 全局规则：${path}` : `Loci 全局规则不存在：${path}`
     }
   } finally {
     lock.release()

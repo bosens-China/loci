@@ -1,12 +1,16 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CloudCatalogItem, CreateSourceInput } from '@loci/shared'
 import { startLocalHttpServer } from '../local-http-server.js'
 import { createLocalRuntime } from '../local-runtime.js'
 
 const cleanups: Array<() => Promise<void> | void> = []
+const skillResourceDir = fileURLToPath(
+  new URL('../../../../.agents/skills/use-loci/', import.meta.url)
+)
 
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.()
@@ -269,5 +273,45 @@ describe('本机 HTTP 服务', () => {
       backgroundError: 'persistent worker unavailable'
     })
     expect(runtime.database.listSources()[0]?.name).toBe('Local docs')
+  })
+
+  it('通过受 Origin 保护的本机接口管理 Agent 全局接入', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'loci-http-agent-'))
+    const runtime = createLocalRuntime({
+      dataDir: join(root, 'data'),
+      cacheDir: join(root, 'cache'),
+      agentIntegration: {
+        homeDir: join(root, 'home'),
+        packageVersion: '1.13.0',
+        skillResourceDir,
+        setupMcp: async (client, options) => {
+          const { writeAgentMcpConfigFile } = await import('../agent-mcp-config.js')
+          const { LOCI_CLI_STDIO_CONNECTION } = await import('../agent-import.js')
+          writeAgentMcpConfigFile(client, LOCI_CLI_STDIO_CONNECTION, options)
+        }
+      }
+    })
+    const server = await startLocalHttpServer(runtime, {})
+    cleanups.push(async () => {
+      await server.close()
+      await runtime.close()
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    const listed = await fetch(`${server.endpoint}/api/agents`)
+    expect(listed.status).toBe(200)
+    expect(await listed.json()).toHaveLength(5)
+
+    const rejected = await fetch(`${server.endpoint}/api/agents/antigravity/setup`, {
+      method: 'POST',
+      headers: { origin: 'https://example.com' }
+    })
+    expect(rejected.status).toBe(403)
+
+    const setupResponse = await fetch(`${server.endpoint}/api/agents/antigravity/setup`, {
+      method: 'POST',
+      headers: { origin: server.endpoint }
+    })
+    expect(await setupResponse.json()).toMatchObject({ status: { overall: 'ready' } })
   })
 })

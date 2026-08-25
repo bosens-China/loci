@@ -197,7 +197,7 @@ export function AdminWorkspace({ session }: { session: CloudAdminSession }): Rea
           type="error"
           showIcon
           className="mb-4"
-          message={jobs.error.message}
+          title={jobs.error.message}
           action={
             <Button size="small" onClick={() => void jobs.refetch()}>
               重试

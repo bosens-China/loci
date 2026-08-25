@@ -24,12 +24,14 @@ loci ui
 loci source add https://rspress.rs/guide/introduction.html
 loci source sync rspress
 loci document search "Quick start"
-loci agent
+loci agent setup codex
 # 无 MCP 连接时也可直接调用同一工具
 loci mcp call loci_list_libraries
 ```
 
-`loci ui` 会先输出本机 Web 地址，再尝试打开浏览器，并在当前终端运行仅服务本次会话的回环 HTTP；按 `Ctrl+C` 会关闭 HTTP，但已经提交的后台任务继续由独立 worker 执行。浏览器无法自动打开时，复制终端中的地址手动访问即可。Web 的“管理”入口可以登录目标 Server，维护公开文档库和同步任务；远程 Admin Token 只保存在当前 Runtime 内存。在 CLI 或 Web UI 中开启定时抓取或云端每日同步后，Loci 会立即确保无 HTTP 的常驻 worker 可用；`loci service start` 保留为手动恢复和服务治理入口。仓库的 `pnpm dev` 使用 `.loci-dev` 隔离数据联调本机 Web 会话与 worker；需要复现正式数据问题时显式运行 `pnpm dev:user`，其 Web 写操作会直接修改正式 Loci 数据。`pnpm build` 构建包含 Web UI 的 CLI 发布包。
+`loci agent setup <client>` 会一次配置用户级 MCP、`use-loci` Skill 和全局 Rules；`loci agent status` 检查状态，`loci agent remove <client>` 安全移除 Loci 管理的内容。`loci ui` 的“Agent”入口提供相同能力。
+
+`loci ui` 会先输出本机 Web 地址，再尝试打开浏览器，并在当前终端运行仅服务本次会话的回环 HTTP；按 `Ctrl+C` 会关闭 HTTP，但已经提交的后台任务继续由独立 worker 执行。浏览器无法自动打开时，复制终端中的地址手动访问即可。Web 的“管理”入口可以登录目标 Server，维护公开文档库和同步任务；远程 Admin Token 只保存在当前 Runtime 内存。在 CLI 或 Web UI 中开启定时抓取或云端每日同步后，Loci 会立即确保无 HTTP 的常驻 worker 可用；`loci service start` 保留为手动恢复和服务治理入口。仓库的 `pnpm dev` 使用 `.loci-dev` 隔离数据、缓存和模拟用户目录来联调本机 Web 会话与 worker；需要复现正式数据问题时显式运行 `pnpm dev:user`，其 Web 写操作会直接修改正式 Loci 数据和真实 Agent 文件。`pnpm build` 构建包含 Web UI 的 CLI 发布包。
 
 需要抓取依赖客户端渲染的网站时，再安装浏览器运行时：
 

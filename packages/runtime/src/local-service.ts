@@ -1,5 +1,5 @@
 import { resolveLociDataDir } from './data-path.js'
-import { createLocalRuntime, type LocalRuntime } from './local-runtime.js'
+import { createLocalRuntime, type LocalRuntime, type LocalRuntimeOptions } from './local-runtime.js'
 import { startLocalHttpServer, type LocalHttpServer } from './local-http-server.js'
 import {
   removeLocalWebServiceState,
@@ -22,6 +22,7 @@ export interface LocalServiceOptions {
   assetsDir?: string
   startJobWorker?: () => Promise<void>
   ensurePersistentBackground?: () => Promise<void>
+  agentIntegration?: LocalRuntimeOptions['agentIntegration']
 }
 
 /**
@@ -38,7 +39,8 @@ export async function startLocalService(options: LocalServiceOptions = {}): Prom
     const createdRuntime = createLocalRuntime({
       dataDir,
       cacheDir: options.cacheDir,
-      owner: 'Web UI'
+      owner: 'Web UI',
+      agentIntegration: options.agentIntegration
     })
     runtime = createdRuntime
     http = await startLocalHttpServer(createdRuntime, {

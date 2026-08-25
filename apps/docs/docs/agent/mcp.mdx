@@ -10,13 +10,13 @@
 npm install --global @boses/cli
 ```
 
-交互终端可以选择客户端并预览写入内容：
+推荐一次配置 MCP、全局 Skill 和 Rules：
 
 ```bash
-loci agent configure
+loci agent setup codex
 ```
 
-Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都使用同一个 stdio 命令。可信的自动化环境需要显式指定客户端并传入 `--yes`：
+只配置 MCP 时，使用细粒度命令。Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都使用同一个 stdio 命令：
 
 ```bash
 loci agent configure codex --yes
@@ -27,6 +27,8 @@ loci agent configure antigravity --yes
 ```
 
 写入后，新建一个 Agent 会话，使客户端重新加载 MCP 配置。
+
+使用 `loci agent status <client>` 检查 MCP、Skill 和 Rules 的独立状态；`loci agent remove <client>` 只移除能确认属于 Loci 的 `loci` 服务，保留同一文件中的其他 MCP。
 
 ## 手动配置
 
@@ -70,7 +72,7 @@ Agent 调用 Loci 工具时，客户端启动 `loci mcp stdio`；会话结束后
 1. 运行 `loci agent print-config <client>`，确认客户端格式和配置路径。
 2. 确认 `loci` 在客户端进程的 `PATH` 中。
 3. 在终端运行 `loci mcp stdio`，确认没有启动错误；测试结束后按 `Ctrl+C`。
-4. 重新运行 `loci agent configure <client> --yes`，替换旧配置并新建 Agent 会话。
+4. 重新运行 `loci agent setup <client> --yes` 收敛全部接入项，或使用 `configure` 只修复 MCP，然后新建 Agent 会话。
 
 ## 下一步
 

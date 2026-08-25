@@ -1,6 +1,7 @@
 export * from './agent-import.js'
 export * from './agent-mcp-config.js'
 export * from './agent-global-rules.js'
+export * from './agent-integration.js'
 export * from './atomic-file.js'
 export * from './background-requirements.js'
 export * from './cloud-admin-client.js'

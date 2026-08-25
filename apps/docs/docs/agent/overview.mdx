@@ -24,24 +24,29 @@ CLI stdio 是唯一的本机 MCP 入口。客户端会按需启动进程，无�
 
 ## 推荐配置
 
-人类用户推荐直接运行根命令：
+推荐直接使用全局一键接入：
 
 ```bash
 npm install --global @boses/cli
-loci agent
+loci agent setup codex
+loci agent status codex
 ```
 
-`loci agent` 会交互选择 Agent 和 Skill 作用域，统一预览后配置 MCP、安装 `use-loci` 并写入全局规则。需要只执行其中一项时，使用 `configure`、`print-config`、`rules` 或 `skills` 子命令；在交互终端中，缺少的选择会继续询问。
+`loci agent setup` 会交互选择 Agent，统一预览后配置用户级 MCP、安装全局 `use-loci` 并写入全局规则；不带子命令的 `loci agent` 进入同一个向导。本机 `loci ui` 的“Agent”页面提供相同的状态、接入和移除能力。
 
 Agent、CI 和其他非交互调用应使用完整命令，不依赖交互偏好或隐式默认：
 
 ```bash
-loci agent configure codex --yes
-loci agent skills add --agent codex --project /absolute/path/to/project --yes
-loci agent rules codex --yes
+loci agent setup codex --yes
+loci agent status codex --json
+loci agent remove codex --yes
 ```
 
-上例以 Codex 为例。其他客户端的 MCP 写入方式请查看[通过 MCP 接入](/agent/mcp)，Skill 的安装目录和管理命令请查看[使用 use-loci Skill](/agent/skill)，全局规则的客户端差异请查看[配置全局规则](/agent/global-rules)。
+Codex、VS Code、Claude Code 和 Google Antigravity 可以完整自动接入。Cursor 会自动配置 MCP 和 Skill，并返回需要粘贴到 `Customize → Rules → User Rules` 的规则；状态保持“部分完成”，不会误报完整成功。
+
+需要只执行其中一项或管理项目级 Skill 时，继续使用 `configure`、`print-config`、`rules` 或 `skills` 子命令。其他客户端的 MCP 写入方式请查看[通过 MCP 接入](/agent/mcp)，Skill 的安装目录和管理命令请查看[使用 use-loci Skill](/agent/skill)，全局规则的客户端差异请查看[配置全局规则](/agent/global-rules)。
+
+一键移除只删除能确认由 Loci 管理的 `loci` MCP、Skill 目录和规则区块；配置被修改或所有权不明时会保留文件并报告冲突。Cursor 中手动粘贴的 User Rules 仍需用户自行移除。
 
 ## 一次典型查询
 

@@ -119,6 +119,27 @@ export function hasContext7Compatibility(content: string): boolean {
   )
 }
 
+/** 检查 Loci 受管区块；异常边界继续抛错，避免把冲突误报为缺失。 */
+export function hasLociAgentInstructions(content: string): boolean {
+  return findLociRange(content) !== undefined
+}
+
+/** 只移除 Loci 受管区块，保留同一文件中的其他用户规则。 */
+export function removeLociAgentInstructions(content: string): {
+  content: string
+  removed: boolean
+} {
+  const range = findLociRange(content)
+  if (!range) return { content, removed: false }
+  const next = replaceRange(content, range, '')
+    .replace(/^(?:\r?\n){2,}/, '')
+    .replace(/(?:\r?\n){3,}/g, '\n\n')
+  return {
+    content: next.trim() ? `${next.trimEnd()}\n` : '',
+    removed: true
+  }
+}
+
 function createManagedBlock(body: string): string {
   return `${LOCI_INSTRUCTIONS_START}\n${body}\n${LOCI_INSTRUCTIONS_END}`
 }

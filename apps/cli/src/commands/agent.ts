@@ -1,8 +1,6 @@
 import type { Command } from 'commander'
 import {
   createAgentImportCommand,
-  importAgentClient,
-  installAgentGlobalRules,
   LOCI_CLI_STDIO_CONNECTION,
   resolveAgentMcpConfigPath
 } from '@loci/runtime'
@@ -14,7 +12,6 @@ import {
   isAgentClient,
   isAgentGlobalRulesClient,
   isMcpClient,
-  isSkillAgent,
   listImportableAgentClients,
   listMcpClients,
   type AgentClient,
@@ -26,7 +23,8 @@ import { CliError } from '../errors.js'
 import { readMcpConfigurePreference, saveMcpConfigurePreference } from '../preferences.js'
 import { createCliRuntime } from '../runtime.js'
 import { askConfirm, askSelect, note } from '../ui.js'
-import { installLociSkill, registerSkillsCommands } from './skills.js'
+import { registerAgentIntegrationCommands, runAgentSetupWizard } from './agent-integration.js'
+import { registerSkillsCommands } from './skills.js'
 
 type AgentSelection = AgentClient | 'manual'
 
@@ -44,8 +42,9 @@ export function registerAgentCommands(program: Command): void {
   const agent = program
     .command('agent')
     .description('交互接入 Agent，或通过完整子命令管理连接、规则和 Skills')
-    .action(runAgentOnboarding)
+    .action(runAgentSetupWizard)
 
+  registerAgentIntegrationCommands(agent)
   registerConfigureCommand(agent)
   registerRulesCommand(agent)
   registerSkillsCommands(agent)
@@ -114,12 +113,12 @@ async function configureAgentClient(
         return '客户端配置未修改'
       }
     }
-    const result = await importAgentClient(selected, connection, {
-      dataDir: runtime.dataDir,
-      owner: 'CLI Agent MCP 配置写入'
-    })
+    const result = await runtime.agentIntegration?.setupMcp(selected)
+    if (!result) throw new Error('当前 Runtime 未启用 Agent 接入管理')
     saveMcpConfigurePreference(runtime.database, { client: selected })
-    return result.message
+    return result.status === 'current'
+      ? `MCP 已就绪：${result.path}`
+      : (result.message ?? 'MCP 配置未完成')
   })
 }
 
@@ -165,14 +164,13 @@ async function configureAgentRules(
     )
     if (!(await askConfirm('确认写入这个客户端的用户级全局规则吗？', true))) return
   }
-  await runWithRuntime(
-    '配置 Agent 全局规则',
-    async (runtime) =>
-      installAgentGlobalRules(selected, {
-        dataDir: runtime.dataDir,
-        owner: 'CLI Agent 全局规则写入'
-      }).message
-  )
+  await runWithRuntime('配置 Agent 全局规则', async (runtime) => {
+    const result = await runtime.agentIntegration?.setupRules(selected)
+    if (!result) throw new Error('当前 Runtime 未启用 Agent 接入管理')
+    return result.status === 'current'
+      ? `全局规则已就绪：${result.path}`
+      : (result.message ?? '全局规则配置未完成')
+  })
 }
 
 function registerPrintConfigCommand(agent: Command): void {
@@ -192,45 +190,6 @@ async function printAgentConfig(client: string | undefined): Promise<void> {
   if (!selected) throw new CliError('非交互终端必须指定配置目标', 2)
   const target = resolveMcpConfigTarget(selected === 'manual' ? 'generic' : selected)
   printManualMcpConfig(target)
-}
-
-async function runAgentOnboarding(): Promise<void> {
-  if (!process.stdin.isTTY) {
-    throw new CliError('非交互终端请使用完整的 loci agent 子命令和参数', 2)
-  }
-  const available = listImportableAgentClients().map((client) => ({
-    value: client.id,
-    label: client.label
-  }))
-  const selected = await askSelect<AgentClient>('请选择需要接入 Loci 的 Agent', available, 'codex')
-  const scope = await askSelect<'project' | 'global'>(
-    '请选择 use-loci Skill 作用域',
-    [
-      { value: 'project', label: '当前项目', hint: process.cwd() },
-      { value: 'global', label: '所有项目', hint: '安装到用户级 Skills 目录' }
-    ],
-    'project'
-  )
-  const definition = getMcpClientDefinition(selected)
-  note(
-    [
-      `Agent：${definition.label}`,
-      'MCP：CLI stdio',
-      `Skill：${scope === 'project' ? process.cwd() : '用户级全局目录'}`,
-      `全局规则：${definition.globalRulesPath}`
-    ].join('\n'),
-    '推荐接入预览'
-  )
-  if (!(await askConfirm('确认配置 MCP、安装 Skill 并写入全局规则吗？', true))) return
-
-  await configureAgentClient(selected, { yes: true })
-  await installLociSkill({
-    agent: isSkillAgent(selected) ? selected : 'universal',
-    project: scope === 'project' ? process.cwd() : undefined,
-    global: scope === 'global',
-    yes: true
-  })
-  await configureAgentRules(selected, { yes: true })
 }
 
 function formatCommand(command: string, args: readonly string[]): string {

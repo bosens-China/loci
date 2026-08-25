@@ -31,7 +31,16 @@ describe('Loci CLI command surface', () => {
       program.commands
         .find((command) => command.name() === 'agent')
         ?.commands.map((command) => command.name())
-    ).toEqual(['configure', 'rules', 'skills', 'print-config', 'config'])
+    ).toEqual([
+      'setup',
+      'status',
+      'remove',
+      'configure',
+      'rules',
+      'skills',
+      'print-config',
+      'config'
+    ])
     expect(
       program.commands
         .find((command) => command.name() === 'agent')

@@ -16,6 +16,9 @@ const CloudPage = lazy(() =>
 const JobsPage = lazy(() =>
   import('@/pages/JobsPage').then((module) => ({ default: module.JobsPage }))
 )
+const AgentsPage = lazy(() =>
+  import('@/pages/AgentsPage').then((module) => ({ default: module.AgentsPage }))
+)
 const AdminPage = lazy(() =>
   import('@/pages/AdminPage').then((module) => ({ default: module.AdminPage }))
 )
@@ -54,6 +57,7 @@ function pageFor(route: AppRoute): React.JSX.Element {
   if (route === 'documents') return <DocumentsPage />
   if (route === 'cloud') return <CloudPage />
   if (route === 'jobs') return <JobsPage />
+  if (route === 'agents') return <AgentsPage />
   if (route === 'admin') return <AdminPage />
   if (route === 'settings') return <SettingsPage />
   return <OverviewPage />

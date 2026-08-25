@@ -7,7 +7,11 @@ import {
   LOCI_INSTRUCTIONS_END,
   LOCI_INSTRUCTIONS_START
 } from '@loci/shared'
-import { installAgentGlobalRules } from '../agent-global-rules.js'
+import {
+  inspectAgentGlobalRules,
+  installAgentGlobalRules,
+  removeAgentGlobalRules
+} from '../agent-global-rules.js'
 import { acquireRuntimeLock } from '../runtime-lock.js'
 
 let root = ''
@@ -170,5 +174,32 @@ describe('Agent 全局规则写入', () => {
     ).toThrow('不完整')
     expect(readFileSync(path, 'utf8')).toBe(original)
     expect(original).not.toContain(LOCI_INSTRUCTIONS_END)
+  })
+
+  it('检查并移除受管区块，保留个人规则', () => {
+    const path = join(homeDir, '.claude', 'CLAUDE.md')
+    mkdirSync(join(homeDir, '.claude'), { recursive: true })
+    writeFileSync(path, '# 我的规则\n', 'utf8')
+    installAgentGlobalRules('claude-code', { dataDir, homeDir, owner: '测试' })
+
+    expect(inspectAgentGlobalRules('claude-code', { homeDir }).status).toBe('current')
+    expect(removeAgentGlobalRules('claude-code', { dataDir, homeDir, owner: '测试' }).changed).toBe(
+      true
+    )
+    expect(readFileSync(path, 'utf8')).toBe('# 我的规则\n')
+    expect(inspectAgentGlobalRules('claude-code', { homeDir }).status).toBe('missing')
+  })
+
+  it('异常标记检查为冲突且移除拒绝修改', () => {
+    const path = join(homeDir, '.gemini', 'GEMINI.md')
+    mkdirSync(join(homeDir, '.gemini'), { recursive: true })
+    const original = '<!-- loci:start -->\n不完整\n'
+    writeFileSync(path, original, 'utf8')
+
+    expect(inspectAgentGlobalRules('antigravity', { homeDir }).status).toBe('conflict')
+    expect(() =>
+      removeAgentGlobalRules('antigravity', { dataDir, homeDir, owner: '测试' })
+    ).toThrow('不完整')
+    expect(readFileSync(path, 'utf8')).toBe(original)
   })
 })

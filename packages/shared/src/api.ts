@@ -27,6 +27,32 @@ export interface AgentGlobalRulesResult {
   message: string
 }
 
+export type AgentIntegrationComponent = 'mcp' | 'skill' | 'rules'
+export type AgentIntegrationComponentStatus =
+  'missing' | 'current' | 'outdated' | 'conflict' | 'manual'
+export type AgentIntegrationOverallStatus = 'ready' | 'partial' | 'missing' | 'attention'
+
+export interface AgentIntegrationComponentState {
+  component: AgentIntegrationComponent
+  status: AgentIntegrationComponentStatus
+  path: string
+  message: string | null
+  manualContent?: string
+}
+
+export interface AgentIntegrationStatus {
+  client: AgentClient
+  label: string
+  overall: AgentIntegrationOverallStatus
+  components: AgentIntegrationComponentState[]
+}
+
+export interface AgentIntegrationActionResult {
+  action: 'setup' | 'remove'
+  changed: boolean
+  status: AgentIntegrationStatus
+}
+
 export interface CloudAdminLoginInput {
   username: string
   password: string

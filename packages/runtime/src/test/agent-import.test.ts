@@ -15,16 +15,22 @@ vi.mock('which', () => ({ default: vi.fn(async () => null) }))
 let root = ''
 let homeDir = ''
 let dataDir = ''
+const originalHome = process.env.HOME
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'loci-agent-import-'))
   homeDir = join(root, 'home')
   dataDir = join(root, 'data')
   mkdirSync(dataDir, { recursive: true })
+  process.env.HOME = homeDir
   vi.mocked(which).mockClear()
 })
 
-afterEach(() => rmSync(root, { recursive: true, force: true }))
+afterEach(() => {
+  rmSync(root, { recursive: true, force: true })
+  if (originalHome === undefined) delete process.env.HOME
+  else process.env.HOME = originalHome
+})
 
 describe('Agent MCP 导入命令', () => {
   it('为四种客户端生成同名 loci 的 CLI stdio 配置', () => {
@@ -74,7 +80,6 @@ describe('Agent MCP 导入命令', () => {
 
   it('客户端命令缺失时回退创建用户配置文件', async () => {
     const result = await importAgentClient('codex', LOCI_CLI_STDIO_CONNECTION, {
-      homeDir,
       dataDir,
       owner: '测试'
     })
@@ -89,12 +94,27 @@ describe('Agent MCP 导入命令', () => {
     vi.mocked(which).mockResolvedValueOnce(process.execPath)
 
     const result = await importAgentClient('codex', LOCI_CLI_STDIO_CONNECTION, {
-      homeDir,
       dataDir,
       owner: '测试'
     })
 
     expect(result.message).toContain('Codex 导入失败')
+    expect(readFileSync(join(homeDir, '.codex', 'config.toml'), 'utf8')).toContain(
+      '[mcp_servers.loci]'
+    )
+  })
+
+  it('显式用户目录跳过客户端命令并写入指定位置', async () => {
+    vi.mocked(which).mockResolvedValueOnce(process.execPath)
+
+    const result = await importAgentClient('codex', LOCI_CLI_STDIO_CONNECTION, {
+      homeDir,
+      dataDir,
+      owner: '测试'
+    })
+
+    expect(result.message).toContain('已使用指定用户目录')
+    expect(which).not.toHaveBeenCalled()
     expect(readFileSync(join(homeDir, '.codex', 'config.toml'), 'utf8')).toContain(
       '[mcp_servers.loci]'
     )
@@ -128,7 +148,6 @@ describe('Agent MCP 导入命令', () => {
     try {
       await expect(
         importAgentClient('codex', LOCI_CLI_STDIO_CONNECTION, {
-          homeDir,
           dataDir,
           owner: '测试'
         })

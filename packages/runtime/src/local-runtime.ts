@@ -14,6 +14,7 @@ import type {
   UpdateSourceInput
 } from '@loci/shared'
 import { CloudAdminClient } from './cloud-admin-client.js'
+import { AgentIntegrationService, type AgentIntegrationOptions } from './agent-integration.js'
 import { CloudLibraryService, cloudLibraryLockKey } from './cloud-library-service.js'
 import { CrawlTaskCoordinator } from './crawl-task-coordinator.js'
 import { createDatabase, databaseNeedsMigration, type LociDatabase } from './database.js'
@@ -39,6 +40,7 @@ export interface LocalRuntime {
   database: LociDatabase
   cloud: CloudLibraryService
   admin: CloudAdminClient
+  agentIntegration?: AgentIntegrationService
   crawlSource: (
     sourceId: string,
     onProgress?: (progress: CrawlProgress) => void,
@@ -70,6 +72,7 @@ export interface LocalRuntimeOptions {
   cacheDir?: string
   owner?: string
   browser?: LocalBrowserCrawler
+  agentIntegration?: Omit<AgentIntegrationOptions, 'database' | 'dataDir'>
 }
 
 /** 所有本机入口共用的应用运行时，入口层只负责交互和 transport。 */
@@ -91,6 +94,13 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     migrationLock?.release()
   }
   const browser = options.browser ?? new LocalBrowserCrawler(join(cacheDir, 'playwright'))
+  const agentIntegration = options.agentIntegration
+    ? new AgentIntegrationService({
+        ...options.agentIntegration,
+        database,
+        dataDir
+      })
+    : undefined
   const states = new Map<string, CrawlRunState>()
   const crawlTasks = new CrawlTaskCoordinator()
   const assertWritable = (): void => {
@@ -279,6 +289,7 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     database,
     cloud: new CloudLibraryService(database, fetch, dataDir),
     admin: new CloudAdminClient(),
+    agentIntegration,
     crawlSource: run,
     fetchPages: (sourceId, urls, onBrowserMissing, signal) => {
       assertWritable()

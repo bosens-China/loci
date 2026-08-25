@@ -9,6 +9,7 @@ import { inspectPersistentBackgroundRequirements } from './background-requiremen
 import { acquireMaintenanceRuntimeLock } from './runtime-lock.js'
 import type { LocalRuntime } from './local-runtime.js'
 import { handleLocalAdmin } from './local-http-admin.js'
+import { handleAgentIntegrations } from './local-http-agent.js'
 import { json, mutationJson, readJson, safeClientError } from './local-http-response.js'
 
 const BACKUP_LIMIT_BYTES = 256 * 1024 * 1024
@@ -27,6 +28,7 @@ export async function handleLocalApi(
   options: LocalApiOptions
 ): Promise<void> {
   if (await handleLocalAdmin(runtime, request, response, url)) return
+  if (await handleAgentIntegrations(runtime, request, response, url)) return
   if (await handleSources(runtime, request, response, url, options)) return
   if (await handleDocumentsAndJobs(runtime, request, response, url, options)) return
   if (await handleSettings(runtime, request, response, url)) return

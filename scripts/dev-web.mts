@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { CLI_VERSION } from '../apps/cli/src/update.js'
 import {
   checkLocalWebService,
   readLocalWebServiceState,
@@ -71,7 +73,9 @@ web.once('spawn', () => {
   process.stdout.write(`本地 API：http://127.0.0.1:${state.port}\n`)
   process.stdout.write(`数据目录：${dataDir}\n`)
   if (dataMode === 'user') {
-    process.stdout.write('注意：当前为真实用户数据模式，Web 中的写操作会直接修改正式 Loci 数据。\n')
+    process.stdout.write(
+      '注意：当前为真实用户模式，Web 写操作会直接修改正式 Loci 数据和 Agent 文件。\n'
+    )
   }
   if (!owned) {
     process.stdout.write('已复用正在运行的开发服务（仅启动 Vite）。\n')
@@ -98,6 +102,11 @@ async function ensureDevService(): Promise<{
       dataDir,
       cacheDir,
       port: API_PORT,
+      agentIntegration: {
+        packageVersion: CLI_VERSION,
+        skillResourceDir: join(root, '.agents/skills/use-loci'),
+        homeDir: dataMode === 'isolated' ? join(rootDir, 'home') : undefined
+      },
       startJobWorker: () => ensureDevWorker(false),
       ensurePersistentBackground: () => ensureDevWorker(true)
     })

@@ -14,6 +14,7 @@ import {
   writeAgentMcpConfigFile,
   type AgentMcpConfigPathOptions
 } from './agent-mcp-config.js'
+import { AGENT_IMPORT_TIMEOUT_MS } from './agent-operation-timing.js'
 import { resolveLociDataDir } from './data-path.js'
 import { acquireRuntimeLock } from './runtime-lock.js'
 
@@ -77,7 +78,8 @@ async function performAgentImport(
   )
   try {
     let commandError: Error | undefined
-    if (definition.quickImport) {
+    const usesCustomHome = options.homeDir !== undefined
+    if (definition.quickImport && !usesCustomHome) {
       const command = createAgentImportCommand(client, connection)
       try {
         const executable = await resolveExecutable(command)
@@ -101,7 +103,9 @@ async function performAgentImport(
       client,
       message: commandError
         ? `${definition.label} 配置命令失败（${commandError.message}），${status}`
-        : `${definition.label} 不支持配置命令，${status}`
+        : usesCustomHome && definition.quickImport
+          ? `已使用指定用户目录，${status}`
+          : `${definition.label} 不支持配置命令，${status}`
     }
   } finally {
     lock.release()
@@ -182,7 +186,7 @@ async function resolveExecutable(command: AgentImportCommand): Promise<string> {
 async function runCommand(executable: string, args: string[], label: string): Promise<void> {
   let result: CommandResult
   try {
-    result = await executeCommand(executable, args, 15_000)
+    result = await executeCommand(executable, args, AGENT_IMPORT_TIMEOUT_MS)
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     if (code === 'ETIMEDOUT') throw new Error(`${label} 导入超时，请稍后重试`)

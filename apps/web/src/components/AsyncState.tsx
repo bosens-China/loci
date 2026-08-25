@@ -22,7 +22,7 @@ export function AsyncState(props: AsyncStateProps): React.JSX.Element {
       <Alert
         type="error"
         showIcon
-        message="读取失败"
+        title="读取失败"
         description={props.error.message}
         action={props.onRetry ? <Button onClick={props.onRetry}>重试</Button> : undefined}
       />

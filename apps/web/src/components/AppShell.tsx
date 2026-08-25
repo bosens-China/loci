@@ -2,6 +2,7 @@ import {
   CloudOutlined,
   FileTextOutlined,
   HomeOutlined,
+  RobotOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
   SyncOutlined
@@ -13,6 +14,7 @@ const items: Array<{ route: AppRoute; label: string; icon: React.ReactNode }> = 
   { route: 'documents', label: '文档', icon: <FileTextOutlined /> },
   { route: 'cloud', label: '云端', icon: <CloudOutlined /> },
   { route: 'jobs', label: '任务', icon: <SyncOutlined /> },
+  { route: 'agents', label: 'Agent', icon: <RobotOutlined /> },
   { route: 'admin', label: '管理', icon: <SafetyCertificateOutlined /> },
   { route: 'settings', label: '设置', icon: <SettingOutlined /> }
 ]
