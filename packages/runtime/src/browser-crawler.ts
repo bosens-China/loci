@@ -13,7 +13,17 @@ import {
 
 type PlaywrightModule = typeof import('playwright-core')
 type Browser = Awaited<ReturnType<PlaywrightModule['chromium']['launch']>>
+type PlaywrightRegistryBundle = {
+  registry: {
+    registry: {
+      findExecutable(name: string): { executablePath(): string } | undefined
+    }
+  }
+}
 export type BrowserInstallPrompt = (install: () => Promise<void>) => Promise<void>
+
+const require = createRequire(import.meta.url)
+const HEADLESS_SHELL = 'chromium-headless-shell'
 
 /** 本地运行时统一使用 Playwright 执行浏览器抓取。 */
 export class LocalBrowserCrawler {
@@ -85,8 +95,7 @@ export class LocalBrowserCrawler {
     if (this.browser) return this.browser
     configureBrowserPath(this.browsersPath)
     try {
-      const { chromium } = await import('playwright-core')
-      this.browser = await chromium.launch({ headless: true })
+      this.browser = await launchHeadlessShell()
       return this.browser
     } catch (error) {
       throw new Error(
@@ -102,8 +111,7 @@ export async function ensureBrowserInstalled(
   installBrowser: () => Promise<void> = () => runBrowserCommand(browsersPath, 'install')
 ): Promise<void> {
   configureBrowserPath(browsersPath)
-  const { chromium } = await import('playwright-core')
-  const executable = chromium.executablePath()
+  const executable = resolveHeadlessShellExecutable()
   if (isExecutable(executable)) return
   if (!onMissing) throw new Error('未安装 Chromium headless shell，请先运行 loci browser install。')
   await onMissing(installBrowser)
@@ -119,12 +127,11 @@ export async function browserStatus(browsersPath: string): Promise<{
   error: string | null
 }> {
   configureBrowserPath(browsersPath)
-  const { chromium } = await import('playwright-core')
-  const executable = chromium.executablePath()
+  const executable = resolveHeadlessShellExecutable()
   const installed = isExecutable(executable)
   if (!installed) return { installed, executable, launchable: false, error: null }
   try {
-    const browser = await chromium.launch({ headless: true })
+    const browser = await launchHeadlessShell(executable)
     await browser.close()
     return { installed, executable, launchable: true, error: null }
   } catch (error) {
@@ -142,7 +149,6 @@ export async function runBrowserCommand(
   command: 'install' | 'uninstall'
 ): Promise<void> {
   mkdirSync(browsersPath, { recursive: true })
-  const require = createRequire(import.meta.url)
   const packageFile = require.resolve('playwright-core/package.json')
   const cliFile = join(dirname(packageFile), 'cli.js')
   const args = command === 'install' ? ['install', 'chromium', '--only-shell'] : ['uninstall']
@@ -162,6 +168,21 @@ export async function runBrowserCommand(
 
 function configureBrowserPath(path: string): void {
   process.env.PLAYWRIGHT_BROWSERS_PATH = path
+}
+
+/** 使用 Playwright 自身的版本与平台映射解析受管 headless shell。 */
+function resolveHeadlessShellExecutable(): string {
+  const bundle = require('playwright-core/lib/coreBundle') as PlaywrightRegistryBundle
+  const executable = bundle.registry.registry.findExecutable(HEADLESS_SHELL)?.executablePath()
+  if (!executable) throw new Error('当前平台不支持 Chromium headless shell。')
+  return executable
+}
+
+async function launchHeadlessShell(
+  executablePath = resolveHeadlessShellExecutable()
+): Promise<Browser> {
+  const { chromium } = await import('playwright-core')
+  return chromium.launch({ headless: true, executablePath })
 }
 
 function isExecutable(path: string): boolean {
