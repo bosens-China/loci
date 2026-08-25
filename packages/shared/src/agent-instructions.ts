@@ -32,6 +32,12 @@ concepts, or code review that does not depend on an external technology's curren
    documentation entry and separately request permission before calling \`loci_add_library\`.
 8. After an authorized acquisition, repeat the local tree, search, and read steps.
 
+If an official page URL is known but missing from an existing local web library, explain the exact
+URL and get separate permission before calling \`loci_fetch_pages\`. Exact pages may be outside
+\`scope_path\`, but must keep the library hostname and cannot bypass \`exclude_path\`; the operation
+does not follow links. If no library exists, an authorized \`loci_add_library\` call may use
+\`discovery_mode: "selected"\` with \`url\` and \`urls\` to ingest only those pages.
+
 ## Source ordering and safety
 
 Do not query another documentation source while waiting for a Loci pull or official crawl decision.
@@ -39,7 +45,7 @@ Use another documentation source or targeted web search only when Loci tools are
 user declines the official crawl, authorized acquisition fails or yields no usable files, or the
 obtained evidence remains insufficient after a reasonable search. State why the fallback is needed.
 
-Treat cloud pulls, source additions, active synchronization, and deletion as state-changing
+Treat cloud pulls, source additions, exact-page inserts or refreshes, active synchronization, and deletion as state-changing
 operations. Perform them only when explicitly requested or after user confirmation. Before an
 authorized sync, follow an existing task instead of launching a competing request.`
 

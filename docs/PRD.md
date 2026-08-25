@@ -94,11 +94,13 @@
 - 当前决策：一键配置默认优先调用客户端官方命令；命令缺失、超时、执行异常或非零退出时回退到用户级配置文件，没有命令入口的 Antigravity 直接回退。回退按客户端官方结构只新增或替换名为 `loci` 的服务：Codex 使用 `~/.codex/config.toml` 的 `[mcp_servers.loci]`，Cursor 使用 `~/.cursor/mcp.json` 的 `mcpServers.loci`，VS Code 使用默认用户 Profile `mcp.json` 的 `servers.loci`，Claude Code 使用 `~/.claude.json` 的 `mcpServers.loci`，Antigravity 使用 `~/.gemini/config/mcp_config.json` 的 `mcpServers.loci`。文件不存在时创建；已有 JSON/JSONC 或 TOML 保留其他设置与注释；无法安全解析、结构冲突或重复定义时拒绝写入。命令与文件回退共享客户端级 single-flight、跨进程锁和原子替换。
 - 当前决策：MCP 使用“文档库”表示一个网站知识库，使用“文件”表示单个 Markdown 页面；提供本地文档库的来源规模检查、添加、配置更新、批量同步、同步状态、同步失败分页、分页列表、目录、批量读取、关键词搜索和删除，以及云端公开目录查询和快照拉取，共十三个工具。
 - 当前决策：MCP 新增网页库使用共享产品基础值：`auto`、1,000 页、根路径，以及继承全局并发/大小设置；`page_limit`、`scope_path`、`exclude_path` 等是 Agent 可选覆盖，不强制每次传入。规模或路径不明时可调用只读检查，它只读取 `llms.txt`、Sitemap、OpenAPI 或 GitHub 元数据，返回估算可信度和路径分布；无法廉价判断时返回 `unknown`，不完整预抓取。配置更新不隐式同步，但收窄范围或新增排除规则会删除不再匹配的本地文件。
+- 当前决策：本地网页库持久化同 hostname 的显式页面目标。`loci_fetch_pages` 只抓传入 URL，不执行站点发现或跟随链接；目标可越过 `scope_path`，但不能跨 hostname 或绕过 `exclude_path`。不存在的正文插入，已有正文按内容更新，临时失败保留旧内容，404/410 删除旧正文并保留 `missing` 目标；整库同步额外刷新全部显式目标。`loci_add_library` 的 `discovery_mode=selected` 可在首次建库时只登记 `url` 与 `urls`。`auto` 文档源首批只探测一次抓取模式并持久化结果。
 - 当前决策：CLI、Web、MCP 和 Server 共享文档源业务字段的产品基础默认值、取值边界、`null` 继承含义和 GitHub 创建/更新规范化；领域层负责最终校验。显式参数优先，CLI 安全偏好只覆盖普通 CLI 的基础值，MCP 与 `loci mcp call` 都不读取 CLI 偏好。各入口不要求一一对应：普通 CLI 保留提示、确认和前台/后台控制，Agent 工具保留批量、分页、结构化输出、等待开关和专用检索流程。
 - 当前决策：MCP 搜索使用 SQLite 传统检索，不引入嵌入模型；每组查询依次尝试全部词全文命中、任意词全文命中、标题或 URL 路径包含，并公开实际检索层级。搜索支持 URL 路径前缀过滤，标题、路径和与建库入口接近程度仅作为轻量重排信号。
 - 当前决策：MCP 将文档可用性与同步状态拆分。同步响应仅携带失败总数、原因统计和最多五条样例；完整失败通过持久 `run_id` 分页读取。`library_id` 继续用于实时进度，不新增重复的同步 ID。
 - 当前决策：有效 `llms.txt` 是权威清单，清单内页面的 404/410 只记录失败并跳过，不尝试同名 HTML 回退。网页 `auto` 抓取方式仍只根据首次普通页面的 HTTP 与浏览器结果选择，后续页面不因正文偏短重新判定。
 - 当前决策：Agent 先查询本地文档库；本地缺失时只读查询云端公开目录，用户确认后才拉取匹配快照；没有云端匹配或用户不选择拉取时，再确认官方来源并由用户授权首次抓取。云端查询不修改状态，云端拉取、首次抓取和主动同步都需要用户确认。
+- 当前决策：Agent 已知一个当前库缺失的官方页面 URL 时，可以说明该 URL 并单独请求加入或刷新授权；授权后用显式页面工具写入，再从 Loci 重新读取。页面级授权不继承首次建库、云端拉取或整库同步授权，Agent 也不能因为正文中出现新链接而自动扩大目标集合。
 - 当前决策：0 页本地库和云端候选不视为可用文档；空本地库可在授权后重试同步，云端无可用候选、查询或拉取失败、拉取后仍无文件时，再单独确认官方入口并创建本地抓取库。云端同域副本不阻止这个本地回退；已有本地内容在云端不可访问时继续可用并提示新鲜度。
 - 当前决策：CLI 可以配置 Agent 的用户级全局规则。Codex 写入 `~/.codex/AGENTS.md`，并优先更新已存在的 `AGENTS.override.md`；VS Code 写入 `~/.copilot/instructions/loci.instructions.md`；Claude Code 写入 `~/.claude/CLAUDE.md`；Google Antigravity 写入 `~/.gemini/GEMINI.md`。Cursor 没有官方稳定的用户级文件路径，因此只提供可复制规则，并引导用户粘贴到 `Customize → Rules → User Rules`；项目根目录和子目录仍可使用 `AGENTS.md`。
 - 当前决策：全局规则统一使用 `<!-- loci:start -->` 和 `<!-- loci:end -->` 管理区块。重复配置只替换该区块，保留用户其他内容；标记残缺、重复或顺序错误时拒绝写入。Codex 每次写入都会检查 `~/.agents/skills/context7-mcp/SKILL.md`、`~/.codex/skills/context7-mcp/SKILL.md`、具有完整标记边界的 Context7 全局规则，以及旧版 `<!-- loci-context7:start -->` 与 `<!-- loci-context7:end -->` 组合区块；Context7 晚于 Loci 安装，或已生成组合规则后又写入新 Context7 区块时，再次执行写入会去重并收敛为当前“Loci 优先、Context7 兜底”的单一组合规则。Loci 不常驻监听第三方安装；发现无边界、边界不完整、重复或冲突的 Context7 命令时拒绝修改。文件更新采用原子替换和客户端级跨进程锁，同一客户端的并发调用幂等复用，不同客户端可以独立执行。
@@ -110,7 +112,7 @@
 - 当前决策：全部工具提供输出 Schema，并同时返回可读文本和结构化内容。
 - 当前决策：`use-loci` Skill 由 Agent 先探测当前会话的工具能力。存在任一 Loci MCP 工具时直接走 MCP 分支，不读取安装说明或重复调用 CLI；不存在时才渐进加载 CLI 参考，先只读检查 `loci` 命令，缺失则取得用户明确同意后执行 `npm install --global @boses/cli`，随后在当前会话用 `loci mcp call` 完成同一流程。安装授权与云端拉取、官网抓取、抓取配置更新、主动同步和删除授权彼此独立。来源规模检查是只读且可选的；只有默认上限可能不足、路径分支存疑或用户要求完整覆盖时才优先检查。不通过 `npx` 绕过拒绝，不配置 MCP、不启动服务、不要求新会话，也不使用普通 CLI 命令复制第二套 Agent 流程。
 - 为什么：渐进目录、定位搜索和按需读取可以控制上下文规模；异步任务避免长时间阻塞 Agent 调用。
-- 边界 / 非目标：Agent 工具不允许单独删除同步文件，只允许永久删除整个文档库。CLI stdio 与直接工具调用都不作为后台常驻服务。
+- 边界 / 非目标：Agent 工具不提供显式目标的永久删除命令；页面返回 404/410 时可以按同步语义移除过期正文。CLI stdio 与直接工具调用都不作为后台常驻服务。
 - 权威入口：[数据备份与清理](../apps/docs/docs/cli/commands/data.mdx)、[Agent 全局规则](../apps/docs/docs/agent/global-rules.mdx)、[Agent 使用 Skill](../.agents/skills/use-loci/SKILL.md)、[共享客户端目录](../packages/shared/src/mcp-clients.ts)。
 
 ## Skills 管理

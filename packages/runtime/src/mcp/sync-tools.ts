@@ -16,6 +16,7 @@ import {
   result,
   serializeFailure,
   serializeLibrary,
+  serializeProgress,
   startInBackground,
   stateToSyncItem,
   syncSummary,
@@ -39,10 +40,19 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
     'loci_add_library',
     {
       title: '添加网页文档库',
-      description: `按产品基础值创建本地文档库；可覆盖抓取方式、页面上限、路径范围、并发和 GitHub 大小上限。相同 hostname 与路径范围会复用。${WAIT_DESCRIPTION}`,
+      description: `按产品基础值创建本地文档库；可覆盖抓取方式、页面上限、路径范围、并发和 GitHub 大小上限。discovery_mode=selected 时只抓 url 与 urls，不执行站点发现。相同 hostname 与路径范围会复用。${WAIT_DESCRIPTION}`,
       inputSchema: z
         .object({
           url: z.url().describe('任意公开文档页面 URL'),
+          urls: z
+            .array(z.url())
+            .max(49)
+            .optional()
+            .describe('selected 模式下的其余指定页面；加上 url 最多 50 个'),
+          discovery_mode: z
+            .enum(['site', 'selected'])
+            .default('site')
+            .describe('site 执行站点发现；selected 只抓 url 与 urls 中的页面'),
           name: z
             .string()
             .trim()
@@ -94,6 +104,45 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
           input.github_markdown_limit_mb ?? DOCUMENT_SOURCE_DEFAULTS.githubMarkdownLimitMb
       })
       const created = !before.has(source.id)
+      if (input.discovery_mode === 'selected') {
+        const urls = [...new Set([input.url, ...(input.urls ?? [])])]
+        if (!input.wait_for_completion) {
+          const task = services
+            .fetchPages(source.id, urls)
+            .then(() => undefined)
+            .catch(() => undefined)
+          context.trackBackgroundTask?.(task)
+          return result(
+            { created, sync_status: 'syncing', library: serializeLibrary(source) },
+            created ? '文档库已创建并开始抓取指定页面' : '指定页面已加入现有文档库并开始更新'
+          )
+        }
+        try {
+          const output = await services.fetchPages(source.id, urls)
+          const current = services.listSources().find((entry) => entry.id === source.id) ?? source
+          return result(
+            {
+              created,
+              sync_status: output.progress.failed ? 'completed_with_errors' : 'completed',
+              run_id: output.runId,
+              progress: serializeProgress(output.progress),
+              page_items: output.items,
+              library: serializeLibrary(current)
+            },
+            `指定页面处理完成：${output.items.length} 个`
+          )
+        } catch (error) {
+          return result(
+            {
+              created,
+              sync_status: 'failed',
+              error: error instanceof Error ? error.message : '指定页面抓取失败',
+              library: serializeLibrary(source)
+            },
+            '指定页面抓取失败'
+          )
+        }
+      }
       if (!created && !services.isCrawling(source.id) && source.pages > 0) {
         return result(
           { created: false, sync_status: 'idle', library: serializeLibrary(source) },

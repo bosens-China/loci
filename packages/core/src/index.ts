@@ -1,4 +1,5 @@
 export * from './crawl.js'
+export * from './explicit-pages.js'
 export * from './github-markdown.js'
 export * from './github-limits.js'
 export * from './github-source.js'

@@ -11,6 +11,7 @@ import { registerCloudTools } from './cloud-tools.js'
 import { registerLibraryContentTools, registerListLibrariesTool } from './core-tools.js'
 import { registerDeleteLibraryTool } from './delete-tool.js'
 import { registerSearchTool } from './search-tool.js'
+import { registerPageTools } from './page-tools.js'
 import { registerSourcePlanningTools } from './source-planning-tools.js'
 import type { LociMcpServices } from './services.js'
 import { registerSyncTools } from './sync-tools.js'
@@ -101,6 +102,7 @@ export async function callLociMcpTool(
 
 export function registerLociTools(register: LociToolRegistrar, services: LociMcpServices): void {
   registerSyncTools(register, services)
+  registerPageTools(register, services)
   registerSourcePlanningTools(register, services)
   registerListLibrariesTool(register, services)
   registerCloudTools(register, services)

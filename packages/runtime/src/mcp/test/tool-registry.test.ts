@@ -47,4 +47,18 @@ describe('Loci MCP 工具注册表', () => {
     expect(completed).toBe(true)
     expect(response.structuredContent).toMatchObject({ sync_status: 'syncing' })
   })
+
+  it('指定页面工具返回逐页 upsert 状态', async () => {
+    const response = await callLociMcpTool(createServices(), 'loci_fetch_pages', {
+      library_id: source.id,
+      urls: ['https://cn.vuejs.org/api/new'],
+      wait_for_completion: true
+    })
+
+    expect(response.structuredContent).toMatchObject({
+      library_id: source.id,
+      sync_status: 'completed',
+      items: [{ url: 'https://cn.vuejs.org/api/new', status: 'unchanged' }]
+    })
+  })
 })

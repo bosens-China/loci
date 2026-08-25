@@ -24,6 +24,7 @@ export function createLocalMcpServices(
     crawlSource: options.durableJobs
       ? (sourceId, onProgress) => runDurableSync(runtime, sourceId, onProgress, options.signal)
       : runtime.crawlSource,
+    fetchPages: (sourceId, urls) => runtime.fetchPages(sourceId, urls, undefined, options.signal),
     deleteSource: runtime.deleteSource,
     isCrawling: options.durableJobs
       ? (sourceId) =>

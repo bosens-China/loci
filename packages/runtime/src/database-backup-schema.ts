@@ -78,6 +78,18 @@ const documentSchema = z
   })
   .strict()
 
+const explicitPageTargetSchema = z
+  .object({
+    source_id: z.string().min(1),
+    url: z.string().url(),
+    status: z.enum(['pending', 'current', 'missing', 'failed']),
+    last_crawled_at: z.string().datetime().nullable(),
+    last_error: z.string().nullable(),
+    created_at: z.string().datetime(),
+    updated_at: z.string().datetime()
+  })
+  .strict()
+
 const crawlRunSchema = z
   .object({
     id: z.string().min(1),
@@ -140,6 +152,7 @@ export const lociBackupSchema = z
       .object({
         sources: z.array(sourceSchema),
         documents: z.array(documentSchema),
+        explicitPageTargets: z.array(explicitPageTargetSchema).optional(),
         crawlRuns: z.array(crawlRunSchema),
         crawlFailures: z.array(crawlFailureSchema).optional(),
         settings: settingsSchema
@@ -149,6 +162,9 @@ export const lociBackupSchema = z
   .strict()
   .superRefine(({ data }, context) => {
     const sourceIds = new Set(data.sources.map((source) => source.id))
+    const sourceTypes = new Map(
+      data.sources.map((source) => [source.id, source.source_type ?? 'local'] as const)
+    )
     validateUniqueIds(data.sources, ['data', 'sources'], context)
     validateUniqueIds(data.documents, ['data', 'documents'], context)
     validateUniqueIds(data.crawlRuns, ['data', 'crawlRuns'], context)
@@ -162,6 +178,31 @@ export const lociBackupSchema = z
           message: '引用的文档源不存在'
         })
       }
+    })
+    const targetKeys = new Set<string>()
+    ;(data.explicitPageTargets ?? []).forEach((target, index) => {
+      if (!sourceIds.has(target.source_id)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['data', 'explicitPageTargets', index, 'source_id'],
+          message: '引用的文档源不存在'
+        })
+      } else if (sourceTypes.get(target.source_id) === 'cloud') {
+        context.addIssue({
+          code: 'custom',
+          path: ['data', 'explicitPageTargets', index, 'source_id'],
+          message: '云文档副本不能包含指定页面目标'
+        })
+      }
+      const key = `${target.source_id}\n${target.url}`
+      if (targetKeys.has(key)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['data', 'explicitPageTargets', index, 'url'],
+          message: '指定页面重复'
+        })
+      }
+      targetKeys.add(key)
     })
     data.crawlRuns.forEach((run, index) => {
       if (!sourceIds.has(run.source_id)) {

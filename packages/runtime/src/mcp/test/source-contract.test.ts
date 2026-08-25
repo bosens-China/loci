@@ -47,6 +47,33 @@ describe('MCP source contract', () => {
     expect(createSource).not.toHaveBeenCalled()
   })
 
+  it('selected 建库只抓指定 URL，不启动整库同步', async () => {
+    const services = createServices()
+    const fetchPages = vi.fn(services.fetchPages)
+    const crawlSource = vi.fn(services.crawlSource)
+
+    const response = await callLociMcpTool(
+      { ...services, listSources: () => [], fetchPages, crawlSource },
+      'loci_add_library',
+      {
+        url: 'https://docs.example.com/one',
+        urls: ['https://docs.example.com/two'],
+        discovery_mode: 'selected',
+        wait_for_completion: true
+      }
+    )
+
+    expect(fetchPages).toHaveBeenCalledWith(source.id, [
+      'https://docs.example.com/one',
+      'https://docs.example.com/two'
+    ])
+    expect(crawlSource).not.toHaveBeenCalled()
+    expect(response.structuredContent).toMatchObject({
+      sync_status: 'completed',
+      page_items: [{ status: 'unchanged' }, { status: 'unchanged' }]
+    })
+  })
+
   it('按文档库 ID 幂等更新可选抓取配置且不自动同步', async () => {
     const services = createServices()
     const crawlSource = vi.fn(services.crawlSource)

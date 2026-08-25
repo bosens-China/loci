@@ -138,7 +138,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
     }
   }
 
-  const selected = await readFirstPage(options)
+  const selected = await probeSourcePage(options)
   throwIfAborted(options.signal)
   const firstUrl = normalizeUrl(selected.firstPage.url || options.firstUrl)
   const resolution: SourceResolution = {
@@ -168,7 +168,8 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
   return { progress, resolution }
 }
 
-async function readFirstPage(options: SourceCrawlOptions): Promise<{
+/** 只探测一个页面的抓取方式，不执行 Sitemap、llms.txt 或链接发现。 */
+export async function probeSourcePage(options: SourceCrawlOptions): Promise<{
   fetchMode: SourceResolution['fetchMode']
   firstPage: CrawledPage
 }> {

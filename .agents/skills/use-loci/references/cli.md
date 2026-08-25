@@ -31,14 +31,14 @@ loci mcp call loci_read_files --input '{"file_ids":["file-id"]}'
 
 无参数工具可以省略 `--input`，默认输入为 `{}`。成功时 stdout 是该工具的结构化 JSON；把它当成直接 MCP 调用的 `structuredContent` 继续处理。诊断写入 stderr，非零退出码表示调用没有成功；此时读取错误、修正参数或按主流程兜底，不要把错误文本当作文档证据。
 
-CLI 是短进程。调用 `loci_add_library` 或 `loci_sync_libraries` 时优先传 `"wait_for_completion":true`，以便在同一次调用中取得最终状态；未传时 CLI 仍会在安全收口已启动任务后退出，再用 `loci_get_sync_status` 读取结果。
+CLI 是短进程。调用 `loci_add_library`、`loci_fetch_pages` 或 `loci_sync_libraries` 时优先传 `"wait_for_completion":true`，以便在同一次调用中取得最终状态；未传时 CLI 仍会在安全收口已启动任务后退出，再用 `loci_get_sync_status` 读取结果。
 
 工具名与 MCP 完全一致：
 
 - 发现与读取：`loci_list_libraries`、`loci_get_library_tree`、`loci_search_files`、`loci_read_files`
 - 云端获取：`loci_list_cloud_libraries`、`loci_pull_cloud_library`
 - 抓取规划：`loci_inspect_library_source`（只读）、`loci_update_library`（修改配置，不自动同步）
-- 官网抓取与同步：`loci_add_library`、`loci_sync_libraries`、`loci_get_sync_status`、`loci_list_sync_failures`
+- 官网抓取与同步：`loci_add_library`、`loci_fetch_pages`、`loci_sync_libraries`、`loci_get_sync_status`、`loci_list_sync_failures`
 - 删除：`loci_delete_library`
 
 JSON 应作为单个 shell 参数传递，避免变量插值或命令替换。不要把 Token、密码、Cookie 或其他凭据写入参数、命令历史或错误输出。

@@ -28,6 +28,9 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
         )
         .all(),
       documents: database.prepare('SELECT * FROM documents ORDER BY crawled_at').all(),
+      explicitPageTargets: database
+        .prepare('SELECT * FROM explicit_page_targets ORDER BY created_at, url')
+        .all(),
       crawlRuns: database
         .prepare(
           `SELECT id, source_id, status, started_at, finished_at, discovered_count,
@@ -48,7 +51,14 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
 
 export function importDatabaseBackup(database: DatabaseSync, input: unknown): BackupImportSummary {
   const backup = parseLociBackup(input)
-  const { sources, documents, crawlRuns, crawlFailures = [], settings } = backup.data
+  const {
+    sources,
+    documents,
+    explicitPageTargets = [],
+    crawlRuns,
+    crawlFailures = [],
+    settings
+  } = backup.data
 
   database.exec('BEGIN IMMEDIATE')
   try {
@@ -57,6 +67,7 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
       DELETE FROM crawl_failures;
       DELETE FROM crawl_runs;
       DELETE FROM documents;
+      DELETE FROM explicit_page_targets;
       DELETE FROM document_sources;
     `)
 
@@ -132,6 +143,23 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         document.relative_path ?? null
       )
       insertSearch.run(document.id, document.source_id, document.title, document.markdown)
+    }
+
+    const insertTarget = database.prepare(
+      `INSERT INTO explicit_page_targets
+       (source_id, url, status, last_crawled_at, last_error, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    for (const target of explicitPageTargets) {
+      insertTarget.run(
+        target.source_id,
+        target.url,
+        target.status,
+        target.last_crawled_at,
+        target.last_error,
+        target.created_at,
+        target.updated_at
+      )
     }
 
     const insertRun = database.prepare(

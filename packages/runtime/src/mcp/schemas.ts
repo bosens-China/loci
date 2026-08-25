@@ -69,6 +69,30 @@ export const addLibraryOutputSchema = z.object({
   run_id: z.string().optional(),
   file_count: z.number().int().optional(),
   progress: progressSchema.optional(),
+  error: z.string().optional(),
+  page_items: z
+    .array(
+      z.object({
+        url: z.string(),
+        status: z.enum(['inserted', 'updated', 'unchanged', 'missing', 'failed']),
+        message: z.string().optional()
+      })
+    )
+    .optional()
+})
+
+export const explicitPageItemSchema = z.object({
+  url: z.string(),
+  status: z.enum(['inserted', 'updated', 'unchanged', 'missing', 'failed']),
+  message: z.string().optional()
+})
+
+export const fetchPagesOutputSchema = z.object({
+  library_id: z.string(),
+  sync_status: syncStatusSchema,
+  run_id: z.string().optional(),
+  items: z.array(explicitPageItemSchema),
+  progress: progressSchema.optional(),
   error: z.string().optional()
 })
 

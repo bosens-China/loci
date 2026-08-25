@@ -27,9 +27,9 @@ loci mcp call loci_search_files --input '{"queries":["router"]}'
 | 定位 | 查看目录树，或按关键词搜索正文。                         |
 | 阅读 | 读取 Markdown 文件或搜索命中的完整小节。                 |
 | 规划 | 只读检查来源规模和路径分布，或修改已有文档库的抓取配置。 |
-| 管理 | 添加、拉取、同步、查询状态、查看失败详情和删除文档库。   |
+| 管理 | 添加、拉取、抓取指定页、同步、查询状态和删除文档库。     |
 
-列出、查看、搜索、读取和 `loci_inspect_library_source` 属于只读操作。拉取、新增抓取、修改配置、同步和删除会访问网络或修改本地状态，Agent 必须先得到用户当前请求或明确确认。
+列出、查看、搜索、读取和 `loci_inspect_library_source` 属于只读操作。拉取、新增抓取、指定页面插入或刷新、修改配置、同步和删除会访问网络或修改本地状态，Agent 必须先得到用户当前请求或明确确认。
 
 ## 创建与搜索
 
@@ -42,6 +42,33 @@ loci mcp call loci_search_files --input '{"queries":["router"]}'
 `loci_search_files` 会先尝试精确匹配；没有结果时再放宽搜索条件。搜索 API 名、配置键和错误原文时，优先使用原始文本。
 
 同一域名、同一路径的网页库会复用已有文档库；同一站点的不同路径可以独立收录。
+
+## 抓取指定 URL
+
+已有网页文档库缺少一个已知的官方页面时，使用 `loci_fetch_pages`，无需扩大自动发现范围：
+
+```json
+{
+  "library_id": "目标文档库 ID",
+  "urls": ["https://docs.example.com/api/new-page", "https://docs.example.com/reference/special"],
+  "wait_for_completion": true
+}
+```
+
+指定 URL 可以位于 `scope_path` 外，但必须与文档库 hostname 相同，且不能命中 `exclude_path`。工具只抓数组里的页面，不读取 Sitemap、`llms.txt` 或 OpenAPI，也不跟随页面链接。结果逐页返回 `inserted`、`updated`、`unchanged`、`missing` 或 `failed`；临时失败保留已有正文，404/410 会删除旧正文并保留 `missing` 目标。整库同步会同时刷新已登记的全部指定页面。
+
+第一次建库就只需要少量页面时，可使用 `loci_add_library` 的 `selected` 模式。`url` 是第一个指定页，`urls` 是其余页面：
+
+```json
+{
+  "url": "https://docs.example.com/api/one",
+  "urls": ["https://docs.example.com/api/two"],
+  "discovery_mode": "selected",
+  "wait_for_completion": true
+}
+```
+
+该模式不进行站点发现。若文档源仍为 `auto`，首批只用第一个页面探测一次抓取方式，后续页面复用选出的 HTTP 或浏览器模式。
 
 ## 等待同步结果
 

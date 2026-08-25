@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
@@ -10,6 +9,7 @@ import {
   normalizeScopePath,
   normalizeUrl,
   parseGithubRepositoryUrl,
+  type ExplicitPageResult,
   type GithubBlockedState
 } from '@loci/core'
 import { deleteDocumentsOutsideScope } from './database-source-scope.js'
@@ -71,8 +71,15 @@ import {
   withTransaction,
   type SourceConfig
 } from './database-local-source.js'
+import {
+  commitExplicitPageResults,
+  createExplicitPageDatabase,
+  initializeExplicitPageDatabase,
+  type ExplicitPageDatabase
+} from './explicit-page-database.js'
 
 export { LOCI_SCHEMA_VERSION } from './database-schema.js'
+export { databaseNeedsMigration } from './database-lifecycle.js'
 
 export type { SourceConfig } from './database-local-source.js'
 
@@ -80,6 +87,7 @@ export interface SourceCrawlCommit {
   documents: StoredDocument[]
   deletedUrls: string[]
   replaceAll: boolean
+  explicitPages?: readonly ExplicitPageResult[]
   resolution: {
     firstUrl: string
     mode: 'http' | 'browser'
@@ -96,7 +104,8 @@ export interface LociDatabase
     CrawlHistoryDatabase,
     DocumentContentDatabase,
     SkillInstallationDatabase,
-    LocalJobDatabase {
+    LocalJobDatabase,
+    ExplicitPageDatabase {
   schemaVersion: number
   listSources: () => DocumentSource[]
   createSource: (input: CreateSourceInput) => DocumentSource
@@ -115,19 +124,6 @@ export interface LociDatabase
   exportBackup: () => LociBackup
   importBackup: (input: unknown) => BackupImportSummary
   close: () => void
-}
-
-export function databaseNeedsMigration(filename: string): boolean {
-  if (filename === ':memory:' || !existsSync(filename)) return true
-  const database = new DatabaseSync(filename, { readOnly: true })
-  try {
-    const row = database.prepare('PRAGMA user_version').get() as unknown as {
-      user_version: number
-    }
-    return row.user_version < LOCI_SCHEMA_VERSION
-  } finally {
-    database.close()
-  }
 }
 
 export type CreateDatabaseOptions = SettingsInitializationOptions
@@ -156,6 +152,7 @@ export function createDatabase(
     database.exec(LOCI_DATABASE_SCHEMA)
     initializeCrawlHistoryDatabase(database)
     initializeLocalJobDatabase(database)
+    initializeExplicitPageDatabase(database)
     migrateDatabase(database, row.user_version)
     initializeSettings(database, options)
     database.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION}`)
@@ -173,6 +170,7 @@ export function createDatabase(
     ...createDocumentContentDatabase(database),
     ...createSkillInstallationDatabase(database),
     ...createLocalJobDatabase(database),
+    ...createExplicitPageDatabase(database),
     listSources: () => {
       const rows = database
         .prepare(
@@ -326,6 +324,8 @@ export function createDatabase(
           if (Number(result.changes) !== 1) throw new Error('文档源不存在')
           if (!repository) {
             deleteDocumentsOutsideScope(database, id, hostname, scopePath, excludePathPattern)
+          } else {
+            database.prepare('DELETE FROM explicit_page_targets WHERE source_id = ?').run(id)
           }
         })
       } catch (error) {
@@ -357,6 +357,9 @@ export function createDatabase(
             for (const url of new Set(commit.deletedUrls)) deleteStoredDocument(database, id, url)
           }
           for (const document of commit.documents) storeDocument(database, document)
+          if (commit.explicitPages?.length) {
+            commitExplicitPageResults(database, id, commit.explicitPages, commit.resolution.mode)
+          }
           updateResolvedSourceRecord(
             database,
             id,

@@ -1,6 +1,12 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { crawlSource, GithubLimitError, type CrawlNode, type CrawlProgress } from '@loci/core'
+import {
+  crawlSource,
+  fetchExplicitPages,
+  GithubLimitError,
+  type CrawlNode,
+  type CrawlProgress
+} from '@loci/core'
 import type {
   CreateSourceInput,
   CrawlRunState,
@@ -11,7 +17,12 @@ import { CloudAdminClient } from './cloud-admin-client.js'
 import { CloudLibraryService, cloudLibraryLockKey } from './cloud-library-service.js'
 import { CrawlTaskCoordinator } from './crawl-task-coordinator.js'
 import { createDatabase, databaseNeedsMigration, type LociDatabase } from './database.js'
-import { crawlRunState, waitForExternalCrawl } from './external-crawl.js'
+import { crawlRunState, waitForCrawlLockRelease, waitForExternalCrawl } from './external-crawl.js'
+import {
+  mergeExplicitPageProgress,
+  runExplicitPageFetch,
+  type ExplicitPageFetchResult
+} from './explicit-page-service.js'
 import { LocalBrowserCrawler, type BrowserInstallPrompt } from './browser-crawler.js'
 import { resolveLociCacheDir, resolveLociDataDir } from './data-path.js'
 import {
@@ -34,6 +45,12 @@ export interface LocalRuntime {
     onBrowserMissing?: BrowserInstallPrompt,
     signal?: AbortSignal
   ) => Promise<CrawlProgress>
+  fetchPages: (
+    sourceId: string,
+    urls: readonly string[],
+    onBrowserMissing?: BrowserInstallPrompt,
+    signal?: AbortSignal
+  ) => Promise<ExplicitPageFetchResult>
   createSource: (input: CreateSourceInput) => DocumentSource
   deleteSource: (sourceId: string) => void
   updateSourcePreservingSchedule: (
@@ -101,10 +118,23 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     } catch (error) {
       if (!(error instanceof RuntimeLockedError)) throw error
       if (!readRuntimeLock(dataDir, `crawl-${sourceId}`)) throw error
-      return waitForExternalCrawl(database, sourceId, (progress) => {
-        updateState(states, sourceId, progress, null, true)
-        onProgress?.(progress)
-      })
+      const pageFetchIsRunning = error.record?.owner.includes('指定页面抓取') === true
+      try {
+        const progress = await waitForExternalCrawl(
+          database,
+          sourceId,
+          (current) => {
+            updateState(states, sourceId, current, null, true)
+            onProgress?.(current)
+          },
+          signal
+        )
+        if (!pageFetchIsRunning) return progress
+      } catch (waitError) {
+        if (!pageFetchIsRunning || signal?.aborted) throw waitError
+      }
+      await waitForCrawlLockRelease(dataDir, sourceId, signal)
+      return runOnce(sourceId, onProgress, onBrowserMissing, signal)
     }
     try {
       const source = database.getSourceConfig(sourceId)
@@ -176,13 +206,32 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
             onProgress?.(progress)
           }
         })
-        if (result.progress.succeeded === 0 && result.progress.failed > 0) {
-          throw new Error(`抓取失败：${result.progress.failed} 个页面均未成功`)
+        const targets = database.listExplicitPageTargets(sourceId)
+        const explicit = targets.length
+          ? await fetchExplicitPages({
+              urls: targets.map((target) => target.url),
+              hostname: source.hostname,
+              excludePathPattern: source.excludePathPattern,
+              fetchMode: result.resolution.fetchMode,
+              concurrency:
+                result.resolution.fetchMode === 'browser'
+                  ? (source.browserConcurrency ?? settings.browserConcurrency)
+                  : (source.httpConcurrency ?? settings.httpConcurrency),
+              maxRetries: settings.maxRetries,
+              signal,
+              crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
+              beforeBrowserCrawl: () => browser.ensureInstalled(onBrowserMissing)
+            })
+          : undefined
+        const progress = mergeExplicitPageProgress(result.progress, explicit?.items ?? [])
+        if (progress.succeeded === 0 && progress.failed > 0) {
+          throw new Error(`抓取失败：${progress.failed} 个页面均未成功`)
         }
         database.commitSourceCrawl(sourceId, {
           documents,
           deletedUrls,
           replaceAll,
+          explicitPages: explicit?.items,
           resolution: {
             firstUrl: result.resolution.firstUrl,
             mode: result.resolution.fetchMode,
@@ -190,9 +239,9 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
             github: result.resolution.github
           }
         })
-        updateState(states, sourceId, result.progress, null, false)
-        database.finishCrawlRun(runId, 'completed', result.progress, null)
-        return result.progress
+        updateState(states, sourceId, progress, null, false)
+        database.finishCrawlRun(runId, 'completed', progress, null)
+        return progress
       } catch (error) {
         if (error instanceof GithubLimitError) {
           database.updateGithubBlocked(sourceId, {
@@ -231,6 +280,16 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     cloud: new CloudLibraryService(database, fetch, dataDir),
     admin: new CloudAdminClient(),
     crawlSource: run,
+    fetchPages: (sourceId, urls, onBrowserMissing, signal) => {
+      assertWritable()
+      return runExplicitPageFetch(
+        { database, browser, dataDir, owner },
+        sourceId,
+        urls,
+        onBrowserMissing,
+        signal
+      )
+    },
     createSource: (input) => {
       assertWritable()
       return database.createSource(input)

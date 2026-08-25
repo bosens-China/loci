@@ -104,6 +104,11 @@ export function createServices(): LociMcpServices {
       onProgress?.(completedProgress)
       return completedProgress
     },
+    fetchPages: async (_id, urls) => ({
+      runId,
+      items: urls.map((url) => ({ url, status: 'unchanged' as const })),
+      progress: completedProgress
+    }),
     deleteSource: () => undefined,
     isCrawling: () => false,
     getCrawlState: () => ({ ...runningState(), progress: completedProgress, running: false }),
