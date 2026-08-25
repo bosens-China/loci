@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.17.0](https://github.com/bosens-China/loci/compare/cli-v1.16.1...cli-v1.17.0) (2026-08-25)
+
+
+### Features
+
+* 支持指定页面抓取 ([e0e96e6](https://github.com/bosens-China/loci/commit/e0e96e6d938fa66a31ee7a566402ae1e4accac46))
+* 统一 Agent 全局接入 ([2b076d1](https://github.com/bosens-China/loci/commit/2b076d134ee3d8f48046aeb07aa0b05b53d64a8b))
+
+
+### Bug Fixes
+
+* 统一 Chromium headless shell 检查与启动 ([84db714](https://github.com/bosens-China/loci/commit/84db7142a5849b41687ff15c3de2351deb051700))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.13.0
+    * @loci/runtime bumped to 1.15.0
+    * @loci/shared bumped to 1.21.0
+
 ## [1.16.1](https://github.com/bosens-China/loci/compare/cli-v1.16.0...cli-v1.16.1) (2026-08-22)
 
 
