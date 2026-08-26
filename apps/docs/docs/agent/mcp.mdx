@@ -63,7 +63,9 @@ loci agent print-config antigravity
 
 Agent 调用 Loci 工具时，客户端启动 `loci mcp stdio`；会话结束后 stdio 进程随之退出。同步写操作进入共享的 SQLite 持久任务队列，并由该进程的轻量 worker 执行；如果后台服务已经认领同一来源，当前进程会等待并读取同一任务的最终结果。
 
-`loci service start` 启动的是不监听 HTTP、也不承载 MCP 的常驻 worker。定时计划和云端每日同步在开启时会自动准备它；普通后台同步使用队列空闲后自动退出的按需 worker。
+等待同步时，Loci 使用 MCP SDK 原生 Progress 逐页发送标题、URL 和结果，并接收 SDK Cancellation。取消本次调用新建的任务会停止实际抓取；取消一个复用已有任务的调用只停止跟随。Host 无法把原生进度或取消暴露给 Agent 时，`use-loci` Skill 会在任务启动前改用 [CLI 降级流程](/agent/mcp-tools#mcp-原生进度与-cli-降级)，MCP Server 本身不维护客户端兼容矩阵。
+
+`loci service start` 启动的是不监听 HTTP、也不承载 MCP 的常驻 worker。默认数据目录中的定时计划和云端每日同步会在开启时自动准备它；普通后台同步使用队列空闲后自动退出的按需 worker。上述自动准备在自定义 `LOCI_DATA_DIR` 下只启动 detached worker，不安装对应的登录或机器重启自启动定义；需要长期运行时应由外部进程管理器托管。
 
 ## 排查连接
 

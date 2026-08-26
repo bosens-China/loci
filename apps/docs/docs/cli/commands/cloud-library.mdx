@@ -4,7 +4,7 @@
 
 ## 修改默认的云端文档库地址
 
-正式版 CLI 默认连接 `https://loci.xiaowo.live`。如果使用自行部署的 Loci Server，可以将 `server-url` 改为对应地址。
+正式版 CLI 默认连接 `https://loci.xiaowo.live`。如果使用自行部署的 Loci Server，可以将 `server-url` 改为对应地址。`LOCI_SERVER_URL` 环境变量优先于持久设置；变量存在时，CLI 会拒绝 `config set server-url`，请先取消覆盖再修改。
 
 示例：
 
@@ -87,7 +87,7 @@ loci cloud remove "React 文档"
 loci cloud auto-sync "React 文档" on
 ```
 
-CLI 或 Web UI 开启每日同步时会立即安装或启动无 HTTP 的常驻 worker，关闭开关不会擅自停止 worker，因为其他文档库或定时抓取可能仍依赖它。Web 会话不承载检查，也不需要在退出时交接；常驻 worker 启动时检查一次云端更新，持续运行期间每天检查。详见[后台服务与 Web UI](/cli/commands/service)。
+使用默认数据目录时，CLI 或 Web UI 开启每日同步会立即安装或启动无 HTTP 的常驻 worker。关闭开关不会擅自停止 worker，因为其他文档库或定时抓取可能仍依赖它。Web 会话不承载检查，也不需要在退出时交接；常驻 worker 启动时检查一次云端更新，持续运行期间每天检查。设置 `LOCI_DATA_DIR` 时不保证登录或机器重启后恢复，长期运行需要外部进程管理器托管。详见[后台服务与 Web UI](/cli/commands/service)。
 
 关闭每日同步只会把来源标记切换为“云端副本 · 手动更新”，不会删除已经下载的正文。以后手动更新或重新开启自动更新时，Loci 会在完整快照校验成功后事务性替换旧内容；失败时继续保留当前可读版本。
 

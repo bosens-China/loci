@@ -122,7 +122,7 @@ interface LibrarySnapshot {
 ```
 
 `scopePath` 默认是 `/`，只收录该路径及其子路径；同一域名可以按不同范围建立多个文档库，
-但同一域名与范围组合不能重复。缩小范围会立即删除范围外的旧文档。
+但同一域名与范围组合不能重复。PUT 更换起始 URL 会立即清空全部正文，缩小范围会立即删除范围外的旧文档。
 
 `schedule` 使用五段 Linux Cron，传 `null` 表示关闭定时同步。批量同步任务由 Server
 统一排队，最多同时抓取 3 个文档库。任务、进度、所有者和租约保存在 SQLite；共享同一
@@ -132,9 +132,13 @@ interface LibrarySnapshot {
 后，服务端会比较入口页的 HTTP 与浏览器渲染结果，再为整个文档库选择一种抓取方式；
 后续页面不会重复双通道抓取。
 
-Node HTTP 和浏览器请求都会拒绝回环、局域网及链路本地地址。浏览器还会禁止跨
-hostname 导航、弹窗、下载和权限申请。生产机应同时通过主机防火墙或云网络策略
-阻断容器访问内网及云元数据地址，避免仅依赖应用层 DNS 检查。
+Node HTTP 和浏览器请求都会拒绝回环、RFC 1918 私网、链路本地及其他非公网地址。
+浏览器还会禁止跨 hostname 导航、弹窗、下载和权限申请。这些应用层 DNS 校验只是
+纵深防御，不能作为生产环境的唯一 SSRF 边界。生产部署必须通过主机防火墙、云网络
+策略或受控出口代理，在每个实际发起目标连接的执行环境阻断 RFC 1918、loopback、link-local、
+IPv6 本地地址和云元数据服务。默认本地 Chromium 模式需覆盖 Loci Server 容器；远程 Browserless
+模式还必须覆盖 Browserless 执行环境。无法验证远程执行环境的出口策略时，不应用它抓取不完全受信任的
+目标 URL。即使应用校验或 DNS 解析出现竞态，网络层也必须拒绝对应连接。
 
 Compose 默认直接启动镜像内的 Chromium headless shell。Docker 构建分步安装 Chromium
 系统依赖和 `playwright install --only-shell chromium`，不会下载带界面的完整 Chromium。

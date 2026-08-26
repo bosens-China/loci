@@ -137,6 +137,8 @@ loci config set batch-interval-seconds 2
 
 云端文档库地址的作用范围请查看[云端文档库](/cli/commands/cloud-library)。Agent 的 stdio MCP 配置请查看[通过 MCP 接入](/agent/mcp)。
 
+`LOCI_SERVER_URL` 的优先级高于数据目录中保存的 `server-url`。环境变量存在时，`config list` 会标出覆盖来源，`config set server-url` 会拒绝保存，避免把未生效的值误报为成功。需要修改持久设置时，先取消该环境变量，再运行 `config set`。
+
 ## 隔离数据目录
 
 测试、演示或自动化任务可以设置 `LOCI_DATA_DIR`，让当前命令使用独立的数据目录：
@@ -146,6 +148,16 @@ LOCI_DATA_DIR=./.loci-test loci status
 ```
 
 日常使用不建议设置此变量，否则 CLI 与 MCP 可能读取不同的文档库。同一套自动化流程需要在每条相关命令中使用相同的数据目录。
+
+自定义数据目录与默认用户级登录服务隔离。开启计划任务或云端每日同步时，Loci 只为该目录启动当前登录会话中的 detached worker；它可以在终端退出后继续运行，但不保证进程退出、注销或机器重启后自动恢复。长期运行应由容器或系统进程管理器设置相同的 `LOCI_DATA_DIR`，并执行 `loci service run`。
+
+## 覆盖缓存目录
+
+`LOCI_CACHE_DIR` 覆盖 Loci 缓存目录，包括 Chromium headless shell 的安装和查找位置。它是进程级环境变量，不是 `loci config set` 的持久设置；只在单条命令前临时设置，不会改写共享配置。所有可能安装、查找或使用浏览器的 CLI、MCP 和 worker 进程必须使用同一个值，否则可能出现一个进程已安装、另一个进程仍找不到浏览器的情况。长期 worker 应由其服务或进程管理器显式设置该变量。
+
+```bash
+LOCI_CACHE_DIR=./.loci-cache loci browser install
+```
 
 ## 处理脚本退出码
 

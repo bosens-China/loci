@@ -6,7 +6,7 @@
 
 ### `loci source add [url]`
 
-将任意公开文档页作为入口。只提供 URL 时，Loci 会自动生成名称，以 `auto` 模式抓取整个站点，页面上限为 1,000，并立即开始首次同步。
+将任意公开文档页作为入口。首次使用或当前数据目录没有已保存的创建偏好时，只提供 URL 会自动生成名称，以 `auto` 模式、1,000 页上限和整站范围开始，并立即执行首次同步。交互终端之后会复用最近的抓取方式、页面上限和收录路径层级；显式选项始终优先，非交互调用不读取这些偏好。
 
 ```bash
 loci source add https://rspress.rs/guide/introduction.html
@@ -14,16 +14,20 @@ loci source add https://rspress.rs/guide/introduction.html
 
 常用选项如下：
 
-| 参数                           | 用途                                        |
-| ------------------------------ | ------------------------------------------- |
-| `--url <url>`                  | 覆盖位置参数中的入口 URL。                  |
-| `--name <name>`                | 指定文档源名称。                            |
-| `--scope <path>`               | 只收录指定路径，例如 `/guide`。             |
-| `--page-limit <number>`        | 限制最多收录的页面数。                      |
-| `--mode <auto\|http\|browser>` | 选择自动、HTTP 或浏览器抓取。               |
-| `--exclude-path <regex>`       | 排除匹配的 URL 路径，例如不需要的语言目录。 |
-| `--no-sync`                    | 只保存文档源，稍后再同步。                  |
-| `--background`                 | 提交持久后台任务，使当前终端立即返回。      |
+| 参数                             | 用途                                        |
+| -------------------------------- | ------------------------------------------- |
+| `--url <url>`                    | 覆盖位置参数中的入口 URL。                  |
+| `--name <name>`                  | 指定文档源名称。                            |
+| `--scope <path>`                 | 只收录指定路径，例如 `/guide`。             |
+| `--page-limit <number>`          | 限制最多收录的页面数。                      |
+| `--mode <auto\|http\|browser>`   | 选择自动、HTTP 或浏览器抓取。               |
+| `--exclude-path <regex>`         | 排除匹配的 URL 路径，例如不需要的语言目录。 |
+| `--http-concurrency <number>`    | 覆盖这个普通站点的 HTTP 并发数。            |
+| `--browser-concurrency <number>` | 覆盖这个普通站点的浏览器并发数。            |
+| `--archive-limit <size>`         | 覆盖这个 GitHub 仓库的 ZIP 上限。           |
+| `--markdown-limit <size>`        | 覆盖这个 GitHub 仓库的 Markdown 总量上限。  |
+| `--no-sync`                      | 只保存文档源，稍后再同步。                  |
+| `--background`                   | 提交持久后台任务，使当前终端立即返回。      |
 
 `--background` 与 `--no-sync` 不能同时使用。CLI 会在执行前直接拒绝这组冲突参数。
 
@@ -63,9 +67,23 @@ loci browser install
 
 前台同步也会先写入持久任务队列再等待结果。重复同步同一文档源时，Loci 会复用正在运行的任务；即使后台服务或另一个 MCP 入口先认领，CLI 也会读取同一份进度与最终结果。失败或取消后，可以再次执行同步。
 
+### `loci task`
+
+抓取任务具有稳定 ID，并持久保存每个页面的完成事件。可以在另一个终端查看、跟随或取消：
+
+```bash
+loci task list
+loci task status <任务 ID>
+loci task follow <任务 ID>
+loci task follow <任务 ID> --format jsonl
+loci task cancel <任务 ID>
+```
+
+`task follow` 会从持久事件按序读取逐页进度，轮询较慢或重新运行命令不会影响后台抓取。跟随时按 `Ctrl+C` 只退出当前显示并保留任务；`task cancel` 才会取消 pending 或 running 任务，重复取消会返回相同终态。
+
 ### `loci source list`
 
-列出本地文档源，包括页面数、内容大小、抓取方式和收录范围：
+列出本地文档源，包括页面数、内容大小、页面获取方式和收录范围：
 
 ```bash
 loci source list
@@ -73,13 +91,15 @@ loci source list
 
 ### `loci source update [source]`
 
-修改文档源名称、入口 URL、抓取方式、页面上限或收录范围。完全省略修改选项时，CLI 会进入编辑向导：
+修改文档源名称、入口 URL、页面获取方式、页面上限或收录范围。完全省略修改选项时，CLI 会进入编辑向导：
 
 ```bash
 loci source update rspress --page-limit 300
 ```
 
-修改 URL 或范围后，建议立即同步以更新已收录内容。
+`update` 同样支持 `--http-concurrency`、`--browser-concurrency`、`--archive-limit` 和 `--markdown-limit`。省略覆盖值时会保留当前来源设置；创建时省略则继承共享设置。
+
+切换来源类型、把 URL 切换到其他 hostname，或把 GitHub 来源切换到另一仓库，会立即清空现有正文。收窄范围或新增、修改排除规则会在保存事务中立即删除不再匹配的正文和搜索索引，不会等到下次同步。交互向导会在保存前再次警告；显式传入更新选项表示脚本已经确认对应影响。保存后建议立即同步。
 
 ### `loci source runs [source]` 与 `loci source logs [run]`
 
@@ -110,7 +130,7 @@ loci schedule set rspress off
 loci schedule list
 ```
 
-保存启用的计划时，CLI 或 Web UI 会立即确保无 HTTP 的用户级常驻 worker 可用。Web 会话与 worker 可以同时运行，之后无需保持终端或浏览器打开；机器恢复或服务重新启用后，错过的多个时间点最多合并补跑一次。旧脚本中的 `manual` 仍可作为 `off` 的兼容别名。
+使用默认数据目录时，保存启用的计划会立即确保无 HTTP 的用户级常驻 worker 可用。Web 会话与 worker 可以同时运行，之后无需保持终端或浏览器打开；机器恢复或服务重新启用后，错过的多个时间点最多合并补跑一次。设置 `LOCI_DATA_DIR` 时只会为该目录启动当前登录会话中的独立 detached worker，不会安装对应的登录或重启自启动定义；需要长期运行时应由容器或进程管理器执行同一环境下的 `loci service run`。旧脚本中的 `manual` 仍可作为 `off` 的兼容别名。
 
 服务状态和停用方式请查看[后台服务与 Web UI](/cli/commands/service)。计划列表为空时，CLI 会提示先创建文档源或使用 `schedule set` 配置计划。
 

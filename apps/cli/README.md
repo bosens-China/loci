@@ -12,7 +12,7 @@ pnpm --filter @boses/cli test
 pnpm --filter @boses/cli typecheck
 ```
 
-`pnpm dev` 默认使用仓库内的 `.loci-dev` 隔离数据与缓存，适合日常开发。需要直接复现正式 `loci ui` 中的数据问题时，显式运行 `pnpm dev:user`；它遵循 Runtime 的正式数据目录规则以及 `LOCI_DATA_DIR`、`LOCI_CACHE_DIR` 覆盖，并且 Web 中的写操作会直接修改对应数据。
+`pnpm dev` 默认使用仓库内的 `.loci-dev` 隔离数据与缓存，适合日常开发。需要直接复现正式 `loci ui` 中的数据问题时，显式运行 `pnpm dev:user`；它遵循 Runtime 的正式数据目录规则以及 `LOCI_DATA_DIR`、`LOCI_CACHE_DIR` 覆盖，并且 Web 中的写操作会直接修改对应数据。`LOCI_CACHE_DIR` 是进程级的浏览器缓存目录覆盖，不会自动变成持久配置；联调 CLI 与 worker 时必须为所有进程传入同一个值。
 
 CLI 构建会先构建 `@loci/web`，再把产物复制到 npm 包的 `dist/resources/ui`。本地验证前台 Web 会话：
 
@@ -28,7 +28,7 @@ node dist/index.js ui --no-open
 node dist/index.js --help
 ```
 
-正式版默认连接 `https://loci.xiaowo.live`。联调本地 Server 时显式覆盖地址：
+正式版默认连接 `https://loci.xiaowo.live`。联调本地 Server 时显式覆盖地址。`LOCI_SERVER_URL` 高于持久 `server-url`；变量存在时，`loci config set server-url` 会拒绝保存，避免误报成功：
 
 ```bash
 LOCI_SERVER_URL=http://localhost:7001 node dist/index.js doctor

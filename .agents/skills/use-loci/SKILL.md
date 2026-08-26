@@ -16,12 +16,14 @@ description: 使用 Loci 发现、获取、同步、搜索和阅读开发者技�
 
 ## 调用通道路由
 
-开始 Loci 流程前，由 Agent 判断当前会话是否已经提供可调用的 `loci_*` MCP 工具；必要时使用客户端的工具发现能力确认。不要让用户判断 MCP 是否存在。
+开始 Loci 流程前，由 Agent 判断当前会话是否已经提供可调用的 `loci_*` MCP 工具；必要时使用客户端的工具发现能力确认。不要让用户判断 MCP 是否存在。对于需要等待的抓取或同步，还要判断当前 Agent/Host 是否能把 MCP 原生 Progress 暴露给 Agent，并能对运行中的工具请求发送 Cancellation；这是调用工具的能力，不由 Loci MCP Server 猜测客户端类型。
 
-- 如果 `loci_list_libraries` 等 Loci MCP 工具可用，直接调用这些工具。不要读取 CLI 参考、检查或安装 npm 包，也不要对同一操作再调用 CLI。
-- 如果当前会话没有任何可调用的 Loci MCP 工具，完整读取 [CLI 调用参考](references/cli.md)，按其中流程检查 CLI、询问安装授权，并通过 `loci mcp call` 调用后续工具。
+- 如果 `loci_list_libraries` 等 Loci MCP 工具可用，普通发现、读取和短操作直接调用这些工具。不要对同一操作再调用 CLI。
+- 长时间抓取同时具备 MCP 原生 Progress 和 Cancellation 时，使用 MCP 并设置 `wait_for_completion: true`，把每个页面的完成进度及时告诉用户；用户要求停止时取消当前工具请求。
+- 长时间抓取缺少 Progress 或 Cancellation 任一能力时，即使其他 Loci MCP 工具可用，也完整读取 [CLI 调用参考](references/cli.md)，在启动抓取前改走 CLI 的逐页输出与任务取消流程。不要先启动 MCP 抓取再因看不到进度中途切换。
+- 如果当前会话没有任何可调用的 Loci MCP 工具，同样读取 CLI 参考，按其中流程检查 CLI、询问安装授权，并通过 `loci mcp call` 调用后续工具。
 - 不要为了进入 CLI 分支而配置 MCP、启动 stdio 进程或要求用户重开会话。
-- 两条通道使用相同工具名、JSON 输入、结构化结果、检索流程和安全边界。选定通道后，在当前任务中保持一致；只有当前通道实际失效时才重新判定。
+- 两条通道使用相同工具名、JSON 输入、结构化结果、检索流程和安全边界。选定通道后，在当前长任务中保持一致；只有当前通道实际失效时才重新判定。CLI 降级只改变调用载体，不扩大写操作授权。
 
 ## 与其他文档 Skill 共存
 
@@ -90,7 +92,24 @@ description: 使用 Loci 发现、获取、同步、搜索和阅读开发者技�
 - 返回 `unknown` 时不为估算完整预抓取站点；可省略这些参数使用产品基础值，并在同步结果显示触及上限时再说明和调整。
 - 产品基础值仍为 `auto`、1,000 页、根路径，源级并发和 GitHub 大小上限继承全局设置。工具不读取普通 CLI 的最近偏好。
 
-同一域名和同一路径会复用；同一域名的不同路径可以分别建库。GitHub 仓库会统一按 `auto` 和根路径规范化，无需传网页模式或路径范围。
+同一域名和同一路径只在持久发现模式一致时复用：普通站点与 `selected` 使用 `site`，`agent_review` 使用独立模式。同一域名的不同路径可以分别建库。模式冲突时工具会返回已有文档库和失败状态，不会静默转换；继续使用已有模式，或在单独取得删除与重新抓取授权后删除旧库再重建。GitHub 仓库会统一按 `auto` 和根路径规范化，无需传网页模式或路径范围。
+
+工具返回的 `kind` 用于区分普通站点与 GitHub 仓库，`resolved_discovery` 表示最近一次同步实际采用的 `llms`、`openapi`、`pages` 或 `github` 路径；`mode` 只表示页面获取方式。除非用户要求改变来源或范围，不因这些只读结果主动更新文档库。
+
+### Agent 审查式抓取
+
+用户希望用“只收录 API 和组件”等语义目标筛选动态发现的页面，并已授权首次抓取时，调用 `loci_add_library`，设置 `discovery_mode: "agent_review"` 和具体的 `review_goal`。该模式只支持本地网页文档库，不用于 GitHub 仓库或云端副本。
+
+返回 `url_review.status=awaiting_review` 后，按以下循环处理，不要把逐批判断转交给用户：
+
+1. 阅读 `goal`，逐项审查当前 `candidates` 的 `title`、`url`、`title_source` 和可选 `discovered_from`。
+2. 只把明确不符合目标的 URL 放入 `exclude_urls`；不要提交批准清单。候选也可能是文档库已有正文，排除这类 URL 会在审查完成事务中删除对应正文与搜索索引。
+3. 调用 `loci_submit_url_review`，原样传回 `run_id`、`batch_id`，并显式设置 `approve_remaining: true`。这表示批准当前批次中未排除的全部 URL。
+4. 新页面产生下一批时重复以上步骤，直到 `status=completed`。中断或不确定当前批次时，先调用 `loci_get_url_review` 读取状态：`discovering` 时用同一 `library_id` 重调 `loci_start_url_review` 继续发现；`awaiting_review` 时提交返回的当前批次；`completed`、`failed` 或 `cancelled` 是终态。不要重新建库或默认批准。
+
+已有审查模式文档库需要 Agent 再次参与发现时，在取得主动同步授权后调用 `loci_start_url_review`，再执行相同循环。用户要求停止时调用 `loci_cancel_url_review`。同一活动运行和重复批次提交会幂等复用；同一批次不得改用另一份排除清单。
+
+普通 `loci_sync_libraries`、Web、CLI、计划任务和后台 worker 不参与语义判断：对审查模式文档库只刷新已经收录的 URL，不发现新 URL，也不进入等待状态。`404/410` 删除旧正文；网络错误、超时、`408`、`429`、`5xx` 与浏览器错误保留旧正文。不要用普通同步替代用户要求的 Agent 审查式同步。
 
 ### 补充或刷新指定页面
 
@@ -98,6 +117,7 @@ description: 使用 Loci 发现、获取、同步、搜索和阅读开发者技�
 
 - 指定页可以位于自动发现的 `scope_path` 外，但必须与文档库 hostname 相同，且不能命中 `exclude_path`。
 - 工具只抓传入 URL，不跟随页面链接。不要因为正文出现了新链接就未经说明继续添加。
+- 需要在当前调用中观察结果时设置 `wait_for_completion: true`；MCP 路径会逐页使用原生 Progress，并在用户要求停止时取消当前工具请求。
 - 没有对应文档库时，可在得到首次抓取授权后调用 `loci_add_library`，设置 `discovery_mode: "selected"`，把第一个页面放在 `url`，其余页面放在 `urls`；该模式不执行 Sitemap、`llms.txt`、OpenAPI 或链接发现。
 - 文档源仍为 `auto` 时，首批页面只探测一次 HTTP/浏览器模式，批次内其他页面及后续更新复用结果。
 - `404/410` 会删除旧正文但保留 `missing` 目标；临时失败保留旧正文。需要使用新内容回答时，等待完成后重新读取 Loci 文件。
@@ -106,11 +126,11 @@ description: 使用 Loci 发现、获取、同步、搜索和阅读开发者技�
 
 ## 抓取与同步确认
 
-把云端拉取、新增抓取、指定页面插入或刷新、修改文档库配置和主动同步视为会修改本地状态的操作。调用 `loci_pull_cloud_library`、`loci_add_library`、`loci_fetch_pages`、`loci_update_library` 或 `loci_sync_libraries` 前，说明目标并取得用户确认；用户当前请求已经明确要求对应操作时，无需再次确认。不同写操作的授权不能相互沿用。`loci_update_library` 不会自动同步；收窄范围或新增排除规则可能立即删除不再匹配的本地文件，应在确认中说明。
+把云端拉取、新增抓取、指定页面插入或刷新、修改文档库配置和主动同步视为会修改本地状态的操作。调用 `loci_pull_cloud_library`、`loci_add_library`、`loci_fetch_pages`、`loci_update_library`、`loci_sync_libraries` 或 `loci_start_url_review` 前，说明目标并取得用户确认；用户当前请求已经明确要求对应操作时，无需再次确认。一次审查式抓取的授权覆盖其后必要的读取与提交批次，不需要逐批重复确认。不同写操作的授权不能相互沿用。`loci_update_library` 不会自动同步；收窄范围或新增、修改排除规则会在保存事务中立即删除不再匹配的正文与搜索索引，命中排除规则的显式页面目标也会被移除、后续整库同步不再刷新；应在确认中明确说明“保存即删除”，不能写成下次同步时才删除。
 
 `loci_sync_libraries` 只用于已经存在的网页文档库；不存在的文档库必须通过云端拉取或添加官方入口获取。不要为每个问题同步文档库，仅在用户要求最新信息、文档库长期没有成功更新、本地结果明显缺失或可能与官网不一致时建议同步。
 
-用户已授权同步，但另一个工具或 Agent 可能已经启动任务时，先以 `{"library_ids":["目标文档库 ID"]}` 调用 `loci_get_sync_status`。`sync_status=syncing` 时跟随已有任务，不要并行启动第二份抓取；确实需要在当前调用中等待时，对同一文档库调用 `loci_sync_libraries` 并设置 `wait_for_completion: true`。Loci 会复用当前进程中的任务，跨进程调用则由文档源锁阻止重复写入。
+用户已授权同步，但另一个工具或 Agent 可能已经启动任务时，先以 `{"library_ids":["目标文档库 ID"]}` 调用 `loci_get_sync_status`。对 `discovery_mode=agent_review` 的文档库，任何带活动 `run_id` 的审查运行都先调用 `loci_get_url_review`，不论外层 `sync_status` 是 `syncing` 还是 `awaiting_review`：内层状态为 `discovering` 时用同一 `library_id` 重调 `loci_start_url_review`，为 `awaiting_review` 时提交当前批次。不要把审查运行的 `syncing` 当作会自动推进的普通同步。其他文档库在 `sync_status=syncing` 时跟随已有任务，不要并行启动第二份抓取。确实需要在当前调用中等待普通同步时，对同一文档库调用 `loci_sync_libraries` 并设置 `wait_for_completion: true`。MCP 路径使用 SDK 原生 Progress 和 Cancellation；当前 Host 无法让 Agent 使用其中任一能力时，按调用通道路由改走 CLI。Loci 会复用活动任务，跨进程调用由持久任务 single-flight 阻止重复写入。
 
 同步响应只返回失败总数、原因统计和少量样例。需要完整失败详情时，取返回的 `run_id` 调用 `loci_list_sync_failures` 分页读取；`library_id` 用于实时状态，`run_id` 用于特定同步历史。不要因为摘要省略了其余失败就反复启动同步。
 
