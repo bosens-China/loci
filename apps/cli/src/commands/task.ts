@@ -4,7 +4,7 @@ import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { createCliRuntime, type CliRuntime } from '../runtime.js'
 import { ensureLocalJobWorkerRunning } from '../service-manager.js'
-import { printTable } from '../ui.js'
+import { askSelect, printTable } from '../ui.js'
 
 interface FollowOptions {
   format: 'text' | 'jsonl'
@@ -28,28 +28,37 @@ export function registerTaskCommands(program: Command): void {
     )
 
   task
-    .command('status <task>')
-    .description('查看一个任务的当前状态')
-    .action((reference: string) =>
-      runWithRuntime('任务状态', async (runtime) =>
-        JSON.stringify(resolveTask(runtime, reference), null, 2)
-      )
+    .command('status [task]')
+    .description('查看一个任务的当前状态；省略时交互选择')
+    .action((reference: string | undefined) =>
+      runWithRuntime('任务状态', async (runtime) => {
+        const job = await resolveTaskInteractive(runtime, reference)
+        return JSON.stringify(job, null, 2)
+      })
     )
 
   task
-    .command('follow <task>')
-    .description('从持久事件中逐页跟随任务；Ctrl+C 只停止跟随')
+    .command('follow [task]')
+    .description('从持久事件中逐页跟随任务；Ctrl+C 只停止跟随；省略时交互选择')
     .addOption(
       new Option('--format <format>', '输出格式').choices(['text', 'jsonl']).default('text')
     )
-    .action((reference: string, options: FollowOptions) => followTask(reference, options))
+    .action(async (reference: string | undefined, options: FollowOptions) => {
+      const runtime = createCliRuntime()
+      try {
+        const job = await resolveTaskInteractive(runtime, reference)
+        await followTask(runtime, job, options)
+      } finally {
+        await runtime.close()
+      }
+    })
 
   task
-    .command('cancel <task>')
-    .description('按任务 ID 请求取消 pending 或 running 任务')
-    .action((reference: string) =>
+    .command('cancel [task]')
+    .description('请求取消 pending 或 running 任务；省略时交互选择')
+    .action((reference: string | undefined) =>
       runWithRuntime('取消任务', async (runtime) => {
-        const job = resolveTask(runtime, reference)
+        const job = await resolveTaskInteractive(runtime, reference)
         const current = runtime.database.requestLocalJobCancellation(job.id)
         if (!current) throw new CliError('任务不存在', 2)
         return current.status === 'cancelled'
@@ -61,8 +70,11 @@ export function registerTaskCommands(program: Command): void {
     )
 }
 
-async function followTask(reference: string, options: FollowOptions): Promise<void> {
-  const runtime = createCliRuntime()
+async function followTask(
+  runtime: CliRuntime,
+  initial: LocalJob,
+  options: FollowOptions
+): Promise<void> {
   let detached = false
   const detach = (): void => {
     detached = true
@@ -70,7 +82,6 @@ async function followTask(reference: string, options: FollowOptions): Promise<vo
   process.once('SIGINT', detach)
   process.once('SIGTERM', detach)
   try {
-    const initial = resolveTask(runtime, reference)
     if (isActive(initial)) await ensureLocalJobWorkerRunning()
     let sequence = 0
     while (!detached) {
@@ -94,7 +105,6 @@ async function followTask(reference: string, options: FollowOptions): Promise<vo
   } finally {
     process.off('SIGINT', detach)
     process.off('SIGTERM', detach)
-    await runtime.close()
   }
 }
 
@@ -105,6 +115,31 @@ function resolveTask(runtime: CliRuntime, reference: string): LocalJob {
   if (matches.length === 0) throw new CliError(`找不到任务：${reference}`, 2)
   if (matches.length > 1) throw new CliError(`任务短 ID 不唯一：${reference}`, 2)
   return matches[0]!
+}
+
+/** 省略参数时在 TTY 下交互选择任务；非 TTY 必须传入 reference。 */
+async function resolveTaskInteractive(
+  runtime: CliRuntime,
+  reference: string | undefined
+): Promise<LocalJob> {
+  if (reference !== undefined) return resolveTask(runtime, reference)
+  if (!process.stdin.isTTY) throw new CliError('非交互终端必须指定任务 ID', 2)
+  return selectTask(runtime)
+}
+
+/** 从最近任务列表中交互选择一个任务。 */
+async function selectTask(runtime: CliRuntime): Promise<LocalJob> {
+  const jobs = runtime.database.listLocalJobs(50)
+  if (jobs.length === 0) throw new CliError('还没有本地任务', 2)
+  const id = await askSelect(
+    '请选择任务',
+    jobs.map((job) => ({
+      value: job.id,
+      label: `${job.id.slice(0, 8)} · ${job.status}`,
+      hint: `${job.sourceId ?? '—'} · ${progressText(job)} · ${job.trigger}`
+    }))
+  )
+  return jobs.find((job) => job.id === id)!
 }
 
 function writeEvent(event: LocalJobEvent, format: FollowOptions['format']): void {

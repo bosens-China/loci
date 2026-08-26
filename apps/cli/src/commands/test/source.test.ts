@@ -170,7 +170,7 @@ describe('文档源最短输入', () => {
     await expect(
       createProgram().parseAsync(['source', 'delete'], { from: 'user' })
     ).rejects.toThrow('非交互终端请传入 --yes')
-    await expect(createProgram().parseAsync(['cloud', 'remove'], { from: 'user' })).rejects.toThrow(
+    await expect(createProgram().parseAsync(['cloud', 'delete'], { from: 'user' })).rejects.toThrow(
       '非交互终端请传入 --yes'
     )
   })
@@ -257,9 +257,9 @@ describe('文档源最短输入', () => {
     expect(events).toEqual(['catalog', 'ensure', 'snapshot'])
     await runtime.close()
 
-    await program().parseAsync(['cloud', 'auto-sync', cloudSource!.id, 'off'], { from: 'user' })
+    await program().parseAsync(['cloud', 'auto-sync', cloudSource!.id, '--off'], { from: 'user' })
     expect(ensureService).toHaveBeenCalledOnce()
-    await program().parseAsync(['cloud', 'auto-sync', cloudSource!.id, 'on'], { from: 'user' })
+    await program().parseAsync(['cloud', 'auto-sync', cloudSource!.id, '--on'], { from: 'user' })
     expect(ensureService).toHaveBeenCalledTimes(2)
 
     runtime = createCliRuntime()
@@ -270,10 +270,10 @@ describe('文档源最短输入', () => {
   })
 
   it('非交互查看同步记录时要求指定来源或明确传入 --all', async () => {
-    await expect(createProgram().parseAsync(['source', 'runs'], { from: 'user' })).rejects.toThrow(
-      '非交互终端必须指定文档源或传入 --all'
-    )
-    await createProgram().parseAsync(['source', 'runs', '--all'], { from: 'user' })
+    await expect(
+      createProgram().parseAsync(['source', 'history'], { from: 'user' })
+    ).rejects.toThrow('非交互终端必须指定文档源或传入 --all')
+    await createProgram().parseAsync(['source', 'history', '--all'], { from: 'user' })
   })
 
   it('带 URL 创建后默认执行一次首次同步', async () => {

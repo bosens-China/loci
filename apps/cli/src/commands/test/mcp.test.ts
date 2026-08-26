@@ -111,7 +111,7 @@ describe('Agent MCP 配置', () => {
       '请使用完整的 loci agent 子命令和参数'
     )
     await expect(
-      createProgram().parseAsync(['agent', 'config', 'codex'], { from: 'user' })
-    ).resolves.toBeDefined()
+      createProgram().parseAsync(['agent', 'connect', 'codex'], { from: 'user' })
+    ).rejects.toThrow('非交互写入 Agent 配置必须传入 --yes')
   })
 })

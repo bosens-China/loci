@@ -206,7 +206,7 @@ export function registerSourceCommands(program: Command): void {
         })
         if (syncAfterSave && options.background) {
           await startBackgroundSourceSync(saved.id)
-          return `已添加文档源“${saved.name}”并启动后台同步；运行 loci source runs ${saved.id.slice(0, 8)} 查看记录`
+          return `已添加文档源“${saved.name}”并启动后台同步；运行 loci source history ${saved.id.slice(0, 8)} 查看记录`
         }
         if (syncAfterSave) return syncSource(runtime, saved)
         return `已添加文档源“${saved.name}”；运行 loci source sync ${saved.id.slice(0, 8)} 开始同步`

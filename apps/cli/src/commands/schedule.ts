@@ -38,6 +38,12 @@ export function registerScheduleCommands(
               source.id.slice(0, 8)
             ])
           )
+          const hasCloudScheduled = scheduled.some((source) => source.cloud?.autoSync)
+          if (hasCloudScheduled) {
+            process.stdout.write(
+              '\n提示：修改云端副本的每日自动同步，请运行 loci cloud auto-sync [library] --on/--off\n'
+            )
+          }
         }
         return '定时同步计划读取成功'
       })

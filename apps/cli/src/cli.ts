@@ -104,8 +104,7 @@ function requiresCleanStdout(args: readonly string[]): boolean {
     (args[0] === 'task' && args[1] === 'follow' && args.includes('jsonl')) ||
     (args[0] === 'agent' &&
       (args[1] === 'print-config' ||
-        args[1] === 'config' ||
-        args[1] === 'configure' ||
+        args[1] === 'connect' ||
         args[1] === 'rules' ||
         (args[1] === 'status' && args.includes('--json')) ||
         (args[1] === 'skills' && args.includes('--json'))))

@@ -62,6 +62,16 @@ export function registerAdminCommand(program: Command): void {
   const admin = program
     .command('admin')
     .description('管理 Loci Server 文档库；不带子命令进入交互会话')
+    .addHelpText(
+      'after',
+      [
+        '',
+        '使用方式：',
+        '  loci admin                交互登录并连续管理',
+        '  loci admin <command> ...  脚本调用，读取 LOCI_ADMIN_USERNAME 和 LOCI_ADMIN_PASSWORD',
+        ''
+      ].join('\n')
+    )
   admin.action(() =>
     runWithRuntime('Loci Server 管理员', async (runtime) => {
       const settings = runtime.database.getSettings()

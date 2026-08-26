@@ -8,8 +8,8 @@ import { askSearch, note, printTable } from '../ui.js'
 
 export function registerSourceHistoryCommands(source: Command): void {
   source
-    .command('runs [source]')
-    .description('查看最近抓取记录；非交互终端需指定文档源或传入 --all')
+    .command('history [source]')
+    .description('列出最近抓取记录；非交互终端需指定文档源或传入 --all')
     .option('--all', '显示全部文档源的最近记录')
     .action((reference: string | undefined, options: { all?: boolean }) =>
       runWithRuntime('抓取记录', async (runtime) => {
@@ -30,10 +30,10 @@ export function registerSourceHistoryCommands(source: Command): void {
     )
 
   source
-    .command('logs [run]')
-    .description('查看一次抓取的汇总与页面失败明细')
+    .command('run-details [run]')
+    .description('查看一次抓取的汇总与页面失败明细；省略时交互选择')
     .action((reference: string | undefined) =>
-      runWithRuntime('抓取日志', async (runtime) => {
+      runWithRuntime('抓取运行详情', async (runtime) => {
         const allRuns = runtime.database.listCrawlHistory()
         if (!allRuns.length) throw new CliError('还没有抓取记录')
         const run = reference ? resolveRun(allRuns, reference) : await selectRun(runtime)

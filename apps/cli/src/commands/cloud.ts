@@ -65,20 +65,28 @@ export function registerCloudCommands(
     )
 
   cloud
-    .command('auto-sync [library] [state]')
-    .description('开启或关闭每日自动同步；开启时自动准备后台服务，state 可传 on/off')
-    .action((reference: string | undefined, state: string | undefined) =>
+    .command('auto-sync [library]')
+    .description('开启或关闭每日自动同步；开启时自动准备后台服务')
+    .option('--on', '开启每日自动同步')
+    .option('--off', '关闭每日自动同步')
+    .action((reference: string | undefined, options: { on?: boolean; off?: boolean }) =>
       runWithRuntime('云端副本自动同步', async (runtime) => {
         runtime.assertWritable()
+        if (options.on && options.off) {
+          throw new CliError('--on 和 --off 不能同时使用', 2)
+        }
         const source = await selectCloudSource(
           runtime.database.listSources(),
           reference,
           runtime.database,
           'cloud-auto-sync'
         )
-        const enabled = state
-          ? parseAutoSyncState(state)
-          : await askConfirm('启用每日自动同步？', true)
+        const enabled =
+          options.on === true
+            ? true
+            : options.off === true
+              ? false
+              : await askConfirm('启用每日自动同步？', true)
         await applyPersistentBackgroundSetting(
           enabled,
           () =>
@@ -122,7 +130,7 @@ export function registerCloudCommands(
     )
 
   cloud
-    .command('remove [library]')
+    .command('delete [library]')
     .description('删除本地云端副本，不影响 Server')
     .option('--yes', '跳过确认')
     .action((reference: string | undefined, options: { yes?: boolean }) =>
@@ -141,12 +149,6 @@ export function registerCloudCommands(
         return `已删除本地云端副本“${source.name}”，Server 内容未受影响`
       })
     )
-}
-
-function parseAutoSyncState(value: string): boolean {
-  if (['on', 'true', '1'].includes(value)) return true
-  if (['off', 'false', '0'].includes(value)) return false
-  throw new CliError('自动同步状态只能是 on 或 off', 2)
 }
 
 async function selectCatalog(

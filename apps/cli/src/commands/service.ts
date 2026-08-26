@@ -72,7 +72,7 @@ export function registerServiceCommands(program: Command): void {
 
   service
     .command('stop')
-    .description('停止后台服务但保留登录自启动')
+    .description('停止后台服务（保留登录自启动，下次登录仍会自动启动）')
     .action(async () => {
       startUi('停止 Loci 后台服务')
       await createUserServiceManager().stop()
@@ -91,7 +91,7 @@ export function registerServiceCommands(program: Command): void {
 
   service
     .command('disable')
-    .description('停止并移除登录自启动')
+    .description('停止后台服务并彻底移除登录自启动（计划和自动同步配置保留，但暂停执行）')
     .action(async () => {
       startUi('停用 Loci 后台服务')
       await createUserServiceManager().disable()

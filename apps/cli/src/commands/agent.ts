@@ -53,7 +53,7 @@ export function registerAgentCommands(program: Command): void {
 
 function registerConfigureCommand(agent: Command): void {
   agent
-    .command('configure [client]')
+    .command('connect [client]')
     .description('将 Loci MCP 连接写入 Agent 客户端配置')
     .option('--yes', '跳过写入前确认')
     .action(configureAgentClient)
@@ -178,7 +178,6 @@ function registerPrintConfigCommand(agent: Command): void {
     .command('print-config [client]')
     .description('打印 Agent 客户端或通用 MCP 配置，不修改文件')
     .action(printAgentConfig)
-  agent.command('config [client]', { hidden: true }).action(printAgentConfig)
 }
 
 async function printAgentConfig(client: string | undefined): Promise<void> {

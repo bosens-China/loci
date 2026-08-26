@@ -54,7 +54,10 @@ export function registerSkillsCommands(program: Command): void {
     })
 
   addScopeOptions(
-    skills.command('remove [name]').description('删除 Skill').addOption(agentOption())
+    skills
+      .command('remove [name]')
+      .description('删除 Skill，默认 use-loci')
+      .addOption(agentOption())
   )
     .option('--yes', '跳过删除确认')
     .action(async (name: string | undefined, options: SkillOptions) => {
