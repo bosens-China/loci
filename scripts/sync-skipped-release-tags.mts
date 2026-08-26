@@ -1,12 +1,10 @@
 import { execFile } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import { asJsonObject, readJsonObject, type JsonObject } from './json-file.mts'
 
 const execFileAsync = promisify(execFile)
-
-type JsonObject = Record<string, unknown>
 
 export interface SkippedReleaseTag {
   packagePath: string
@@ -25,22 +23,11 @@ export interface ReleaseTagRepository {
   createTags(tags: PlannedReleaseTag[]): Promise<void>
 }
 
-function asObject(value: unknown, source: string): JsonObject {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`${source} 必须是 JSON 对象`)
-  }
-  return value as JsonObject
-}
-
 function readRequiredString(value: unknown, source: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`${source} 必须是非空字符串`)
   }
   return value
-}
-
-async function readJson(path: string): Promise<JsonObject> {
-  return asObject(JSON.parse(await readFile(path, 'utf8')) as unknown, path)
 }
 
 function buildTagName(config: JsonObject, component: string, version: string): string {
@@ -57,13 +44,13 @@ export function findSkippedReleaseTags(
   configValue: unknown,
   manifestValue: unknown
 ): SkippedReleaseTag[] {
-  const config = asObject(configValue, 'release-please-config.json')
-  const manifest = asObject(manifestValue, '.release-please-manifest.json')
-  const packages = asObject(config.packages, 'release-please-config.json#packages')
+  const config = asJsonObject(configValue, 'release-please-config.json')
+  const manifest = asJsonObject(manifestValue, '.release-please-manifest.json')
+  const packages = asJsonObject(config.packages, 'release-please-config.json#packages')
   const tags: SkippedReleaseTag[] = []
 
   for (const [packagePath, packageValue] of Object.entries(packages)) {
-    const packageConfig = asObject(
+    const packageConfig = asJsonObject(
       packageValue,
       `release-please-config.json#packages.${packagePath}`
     )
@@ -138,18 +125,16 @@ export class GitReleaseTagRepository implements ReleaseTagRepository {
   }
 
   async listManifestCommits(): Promise<string[]> {
-    const output = await this.git([
-      'log',
-      '--format=%H',
-      '--',
-      '.release-please-manifest.json'
-    ])
+    const output = await this.git(['log', '--format=%H', '--', '.release-please-manifest.json'])
     return output.length === 0 ? [] : output.split('\n')
   }
 
   async readManifestAt(commitSha: string): Promise<JsonObject> {
     const content = await this.git(['show', `${commitSha}:.release-please-manifest.json`])
-    return asObject(JSON.parse(content) as unknown, `${commitSha}:.release-please-manifest.json`)
+    return asJsonObject(
+      JSON.parse(content) as unknown,
+      `${commitSha}:.release-please-manifest.json`
+    )
   }
 
   async resolveTag(tagName: string): Promise<string | null> {
@@ -187,8 +172,8 @@ export async function syncSkippedReleaseTags(
   workspaceRoot = process.cwd(),
   repository: ReleaseTagRepository = new GitReleaseTagRepository(workspaceRoot)
 ): Promise<PlannedReleaseTag[]> {
-  const config = await readJson(resolve(workspaceRoot, 'release-please-config.json'))
-  const manifest = await readJson(resolve(workspaceRoot, '.release-please-manifest.json'))
+  const config = await readJsonObject(resolve(workspaceRoot, 'release-please-config.json'))
+  const manifest = await readJsonObject(resolve(workspaceRoot, '.release-please-manifest.json'))
   const planned = await planSkippedReleaseTags(repository, findSkippedReleaseTags(config, manifest))
   await repository.createTags(planned)
   return planned

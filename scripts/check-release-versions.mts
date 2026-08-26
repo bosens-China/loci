@@ -1,24 +1,11 @@
-import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-
-type JsonObject = Record<string, unknown>
+import { asJsonObject, readJsonObject } from './json-file.mts'
 
 export interface ReleaseVersionMismatch {
   packagePath: string
   manifestVersion: string | null
   packageVersion: string | null
-}
-
-function asObject(value: unknown, source: string): JsonObject {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`${source} 必须是 JSON 对象`)
-  }
-  return value as JsonObject
-}
-
-async function readJson(path: string): Promise<JsonObject> {
-  return asObject(JSON.parse(await readFile(path, 'utf8')) as unknown, path)
 }
 
 function readVersion(value: unknown): string | null {
@@ -29,13 +16,13 @@ function readVersion(value: unknown): string | null {
 export async function findReleaseVersionMismatches(
   workspaceRoot = process.cwd()
 ): Promise<ReleaseVersionMismatch[]> {
-  const config = await readJson(resolve(workspaceRoot, 'release-please-config.json'))
-  const manifest = await readJson(resolve(workspaceRoot, '.release-please-manifest.json'))
-  const packages = asObject(config.packages, 'release-please-config.json#packages')
+  const config = await readJsonObject(resolve(workspaceRoot, 'release-please-config.json'))
+  const manifest = await readJsonObject(resolve(workspaceRoot, '.release-please-manifest.json'))
+  const packages = asJsonObject(config.packages, 'release-please-config.json#packages')
   const mismatches: ReleaseVersionMismatch[] = []
 
   for (const packagePath of Object.keys(packages)) {
-    const packageJson = await readJson(resolve(workspaceRoot, packagePath, 'package.json'))
+    const packageJson = await readJsonObject(resolve(workspaceRoot, packagePath, 'package.json'))
     const manifestVersion = readVersion(manifest[packagePath])
     const packageVersion = readVersion(packageJson.version)
     if (manifestVersion !== packageVersion) {
