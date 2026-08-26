@@ -12,10 +12,10 @@
 - 当前决策：Loci CLI 通过 npm 分发，是安装、升级和高级管理入口；它与后台服务和 Web UI 共享本地数据库及领域实现，覆盖文档源、知识库、云端公开库、远程 Server 管理、数据维护、诊断和 MCP 核心能力。
 - 当前决策：CLI 面向终端用户，命令说明、交互和反馈使用中文；除专门用于复制的 MCP 客户端配置片段、Agent 专用的 `loci mcp call` 以及 `loci task follow --format jsonl` 外，常规命令输出只承诺适合人阅读，不提供稳定 JSON 契约。AI Agent 优先使用当前会话中的 Loci MCP；没有 MCP 工具，或当前 Host 不能同时提供 MCP 原生 Progress 与 Cancellation 时，可以在用户授权安装 npm CLI 后改用 CLI 降级。普通命令前台完成后退出，不隐式启动后台任务。
 - 当前决策：根命令默认显示总帮助，`loci agent` 例外，在交互终端中进入推荐接入向导。具体命令优先使用位置参数和安全默认值减少输入：新建文档源只需提供第一个页面 URL，名称自动生成，抓取方式、页面上限和收录范围按“显式参数、CLI 安全偏好、产品基础默认值”的顺序解析，并发与 GitHub 大小覆盖留空时继承全局设置；更新命令传入选项时只修改显式字段，在交互终端中完全省略选项时进入逐项编辑。省略有歧义的资源时在交互终端中选择；删除、覆盖、清空、客户端写入和管理员凭据不设置可导致误操作的隐式默认。
-- 当前决策：Agent 客户端集成统一归入 `loci agent`：根命令一次交互选择 Agent 和 Skill 作用域，预览后依次配置 stdio MCP、安装 Skill 和写入全局规则；`configure`、`print-config`、`rules` 和 `skills` 子菜单在 TTY 缺参时也交互补全。旧 `agent config` 作为隐藏兼容别名保留。Agent、CI 和其他非交互调用必须传完整参数，写操作必须显式 `--yes`，不读取人类交互偏好。`loci mcp` 只保留工具直调和 stdio。
+- 当前决策：Agent 客户端集成统一归入 `loci agent`：根命令一次交互选择 Agent 和 Skill 作用域，预览后依次配置 stdio MCP、安装 Skill 和写入全局规则；`connect`、`print-config`、`rules` 和 `skills` 子菜单在 TTY 缺参时也交互补全。旧 `agent configure` 与 `agent config` 已按破坏性升级移除，不保留兼容入口。Agent、CI 和其他非交互调用必须传完整参数，写操作必须显式 `--yes`，不读取人类交互偏好。`loci mcp` 只保留工具直调和 stdio。
 - 当前决策：CLI 将安全且可逆的交互偏好保存在共享 SQLite 中：本地创建记住抓取方式、页面上限、收录路径层级和首次同步选择；Admin 按规范化 Server 地址记住账号、创建配置、更新计划和上次批量同步勾选；资源选择、数据目录和 MCP 客户端配置记住最近成功值。单个候选直接使用或默认勾选，多个候选高亮最近值；显式参数优先，失效偏好回退到当前状态或产品默认值。密码、Token、搜索词、删除目标和危险确认不保存。
 - 当前决策：`loci source add` 创建后默认执行一次前台同步；`--no-sync` 只保存配置，`--background` 把首次同步提交到 SQLite 持久队列、确保按需 worker 已启动后退出，两者互斥并在参数解析阶段拒绝同时使用。按需 worker 不监听 HTTP，通过跨进程 single-flight 认领队列并在空闲后退出；结果通过持久任务和抓取记录审查。
-- 当前决策：`loci task list/status/follow/cancel` 提供持久任务的列表、状态、逐页跟随和幂等取消；任务使用稳定 ID，逐页完成事件带单调 sequence。`task follow` 的 `Ctrl+C` 或 `SIGTERM` 只解除跟随，显式 `task cancel` 才取消 pending 或 running 任务。
+- 当前决策：`loci task list/status/follow/cancel` 提供持久任务的列表、状态、逐页跟随和幂等取消；任务使用稳定 ID，逐页完成事件带单调 sequence。`status`、`follow` 和 `cancel` 在 TTY 省略任务 ID 时从最近任务中选择，非交互调用必须显式提供 ID。`task follow` 的 `Ctrl+C` 或 `SIGTERM` 只解除跟随，显式 `task cancel` 才取消 pending 或 running 任务。
 - 当前决策：持久任务租约过期后按最后请求收口：已经请求取消的任务直接进入 `cancelled`；未请求取消且中断少于三次的任务回到可领取状态，连续三次中断后停止自动重试并进入 `failed`。维护锁竞争等尚未开始业务写入的错误回到待执行状态，不消耗进程中断恢复机会。
 - 当前决策：`loci ui` 在当前 CLI 进程只启动 Web 静态资源、本机 API 和随机回环端口，先打印普通本机地址，再默认尝试打开一次系统浏览器；不在 Web 进程内运行抓取 worker、调度器或云端检查。浏览器启动失败只提示手动访问；收到 `SIGINT` 或 `SIGTERM` 时关闭 HTTP，已经提交的任务继续由独立 worker 执行。`--no-open` 只跳过浏览器尝试。
 - 当前决策：CLI 另行提供当前用户的无 HTTP 登录自启动 worker，承载持久任务、定时调度和云端副本每日检查，不承载 Web 或 MCP。定时抓取和云端每日自动同步统一视为持久后台能力；CLI 或 Web 开启时先确保常驻 worker 可用再保存，不等待 Web 退出交接，关闭能力不自动停止 worker。`loci service start` 保留为手动恢复和提前准备入口；`status`、`stop`、`restart`、`logs`、`disable` 和 `run` 分别提供状态、停止、重启、日志、停用和前台调试入口。Web 与 worker 可以同时运行，同一数据目录只允许一个 worker 认领任务。HTTP 抓取无需浏览器；SPA 抓取使用用户显式安装的 Playwright Chromium headless shell。CLI 安装、状态检查、抓取前检查和实际启动统一使用当前 Playwright registry 解析出的 headless shell，不要求额外安装完整 Chromium。
@@ -58,7 +58,7 @@
 - 当前决策：GitHub ZIP 默认下载上限为 200 MB，所收录 Markdown 默认总量上限为 100 MB，单文件最多 5 MB，ZIP 最多 100,000 个条目；全局大小默认值可修改，单仓库可覆盖。ZIP 下载连接等待最多 30 秒，连续 60 秒无数据时中止，并拒绝路径穿越、Markdown 软链接、条目大小不一致和超限内容。
 - 当前决策：GitHub 成功同步以完整快照事务性替换旧文档和全文索引，因此仓库已删除或移动的 Markdown 会同步删除；下载、解析或安全校验失败时保留旧快照。提交 SHA 未变化时跳过 ZIP 下载；超限失败记录提交、限制类型和当时上限，同一提交在对应上限提高前不重复下载。
 - 当前决策：更新失败保留旧 Markdown 和抓取时间；新页面失败不创建记录；明确返回 404 或 410 时删除页面及其全文索引。
-- 当前决策：每次本地抓取持久化来源、任务 ID、运行 ID、状态、聚合计数、逐页完成事件和有界的页面级失败结构；逐页事件按任务 sequence 断点续读，相同页面终态幂等去重。CLI 通过 `source runs` 列出运行，通过 `source logs` 查看失败 URL、原因、状态码和可重试性，不保存无界原始控制台日志。
+- 当前决策：每次本地抓取持久化来源、任务 ID、运行 ID、状态、聚合计数、逐页完成事件和有界的页面级失败结构；逐页事件按任务 sequence 断点续读，相同页面终态幂等去重。CLI 通过 `source history` 列出运行，通过 `source run-details` 查看失败 URL、原因、状态码和可重试性，不保存无界原始控制台日志。
 - 为什么：优先选择结构化且更轻量的 HTTP 来源，同时保证没有 `llms.txt` 或 OpenAPI 的客户端渲染文档站能够被完整收录；失败保护避免一次异常破坏已有知识库。
 - 边界 / 非目标：浏览器窗口禁用 Node 集成并启用上下文隔离和沙箱，禁止弹窗、下载、权限申请及无关导航；只抓取无需登录即可读取的公开内容，不保存或注入登录态，不处理验证码、Cloudflare 挑战及其他反爬机制；GitHub 不支持私有仓库、身份认证、非默认分支、子目录范围、Git LFS 或仓库历史版本；不额外控制请求间隔。
 
@@ -127,7 +127,7 @@
 ## Skills 管理
 
 - 当前决策：产品通过 CLI 的 `loci agent skills add/list/remove/clear` 管理 Loci 官方内置 Skills，并通过 CLI 全局接入命令与 `loci ui` 的回环 HTTP 入口统一管理全局 Skill。项目路径和项目级 Skill 写入不暴露给浏览器；远端 Server、公开 Web、MCP 与 `loci mcp call` 均不提供 Agent 文件写入能力。
-- 当前决策：CLI 的 `add`、`list`、`remove` 和 `clear` 在交互终端中补充 Agent 目标和项目级/全局作用域；非交互调用必须显式传入 `--agent` 以及 `--project <path>` 或 `--global`，写操作还必须传 `--yes`。`--project` 与 `--global` 互斥。
+- 当前决策：CLI 的 `add`、`list`、`remove` 和 `clear` 在交互终端中补充 Agent 目标和项目级/全局作用域；`remove` 省略名称时操作内置 `use-loci`。非交互调用必须显式传入 `--agent` 以及 `--project <path>` 或 `--global`，写操作还必须传 `--yes`。`--project` 与 `--global` 互斥。
 - 当前决策：用户可以选择通用、Codex、Cursor、Claude Code、VS Code、Antigravity 或全部客户端。路径按客户端官方用户级和项目级目录解析，多个客户端落到同一物理目录时自动去重。
 - 当前决策：更新整目录替换，不做文件合并。新内容先在同父目录暂存并校验，再通过旧目录备份和原子重命名切换；失败恢复旧目录。删除先移入隔离目录，SQLite 提交成功后才清理。只有台账与 `.loci-skill.json` 同时确认所有权时才能替换或删除，不接管第三方目录。
 - 当前决策：同一目标使用进程内 single-flight 和跨进程文件锁；并发入口等待正在执行的短事务并复查最终状态，不同目标可以并行。SQLite 台账属于机器本地文件状态，不进入知识库备份导入导出。

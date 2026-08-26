@@ -19,11 +19,11 @@ loci agent setup codex
 只配置 MCP 时，使用细粒度命令。Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都使用同一个 stdio 命令：
 
 ```bash
-loci agent configure codex --yes
-loci agent configure cursor --yes
-loci agent configure vscode --yes
-loci agent configure claude-code --yes
-loci agent configure antigravity --yes
+loci agent connect codex --yes
+loci agent connect cursor --yes
+loci agent connect vscode --yes
+loci agent connect claude-code --yes
+loci agent connect antigravity --yes
 ```
 
 写入后，新建一个 Agent 会话，使客户端重新加载 MCP 配置。
@@ -74,7 +74,7 @@ Agent 调用 Loci 工具时，客户端启动 `loci mcp stdio`；会话结束后
 1. 运行 `loci agent print-config <client>`，确认客户端格式和配置路径。
 2. 确认 `loci` 在客户端进程的 `PATH` 中。
 3. 在终端运行 `loci mcp stdio`，确认没有启动错误；测试结束后按 `Ctrl+C`。
-4. 重新运行 `loci agent setup <client> --yes` 收敛全部接入项，或使用 `configure` 只修复 MCP，然后新建 Agent 会话。
+4. 重新运行 `loci agent setup <client> --yes` 收敛全部接入项，或使用 `connect` 只修复 MCP，然后新建 Agent 会话。
 
 ## 下一步
 

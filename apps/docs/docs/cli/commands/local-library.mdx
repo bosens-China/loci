@@ -79,7 +79,7 @@ loci task follow <任务 ID> --format jsonl
 loci task cancel <任务 ID>
 ```
 
-`task follow` 会从持久事件按序读取逐页进度，轮询较慢或重新运行命令不会影响后台抓取。跟随时按 `Ctrl+C` 只退出当前显示并保留任务；`task cancel` 才会取消 pending 或 running 任务，重复取消会返回相同终态。
+交互终端可以省略 `status`、`follow` 或 `cancel` 的任务 ID，再从最近任务中选择；脚本、管道和 Agent 等非交互调用必须显式提供任务 ID。`task follow` 会从持久事件按序读取逐页进度，轮询较慢或重新运行命令不会影响后台抓取。跟随时按 `Ctrl+C` 只退出当前显示并保留任务；`task cancel` 才会取消 pending 或 running 任务，重复取消会返回相同终态。
 
 ### `loci source list`
 
@@ -101,19 +101,19 @@ loci source update rspress --page-limit 300
 
 切换来源类型、把 URL 切换到其他 hostname，或把 GitHub 来源切换到另一仓库，会立即清空现有正文。收窄范围或新增、修改排除规则会在保存事务中立即删除不再匹配的正文和搜索索引，不会等到下次同步。交互向导会在保存前再次警告；显式传入更新选项表示脚本已经确认对应影响。保存后建议立即同步。
 
-### `loci source runs [source]` 与 `loci source logs [run]`
+### `loci source history [source]` 与 `loci source run-details [run]`
 
-使用 `source runs` 查看最近的同步记录；使用 `source logs` 排查某次同步的页面失败原因：
+使用 `source history` 查看最近的同步记录；使用 `source run-details` 排查某次同步的页面失败原因：
 
 ```bash
-loci source runs rspress
-loci source logs a1b2c3d4
+loci source history rspress
+loci source run-details a1b2c3d4
 ```
 
-`source logs` 中的 `[run]` 是 `source runs` 输出的短 ID。如需查看所有文档源的记录，使用 `--all`：
+`source run-details` 中的 `[run]` 是 `source history` 输出的短 ID。如需查看所有文档源的记录，使用 `--all`：
 
 ```bash
-loci source runs --all
+loci source history --all
 ```
 
 交互终端可以省略文档源并从列表中选择。非交互终端必须指定文档源，或显式传入 `--all` 查看全部记录。

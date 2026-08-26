@@ -35,7 +35,9 @@ loci service logs --follow
 loci service disable
 ```
 
-使用默认数据目录时，`start` 会安装并启动当前用户的登录自启动 worker。`loci schedule set`、`loci cloud pull --auto-sync`、`loci cloud auto-sync ... on` 以及 Web UI 中开启的持久能力，都会在保存时立即确保它可用，不需要等待 Web 会话退出。
+使用默认数据目录时，`start` 会安装并启动当前用户的登录自启动 worker。`loci schedule set`、`loci cloud pull --auto-sync`、`loci cloud auto-sync ... --on` 以及 Web UI 中开启的持久能力，都会在保存时立即确保它可用，不需要等待 Web 会话退出。
+
+`stop` 停止当前登录会话中的常驻 worker，但**保留**登录自启动定义，下次登录仍会自动重启；`disable` 在停止的基础上同时**移除**登录自启动，直到手动执行 `start` 才会恢复。已保存的计划和自动同步开关在 `stop` 或 `disable` 后均继续保留，但停用期间不会执行。
 
 设置 `LOCI_DATA_DIR` 后，自动启用持久能力不会改写唯一的用户级服务定义，而是为该目录启动当前登录会话中的独立 detached worker；它不保证进程退出、注销或机器重启后自动恢复。测试和临时环境可以接受这个边界。`loci service start`、`stop`、`restart` 和 `disable` 面向单个用户级服务定义，不提供多目录服务治理；不要用它们同时维护多个自定义目录。长期运行的自定义目录应由容器或系统进程管理器设置相同环境变量，并在前台托管 `loci service run`。
 
