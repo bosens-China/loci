@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.18.0](https://github.com/bosens-China/loci/compare/cli-v1.17.0...cli-v1.18.0) (2026-08-26)
+
+
+### Features
+
+* 完善持久抓取任务与 Agent 审查流程 ([094f359](https://github.com/bosens-China/loci/commit/094f3594cd458c94fdc09eb6a3e7e4339fb6003d))
+* 统一 CLI 命令与交互行为 ([58fa60f](https://github.com/bosens-China/loci/commit/58fa60fbc73f33109ae8daca61a42ac40003dc8f))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.14.0
+    * @loci/runtime bumped to 1.16.0
+    * @loci/shared bumped to 1.22.0
+
 ## [1.17.0](https://github.com/bosens-China/loci/compare/cli-v1.16.1...cli-v1.17.0) (2026-08-25)
 
 
