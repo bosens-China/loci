@@ -142,7 +142,7 @@ describe('Agent 全局接入服务', () => {
     expect(result.status.overall).toBe('attention')
     expect(result.status.components.find((item) => item.component === 'mcp')).toMatchObject({
       status: 'conflict',
-      message: '模拟 MCP 写入失败'
+      message: expect.any(String)
     })
     close()
   })

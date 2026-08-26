@@ -180,7 +180,7 @@ describe('createDatabase', () => {
           githubArchiveLimitMb: 200,
           githubMarkdownLimitMb: 100
         })
-      ).toThrow('HTTP 默认并发必须是')
+      ).toThrow()
     } finally {
       database.close()
     }

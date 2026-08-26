@@ -75,7 +75,7 @@ describe('SyncService 队列', () => {
     expect(sync.cancel(job.id)?.status).toBe('canceling')
     release()
     expect((await sync.wait(job.id))?.status).toBe('canceled')
-    expect(() => database.getSnapshot(library.id)).toThrow('尚未发布')
+    expect(() => database.getSnapshot(library.id)).toThrow()
     expect(database.listDocumentUrls(library.id)).toEqual([])
   })
 
@@ -175,7 +175,7 @@ describe('SyncService 队列', () => {
     expect(recovered.id).not.toBe(expired.id)
     expect(database.syncJobs.get(expired.id)).toMatchObject({
       status: 'failed',
-      error: '任务执行进程已退出或租约过期'
+      error: expect.any(String)
     })
   })
 

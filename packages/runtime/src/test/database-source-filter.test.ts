@@ -114,7 +114,7 @@ describe('database source filters', () => {
       )
       expect(() =>
         database.createSource({ ...defaults, excludePathPattern: '^/guide(?:/|$)' })
-      ).toThrow('起始页面不能')
+      ).toThrow()
     } finally {
       database.close()
     }

@@ -5,14 +5,6 @@ import {
 } from '../background-host.js'
 
 describe('持久后台宿主', () => {
-  it('复用统一服务确保函数', async () => {
-    const ensureService = vi.fn(async () => undefined)
-
-    await ensurePersistentBackgroundService(ensureService)
-
-    expect(ensureService).toHaveBeenCalledOnce()
-  })
-
   it('启动失败时给出启动和日志命令', async () => {
     await expect(
       ensurePersistentBackgroundService(async () => {

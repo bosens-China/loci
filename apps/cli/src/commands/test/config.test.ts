@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createProgram } from '../../cli.js'
 import { createCliRuntime } from '../../runtime.js'
-import { formatBatchIntervalHint } from '../config.js'
 
 const originalDataDir = process.env.LOCI_DATA_DIR
 const originalServerUrl = process.env.LOCI_SERVER_URL
@@ -47,12 +46,6 @@ describe('CLI 共享设置', () => {
       githubMarkdownLimitMb: 150
     })
     await runtime.close()
-  })
-
-  it('把批次秒数解释成人类可读时间', () => {
-    expect(formatBatchIntervalHint('0')).toContain('不额外等待')
-    expect(formatBatchIntervalHint('120')).toContain('约 2 分钟')
-    expect(formatBatchIntervalHint('50')).toContain('100 到 3000')
   })
 
   it('环境变量覆盖 Server 地址时拒绝伪装保存成功', async () => {

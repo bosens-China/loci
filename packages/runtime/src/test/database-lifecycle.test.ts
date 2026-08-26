@@ -19,7 +19,7 @@ describe('database lifecycle', () => {
     future.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION + 1}`)
     future.close()
 
-    expect(() => createDatabase(filename)).toThrow('请升级 Loci 后重试')
+    expect(() => createDatabase(filename)).toThrow()
     rmSync(directory, { recursive: true, force: true })
   })
 

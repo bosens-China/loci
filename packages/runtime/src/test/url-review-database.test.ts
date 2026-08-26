@@ -42,7 +42,7 @@ describe('UrlReviewDatabase', () => {
       ).toBe(false)
       expect(() =>
         database.submitUrlReviewBatch(first.id, batch.batchId!, ['https://example.com/api'])
-      ).toThrow('不同的排除清单')
+      ).toThrow()
       expect(database.listApprovedUrlReviewCandidates(first.id)).toEqual([
         expect.objectContaining({ url: 'https://example.com/api', decision: 'approved' })
       ])

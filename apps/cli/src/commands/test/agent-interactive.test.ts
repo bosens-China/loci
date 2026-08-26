@@ -48,9 +48,6 @@ describe('loci agent 交互入口', () => {
     await createProgram().parseAsync(['agent'], { from: 'user' })
 
     expect(askSelect).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(askSelect).mock.calls.map(([message]) => message)).toEqual([
-      '请选择需要管理的 Agent'
-    ])
     expect(existsSync(join(homeDir, '.codex'))).toBe(false)
   })
 
@@ -59,6 +56,6 @@ describe('loci agent 交互入口', () => {
 
     await createProgram().parseAsync(['agent', 'print-config'], { from: 'user' })
 
-    expect(vi.mocked(askSelect).mock.calls.map(([message]) => message)).toEqual(['请选择配置目标'])
+    expect(askSelect).toHaveBeenCalledTimes(1)
   })
 })

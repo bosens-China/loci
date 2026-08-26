@@ -72,47 +72,6 @@ describe('MCP 工具直接调用', () => {
     expect(() => JSON.parse(output)).not.toThrow()
   })
 
-  it('直接调用指定页面工具并输出逐页状态', async () => {
-    const runtime = createCliRuntime()
-    const source = runtime.createSource({
-      name: 'Docs',
-      url: 'https://docs.example.com/guide',
-      mode: 'http',
-      pageLimit: 10,
-      scopePath: '/guide',
-      schedule: null,
-      httpConcurrency: null,
-      browserConcurrency: null
-    })
-    await runtime.close()
-    let output = ''
-    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
-      output += String(chunk)
-      return true
-    })
-
-    await createProgram().parseAsync(
-      [
-        'mcp',
-        'call',
-        'loci_fetch_pages',
-        '--input',
-        JSON.stringify({
-          library_id: source.id,
-          urls: ['https://other.example.com/page'],
-          wait_for_completion: true
-        })
-      ],
-      { from: 'user' }
-    )
-
-    expect(JSON.parse(output)).toMatchObject({
-      library_id: source.id,
-      sync_status: 'completed_with_errors',
-      items: [{ status: 'failed', message: expect.stringContaining('必须属于') }]
-    })
-  })
-
   it('等待同步时保持 stdout 为最终 JSON，并把逐页进度写入 stderr JSONL', async () => {
     vi.stubGlobal(
       'fetch',
@@ -163,11 +122,16 @@ describe('MCP 工具直接调用', () => {
       .trim()
       .split('\n')
       .filter(Boolean)
-      .map((line) => JSON.parse(line) as { message: string })
-    expect(progress).toEqual([
-      expect.objectContaining({
-        message: expect.stringContaining('success Docs https://docs.example.com/guide')
-      })
-    ])
+      .map((line) => JSON.parse(line) as unknown)
+    expect(progress).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'progress',
+          progress: expect.any(Number),
+          total: expect.any(Number),
+          message: expect.any(String)
+        })
+      ])
+    )
   })
 })

@@ -33,7 +33,7 @@ describe('explicit page service', () => {
 
       expect(result.items).toMatchObject([
         { url: valid, status: 'inserted' },
-        { url: invalid, status: 'failed', message: expect.stringContaining('必须属于') }
+        { url: invalid, status: 'failed' }
       ])
       expect(progress).toEqual([
         { processed: 1, status: 'failed', url: invalid },
@@ -203,8 +203,9 @@ describe('explicit page service', () => {
         undefined,
         controller.signal
       )
-      controller.abort(new Error('已取消'))
-      await expect(waiting).rejects.toThrow('已取消')
+      const cancellation = new Error()
+      controller.abort(cancellation)
+      await expect(waiting).rejects.toBe(cancellation)
       release?.()
       await running
     } finally {

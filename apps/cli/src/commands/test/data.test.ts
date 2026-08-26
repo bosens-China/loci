@@ -1,13 +1,12 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProgram } from '../../cli.js'
-import { CliError } from '../../errors.js'
 import { createCliRuntime } from '../../runtime.js'
-import { defaultBackupFilename } from '../data.js'
 
 let directory = ''
+const originalDataDir = process.env.LOCI_DATA_DIR
 
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'loci-cli-data-'))
@@ -15,39 +14,22 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  delete process.env.LOCI_DATA_DIR
+  if (originalDataDir === undefined) delete process.env.LOCI_DATA_DIR
+  else process.env.LOCI_DATA_DIR = originalDataDir
   rmSync(directory, { recursive: true, force: true })
 })
 
-describe('数据导出默认文件名', () => {
-  it('包含毫秒级时间以避免同一天的备份互相覆盖', () => {
-    expect(defaultBackupFilename(new Date('2026-08-04T01:02:03.456Z'))).toBe(
-      'loci-backup-2026-08-04T01-02-03-456Z.json'
-    )
-  })
-
-  it('用清晰错误说明备份文件不是有效 JSON', async () => {
-    const backup = join(directory, 'invalid.json')
-    writeFileSync(backup, '{invalid', 'utf8')
-
-    const error = await createProgram()
-      .parseAsync(['data', 'import', backup, '--yes'], { from: 'user' })
-      .catch((reason: unknown) => reason)
-
-    expect(error).toBeInstanceOf(CliError)
-    expect((error as CliError).message).toBe('备份文件不是有效 JSON，请确认文件来源')
-  })
-
+describe('CLI 数据备份', () => {
   it('非交互清理明确要求传入 --yes', async () => {
     await expect(
       createProgram().parseAsync(['data', 'clear-documents'], { from: 'user' })
     ).rejects.toThrow('非交互终端请传入 --yes')
   })
 
-  it('恢复包含定时能力的备份后确保后台服务', async () => {
-    const backup = join(directory, 'scheduled.json')
-    let runtime = createCliRuntime()
-    runtime.database.createSource({
+  it('导出后可在新的运行时恢复文档源和正文', async () => {
+    const backup = join(directory, 'backup.json')
+    const sourceRuntime = createCliRuntime()
+    const source = sourceRuntime.createSource({
       name: 'Scheduled docs',
       url: 'https://example.com/docs',
       mode: 'auto',
@@ -56,9 +38,20 @@ describe('数据导出默认文件名', () => {
       httpConcurrency: null,
       browserConcurrency: null
     })
-    writeFileSync(backup, JSON.stringify(runtime.database.exportBackup()), 'utf8')
-    runtime.database.clearSources()
-    await runtime.close()
+    sourceRuntime.database.saveDocument({
+      sourceId: source.id,
+      url: 'https://example.com/docs/guide',
+      title: 'Guide',
+      markdown: '# Guide',
+      language: 'en',
+      fetchMode: 'http',
+      crawledAt: '2026-08-25T00:00:00.000Z'
+    })
+    await sourceRuntime.close()
+
+    await createProgram().parseAsync(['data', 'export', backup], { from: 'user' })
+
+    process.env.LOCI_DATA_DIR = join(directory, 'restored-data')
     const ensureService = vi.fn(async () => undefined)
 
     await createProgram({ ensureUserService: ensureService }).parseAsync(
@@ -67,8 +60,21 @@ describe('数据导出默认文件名', () => {
     )
 
     expect(ensureService).toHaveBeenCalledOnce()
-    runtime = createCliRuntime()
-    expect(runtime.database.listSources()[0]?.schedule).toBe('0 2 * * *')
-    await runtime.close()
+    const restoredRuntime = createCliRuntime()
+    const restoredSource = restoredRuntime.database.listSources()[0]
+    expect(restoredSource).toMatchObject({
+      name: 'Scheduled docs',
+      url: 'https://example.com/docs',
+      schedule: '0 2 * * *'
+    })
+    expect(restoredRuntime.database.listDocuments()).toMatchObject([
+      {
+        sourceId: source.id,
+        url: 'https://example.com/docs/guide',
+        title: 'Guide',
+        content: '# Guide'
+      }
+    ])
+    await restoredRuntime.close()
   })
 })

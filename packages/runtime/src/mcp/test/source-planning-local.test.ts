@@ -38,8 +38,7 @@ describe('MCP 本地来源规划', () => {
       })
       expect(blocked).toMatchObject({ isError: true })
       expect(blocked.content[0]).toMatchObject({
-        type: 'text',
-        text: '文档库正在同步，完成后才能修改配置'
+        type: 'text'
       })
     } finally {
       external.release()

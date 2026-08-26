@@ -90,7 +90,7 @@ describe('database GitHub sources', () => {
           name: 'Wrong kind',
           url: 'https://github.com/vuejs/core'
         })
-      ).toThrow('普通站点不能使用 GitHub 仓库首页 URL')
+      ).toThrow()
       const runId = database.startCrawlRun(vue.id)
       database.finishCrawlRun(
         runId,

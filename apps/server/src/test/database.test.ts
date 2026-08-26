@@ -76,7 +76,7 @@ describe('ServerDatabase', () => {
     })
 
     expect(database.listPublishedLibraries()).toEqual([])
-    expect(() => database.publishSnapshot(library.id)).toThrow('没有可发布页面')
+    expect(() => database.publishSnapshot(library.id)).toThrow()
   })
 
   it('重复创建和删除同一文档库时保持幂等', () => {

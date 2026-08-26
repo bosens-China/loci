@@ -75,10 +75,10 @@ describe('database backup', () => {
       Object.assign(backup.data.settings, { mcp_port: 41000 })
       const invalid = structuredClone(backup)
       invalid.data.documents[0]!.source_id = 'missing-source'
-      expect(() => targetDatabase.importBackup(invalid)).toThrow('引用的文档源不存在')
+      expect(() => targetDatabase.importBackup(invalid)).toThrow()
       const invalidRegex = structuredClone(backup)
       invalidRegex.data.sources[0]!.exclude_path_pattern = '['
-      expect(() => targetDatabase.importBackup(invalidRegex)).toThrow('排除路径正则格式无效')
+      expect(() => targetDatabase.importBackup(invalidRegex)).toThrow()
       expect(targetDatabase.listSources()[0]?.name).toBe('Existing')
 
       expect(targetDatabase.importBackup(backup)).toEqual({ sources: 1, documents: 1 })

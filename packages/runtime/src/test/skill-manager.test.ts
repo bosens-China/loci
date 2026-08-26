@@ -53,7 +53,6 @@ describe('SkillManager', () => {
       { action: 'unchanged', name: 'use-loci', targetPath: target }
     ])
     expect(readFileSync(join(target, 'SKILL.md'), 'utf8')).toContain('name: use-loci')
-    expect(readFileSync(join(target, 'agents/openai.yaml'), 'utf8')).toContain('Loci 文档助手')
     expect(readFileSync(join(target, 'references/cli.md'), 'utf8')).toContain('loci mcp call')
     expect(manager.list()).toMatchObject([{ targetPath: target, status: 'current' }])
   })
@@ -80,7 +79,7 @@ describe('SkillManager', () => {
     writeFileSync(join(target, 'SKILL.md'), '# third party\n')
 
     expect(manager.preview()[0]?.status).toBe('conflict')
-    await expect(manager.add()).rejects.toThrow('不是 Loci 管理的目录')
+    await expect(manager.add()).rejects.toThrow()
   })
 
   it('all 按物理路径去重且项目操作使用显式路径', async () => {

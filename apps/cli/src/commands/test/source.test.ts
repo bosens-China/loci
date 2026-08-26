@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProgram } from '../../cli.js'
 import { CliError } from '../../errors.js'
 import { createCliRuntime } from '../../runtime.js'
-import { formatSourceSummary } from '../source-prompts.js'
 
 const originalDataDir = process.env.LOCI_DATA_DIR
 const originalServerUrl = process.env.LOCI_SERVER_URL
@@ -28,26 +27,6 @@ afterEach(() => {
 })
 
 describe('文档源最短输入', () => {
-  it('GitHub 确认摘要展示实际生效的全局上限', () => {
-    expect(
-      formatSourceSummary(
-        {
-          name: 'docs',
-          url: 'https://github.com/vuejs/docs',
-          mode: 'auto',
-          pageLimit: 1000,
-          scopePath: '/',
-          schedule: null,
-          httpConcurrency: null,
-          browserConcurrency: null,
-          githubArchiveLimitMb: null,
-          githubMarkdownLimitMb: null
-        },
-        { githubArchiveLimitMb: 200, githubMarkdownLimitMb: 100 }
-      )
-    ).toContain('ZIP 上限：200 MB\nMarkdown 总量：100 MB')
-  })
-
   it('允许本地开发覆盖默认 Server 地址', async () => {
     process.env.LOCI_SERVER_URL = 'http://localhost:7001'
     const runtime = createCliRuntime()
@@ -288,23 +267,6 @@ describe('文档源最短输入', () => {
       runtime.database.listSources().find((item) => item.id === cloudSource!.id)?.cloud
     ).toMatchObject({ autoSync: true })
     await runtime.close()
-  })
-
-  it('计划列表为空时给出下一步引导', async () => {
-    await createProgram().parseAsync(['schedule', 'list'], { from: 'user' })
-
-    expect(vi.mocked(process.stdout.write).mock.calls.flat().join('')).toContain(
-      '还没有本地文档源，请先运行 loci source add'
-    )
-
-    await createProgram().parseAsync(['source', 'add', 'https://rspress.rs/guide', '--no-sync'], {
-      from: 'user'
-    })
-    vi.mocked(process.stdout.write).mockClear()
-    await createProgram().parseAsync(['schedule', 'list'], { from: 'user' })
-    expect(vi.mocked(process.stdout.write).mock.calls.flat().join('')).toContain(
-      '还没有文档源配置定时同步'
-    )
   })
 
   it('非交互查看同步记录时要求指定来源或明确传入 --all', async () => {

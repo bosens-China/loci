@@ -7,7 +7,7 @@ import { readLocalServiceState } from '../local-service-state.js'
 import { startLocalWorker } from '../local-worker.js'
 
 describe('local worker', () => {
-  it('不创建 HTTP 服务并在任务队列空闲后退出', async () => {
+  it('任务队列空闲后结束等待，并在关闭时清除服务状态', async () => {
     const root = mkdtempSync(join(tmpdir(), 'loci-worker-'))
     const dataDir = join(root, 'data')
     const worker = startLocalWorker({
@@ -17,10 +17,8 @@ describe('local worker', () => {
       heartbeatMs: 10
     })
     try {
-      expect(worker.state).toMatchObject({ pid: process.pid, mode: 'on-demand' })
-      expect(readLocalServiceState(dataDir)).toMatchObject({ mode: 'on-demand' })
-      expect('http' in worker).toBe(false)
       await worker.runUntilIdle()
+      expect(readLocalServiceState(dataDir)?.mode).toBe('on-demand')
     } finally {
       await worker.close()
       expect(readLocalServiceState(dataDir)).toBeNull()

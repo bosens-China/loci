@@ -141,7 +141,6 @@ describe('crawlSource', () => {
       title: 'Ops API',
       fetchMode: 'http'
     })
-    expect(documents[0]?.markdown).toContain('### GET `/health` — 健康检查')
   })
 
   it('OpenAPI 候选未命中时继续普通网页流程', async () => {

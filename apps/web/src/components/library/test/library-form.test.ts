@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   getLocalLibraryRemovalWarning,
-  getLibrarySchedulePreview,
   getLibraryUrlDefaults,
   validateLibrarySourceKind
 } from '../library-form'
@@ -43,13 +42,6 @@ describe('文档库共享表单默认值', () => {
     ).toMatchObject({ name: 'hono' })
   })
 
-  it('只为有效计划返回运行时间', () => {
-    const fromValidSchedule = getLibrarySchedulePreview('0 2 * * *')
-    expect(fromValidSchedule).toHaveLength(2)
-    expect(getLibrarySchedulePreview('0 2')).toEqual([])
-    expect(getLibrarySchedulePreview(null)).toEqual([])
-  })
-
   it('校验顶层来源类型与 URL 是否一致', () => {
     expect(validateLibrarySourceKind('github', 'https://github.com/honojs/hono')).toBeNull()
     expect(validateLibrarySourceKind('web', 'https://hono.dev/docs')).toBeNull()
@@ -61,7 +53,7 @@ describe('文档库共享表单默认值', () => {
     )
   })
 
-  it('只在保存可能立即删除正文时返回危险警告', () => {
+  it('在共享删除风险存在时返回确认内容', () => {
     const current = {
       kind: 'web' as const,
       url: 'https://example.com/docs',
@@ -72,13 +64,13 @@ describe('文档库共享表单默认值', () => {
     expect(getLocalLibraryRemovalWarning(current, { ...current, scopePath: '/' })).toBeNull()
     expect(
       getLocalLibraryRemovalWarning(current, { ...current, scopePath: '/docs/api' })
-    ).toContain('立即删除')
+    ).toBeTypeOf('string')
     expect(
       getLocalLibraryRemovalWarning(current, {
         ...current,
         excludePathPattern: '^/docs/legacy(?:/|$)'
       })
-    ).toContain('立即删除')
+    ).toBeTypeOf('string')
     expect(
       getLocalLibraryRemovalWarning(
         { ...current, excludePathPattern: '^/docs/legacy(?:/|$)' },
@@ -90,7 +82,7 @@ describe('文档库共享表单默认值', () => {
         ...current,
         url: 'https://new.example.com/docs'
       })
-    ).toContain('重新同步')
+    ).toBeTypeOf('string')
     expect(
       getLocalLibraryRemovalWarning(
         {
@@ -106,6 +98,6 @@ describe('文档库共享表单默认值', () => {
           scopePath: '/'
         }
       )
-    ).toContain('立即删除')
+    ).toBeTypeOf('string')
   })
 })

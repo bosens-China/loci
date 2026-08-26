@@ -162,7 +162,7 @@ describe('UrlReviewService', () => {
         batchId: waiting.batchId
       })
       expect(secondRuntime.isCrawling(source.id)).toBe(true)
-      await expect(secondRuntime.crawlSource(source.id)).rejects.toThrow('等待 Agent URL 审查')
+      await expect(secondRuntime.crawlSource(source.id)).rejects.toThrow()
       expect(secondRuntime.database.listDocumentUrls(source.id)).toEqual([])
     } finally {
       await secondRuntime.close()

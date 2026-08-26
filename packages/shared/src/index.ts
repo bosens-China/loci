@@ -1,5 +1,6 @@
 export * from './api.js'
 export * from './agent-instructions.js'
+export * from './content-removal-risk.js'
 export * from './format-bytes.js'
 export * from './github-url.js'
 export * from './mcp-clients.js'

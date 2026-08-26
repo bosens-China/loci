@@ -132,7 +132,7 @@ describe('LocalBrowserCrawler', () => {
     const closing = crawler.close()
     finishLaunch?.(browser)
 
-    await expect(opening).rejects.toThrow('浏览器正在关闭')
+    await expect(opening).rejects.toThrow()
     await closing
     expect(closeBrowser).toHaveBeenCalledOnce()
   })

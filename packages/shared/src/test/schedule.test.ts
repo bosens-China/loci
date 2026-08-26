@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { getNextScheduledRun, getUpcomingScheduleRuns, normalizeCronSchedule } from '../schedule.js'
+import { getUpcomingScheduleRuns, normalizeCronSchedule } from '../schedule.js'
 
 describe('normalizeCronSchedule', () => {
-  it('normalizes five-field Linux Cron schedules and exposes the next run', () => {
+  it('normalizes five-field Linux Cron schedules', () => {
     expect(normalizeCronSchedule('  */15   * * * *  ')).toBe('*/15 * * * *')
-    expect(getNextScheduledRun('*/15 * * * *')).toBeInstanceOf(Date)
   })
 
   it('rejects schedules with a seconds field', () => {

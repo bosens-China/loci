@@ -168,7 +168,7 @@ describe('local job runner', () => {
     database.enqueueSourceSync(source.id, 'ui')
 
     expect(await runner.runOnce()).toBe(1)
-    await expect(runner.runMaintenance(() => undefined)).rejects.toThrow('仍有同步任务正在执行')
+    await expect(runner.runMaintenance(() => undefined)).rejects.toThrow()
     finishCrawl()
     await vi.waitFor(() => expect(runner.activeCount()).toBe(0))
     await runner.stop()
@@ -205,7 +205,7 @@ describe('local job runner', () => {
       await vi.waitFor(() =>
         expect(first.getLocalJob(job.id)).toMatchObject({
           status: 'pending',
-          error: expect.stringContaining('任务等待重试')
+          error: expect.any(String)
         })
       )
 

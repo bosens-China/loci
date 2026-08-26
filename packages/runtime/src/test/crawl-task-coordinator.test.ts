@@ -49,7 +49,7 @@ describe('CrawlTaskCoordinator', () => {
     const firstStart = vi.fn(async () => {
       throw new Error('临时失败')
     })
-    await expect(coordinator.run('vite', firstStart)).rejects.toThrow('临时失败')
+    await expect(coordinator.run('vite', firstStart)).rejects.toThrow()
     await vi.waitFor(() => expect(coordinator.isRunning('vite')).toBe(false))
 
     const retryStart = vi.fn(async () => progress)

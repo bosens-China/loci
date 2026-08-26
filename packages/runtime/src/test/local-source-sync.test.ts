@@ -99,8 +99,9 @@ describe('持久同步等待', () => {
     const ownedController = new AbortController()
     const owned = runDurableSourceSync(runtime, source.id, 'mcp', undefined, ownedController.signal)
     const ownedJob = database.listLocalJobs()[0]!
-    ownedController.abort(new Error('用户取消'))
-    await expect(owned).rejects.toThrow('用户取消')
+    const ownedCancellation = new Error()
+    ownedController.abort(ownedCancellation)
+    await expect(owned).rejects.toBe(ownedCancellation)
     expect(database.getLocalJob(ownedJob.id)).toMatchObject({
       status: 'cancelled',
       cancelRequested: true
@@ -115,8 +116,9 @@ describe('持久同步等待', () => {
       undefined,
       followerController.signal
     )
-    followerController.abort(new Error('停止跟随'))
-    await expect(follower).rejects.toThrow('停止跟随')
+    const followerCancellation = new Error()
+    followerController.abort(followerCancellation)
+    await expect(follower).rejects.toBe(followerCancellation)
     expect(database.getLocalJob(existing.id)).toMatchObject({
       status: 'pending',
       cancelRequested: false

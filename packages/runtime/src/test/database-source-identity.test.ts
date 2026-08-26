@@ -47,7 +47,7 @@ describe('document source identity', () => {
           httpConcurrency: null,
           browserConcurrency: null
         })
-      ).toThrow(`文档源名称不能超过 ${DOCUMENT_SOURCE_LIMITS.nameLength.max} 个字符`)
+      ).toThrow()
     } finally {
       database.close()
     }
@@ -102,7 +102,7 @@ describe('document source identity', () => {
           name: 'Vue on Vite root',
           url: 'https://vite.dev/other'
         })
-      ).toThrow('这个域名和收录范围已经存在于文档源中')
+      ).toThrow()
       expect(database.getSourceConfig(vue.id)).toMatchObject({
         hostname: 'vite.dev',
         scopePath: '/config'

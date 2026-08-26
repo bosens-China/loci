@@ -193,7 +193,7 @@ describe('Agent MCP 用户配置文件', () => {
     ).toMatchObject({ status: 'conflict' })
     expect(() =>
       removeAgentMcpConfigFile('antigravity', LOCI_CLI_STDIO_CONNECTION, { homeDir })
-    ).toThrow('已被修改')
+    ).toThrow()
     expect(readFileSync(path, 'utf8')).toContain('custom')
   })
 

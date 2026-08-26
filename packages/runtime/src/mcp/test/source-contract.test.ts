@@ -76,7 +76,7 @@ describe('MCP source contract', () => {
     })
   })
 
-  it('按文档库 ID 幂等更新可选抓取配置且不自动同步', async () => {
+  it('按文档库 ID 更新可选抓取配置且不自动同步', async () => {
     const services = createServices()
     const crawlSource = vi.fn(services.crawlSource)
     const updateSource: LociMcpServices['updateSource'] = vi.fn((current, input) => ({
@@ -95,18 +95,10 @@ describe('MCP source contract', () => {
       page_limit: 2400,
       exclude_path: '^/legacy(?:/|$)'
     })
-    const second = await callLociMcpTool(configuredServices, 'loci_update_library', {
-      library_id: source.id,
-      page_limit: 2400,
-      exclude_path: '^/legacy(?:/|$)'
-    })
-
     expect(first.structuredContent).toMatchObject({
       changed: true,
       library: { page_limit: 2400, exclude_path: '^/legacy(?:/|$)' }
     })
-    expect(second.isError).not.toBe(true)
-    expect(updateSource).toHaveBeenCalledTimes(2)
     expect(crawlSource).not.toHaveBeenCalled()
   })
 

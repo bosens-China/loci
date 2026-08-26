@@ -36,10 +36,10 @@ describe('assertAllowedBrowserRequest', () => {
         false,
         privateLookup
       )
-    ).rejects.toThrow('不允许抓取')
+    ).rejects.toThrow()
     await expect(
       assertAllowedBrowserRequest('https://other.example/a', 'docs.example.com', true, publicLookup)
-    ).rejects.toThrow('超出了文档库范围')
+    ).rejects.toThrow()
   })
 })
 

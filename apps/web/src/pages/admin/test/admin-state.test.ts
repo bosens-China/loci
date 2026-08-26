@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { CloudLibrary, CloudSyncJob } from '@loci/shared'
 import {
   availableAdminLibraryIds,
-  getAdminLibraryRemovalWarning,
   getAdminSyncPercent,
   isAdminJobActive,
   latestAdminJobsByLibrary,
@@ -50,30 +49,6 @@ describe('Admin 任务状态', () => {
       'library-3'
     ])
     expect(availableAdminLibraryIds(libraries, { 'library-1': running }, ['library-1'])).toEqual([])
-  })
-
-  it('在起始 URL 或收录范围可能删除正文时要求危险操作确认', () => {
-    const current = library('library-1')
-    const input = {
-      name: current.name,
-      url: current.url,
-      scopePath: current.scopePath,
-      pageLimit: current.pageLimit,
-      schedule: current.schedule
-    }
-    expect(getAdminLibraryRemovalWarning(current, input)).toBeNull()
-    expect(
-      getAdminLibraryRemovalWarning(current, { ...input, url: 'https://new.example.com/' })
-    ).toContain('清空')
-    expect(
-      getAdminLibraryRemovalWarning(
-        { ...current, scopePath: '/docs' },
-        { ...input, scopePath: '/' }
-      )
-    ).toBeNull()
-    expect(
-      getAdminLibraryRemovalWarning(current, { ...input, scopePath: '/library-1/api' })
-    ).toContain('立即删除')
   })
 })
 

@@ -3,10 +3,10 @@ import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import {
   SCHEDULE_PRESETS,
   deriveSourceName,
+  getCloudLibraryContentRemovalRisk,
   getSchedulePreset,
   getUpcomingScheduleRuns,
   normalizeCronSchedule,
-  scopePathContains,
   type CloudLibrary,
   type CloudLibraryInput
 } from '@loci/shared'
@@ -363,9 +363,9 @@ export function getAdminLibraryRemovalWarning(
   current: CloudLibrary,
   input: CloudLibraryInput
 ): string | null {
-  if (current.url !== input.url) {
+  const risk = getCloudLibraryContentRemovalRisk(current, input)
+  if (risk === 'url_changed') {
     return '起始 URL 已变化，Server 会立即清空现有抓取内容，需要重新同步后再发布'
   }
-  if (scopePathContains(input.scopePath, current.scopePath)) return null
-  return '收录范围已收窄，Server 会立即删除范围外正文，需要重新同步后再发布'
+  return risk ? '收录范围已收窄，Server 会立即删除范围外正文，需要重新同步后再发布' : null
 }

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { readAttachmentFilename } from '@/api/data-transfer'
-import { formatBytes } from '@/utils/format'
+import {
+  BACKUP_FILE_LIMIT_BYTES,
+  readAttachmentFilename,
+  readBackupFile
+} from '@/api/data-transfer'
 
 describe('浏览器数据传输', () => {
   it('读取服务端备份文件名并提供安全回退', () => {
@@ -10,9 +13,19 @@ describe('浏览器数据传输', () => {
     expect(readAttachmentFilename(undefined)).toBe('loci-backup.json')
   })
 
-  it('使用适合目录卡片的体积单位', () => {
-    expect(formatBytes(512)).toBe('512 B')
-    expect(formatBytes(1536)).toBe('1.5 KB')
-    expect(formatBytes(12 * 1024 * 1024)).toBe('12 MB')
+  it('拒绝超过导入上限的备份文件', async () => {
+    const file = new File(['{}'], 'backup.json')
+    Object.defineProperty(file, 'size', { value: BACKUP_FILE_LIMIT_BYTES + 1 })
+
+    await expect(readBackupFile(file)).rejects.toThrow('备份文件不能超过 256 MB')
+  })
+
+  it('拒绝无效 JSON，并解析有效备份', async () => {
+    await expect(readBackupFile(new File(['{'], 'backup.json'))).rejects.toThrow(
+      '备份文件不是有效的 JSON'
+    )
+    await expect(readBackupFile(new File(['{"sources":[]}'], 'backup.json'))).resolves.toEqual({
+      sources: []
+    })
   })
 })

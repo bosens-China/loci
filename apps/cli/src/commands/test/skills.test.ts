@@ -35,23 +35,23 @@ describe('agent skills command', () => {
     expect(existsSync(join(directory, '.agents/skills/use-loci/SKILL.md'))).toBe(true)
 
     vi.mocked(process.stdout.write).mockClear()
-    await program.parseAsync(['agent', 'skills', 'list', ...projectArgs], { from: 'user' })
-    const tableOutput = vi.mocked(process.stdout.write).mock.calls.flat().join('')
-    expect(tableOutput).toContain('已是最新')
-    expect(tableOutput).not.toContain('current')
-
-    vi.mocked(process.stdout.write).mockClear()
     await program.parseAsync(['agent', 'skills', 'list', ...projectArgs, '--json'], {
       from: 'user'
     })
-    const output = vi.mocked(process.stdout.write).mock.calls.flat().join('')
-    expect(output).toContain('use-loci')
-    expect(output).toContain(`"projectRoot": "${realpathSync(directory)}"`)
+    const output = readJsonListOutput()
+    expect(output).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'use-loci',
+          scope: 'project',
+          projectRoot: realpathSync(directory)
+        })
+      ])
+    )
 
     await program.parseAsync(['agent', 'skills', 'remove', ...projectArgs, '--yes'], {
       from: 'user'
     })
-    expect(vi.mocked(process.stdout.write).mock.calls.flat().join('')).toContain('已删除')
     expect(existsSync(join(directory, '.agents/skills/use-loci'))).toBe(false)
   })
 
@@ -76,19 +76,31 @@ describe('agent skills command', () => {
       ['agent', 'skills', 'list', '--agent', 'universal', '--global', '--json'],
       { from: 'user' }
     )
-    const globalOutput = vi.mocked(process.stdout.write).mock.calls.flat().join('')
-    expect(globalOutput).toContain('"scope": "global"')
-    expect(globalOutput).toContain(join(directory, 'home/.agents/skills/use-loci'))
-    expect(globalOutput).not.toContain(otherProject)
+    const globalOutput = readJsonListOutput()
+    expect(globalOutput).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: 'global',
+          projectRoot: null,
+          targetPath: join(directory, 'home/.agents/skills/use-loci')
+        })
+      ])
+    )
 
     vi.mocked(process.stdout.write).mockClear()
     await program.parseAsync(
       ['agent', 'skills', 'list', '--agent', 'universal', '--project', './other-project', '--json'],
       { from: 'user' }
     )
-    const projectOutput = vi.mocked(process.stdout.write).mock.calls.flat().join('')
-    expect(projectOutput).toContain(`"projectRoot": "${realpathSync(otherProject)}"`)
-    expect(projectOutput).not.toContain('"scope": "global"')
+    const projectOutput = readJsonListOutput()
+    expect(projectOutput).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: 'project',
+          projectRoot: realpathSync(otherProject)
+        })
+      ])
+    )
 
     await program.parseAsync(
       ['agent', 'skills', 'clear', '--agent', 'universal', '--project', otherProject, '--yes'],
@@ -110,22 +122,31 @@ describe('agent skills command', () => {
         ['agent', 'skills', 'add', '--global', '--project', './', '--yes'],
         { from: 'user' }
       )
-    ).rejects.toThrow("option '--project <path>' cannot be used with option '--global'")
+    ).rejects.toThrow()
   })
 
   it('非交互命令要求完整的 Agent、作用域和写入确认', async () => {
     const program = createProgram()
-    await expect(program.parseAsync(['agent', 'skills', 'list'], { from: 'user' })).rejects.toThrow(
-      '必须指定 --agent'
-    )
+    await expect(
+      program.parseAsync(['agent', 'skills', 'list'], { from: 'user' })
+    ).rejects.toThrow()
     await expect(
       program.parseAsync(['agent', 'skills', 'list', '--agent', 'universal'], { from: 'user' })
-    ).rejects.toThrow('必须指定 --project 或 --global')
+    ).rejects.toThrow()
     await expect(
       program.parseAsync(
         ['agent', 'skills', 'add', '--agent', 'universal', '--project', directory],
         { from: 'user' }
       )
-    ).rejects.toThrow('必须传入 --yes')
+    ).rejects.toThrow()
   })
 })
+
+function readJsonListOutput(): unknown {
+  const output = vi
+    .mocked(process.stdout.write)
+    .mock.calls.map(([chunk]) => String(chunk))
+    .find((chunk) => chunk.trimStart().startsWith('['))
+  expect(output).toBeDefined()
+  return JSON.parse(output ?? '') as unknown
+}

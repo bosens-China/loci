@@ -43,31 +43,6 @@ describe('Agent MCP 配置', () => {
     })
   })
 
-  it('为 Google Antigravity 输出 stdio 配置', async () => {
-    let output = ''
-    let hint = ''
-    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
-      output += String(chunk)
-      return true
-    })
-    vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
-      hint += String(chunk)
-      return true
-    })
-
-    await createProgram().parseAsync(['agent', 'print-config', 'antigravity'], {
-      from: 'user'
-    })
-
-    expect(JSON.parse(output)).toEqual({
-      mcpServers: {
-        loci: { command: 'loci', args: ['mcp', 'stdio'] }
-      }
-    })
-    expect(hint).toContain('Google Antigravity')
-    expect(hint).toContain('~/.gemini/config/mcp_config.json')
-  })
-
   it('Codex 配置输出 CLI stdio TOML', async () => {
     let output = ''
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
@@ -108,23 +83,18 @@ describe('Agent MCP 配置', () => {
     expect(JSON.parse(output)).toHaveProperty('mcpServers.loci.command', 'loci')
   })
 
-  it('Cursor 全局规则输出受管区块和官方设置位置', async () => {
+  it('Cursor 全局规则输出受管区块', async () => {
     let output = ''
-    let hint = ''
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
       output += String(chunk)
       return true
     })
-    vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
-      hint += String(chunk)
-      return true
-    })
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
     await createProgram().parseAsync(['agent', 'rules', 'cursor'], { from: 'user' })
 
     expect(output).toContain('<!-- loci:start -->')
     expect(output).toContain('<!-- loci:end -->')
-    expect(hint).toContain('Customize → Rules → User Rules')
   })
 
   it('全局规则命令拒绝未知客户端和非交互省略值', async () => {

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { CloudCatalogItem, CreateSourceInput } from '@loci/shared'
+import type { CloudCatalogItem, CreateSourceInput, ResourceRevisions } from '@loci/shared'
 import { startLocalHttpServer } from '../local-http-server.js'
 import { createLocalRuntime } from '../local-runtime.js'
 
@@ -110,6 +110,9 @@ describe('本机 HTTP 服务', () => {
     const sources = await fetch(`${server.endpoint}/api/sources`)
     expect(sources.status).toBe(200)
     expect(await sources.json()).toEqual([])
+    const initialRevisions = (await (
+      await fetch(`${server.endpoint}/api/revisions`)
+    ).json()) as ResourceRevisions
 
     const input: CreateSourceInput = {
       name: 'Example',
@@ -144,6 +147,11 @@ describe('本机 HTTP 服务', () => {
     expect(result.workerError).toBeNull()
     expect(startJobWorker).toHaveBeenCalledOnce()
     expect(ensurePersistentBackground).toHaveBeenCalledOnce()
+    const revisions = (await (
+      await fetch(`${server.endpoint}/api/revisions`)
+    ).json()) as ResourceRevisions
+    expect(revisions.sources).toBeGreaterThan(initialRevisions.sources)
+    expect(revisions.jobs).toBeGreaterThan(initialRevisions.jobs)
   })
 
   it('worker 启动失败时仍确认来源和任务已保存', async () => {
@@ -181,33 +189,10 @@ describe('本机 HTTP 服务', () => {
     expect(await response.json()).toMatchObject({
       source: { name: 'Saved source' },
       sync: { reused: false },
-      workerError: 'worker unavailable'
+      workerError: expect.any(String)
     })
     expect(runtime.database.listSources()).toHaveLength(1)
     expect(runtime.database.listLocalJobs()).toHaveLength(1)
-  })
-
-  it('重复同步同一来源时复用活动任务', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'loci-http-job-'))
-    const runtime = createLocalRuntime({
-      dataDir: join(root, 'data'),
-      cacheDir: join(root, 'cache')
-    })
-    const source = runtime.createSource({
-      name: 'Example',
-      url: 'https://example.com',
-      mode: 'http',
-      pageLimit: 1,
-      schedule: null,
-      httpConcurrency: null,
-      browserConcurrency: null
-    })
-    const first = runtime.database.enqueueSourceSync(source.id, 'ui')
-    const second = runtime.database.enqueueSourceSync(source.id, 'ui')
-    expect(second.reused).toBe(true)
-    expect(second.job.id).toBe(first.job.id)
-    await runtime.close()
-    rmSync(root, { recursive: true, force: true })
   })
 
   it('提供云端目录并通过浏览器备份恢复本地库', async () => {

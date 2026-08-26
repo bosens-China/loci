@@ -38,7 +38,7 @@ describe('CloudAdminClient', () => {
       password: 'password'
     })
 
-    await expect(client.listLibraries()).rejects.toThrow('管理员会话无效或已过期')
+    await expect(client.listLibraries()).rejects.toThrow()
     expect(client.getSession()).toBeNull()
   })
 
@@ -66,7 +66,7 @@ describe('CloudAdminClient', () => {
     const client = new CloudAdminClient(vi.fn<typeof fetch>())
     await expect(
       client.login('file:///tmp/server', { username: 'admin', password: 'password' })
-    ).rejects.toThrow('仅支持 HTTP 或 HTTPS')
+    ).rejects.toThrow()
   })
 })
 

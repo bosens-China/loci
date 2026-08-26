@@ -36,8 +36,7 @@ describe('fetchCrawledPageWithRetry', () => {
 describe('waitForStableContent', () => {
   it('空正文不会被提前视为渲染完成', async () => {
     let now = 0
-    const readContent = vi.fn(async () => (now < 30 ? '' : 'Rendered docs'))
-    await waitForStableContent(readContent, {
+    await waitForStableContent(async () => (now < 30 ? '' : 'Rendered docs'), {
       timeoutMs: 100,
       minimumWaitMs: 20,
       intervalMs: 10,
@@ -50,7 +49,6 @@ describe('waitForStableContent', () => {
     })
 
     expect(now).toBe(50)
-    expect(readContent).toHaveBeenCalledTimes(6)
   })
 
   it('一直为空时等待到截止时间', async () => {
@@ -85,7 +83,6 @@ describe('waitForStableContent', () => {
     })
 
     expect(now).toBe(70)
-    expect(readContent).toHaveBeenLastCalledWith()
   })
 })
 

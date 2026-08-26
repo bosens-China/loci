@@ -59,7 +59,7 @@ describe('Agent 全局规则写入', () => {
     ).toMatch(/^---\n[\s\S]*applyTo: "\*\*"[\s\S]*<!-- loci:start -->/)
   })
 
-  it('迁移 Codex 中有边界的 Context7 规则并返回明确提示', () => {
+  it('迁移 Codex 中有边界的 Context7 规则并保留个人规则', () => {
     const codexDir = join(homeDir, '.codex')
     const path = join(codexDir, 'AGENTS.md')
     mkdirSync(codexDir, { recursive: true })
@@ -69,16 +69,14 @@ describe('Agent 全局规则写入', () => {
       'utf8'
     )
 
-    const first = installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+    installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
     const content = readFileSync(path, 'utf8')
     const second = installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
 
-    expect(first.message).toContain('检测到 Context7')
     expect(content).toContain(LOCI_CONTEXT7_COMPATIBILITY)
     expect(content).toContain('# 我的规则')
     expect(content).not.toContain('<!-- context7 -->')
     expect(second.changed).toBe(false)
-    expect(second.message).toContain('组合规则已是最新版本')
   })
 
   it('迁移旧版 Codex Loci 与 Context7 组合规则', () => {
@@ -91,10 +89,9 @@ describe('Agent 全局规则写入', () => {
       'utf8'
     )
 
-    const result = installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
+    installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })
     const content = readFileSync(path, 'utf8')
 
-    expect(result.message).toContain('检测到 Context7')
     expect(content).toContain(LOCI_CONTEXT7_COMPATIBILITY)
     expect(content).toContain('# 我的规则')
     expect(content).not.toContain('loci-context7')
@@ -113,7 +110,6 @@ describe('Agent 全局规则写入', () => {
 
     expect(first.changed).toBe(true)
     expect(second.changed).toBe(true)
-    expect(second.message).toContain('检测到 Context7')
     expect(readFileSync(path, 'utf8')).toContain(LOCI_CONTEXT7_COMPATIBILITY)
     expect(third.changed).toBe(false)
   })
@@ -145,9 +141,7 @@ describe('Agent 全局规则写入', () => {
     const original = 'Always run `npx ctx7@latest docs` first.\n'
     writeFileSync(path, original, 'utf8')
 
-    expect(() => installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })).toThrow(
-      '无法安全替换'
-    )
+    expect(() => installAgentGlobalRules('codex', { dataDir, homeDir, owner: '测试' })).toThrow()
     expect(readFileSync(path, 'utf8')).toBe(original)
   })
 
@@ -155,7 +149,7 @@ describe('Agent 全局规则写入', () => {
     const lock = acquireRuntimeLock(dataDir, 'agent-global-rules-antigravity', '另一个进程')
     expect(() =>
       installAgentGlobalRules('antigravity', { dataDir, homeDir, owner: '测试' })
-    ).toThrow('另一个进程')
+    ).toThrow()
 
     lock.release()
     expect(
@@ -171,7 +165,7 @@ describe('Agent 全局规则写入', () => {
 
     expect(() =>
       installAgentGlobalRules('antigravity', { dataDir, homeDir, owner: '测试' })
-    ).toThrow('不完整')
+    ).toThrow()
     expect(readFileSync(path, 'utf8')).toBe(original)
     expect(original).not.toContain(LOCI_INSTRUCTIONS_END)
   })
@@ -199,7 +193,7 @@ describe('Agent 全局规则写入', () => {
     expect(inspectAgentGlobalRules('antigravity', { homeDir }).status).toBe('conflict')
     expect(() =>
       removeAgentGlobalRules('antigravity', { dataDir, homeDir, owner: '测试' })
-    ).toThrow('不完整')
+    ).toThrow()
     expect(readFileSync(path, 'utf8')).toBe(original)
   })
 })

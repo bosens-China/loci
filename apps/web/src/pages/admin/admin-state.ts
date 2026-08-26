@@ -1,5 +1,5 @@
 import {
-  scopePathContains,
+  getCloudLibraryContentRemovalRisk,
   type CloudLibrary,
   type CloudLibraryInput,
   type CloudSyncJob
@@ -60,9 +60,11 @@ export function getAdminLibraryRemovalWarning(
   library: CloudLibrary,
   input: CloudLibraryInput
 ): string | null {
-  if (library.url !== input.url) {
+  const risk = getCloudLibraryContentRemovalRisk(library, input)
+  if (risk === 'url_changed') {
     return 'Server 会立即清空该文档库现有抓取内容。保存后需要重新同步，成功后才会发布新快照。'
   }
-  if (scopePathContains(input.scopePath, library.scopePath)) return null
-  return 'Server 会立即删除新收录范围之外的正文。保存后需要重新同步，成功后才会发布完整的新快照。'
+  return risk
+    ? 'Server 会立即删除新收录范围之外的正文。保存后需要重新同步，成功后才会发布完整的新快照。'
+    : null
 }

@@ -1,10 +1,10 @@
 import {
   DOCUMENT_SOURCE_DEFAULTS,
   deriveSourceName,
+  getDocumentContentRemovalRisk,
   getSourceScopeOptions,
   getUpcomingScheduleRuns,
   parseGithubRepositoryUrl,
-  scopePathContains,
   type SourceKind
 } from '@loci/shared'
 
@@ -64,18 +64,9 @@ export function getLocalLibraryRemovalWarning(
   current: StoredLibraryLocation,
   next: StoredLibraryLocation
 ): string | null {
-  const nextRepository = parseGithubRepositoryUrl(next.url)
-  if (
-    current.kind !== next.kind ||
-    new URL(current.url).hostname !== new URL(next.url).hostname ||
-    (next.kind === 'github' && current.url !== nextRepository?.url)
-  ) {
+  const risk = getDocumentContentRemovalRisk(current, next)
+  if (risk === 'source_changed') {
     return '文档来源切换会立即删除现有正文和搜索索引。保存后需要重新同步。'
   }
-  const scopeMayRemoveDocuments = !scopePathContains(next.scopePath, current.scopePath)
-  const nextExclusion = next.excludePathPattern?.trim() || null
-  const currentExclusion = current.excludePathPattern?.trim() || null
-  const exclusionMayRemoveDocuments = nextExclusion !== null && nextExclusion !== currentExclusion
-  if (!scopeMayRemoveDocuments && !exclusionMayRemoveDocuments) return null
-  return '收窄收录范围或新增、修改排除规则会立即删除不再匹配的正文和搜索索引。'
+  return risk ? '收窄收录范围或新增、修改排除规则会立即删除不再匹配的正文和搜索索引。' : null
 }
