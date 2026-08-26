@@ -12,6 +12,7 @@ import type {
 import type { InspectSourceOptions, SourceInspection } from '@loci/core'
 import type { DocumentSearchMode } from '../document-content-database.js'
 import type { ExplicitPageFetchResult } from '../explicit-page-service.js'
+import type { UrlReviewSnapshot } from '../url-review-database.js'
 
 // MCP 仅依赖宿主能力接口，CLI 与后台服务可各自注入实现。
 export interface LociMcpServices {
@@ -26,9 +27,25 @@ export interface LociMcpServices {
   ) => DocumentSource
   crawlSource: (
     id: string,
-    onProgress?: (progress: CrawlProgress) => void
+    onProgress?: (progress: CrawlProgress) => void,
+    signal?: AbortSignal
   ) => Promise<CrawlProgress>
-  fetchPages: (id: string, urls: readonly string[]) => Promise<ExplicitPageFetchResult>
+  fetchPages: (
+    id: string,
+    urls: readonly string[],
+    onProgress?: (progress: CrawlProgress) => void,
+    signal?: AbortSignal
+  ) => Promise<ExplicitPageFetchResult>
+  startUrlReview: (id: string, goal?: string, signal?: AbortSignal) => Promise<UrlReviewSnapshot>
+  submitUrlReview: (
+    runId: string,
+    batchId: string,
+    excludeUrls: readonly string[],
+    signal?: AbortSignal
+  ) => Promise<UrlReviewSnapshot>
+  getUrlReview: (runId: string) => UrlReviewSnapshot | undefined
+  getActiveUrlReview: (libraryId: string) => UrlReviewSnapshot | undefined
+  cancelUrlReview: (runId: string) => boolean
   deleteSource: (id: string) => void
   isCrawling: (id: string) => boolean
   getCrawlState: (id: string) => CrawlRunState | undefined

@@ -1,28 +1,18 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import {
-  crawlSource,
-  fetchExplicitPages,
-  GithubLimitError,
-  type CrawlNode,
-  type CrawlProgress
-} from '@loci/core'
-import type {
-  CreateSourceInput,
-  CrawlRunState,
-  DocumentSource,
-  UpdateSourceInput
-} from '@loci/shared'
+import { crawlSource, GithubLimitError, type CrawlNode, type CrawlProgress } from '@loci/core'
+import type { CrawlRunState, DocumentSource } from '@loci/shared'
 import { CloudAdminClient } from './cloud-admin-client.js'
-import { AgentIntegrationService, type AgentIntegrationOptions } from './agent-integration.js'
+import { AgentIntegrationService } from './agent-integration.js'
 import { CloudLibraryService, cloudLibraryLockKey } from './cloud-library-service.js'
 import { CrawlTaskCoordinator } from './crawl-task-coordinator.js'
 import { createDatabase, databaseNeedsMigration, type LociDatabase } from './database.js'
 import { crawlRunState, waitForCrawlLockRelease, waitForExternalCrawl } from './external-crawl.js'
 import {
+  fetchSourceExplicitPages,
+  mergeCrawlProgress,
   mergeExplicitPageProgress,
-  runExplicitPageFetch,
-  type ExplicitPageFetchResult
+  runExplicitPageFetch
 } from './explicit-page-service.js'
 import { LocalBrowserCrawler, type BrowserInstallPrompt } from './browser-crawler.js'
 import { resolveLociCacheDir, resolveLociDataDir } from './data-path.js'
@@ -33,47 +23,11 @@ import {
   acquireMaintenanceRuntimeLock,
   readRuntimeLock
 } from './runtime-lock.js'
+import { refreshReviewedSource } from './reviewed-source-refresh.js'
+import { createUrlReviewService } from './url-review-service.js'
+import type { LocalRuntime, LocalRuntimeOptions } from './local-runtime-types.js'
 
-export interface LocalRuntime {
-  dataDir: string
-  cacheDir: string
-  database: LociDatabase
-  cloud: CloudLibraryService
-  admin: CloudAdminClient
-  agentIntegration?: AgentIntegrationService
-  crawlSource: (
-    sourceId: string,
-    onProgress?: (progress: CrawlProgress) => void,
-    onBrowserMissing?: BrowserInstallPrompt,
-    signal?: AbortSignal
-  ) => Promise<CrawlProgress>
-  fetchPages: (
-    sourceId: string,
-    urls: readonly string[],
-    onBrowserMissing?: BrowserInstallPrompt,
-    signal?: AbortSignal
-  ) => Promise<ExplicitPageFetchResult>
-  createSource: (input: CreateSourceInput) => DocumentSource
-  deleteSource: (sourceId: string) => void
-  updateSourcePreservingSchedule: (
-    source: DocumentSource,
-    input: Omit<UpdateSourceInput, 'schedule'>
-  ) => DocumentSource
-  updateSourceSchedule: (source: DocumentSource, schedule: string | null) => DocumentSource
-  isCrawling: (sourceId: string) => boolean
-  getCrawlState: (sourceId: string) => CrawlRunState | undefined
-  resetCrawlStates: () => void
-  assertWritable: () => void
-  close: () => Promise<void>
-}
-
-export interface LocalRuntimeOptions {
-  dataDir?: string
-  cacheDir?: string
-  owner?: string
-  browser?: LocalBrowserCrawler
-  agentIntegration?: Omit<AgentIntegrationOptions, 'database' | 'dataDir'>
-}
+export type { LocalRuntime, LocalRuntimeOptions } from './local-runtime-types.js'
 
 /** 所有本机入口共用的应用运行时，入口层只负责交互和 transport。 */
 export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRuntime {
@@ -120,7 +74,8 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     sourceId: string,
     onProgress?: (progress: CrawlProgress) => void,
     onBrowserMissing?: BrowserInstallPrompt,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    localJob?: { id: string; owner: string }
   ): Promise<CrawlProgress> => {
     let lock
     try {
@@ -144,10 +99,12 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
         if (!pageFetchIsRunning || signal?.aborted) throw waitError
       }
       await waitForCrawlLockRelease(dataDir, sourceId, signal)
-      return runOnce(sourceId, onProgress, onBrowserMissing, signal)
+      return runOnce(sourceId, onProgress, onBrowserMissing, signal, localJob)
     }
     try {
       const source = database.getSourceConfig(sourceId)
+      const activeReview = database.getActiveUrlReview(sourceId)
+      if (activeReview) throw new Error('文档库正在等待 Agent URL 审查，完成或取消后才能普通同步')
       const initialNode: CrawlNode = {
         id: source.firstUrl,
         url: source.firstUrl,
@@ -175,82 +132,121 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
         const documents: Parameters<LociDatabase['saveDocument']>[0][] = []
         const deletedUrls: string[] = []
         let replaceAll = false
-        const result = await crawlSource({
-          firstUrl: source.firstUrl,
-          firstNodeId: source.firstUrl,
-          hostname: source.hostname,
-          scopePath: source.scopePath,
-          excludePathPattern: source.excludePathPattern,
-          pageLimit: source.pageLimit,
-          initialUrls: database.listDocumentUrls(sourceId),
-          fetchMode: source.fetchMode,
-          httpConcurrency: source.httpConcurrency ?? settings.httpConcurrency,
-          browserConcurrency: source.browserConcurrency ?? settings.browserConcurrency,
-          maxRetries: settings.maxRetries,
-          batchIntervalMs: settings.batchIntervalSeconds * 1000,
-          githubArchiveLimitBytes:
-            (source.githubArchiveLimitMb ?? settings.githubArchiveLimitMb) * 1024 * 1024,
-          githubMarkdownLimitBytes:
-            (source.githubMarkdownLimitMb ?? settings.githubMarkdownLimitMb) * 1024 * 1024,
-          githubPreviousRevision: source.githubRevision,
-          githubBlocked: source.githubBlocked,
-          signal,
-          crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
-          beforeBrowserCrawl: () => browser.ensureInstalled(onBrowserMissing),
-          onDocument: (document) => {
-            documents.push({ ...document, sourceId })
-          },
-          onSnapshot: (snapshot) => {
-            replaceAll = true
-            documents.push(...snapshot.map((document) => ({ ...document, sourceId })))
-          },
-          onError: ({ url, missing }) => {
-            if (missing) deletedUrls.push(url)
-          },
-          onDuplicate: ({ url }) => {
-            deletedUrls.push(url)
-          },
-          onProgress: (progress) => {
-            updateState(states, sourceId, progress, null, true)
-            database.updateCrawlRunProgress(runId, progress)
-            onProgress?.(progress)
-          }
-        })
-        const targets = database.listExplicitPageTargets(sourceId)
-        const explicit = targets.length
-          ? await fetchExplicitPages({
-              urls: targets.map((target) => target.url),
+        const reportProgress = (progress: CrawlProgress): void => {
+          updateState(states, sourceId, progress, null, true)
+          database.updateCrawlRunProgress(runId, progress)
+          onProgress?.(progress)
+        }
+        const reviewed =
+          source.discoveryMode === 'agent_review'
+            ? await refreshReviewedSource(
+                database,
+                browser,
+                source,
+                onBrowserMissing,
+                signal,
+                reportProgress
+              )
+            : undefined
+        if (reviewed) {
+          if (reviewed.progress.processed === 0) reportProgress(reviewed.progress)
+        }
+        const result = reviewed
+          ? {
+              progress: reviewed.progress,
+              resolution: {
+                firstUrl: reviewed.resolution.firstUrl,
+                hostname: source.hostname,
+                fetchMode: reviewed.resolution.fetchMode,
+                iconUrl: reviewed.resolution.iconUrl,
+                discovery: 'pages' as const
+              }
+            }
+          : await crawlSource({
+              kind: source.kind,
+              firstUrl: source.firstUrl,
+              firstNodeId: source.firstUrl,
               hostname: source.hostname,
+              scopePath: source.scopePath,
               excludePathPattern: source.excludePathPattern,
-              fetchMode: result.resolution.fetchMode,
-              concurrency:
-                result.resolution.fetchMode === 'browser'
-                  ? (source.browserConcurrency ?? settings.browserConcurrency)
-                  : (source.httpConcurrency ?? settings.httpConcurrency),
+              pageLimit: source.pageLimit,
+              initialUrls: database.listDocumentUrls(sourceId),
+              fetchMode: source.fetchMode,
+              httpConcurrency: source.httpConcurrency ?? settings.httpConcurrency,
+              browserConcurrency: source.browserConcurrency ?? settings.browserConcurrency,
               maxRetries: settings.maxRetries,
+              batchIntervalMs: settings.batchIntervalSeconds * 1000,
+              githubArchiveLimitBytes:
+                (source.githubArchiveLimitMb ?? settings.githubArchiveLimitMb) * 1024 * 1024,
+              githubMarkdownLimitBytes:
+                (source.githubMarkdownLimitMb ?? settings.githubMarkdownLimitMb) * 1024 * 1024,
+              githubPreviousRevision: source.githubRevision,
+              githubBlocked: source.githubBlocked,
               signal,
               crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
-              beforeBrowserCrawl: () => browser.ensureInstalled(onBrowserMissing)
+              beforeBrowserCrawl: () => browser.ensureInstalled(onBrowserMissing),
+              onDocument: (document) => {
+                documents.push({ ...document, sourceId })
+              },
+              onSnapshot: (snapshot) => {
+                replaceAll = true
+                documents.push(...snapshot.map((document) => ({ ...document, sourceId })))
+              },
+              onError: ({ url, missing }) => {
+                if (missing) deletedUrls.push(url)
+              },
+              onDuplicate: ({ url }) => {
+                deletedUrls.push(url)
+              },
+              onProgress: reportProgress
+            })
+        const targets = database.listExplicitPageTargets(sourceId)
+        const targetUrls = new Set(targets.map((target) => target.url))
+        const reviewedUrls = new Set(reviewed?.pages.map((page) => page.url) ?? [])
+        const reviewedTargetPages = reviewed?.pages.filter((page) => targetUrls.has(page.url)) ?? []
+        if (reviewed) {
+          documents.push(...reviewed.documents.filter((document) => !targetUrls.has(document.url)))
+          deletedUrls.push(...reviewed.deletedUrls.filter((url) => !targetUrls.has(url)))
+        }
+        const remainingTargets = reviewed
+          ? targets.filter((target) => !reviewedUrls.has(target.url))
+          : targets
+        const explicit = remainingTargets.length
+          ? await fetchSourceExplicitPages({
+              database,
+              browser,
+              source,
+              urls: remainingTargets.map((target) => target.url),
+              fetchMode: result.resolution.fetchMode,
+              signal,
+              onBrowserMissing,
+              onProgress: (progress) =>
+                reportProgress(mergeCrawlProgress(result.progress, progress))
             })
           : undefined
         const progress = mergeExplicitPageProgress(result.progress, explicit?.items ?? [])
-        if (progress.succeeded === 0 && progress.failed > 0) {
+        const explicitPages = [...reviewedTargetPages, ...(explicit?.items ?? [])]
+        if (!reviewed && progress.succeeded === 0 && progress.failed > 0) {
           throw new Error(`抓取失败：${progress.failed} 个页面均未成功`)
         }
-        database.commitSourceCrawl(sourceId, {
+        signal?.throwIfAborted()
+        const committed = database.commitSourceCrawl(sourceId, {
           documents,
           deletedUrls,
           replaceAll,
-          explicitPages: explicit?.items,
+          explicitPages: explicitPages.length ? explicitPages : undefined,
+          ...(localJob ? { localJob: { ...localJob, runId, result: progress } } : {}),
           resolution: {
             firstUrl: result.resolution.firstUrl,
             mode: result.resolution.fetchMode,
             iconUrl: result.resolution.iconUrl,
+            discovery: result.resolution.discovery,
             github: result.resolution.github
           }
         })
+        if (!committed) throw new Error('任务已取消，未提交抓取结果')
         updateState(states, sourceId, progress, null, false)
-        database.finishCrawlRun(runId, 'completed', progress, null)
+        if (!localJob) database.finishCrawlRun(runId, 'completed', progress, null)
         return progress
       } catch (error) {
         if (error instanceof GithubLimitError) {
@@ -275,11 +271,12 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     sourceId: string,
     onProgress?: (progress: CrawlProgress) => void,
     onBrowserMissing?: BrowserInstallPrompt,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    localJob?: { id: string; owner: string }
   ): Promise<CrawlProgress> =>
     crawlTasks.run(
       sourceId,
-      (reportProgress) => runOnce(sourceId, reportProgress, onBrowserMissing, signal),
+      (reportProgress) => runOnce(sourceId, reportProgress, onBrowserMissing, signal, localJob),
       onProgress
     )
 
@@ -290,15 +287,17 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     cloud: new CloudLibraryService(database, fetch, dataDir),
     admin: new CloudAdminClient(),
     agentIntegration,
+    urlReviews: createUrlReviewService({ database, browser, dataDir, owner }),
     crawlSource: run,
-    fetchPages: (sourceId, urls, onBrowserMissing, signal) => {
+    fetchPages: (sourceId, urls, onBrowserMissing, signal, onProgress) => {
       assertWritable()
       return runExplicitPageFetch(
         { database, browser, dataDir, owner },
         sourceId,
         urls,
         onBrowserMissing,
-        signal
+        signal,
+        onProgress
       )
     },
     createSource: (input) => {
@@ -324,11 +323,13 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     },
     updateSourcePreservingSchedule: (source, input) =>
       mutateSource(source.id, '编辑文档源', () => {
+        assertNoActiveUrlReview(database, source.id)
         const current = requireSource(database, source.id)
         return database.updateSource(source.id, { ...input, schedule: current.schedule })
       }),
     updateSourceSchedule: (source, schedule) =>
       mutateSource(source.id, '修改定时计划', () => {
+        assertNoActiveUrlReview(database, source.id)
         const current = requireSource(database, source.id)
         return database.updateSource(source.id, {
           name: current.name,
@@ -348,6 +349,7 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
       Boolean(
         crawlTasks.isRunning(sourceId) ||
         states.get(sourceId)?.running ||
+        database.getActiveUrlReview(sourceId) ||
         readRuntimeLock(dataDir, `crawl-${sourceId}`)
       ),
     getCrawlState: (sourceId) => {
@@ -369,6 +371,12 @@ function requireSource(database: LociDatabase, sourceId: string): DocumentSource
   const source = database.listSources().find((item) => item.id === sourceId)
   if (!source) throw new Error('文档源不存在')
   return source
+}
+
+function assertNoActiveUrlReview(database: LociDatabase, sourceId: string): void {
+  if (database.getActiveUrlReview(sourceId)) {
+    throw new Error('文档库正在等待 Agent URL 审查，完成或取消后才能修改')
+  }
 }
 
 function updateState(

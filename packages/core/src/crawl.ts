@@ -1,6 +1,10 @@
 import { parse } from 'node-html-parser'
 import { htmlToMarkdown } from 'mdream'
-import { createPathExclusionMatcher, DOCUMENT_SOURCE_LIMITS } from '@loci/shared'
+import {
+  createPathExclusionMatcher,
+  deriveUrlPathTitle,
+  DOCUMENT_SOURCE_LIMITS
+} from '@loci/shared'
 import { abortableSleep, throwIfAborted } from './abort.js'
 import { fetchWithRetry } from './retry.js'
 export { fetchWithRetry, isRetryableStatus, retryAfterMs } from './retry.js'
@@ -83,12 +87,25 @@ export function parsePage(html: string, pageUrl: string): ParsedPage {
     ?.getAttribute('href')
   const iconUrl =
     (iconHref && resolveLink(iconHref, pageUrl)) ?? new URL('/favicon.ico', pageUrl).toString()
-  const links = root
-    .querySelectorAll('a')
-    .map((link) => link.getAttribute('href'))
-    .filter((href): href is string => Boolean(href))
-    .map((href) => resolveLink(href, pageUrl))
-    .filter((url): url is string => Boolean(url))
+  const linkCandidates = root.querySelectorAll('a').flatMap((link) => {
+    const href = link.getAttribute('href')
+    const url = href ? resolveLink(href, pageUrl) : undefined
+    if (!url) return []
+    const label =
+      link.getAttribute('aria-label')?.trim() ||
+      link.getAttribute('title')?.trim() ||
+      link.text.trim()
+    return [
+      {
+        url,
+        title: label || deriveUrlPathTitle(url),
+        titleSource: label ? ('link_text' as const) : ('pathname' as const)
+      }
+    ]
+  })
+  const uniqueCandidates = [
+    ...new Map(linkCandidates.map((candidate) => [candidate.url, candidate])).values()
+  ]
 
   root
     .querySelectorAll('script, style, nav, footer, header, aside, noscript')
@@ -102,7 +119,8 @@ export function parsePage(html: string, pageUrl: string): ParsedPage {
     title,
     language,
     markdown: htmlToMarkdown(content.innerHTML).trim(),
-    links: [...new Set(links)],
+    links: uniqueCandidates.map((candidate) => candidate.url),
+    linkCandidates: uniqueCandidates,
     iconUrl
   }
 }

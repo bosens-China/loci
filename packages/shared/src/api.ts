@@ -133,6 +133,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 
 export type SourceStatus = 'healthy' | 'syncing' | 'attention'
 export type SourceKind = 'web' | 'github'
+export type SourceDiscoveryMode = 'site' | 'agent_review'
+export type ResolvedSourceDiscovery = 'github' | 'llms' | 'openapi' | 'pages'
 
 export interface DocumentSource {
   id: string
@@ -156,6 +158,9 @@ export interface DocumentSource {
   githubMarkdownLimitMb: number | null
   githubDefaultBranch: string | null
   githubRevision: string | null
+  discoveryMode: SourceDiscoveryMode
+  resolvedDiscovery: ResolvedSourceDiscovery | null
+  reviewGoal: string | null
 }
 
 export interface CloudSourceOrigin {
@@ -168,6 +173,7 @@ export interface CloudSourceOrigin {
 export interface CreateSourceInput {
   name: string
   url: string
+  kind?: SourceKind
   mode: FetchMode
   pageLimit: number
   scopePath?: string
@@ -177,6 +183,8 @@ export interface CreateSourceInput {
   browserConcurrency: number | null
   githubArchiveLimitMb?: number | null
   githubMarkdownLimitMb?: number | null
+  discoveryMode?: SourceDiscoveryMode
+  reviewGoal?: string | null
 }
 
 export type UpdateSourceInput = CreateSourceInput
@@ -251,6 +259,19 @@ export interface LocalJob {
 export interface EnqueueLocalJobResult {
   job: LocalJob
   reused: boolean
+}
+
+export type LocalJobEventStatus = Extract<CrawlNodeStatus, 'success' | 'failed'>
+
+/** 持久任务的逐页完成事件；sequence 可用于跨进程断点续读。 */
+export interface LocalJobEvent {
+  sequence: number
+  jobId: string
+  sourceId: string
+  runId: string | null
+  node: CrawlNode & { status: LocalJobEventStatus }
+  progress: CrawlProgress
+  createdAt: string
 }
 
 export interface CreateSourceResult {

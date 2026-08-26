@@ -1,5 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
-import { crawlHttpSource, isImmediateStaticHostname } from '../crawl.js'
+import { crawlHttpSource, isImmediateStaticHostname, parsePage } from '../crawl.js'
+
+describe('页面候选链接', () => {
+  it('保留可帮助 Agent 理解 URL 的链接标题及来源', () => {
+    const page = parsePage(
+      '<main><a href="/api" aria-label="API 参考"></a><a href="/components/button"></a></main>',
+      'https://example.com/docs'
+    )
+    expect(page.linkCandidates).toEqual([
+      { url: 'https://example.com/api', title: 'API 参考', titleSource: 'link_text' },
+      {
+        url: 'https://example.com/components/button',
+        title: 'button',
+        titleSource: 'pathname'
+      }
+    ])
+  })
+})
 
 describe('静态 Pages 抓取', () => {
   it('只识别 GitHub Pages 与 GitLab Pages 的站点子域名', () => {

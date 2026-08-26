@@ -17,6 +17,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   rmSync(dataDir, { recursive: true, force: true })
   if (originalDataDir === undefined) delete process.env.LOCI_DATA_DIR
   else process.env.LOCI_DATA_DIR = originalDataDir
@@ -110,5 +111,63 @@ describe('MCP 工具直接调用', () => {
       sync_status: 'completed_with_errors',
       items: [{ status: 'failed', message: expect.stringContaining('必须属于') }]
     })
+  })
+
+  it('等待同步时保持 stdout 为最终 JSON，并把逐页进度写入 stderr JSONL', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () =>
+        Promise.resolve(new Response('<html><title>Docs</title><main><h1>Docs</h1></main></html>'))
+      )
+    )
+    const runtime = createCliRuntime()
+    const source = runtime.createSource({
+      name: 'Docs',
+      url: 'https://docs.example.com/guide',
+      mode: 'http',
+      pageLimit: 1,
+      scopePath: '/guide',
+      schedule: null,
+      httpConcurrency: null,
+      browserConcurrency: null
+    })
+    await runtime.close()
+    let output = ''
+    let progressOutput = ''
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      output += String(chunk)
+      return true
+    })
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      progressOutput += String(chunk)
+      return true
+    })
+
+    await createProgram().parseAsync(
+      [
+        'mcp',
+        'call',
+        'loci_sync_libraries',
+        '--input',
+        JSON.stringify({ library_ids: [source.id], wait_for_completion: true }),
+        '--progress',
+        'jsonl'
+      ],
+      { from: 'user' }
+    )
+
+    expect(JSON.parse(output)).toMatchObject({
+      items: [{ library_id: source.id, sync_status: 'completed' }]
+    })
+    const progress = progressOutput
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { message: string })
+    expect(progress).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining('success Docs https://docs.example.com/guide')
+      })
+    ])
   })
 })

@@ -22,7 +22,10 @@ const source: DocumentSource = {
   githubArchiveLimitMb: null,
   githubMarkdownLimitMb: null,
   githubDefaultBranch: null,
-  githubRevision: null
+  githubRevision: null,
+  discoveryMode: 'site',
+  resolvedDiscovery: null,
+  reviewGoal: null
 }
 
 describe('持久后台需求', () => {

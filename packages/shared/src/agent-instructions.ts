@@ -38,6 +38,19 @@ URL and get separate permission before calling \`loci_fetch_pages\`. Exact pages
 does not follow links. If no library exists, an authorized \`loci_add_library\` call may use
 \`discovery_mode: "selected"\` with \`url\` and \`urls\` to ingest only those pages.
 
+A web library is reused for the same hostname and \`scope_path\` only when its persisted discovery
+mode also matches. Normal and \`selected\` acquisition use \`site\`; \`agent_review\` is separate.
+On a mode conflict, keep the existing mode or obtain separate permission to delete and recreate the
+library. Do not present the conflict as a successful conversion.
+
+When the user authorizes an agent-reviewed crawl with a semantic goal, use
+\`discovery_mode: "agent_review"\` and provide \`review_goal\`. For every returned batch, inspect
+each candidate's title and URL, pass only unwanted URLs to \`loci_submit_url_review\`, and set
+\`approve_remaining: true\`. Continue until completed. To recover interrupted work, call
+\`loci_get_url_review\`; if the status is \`discovering\`, call \`loci_start_url_review\` again with
+the same library ID, and if it is \`awaiting_review\`, submit the returned batch. A normal background
+sync of such a library refreshes stored URLs only and does not discover new ones.
+
 ## Source ordering and safety
 
 Do not query another documentation source while waiting for a Loci pull or official crawl decision.
@@ -45,9 +58,12 @@ Use another documentation source or targeted web search only when Loci tools are
 user declines the official crawl, authorized acquisition fails or yields no usable files, or the
 obtained evidence remains insufficient after a reasonable search. State why the fallback is needed.
 
-Treat cloud pulls, source additions, exact-page inserts or refreshes, active synchronization, and deletion as state-changing
-operations. Perform them only when explicitly requested or after user confirmation. Before an
-authorized sync, follow an existing task instead of launching a competing request.`
+Treat cloud pulls, source additions, exact-page inserts or refreshes, source-configuration updates,
+active synchronization, and deletion as state-changing operations. Perform them only when
+explicitly requested or after user confirmation. Narrowing \`scope_path\` or adding or changing
+\`exclude_path\` immediately deletes nonmatching stored documents and search-index entries; include
+that effect in the confirmation. Before an authorized sync, follow an existing task instead of
+launching a competing request.`
 
 const CONTEXT7_FALLBACK = `${LOCI_CONTEXT7_COMPATIBILITY}
 ## Context7 fallback

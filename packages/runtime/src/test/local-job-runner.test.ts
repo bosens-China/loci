@@ -1,7 +1,11 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createDatabase } from '../database.js'
 import { createLocalJobRunner } from '../local-job-runner.js'
 import type { LocalRuntime } from '../local-runtime.js'
+import { acquireCrawlRuntimeLock, acquireMaintenanceRuntimeLock } from '../runtime-lock.js'
 
 describe('local job runner', () => {
   it('执行持久任务并复用同一资源的重复提交', async () => {
@@ -89,6 +93,34 @@ describe('local job runner', () => {
     database.close()
   })
 
+  it('取消请求与 worker 停止并发时仍收口为 cancelled', async () => {
+    const database = createDatabase(':memory:')
+    const source = database.createSource({
+      name: 'Vite',
+      url: 'https://vite.dev',
+      mode: 'http',
+      pageLimit: 100,
+      schedule: null,
+      httpConcurrency: null,
+      browserConcurrency: null
+    })
+    const crawlSource = vi.fn(
+      (_id: string, _progress: unknown, _missing: unknown, signal: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+    )
+    const runtime = { database, crawlSource } as unknown as LocalRuntime
+    const runner = createLocalJobRunner(runtime, { owner: 'test-worker' })
+    const job = database.enqueueSourceSync(source.id, 'mcp').job
+
+    expect(await runner.runOnce()).toBe(1)
+    database.requestLocalJobCancellation(job.id)
+    await runner.stop()
+    expect(database.getLocalJob(job.id)?.status).toBe('cancelled')
+    database.close()
+  })
+
   it('维护窗口停止认领新任务，完成后恢复执行', async () => {
     const database = createDatabase(':memory:')
     const source = database.createSource({
@@ -141,5 +173,52 @@ describe('local job runner', () => {
     await vi.waitFor(() => expect(runner.activeCount()).toBe(0))
     await runner.stop()
     database.close()
+  })
+
+  it('跨连接遇到维护锁时把任务放回队列并在维护后恢复', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-job-maintenance-'))
+    const filename = join(directory, 'loci.sqlite')
+    const first = createDatabase(filename)
+    const source = first.createSource({
+      name: 'Vite',
+      url: 'https://vite.dev',
+      mode: 'http',
+      pageLimit: 100,
+      schedule: null,
+      httpConcurrency: null,
+      browserConcurrency: null
+    })
+    const second = createDatabase(filename)
+    const maintenance = acquireMaintenanceRuntimeLock(directory, 'backup')
+    const result = { queued: 1, processed: 1, succeeded: 1, failed: 0, limitReached: false }
+    const crawlSource = vi.fn(async () => {
+      const lock = acquireCrawlRuntimeLock(directory, source.id, 'test-worker')
+      lock.release()
+      return result
+    })
+    const runtime = { database: second, crawlSource } as unknown as LocalRuntime
+    const runner = createLocalJobRunner(runtime, { owner: 'test-worker' })
+    const job = first.enqueueSourceSync(source.id, 'background').job
+
+    try {
+      expect(await runner.runOnce()).toBe(1)
+      await vi.waitFor(() =>
+        expect(first.getLocalJob(job.id)).toMatchObject({
+          status: 'pending',
+          error: expect.stringContaining('任务等待重试')
+        })
+      )
+
+      maintenance.release()
+      expect(await runner.runOnce()).toBe(1)
+      await vi.waitFor(() => expect(first.getLocalJob(job.id)?.status).toBe('completed'))
+      expect(crawlSource).toHaveBeenCalledTimes(2)
+    } finally {
+      maintenance.release()
+      await runner.stop()
+      first.close()
+      second.close()
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 })

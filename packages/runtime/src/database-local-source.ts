@@ -1,8 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { GithubBlockedState } from '@loci/core'
 import { getHostname, normalizeScopePath, normalizeUrl } from '@loci/core'
-import type { DocumentSource } from '@loci/shared'
+import type { DocumentSource, ResolvedSourceDiscovery } from '@loci/shared'
 import { type SourceRow, toDocumentSource } from './database-values.js'
+
+export { withImmediateTransaction as withTransaction } from './sqlite.js'
 
 export interface SourceConfig {
   id: string
@@ -20,6 +22,8 @@ export interface SourceConfig {
   githubDefaultBranch: string | null
   githubRevision: string | null
   githubBlocked: GithubBlockedState | null
+  discoveryMode: 'site' | 'agent_review'
+  reviewGoal: string | null
 }
 
 export function createWebSourceIdentity(hostname: string, scopePath: string): string {
@@ -45,6 +49,8 @@ interface SourceConfigRow {
   github_blocked_revision: string | null
   github_blocked_limit_kind: 'archive' | 'markdown' | null
   github_blocked_limit_bytes: number | null
+  discovery_mode: SourceConfig['discoveryMode']
+  review_goal: string | null
 }
 
 export function readSourceConfig(database: DatabaseSync, id: string): SourceConfig {
@@ -53,7 +59,8 @@ export function readSourceConfig(database: DatabaseSync, id: string): SourceConf
       `SELECT id, first_url, hostname, fetch_mode, page_limit, scope_path, exclude_path_pattern, http_concurrency,
          browser_concurrency, source_type, document_kind, github_archive_limit_mb,
          github_markdown_limit_mb, github_default_branch, github_revision,
-         github_blocked_revision, github_blocked_limit_kind, github_blocked_limit_bytes
+         github_blocked_revision, github_blocked_limit_kind, github_blocked_limit_bytes,
+         discovery_mode, review_goal
        FROM document_sources WHERE id = ?`
     )
     .get(id) as unknown as SourceConfigRow | undefined
@@ -77,6 +84,8 @@ export function readSourceConfig(database: DatabaseSync, id: string): SourceConf
       source.github_markdown_limit_mb === null ? null : Number(source.github_markdown_limit_mb),
     githubDefaultBranch: source.github_default_branch,
     githubRevision: source.github_revision,
+    discoveryMode: source.discovery_mode,
+    reviewGoal: source.review_goal,
     githubBlocked:
       source.github_blocked_revision &&
       source.github_blocked_limit_kind &&
@@ -126,31 +135,21 @@ export function throwLocalHostnameConflict(error: unknown): never {
   throw error
 }
 
-export function withTransaction<T>(database: DatabaseSync, work: () => T): T {
-  database.exec('BEGIN IMMEDIATE')
-  try {
-    const result = work()
-    database.exec('COMMIT')
-    return result
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
-  }
-}
-
 export function updateResolvedSourceRecord(
   database: DatabaseSync,
   id: string,
   firstUrl: string,
   mode: 'http' | 'browser',
   iconUrl: string | null,
-  github?: { defaultBranch: string; revision: string }
+  github?: { defaultBranch: string; revision: string },
+  discovery?: ResolvedSourceDiscovery
 ): void {
   const url = normalizeUrl(firstUrl)
   database
     .prepare(
       `UPDATE document_sources
        SET first_url = ?, hostname = ?, fetch_mode = ?, icon_url = COALESCE(?, icon_url),
+           resolved_discovery = COALESCE(?, resolved_discovery),
             source_identity = CASE WHEN document_kind = 'web' THEN ? || '|' || scope_path ELSE source_identity END,
            github_default_branch = COALESCE(?, github_default_branch),
            github_revision = COALESCE(?, github_revision),
@@ -165,6 +164,7 @@ export function updateResolvedSourceRecord(
       getHostname(url),
       mode,
       iconUrl,
+      discovery ?? null,
       getHostname(url),
       github?.defaultBranch ?? null,
       github?.revision ?? null,
@@ -190,7 +190,8 @@ export function readDocumentSource(database: DatabaseSync, id: string): Document
          s.http_concurrency, s.browser_concurrency, s.icon_url, s.source_type,
          s.cloud_server_url, s.cloud_library_id, s.cloud_revision, s.cloud_auto_sync,
          s.document_kind, s.github_archive_limit_mb, s.github_markdown_limit_mb,
-         s.github_default_branch, s.github_revision,
+         s.github_default_branch, s.github_revision, s.discovery_mode, s.resolved_discovery,
+         s.review_goal,
          COUNT(d.id) AS page_count,
          COALESCE(SUM(length(CAST(d.markdown AS BLOB))), 0) AS content_size,
          MAX(d.crawled_at) AS last_crawled_at

@@ -3,7 +3,13 @@ import { throwIfAborted } from './abort.js'
 import { fetchHttpPage, getHostname, normalizeUrl } from './crawl.js'
 import { fetchCrawledPageWithRetry, type RenderedCrawler } from './rendered.js'
 import { probeSourcePage, type SourceFetchMode } from './source.js'
-import type { CrawledDocument, CrawledPage, CrawlFailure, FetchOptions } from './types.js'
+import type {
+  CrawledDocument,
+  CrawledPage,
+  CrawlFailure,
+  CrawlProgress,
+  FetchOptions
+} from './types.js'
 
 export type ExplicitPageStatus = 'fetched' | 'missing' | 'failed'
 
@@ -28,6 +34,7 @@ export interface ExplicitPagesOptions extends FetchOptions {
   concurrency: number
   crawler?: RenderedCrawler
   beforeBrowserCrawl?: () => Promise<void>
+  onProgress?: (progress: CrawlProgress) => void
 }
 
 export interface ExplicitPageUrlCheck {
@@ -45,6 +52,31 @@ export async function fetchExplicitPages(
   const results = new Array<ExplicitPageResult>(urls.length)
   let iconUrl = selected.firstPage?.page?.iconUrl ?? null
   let cursor = 0
+  let processed = 0
+  let succeeded = 0
+  let failed = 0
+  const failures: CrawlFailure[] = []
+
+  const report = (item: ExplicitPageResult): void => {
+    processed += 1
+    if (item.status === 'fetched') succeeded += 1
+    else failed += 1
+    if (item.failure) failures.push(item.failure)
+    options.onProgress?.({
+      queued: urls.length,
+      processed,
+      succeeded,
+      failed,
+      limitReached: false,
+      ...(failures.length ? { failures: [...failures] } : {}),
+      node: {
+        id: item.url,
+        url: item.url,
+        title: item.document?.title ?? item.url,
+        status: item.status === 'fetched' ? 'success' : 'failed'
+      }
+    })
+  }
 
   const worker = async (): Promise<void> => {
     while (cursor < urls.length) {
@@ -52,16 +84,17 @@ export async function fetchExplicitPages(
       const index = cursor++
       const url = urls[index]
       if (!url) continue
+      let item: ExplicitPageResult
       try {
         const page =
           index === 0 && selected.firstPage
             ? selected.firstPage
             : await fetchPage(options, url, selected.fetchMode)
         iconUrl ??= page.page?.iconUrl ?? null
-        results[index] = toExplicitResult(url, page, selected.fetchMode, options)
+        item = toExplicitResult(url, page, selected.fetchMode, options)
       } catch (error) {
         throwIfAborted(options.signal)
-        results[index] = {
+        item = {
           url,
           status: 'failed',
           failure: {
@@ -72,6 +105,8 @@ export async function fetchExplicitPages(
           }
         }
       }
+      results[index] = item
+      report(item)
     }
   }
 

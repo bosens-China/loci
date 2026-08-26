@@ -1,7 +1,9 @@
 import {
   createPathExclusionMatcher,
   DOCUMENT_SOURCE_LIMITS,
-  parseGithubRepositoryUrl
+  parseGithubRepositoryUrl,
+  type ResolvedSourceDiscovery,
+  type SourceKind
 } from '@loci/shared'
 import {
   crawlHttpSource,
@@ -26,7 +28,7 @@ export interface SourceResolution {
   hostname: string
   fetchMode: Exclude<SourceFetchMode, 'auto'>
   iconUrl: string | null
-  discovery: 'github' | 'llms' | 'openapi' | 'pages'
+  discovery: ResolvedSourceDiscovery
   github?: {
     defaultBranch: string
     revision: string
@@ -39,6 +41,7 @@ export interface SourceCrawlResult {
 }
 
 export interface SourceCrawlOptions extends Omit<HttpCrawlOptions, 'concurrency' | 'seedPage'> {
+  kind?: SourceKind
   fetchMode: SourceFetchMode
   httpConcurrency?: number
   browserConcurrency?: number
@@ -57,7 +60,9 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
   throwIfAborted(options.signal)
   const scopePath = options.scopePath ?? '/'
   const githubRepository = parseGithubRepositoryUrl(options.firstUrl)
-  if (githubRepository) {
+  const kind = options.kind ?? (githubRepository ? 'github' : 'web')
+  if (kind === 'github') {
+    if (!githubRepository) throw new Error('GitHub 文档源必须使用公开仓库首页 URL')
     const result = await crawlGithubSource({
       repository: githubRepository,
       pageLimit: options.pageLimit,

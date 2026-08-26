@@ -7,8 +7,10 @@ export async function waitForSync(
   libraryId: string,
   context: LociToolContext
 ): Promise<Record<string, unknown>> {
+  const reporter = createProgressReporter(context, libraryId)
   try {
-    const progress = await services.crawlSource(libraryId, progressReporter(context, libraryId))
+    const progress = await services.crawlSource(libraryId, reporter.report, context.signal)
+    await reporter.flush()
     const runId = services.getLatestCrawlRunId(libraryId)
     return {
       library_id: libraryId,
@@ -18,6 +20,8 @@ export async function waitForSync(
       progress: serializeProgress(progress)
     }
   } catch (error) {
+    await reporter.flush()
+    if (context.signal?.aborted) throw context.signal.reason
     const state = services.getCrawlState(libraryId)
     const runId = services.getLatestCrawlRunId(libraryId)
     return {
@@ -71,28 +75,34 @@ export function stateToSyncItem(
   }
 }
 
-function progressReporter(
+export function createProgressReporter(
   context: LociToolContext,
   libraryId: string
-): (progress: CrawlProgress) => void {
+): { report: (progress: CrawlProgress) => void; flush: () => Promise<void> } {
   const progressToken = context.progressToken
-  let lastProcessed = -1
-  return (progress) => {
-    if (
-      progressToken === undefined ||
-      !context.notifyProgress ||
-      progress.processed === lastProcessed
-    )
-      return
-    lastProcessed = progress.processed
-    void context
-      .notifyProgress(
-        progress.processed,
-        Math.max(progress.queued, progress.processed),
-        `${libraryId}: ${progress.succeeded} succeeded, ${progress.failed} failed`
-      )
+  let lastReported = -1
+  let lastNode = ''
+  let notifications = Promise.resolve()
+  const report = (progress: CrawlProgress): void => {
+    const node = progress.node
+    const completedNode = node && (node.status === 'success' || node.status === 'failed')
+    const nodeKey = completedNode ? `${node.id}:${node.status}` : ''
+    if (progressToken === undefined || !context.notifyProgress) return
+    if (completedNode && nodeKey === lastNode) return
+    if (!completedNode && progress.processed <= lastReported) return
+    if (completedNode) lastNode = nodeKey
+    lastReported = Math.max(lastReported, progress.processed)
+    const reported = lastReported
+    const total = Math.max(progress.queued, progress.processed, reported)
+    const message = completedNode
+      ? `${libraryId}: [${reported}/${total}] ${node.status} ${node.title} ${node.url}`
+      : `${libraryId}: ${progress.succeeded} succeeded, ${progress.failed} failed`
+    notifications = notifications
+      .then(() => context.notifyProgress?.(reported, total, message))
+      .then(() => undefined)
       .catch(() => undefined)
   }
+  return { report, flush: () => notifications }
 }
 
 export function serializeLibrary(source: DocumentSource): Record<string, unknown> {
@@ -114,7 +124,10 @@ export function serializeLibrary(source: DocumentSource): Record<string, unknown
     kind: source.kind,
     github_archive_limit_mb: source.githubArchiveLimitMb,
     github_markdown_limit_mb: source.githubMarkdownLimitMb,
-    icon_url: source.iconUrl
+    icon_url: source.iconUrl,
+    discovery_mode: source.discoveryMode,
+    resolved_discovery: source.resolvedDiscovery,
+    review_goal: source.reviewGoal
   }
 }
 

@@ -10,6 +10,7 @@ import {
 } from './schemas.js'
 import type { LociMcpServices } from './services.js'
 import {
+  createProgressReporter,
   failure,
   page,
   readAnnotations,
@@ -24,9 +25,11 @@ import {
   writeAnnotations
 } from './server-support.js'
 import type { LociToolRegistrar } from './tool-registry.js'
+import { serializeUrlReview } from './url-review-tools.js'
+import { rethrowRequestCancellation } from '../url-review-cancellation.js'
 
 const WAIT_DESCRIPTION =
-  '默认立即返回 syncing；需要在单次调用内等待结果时传 wait_for_completion=true，并设置客户端进度回调。'
+  '默认立即返回 syncing；需要逐页等待时传 wait_for_completion=true，工具会使用 MCP SDK 原生 Progress，并响应当前请求的 Cancellation。'
 
 export function registerSyncTools(register: LociToolRegistrar, services: LociMcpServices): void {
   registerAddLibrary(register, services)
@@ -40,7 +43,7 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
     'loci_add_library',
     {
       title: '添加网页文档库',
-      description: `按产品基础值创建本地文档库；可覆盖抓取方式、页面上限、路径范围、并发和 GitHub 大小上限。discovery_mode=selected 时只抓 url 与 urls，不执行站点发现。相同 hostname 与路径范围会复用。${WAIT_DESCRIPTION}`,
+      description: `按产品基础值创建本地文档库；discovery_mode=selected 只抓指定页面；agent_review 会把每批 title + url 交给 Agent 思考，并只接收排除清单。相同 hostname 与路径范围会复用。${WAIT_DESCRIPTION}`,
       inputSchema: z
         .object({
           url: z.url().describe('任意公开文档页面 URL'),
@@ -50,9 +53,16 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
             .optional()
             .describe('selected 模式下的其余指定页面；加上 url 最多 50 个'),
           discovery_mode: z
-            .enum(['site', 'selected'])
+            .enum(['site', 'selected', 'agent_review'])
             .default('site')
-            .describe('site 执行站点发现；selected 只抓 url 与 urls 中的页面'),
+            .describe('site 默认发现；selected 只抓指定页面；agent_review 逐批由 Agent 排除'),
+          review_goal: z
+            .string()
+            .trim()
+            .min(1)
+            .max(2_000)
+            .optional()
+            .describe('agent_review 必填，例如“只收录 API 与组件文档”'),
           name: z
             .string()
             .trim()
@@ -81,9 +91,25 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
           github_markdown_limit_mb: sizeSchema('省略时使用全局 GitHub Markdown 默认值'),
           wait_for_completion: z.boolean().default(false)
         })
-        .strict(),
+        .strict()
+        .superRefine((input, context) => {
+          if (input.discovery_mode === 'agent_review' && !input.review_goal) {
+            context.addIssue({
+              code: 'custom',
+              path: ['review_goal'],
+              message: 'agent_review 模式必须提供 review_goal'
+            })
+          }
+          if (input.discovery_mode !== 'selected' && input.urls?.length) {
+            context.addIssue({
+              code: 'custom',
+              path: ['urls'],
+              message: 'urls 只用于 selected 模式'
+            })
+          }
+        }),
       outputSchema: addLibraryOutputSchema,
-      annotations: writeAnnotations(true)
+      annotations: { ...writeAnnotations(true), destructiveHint: true }
     },
     async (input, context) => {
       const before = new Set(services.listSources().map((item) => item.id))
@@ -101,9 +127,58 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
         githubArchiveLimitMb:
           input.github_archive_limit_mb ?? DOCUMENT_SOURCE_DEFAULTS.githubArchiveLimitMb,
         githubMarkdownLimitMb:
-          input.github_markdown_limit_mb ?? DOCUMENT_SOURCE_DEFAULTS.githubMarkdownLimitMb
+          input.github_markdown_limit_mb ?? DOCUMENT_SOURCE_DEFAULTS.githubMarkdownLimitMb,
+        discoveryMode: input.discovery_mode === 'agent_review' ? 'agent_review' : 'site',
+        reviewGoal: input.review_goal ?? null
       })
       const created = !before.has(source.id)
+      const requestedMode = input.discovery_mode === 'agent_review' ? 'agent_review' : 'site'
+      if (source.discoveryMode !== requestedMode) {
+        return result(
+          {
+            created: false,
+            sync_status: 'failed',
+            error: `相同域名与路径范围的文档库已使用 ${source.discoveryMode} 模式`,
+            library: serializeLibrary(source)
+          },
+          '文档库发现模式冲突'
+        )
+      }
+      if (input.discovery_mode === 'agent_review') {
+        try {
+          const review = await services.startUrlReview(source.id, input.review_goal, context.signal)
+          const current = services.listSources().find((entry) => entry.id === source.id) ?? source
+          return result(
+            {
+              created,
+              sync_status:
+                review.run.status === 'awaiting_review'
+                  ? 'awaiting_review'
+                  : review.run.status === 'completed'
+                    ? 'completed'
+                    : review.run.status === 'failed' || review.run.status === 'cancelled'
+                      ? 'failed'
+                      : 'syncing',
+              library: serializeLibrary(current),
+              url_review: serializeUrlReview(review)
+            },
+            review.run.status === 'awaiting_review'
+              ? '文档库已创建，等待 Agent 审查首批 URL'
+              : `URL 审查状态：${review.run.status}`
+          )
+        } catch (error) {
+          rethrowRequestCancellation(error, context.signal)
+          return result(
+            {
+              created,
+              sync_status: 'failed',
+              error: error instanceof Error ? error.message : 'URL 审查启动失败',
+              library: serializeLibrary(source)
+            },
+            'URL 审查启动失败'
+          )
+        }
+      }
       if (input.discovery_mode === 'selected') {
         const urls = [...new Set([input.url, ...(input.urls ?? [])])]
         if (!input.wait_for_completion) {
@@ -117,8 +192,10 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
             created ? '文档库已创建并开始抓取指定页面' : '指定页面已加入现有文档库并开始更新'
           )
         }
+        const reporter = createProgressReporter(context, source.id)
         try {
-          const output = await services.fetchPages(source.id, urls)
+          const output = await services.fetchPages(source.id, urls, reporter.report, context.signal)
+          await reporter.flush()
           const current = services.listSources().find((entry) => entry.id === source.id) ?? source
           return result(
             {
@@ -132,6 +209,8 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
             `指定页面处理完成：${output.items.length} 个`
           )
         } catch (error) {
+          await reporter.flush()
+          rethrowRequestCancellation(error, context.signal)
           return result(
             {
               created,
@@ -193,8 +272,15 @@ function registerSyncLibraries(register: LociToolRegistrar, services: LociMcpSer
       const available = new Set(services.listSources().map((source) => source.id))
       const items: Array<Record<string, unknown>> = []
       for (const id of new Set(library_ids)) {
+        const review = services.getActiveUrlReview(id)
         if (!available.has(id)) {
           items.push({ library_id: id, sync_status: 'not_found' })
+        } else if (review) {
+          items.push({
+            library_id: id,
+            sync_status: 'awaiting_review',
+            run_id: review.run.id
+          })
         } else if (services.isCrawling(id)) {
           const state = services.getCrawlState(id)
           items.push(
@@ -226,16 +312,23 @@ function registerSyncStatus(register: LociToolRegistrar, services: LociMcpServic
     },
     ({ library_ids }) => {
       const available = new Set(services.listSources().map((source) => source.id))
-      const items = [...new Set(library_ids)].map((id) =>
-        available.has(id)
-          ? stateToSyncItem(
-              id,
-              services.getCrawlState(id),
-              services.isCrawling(id),
-              services.getLatestCrawlRunId(id)
-            )
-          : { library_id: id, sync_status: 'not_found' }
-      )
+      const items = [...new Set(library_ids)].map((id) => {
+        if (!available.has(id)) return { library_id: id, sync_status: 'not_found' }
+        const review = services.getActiveUrlReview(id)
+        if (review) {
+          return {
+            library_id: id,
+            sync_status: 'awaiting_review',
+            run_id: review.run.id
+          }
+        }
+        return stateToSyncItem(
+          id,
+          services.getCrawlState(id),
+          services.isCrawling(id),
+          services.getLatestCrawlRunId(id)
+        )
+      })
       return result({ items }, items.map(syncSummary).join('\n'))
     }
   )

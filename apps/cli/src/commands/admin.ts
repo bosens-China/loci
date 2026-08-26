@@ -6,6 +6,7 @@ import {
   getSchedulePreset,
   getUpcomingScheduleRuns,
   normalizeCronSchedule,
+  scopePathContains,
   type CloudLibrary,
   type CloudLibraryInput
 } from '@loci/shared'
@@ -136,9 +137,8 @@ async function adminLoop(
           info('基础信息没有变化')
           continue
         }
-        if (current.url !== input.url) {
-          warning('起始 URL 已变化，Server 会清空现有抓取内容，需要重新同步后再发布')
-        }
+        const removalWarning = getAdminLibraryRemovalWarning(current, input)
+        if (removalWarning) warning(removalWarning)
         note(formatLibraryChanges(current, input), '请确认基础信息变更')
         if (!(await askConfirm('确认保存这些修改吗？', true))) {
           warning('已取消修改')
@@ -356,4 +356,16 @@ function sameLibraryInput(current: CloudLibrary, input: CloudLibraryInput): bool
     current.pageLimit === input.pageLimit &&
     current.schedule === input.schedule
   )
+}
+
+/** Server 更新会在保存事务内裁剪正文，交互流程必须在确认前说明。 */
+export function getAdminLibraryRemovalWarning(
+  current: CloudLibrary,
+  input: CloudLibraryInput
+): string | null {
+  if (current.url !== input.url) {
+    return '起始 URL 已变化，Server 会立即清空现有抓取内容，需要重新同步后再发布'
+  }
+  if (scopePathContains(input.scopePath, current.scopePath)) return null
+  return '收录范围已收窄，Server 会立即删除范围外正文，需要重新同步后再发布'
 }

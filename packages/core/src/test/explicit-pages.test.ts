@@ -77,6 +77,32 @@ describe('fetchExplicitPages', () => {
     ])
   })
 
+  it('每完成一个指定页面就上报一次进度', async () => {
+    const progress: Array<{ processed: number; url?: string; status?: string }> = []
+    await fetchExplicitPages({
+      urls: ['https://docs.example.com/one', 'https://docs.example.com/missing'],
+      hostname: 'docs.example.com',
+      fetchMode: 'http',
+      concurrency: 1,
+      fetchImpl: vi.fn(async (input: string | URL | Request) =>
+        String(input).endsWith('/missing')
+          ? new Response('', { status: 404 })
+          : new Response('<html><title>One</title><main><h1>One</h1></main></html>')
+      ) as unknown as typeof fetch,
+      onProgress: (item) =>
+        progress.push({
+          processed: item.processed,
+          url: item.node?.url,
+          status: item.node?.status
+        })
+    })
+
+    expect(progress).toEqual([
+      { processed: 1, url: 'https://docs.example.com/one', status: 'success' },
+      { processed: 2, url: 'https://docs.example.com/missing', status: 'failed' }
+    ])
+  })
+
   it('复用页面请求重试配置', async () => {
     const fetchImpl = vi
       .fn()

@@ -5,6 +5,7 @@ import {
   storeDocument,
   type StoredDocument
 } from './document-content-database.js'
+import { withImmediateTransaction as withTransaction } from './sqlite.js'
 
 export type ExplicitPageTargetStatus = 'pending' | 'current' | 'missing' | 'failed'
 export type ExplicitPageWriteStatus = 'inserted' | 'updated' | 'unchanged' | 'missing' | 'failed'
@@ -172,16 +173,4 @@ function compareDocument(
     existing.fetch_mode === fetchMode
     ? 'unchanged'
     : 'updated'
-}
-
-function withTransaction<T>(database: DatabaseSync, work: () => T): T {
-  database.exec('BEGIN IMMEDIATE')
-  try {
-    const result = work()
-    database.exec('COMMIT')
-    return result
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
-  }
 }

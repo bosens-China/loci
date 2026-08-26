@@ -59,6 +59,9 @@ const sourceSchema = z
     github_blocked_revision: z.string().nullable().optional(),
     github_blocked_limit_kind: z.enum(['archive', 'markdown']).nullable().optional(),
     github_blocked_limit_bytes: z.number().int().positive().nullable().optional(),
+    discovery_mode: z.enum(['site', 'agent_review']).optional(),
+    resolved_discovery: z.enum(['github', 'llms', 'openapi', 'pages']).nullable().optional(),
+    review_goal: z.string().max(2_000).nullable().optional(),
     created_at: z.string().datetime(),
     updated_at: z.string().datetime()
   })

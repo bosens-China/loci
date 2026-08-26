@@ -40,6 +40,7 @@ describe('crawlSource', () => {
     })
 
     const result = await crawlSource({
+      kind: 'web',
       firstUrl: 'https://docs.example.com/docs',
       hostname: 'docs.example.com',
       pageLimit: 10,
@@ -312,5 +313,18 @@ describe('crawlSource', () => {
         onDocument: () => undefined
       })
     ).rejects.toThrow('HTTP：HTTP blocked；浏览器：Browser blocked')
+  })
+
+  it('显式 GitHub 来源拒绝普通站点 URL', async () => {
+    await expect(
+      crawlSource({
+        kind: 'github',
+        firstUrl: 'https://docs.example.com/guide',
+        hostname: 'docs.example.com',
+        pageLimit: 10,
+        fetchMode: 'auto',
+        onDocument: () => undefined
+      })
+    ).rejects.toThrow('GitHub 文档源必须使用公开仓库首页 URL')
   })
 })

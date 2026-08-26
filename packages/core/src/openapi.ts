@@ -1,6 +1,7 @@
 import { throwIfAborted } from './abort.js'
 import { isImmediateStaticHostname } from './crawl.js'
 import { renderOpenApiMarkdown } from './openapi-markdown.js'
+import { objectValue, stringValue } from './openapi-values.js'
 import type {
   CrawlFailure,
   CrawlNode,
@@ -265,14 +266,4 @@ function withoutHash(input: string): string {
   const url = new URL(input)
   url.hash = ''
   return url.toString()
-}
-
-function objectValue(input: unknown): Record<string, unknown> | undefined {
-  return input !== null && typeof input === 'object' && !Array.isArray(input)
-    ? (input as Record<string, unknown>)
-    : undefined
-}
-
-function stringValue(input: unknown): string | undefined {
-  return typeof input === 'string' && input.trim() ? input.trim() : undefined
 }

@@ -13,6 +13,7 @@ import { registerSourceCommands } from './commands/source.js'
 import { registerScheduleCommands } from './commands/schedule.js'
 import { registerServiceCommands, registerUiCommand } from './commands/service.js'
 import { registerStatusCommand } from './commands/status.js'
+import { registerTaskCommands } from './commands/task.js'
 import { registerUpdateCommand } from './commands/update.js'
 import {
   CLI_VERSION,
@@ -75,6 +76,7 @@ export function createProgram(options: CreateProgramOptions = {}): Command {
     .configureOutput({ writeErr: () => undefined })
 
   registerStatusCommand(program)
+  registerTaskCommands(program)
   registerUpdateCommand(program)
   registerSourceCommands(program)
   registerScheduleCommands(program, options.ensureUserService)
@@ -99,6 +101,7 @@ function isVersionOrHelp(args: readonly string[]): boolean {
 function requiresCleanStdout(args: readonly string[]): boolean {
   return (
     (args[0] === 'mcp' && (args[1] === 'stdio' || args[1] === 'call')) ||
+    (args[0] === 'task' && args[1] === 'follow' && args.includes('jsonl')) ||
     (args[0] === 'agent' &&
       (args[1] === 'print-config' ||
         args[1] === 'config' ||

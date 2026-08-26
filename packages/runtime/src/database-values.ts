@@ -11,7 +11,8 @@ import type {
   CreateSourceInput,
   DocumentRecord,
   DocumentSource,
-  DocumentSummary
+  DocumentSummary,
+  ResolvedSourceDiscovery
 } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
 import {
@@ -20,6 +21,7 @@ import {
   normalizeExcludePathPattern,
   normalizeScopePath
 } from '@loci/core'
+import { addColumn, hasColumn } from './sqlite.js'
 
 export interface SourceRow {
   id: string
@@ -46,6 +48,9 @@ export interface SourceRow {
   github_markdown_limit_mb: number | null
   github_default_branch: string | null
   github_revision: string | null
+  discovery_mode: 'site' | 'agent_review'
+  resolved_discovery: ResolvedSourceDiscovery | null
+  review_goal: string | null
 }
 
 export interface DocumentRow {
@@ -101,6 +106,7 @@ export function validateSourceInput(input: CreateSourceInput): string | null {
     )
   }
   if (!['auto', 'http', 'browser'].includes(input.mode)) throw new Error('不支持的抓取方式')
+  if (input.kind && !['web', 'github'].includes(input.kind)) throw new Error('不支持的文档来源类型')
   normalizeScopePath(input.scopePath ?? DOCUMENT_SOURCE_DEFAULTS.scopePath)
   normalizeExcludePathPattern(input.excludePathPattern)
   if (input.httpConcurrency !== null) validateConcurrency(input.httpConcurrency, '文档源 HTTP 并发')
@@ -112,6 +118,15 @@ export function validateSourceInput(input: CreateSourceInput): string | null {
   }
   if (input.githubMarkdownLimitMb != null) {
     validateMegabytes(input.githubMarkdownLimitMb, 'GitHub Markdown 上限')
+  }
+  if (input.discoveryMode && !['site', 'agent_review'].includes(input.discoveryMode)) {
+    throw new Error('不支持的 URL 发现模式')
+  }
+  if (input.discoveryMode === 'agent_review' && !input.reviewGoal?.trim()) {
+    throw new Error('Agent 审查模式需要说明收录目标')
+  }
+  if (input.reviewGoal && input.reviewGoal.trim().length > 2_000) {
+    throw new Error('Agent 审查目标不能超过 2000 个字符')
   }
   return normalizeCronSchedule(input.schedule)
 }
@@ -157,7 +172,10 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
     githubMarkdownLimitMb:
       row.github_markdown_limit_mb === null ? null : Number(row.github_markdown_limit_mb),
     githubDefaultBranch: row.github_default_branch,
-    githubRevision: row.github_revision
+    githubRevision: row.github_revision,
+    discoveryMode: row.discovery_mode,
+    resolvedDiscovery: row.resolved_discovery,
+    reviewGoal: row.review_goal
   }
 }
 
@@ -276,6 +294,19 @@ export function migrateDatabase(database: DatabaseSync, previousVersion = 0): vo
   addColumn(database, 'document_sources', 'github_blocked_revision', 'TEXT')
   addColumn(database, 'document_sources', 'github_blocked_limit_kind', 'TEXT')
   addColumn(database, 'document_sources', 'github_blocked_limit_bytes', 'INTEGER')
+  addColumn(
+    database,
+    'document_sources',
+    'discovery_mode',
+    "TEXT NOT NULL DEFAULT 'site' CHECK (discovery_mode IN ('site', 'agent_review'))"
+  )
+  addColumn(
+    database,
+    'document_sources',
+    'resolved_discovery',
+    "TEXT CHECK (resolved_discovery IS NULL OR resolved_discovery IN ('github', 'llms', 'openapi', 'pages'))"
+  )
+  addColumn(database, 'document_sources', 'review_goal', 'TEXT')
   addColumn(database, 'documents', 'relative_path', 'TEXT')
   addColumn(
     database,
@@ -315,24 +346,6 @@ export function migrateDatabase(database: DatabaseSync, previousVersion = 0): vo
      ON documents(source_id, relative_path)
      WHERE relative_path IS NOT NULL`
   )
-}
-
-function addColumn(
-  database: DatabaseSync,
-  table: string,
-  column: string,
-  definition: string
-): boolean {
-  if (hasColumn(database, table, column)) return false
-  database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
-  return true
-}
-
-function hasColumn(database: DatabaseSync, table: string, column: string): boolean {
-  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as unknown as {
-    name: string
-  }[]
-  return columns.some((item) => item.name === column)
 }
 
 function validateConcurrency(value: number, label: string): void {

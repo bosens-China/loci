@@ -11,6 +11,7 @@ describe('Loci CLI command surface', () => {
 
     expect(commands).toEqual([
       'status',
+      'task',
       'update',
       'source',
       'schedule',
@@ -27,6 +28,11 @@ describe('Loci CLI command surface', () => {
       'doctor'
     ])
     expect(program.options.some((option) => option.long === '--json')).toBe(false)
+    expect(
+      program.commands
+        .find((command) => command.name() === 'task')
+        ?.commands.map((command) => command.name())
+    ).toEqual(['list', 'status', 'follow', 'cancel'])
     expect(
       program.commands
         .find((command) => command.name() === 'agent')

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { LocalJob } from './local-job-database.js'
 import type { BrowserInstallPrompt } from './browser-crawler.js'
 import type { LocalRuntime } from './local-runtime.js'
+import { RuntimeLockedError } from './runtime-lock.js'
 
 export interface LocalJobRunnerOptions {
   owner?: string
@@ -67,16 +68,25 @@ export function createLocalJobRunner(
         if (job.kind === 'source_sync') {
           const result = await runtime.crawlSource(
             job.sourceId,
-            undefined,
+            (progress) => {
+              const runId = runtime.database.getActiveCrawlRun(job.sourceId)?.id
+              runtime.database.recordLocalJobProgress(job.id, owner, progress, runId)
+              publish(job.id)
+            },
             options.onBrowserMissing,
-            controller.signal
+            controller.signal,
+            { id: job.id, owner }
           )
           runtime.database.completeLocalJob(job.id, owner, result)
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : '后台任务执行失败'
-        if (stopping)
+        const current = runtime.database.getLocalJob(job.id)
+        if (current?.cancelRequested) runtime.database.failLocalJob(job.id, owner, message)
+        else if (stopping)
           runtime.database.releaseLocalJob(job.id, owner, '后台服务正在停止，任务等待恢复')
+        else if (error instanceof RuntimeLockedError)
+          runtime.database.releaseLocalJob(job.id, owner, `${message}，任务等待重试`)
         else runtime.database.failLocalJob(job.id, owner, message)
       } finally {
         clearInterval(heartbeat)

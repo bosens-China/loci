@@ -5,18 +5,18 @@ export function throwIfAborted(signal?: AbortSignal): void {
   throw new Error(typeof signal.reason === 'string' ? signal.reason : '操作已取消')
 }
 
-/** 等待期间响应取消；传入的自定义 sleep 可以继续收尾，但调用链立即停止。 */
+/** 等待期间响应取消；支持 signal 的 sleep 会同步清理底层等待。 */
 export async function abortableSleep(
   milliseconds: number,
   signal: AbortSignal | undefined,
-  sleep: (milliseconds: number) => Promise<void>
+  sleep: (milliseconds: number, signal?: AbortSignal) => Promise<void>
 ): Promise<void> {
   throwIfAborted(signal)
   if (!signal) return sleep(milliseconds)
   await new Promise<void>((resolve, reject) => {
     const abort = (): void => reject(abortError(signal))
     signal.addEventListener('abort', abort, { once: true })
-    void sleep(milliseconds)
+    void sleep(milliseconds, signal)
       .then(resolve, reject)
       .finally(() => {
         signal.removeEventListener('abort', abort)

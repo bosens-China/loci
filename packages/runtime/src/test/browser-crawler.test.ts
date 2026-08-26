@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { browserStatus, ensureBrowserInstalled } from '../browser-crawler.js'
+import { browserStatus, ensureBrowserInstalled, LocalBrowserCrawler } from '../browser-crawler.js'
 
 const { closeBrowser, launchBrowser } = vi.hoisted(() => ({
   closeBrowser: vi.fn(),
@@ -78,8 +78,72 @@ describe('browserStatus', () => {
   })
 })
 
+describe('LocalBrowserCrawler', () => {
+  beforeEach(() => {
+    closeBrowser.mockReset().mockResolvedValue(undefined)
+    launchBrowser.mockReset()
+  })
+
+  it('并发首次使用时只启动一个浏览器实例', async () => {
+    const browser = { close: closeBrowser }
+    let finishLaunch: ((value: unknown) => void) | undefined
+    launchBrowser.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLaunch = resolve
+      })
+    )
+    const crawler = new LocalBrowserCrawler('/tmp/loci-browser-single-flight')
+
+    const first = openBrowser(crawler)
+    const second = openBrowser(crawler)
+    await vi.waitFor(() => expect(launchBrowser).toHaveBeenCalledOnce())
+    finishLaunch?.(browser)
+
+    await expect(Promise.all([first, second])).resolves.toEqual([browser, browser])
+    expect(launchBrowser).toHaveBeenCalledOnce()
+    await crawler.close()
+    expect(closeBrowser).toHaveBeenCalledOnce()
+  })
+
+  it('首次启动失败后允许下一次调用重新启动', async () => {
+    const browser = { close: closeBrowser }
+    launchBrowser.mockRejectedValueOnce(new Error('launch failed')).mockResolvedValueOnce(browser)
+    const crawler = new LocalBrowserCrawler('/tmp/loci-browser-retry')
+
+    await expect(openBrowser(crawler)).rejects.toThrow('launch failed')
+    await expect(openBrowser(crawler)).resolves.toBe(browser)
+    expect(launchBrowser).toHaveBeenCalledTimes(2)
+    await crawler.close()
+    expect(closeBrowser).toHaveBeenCalledOnce()
+  })
+
+  it('启动过程中关闭时会关闭刚创建的实例', async () => {
+    const browser = { close: closeBrowser }
+    let finishLaunch: ((value: unknown) => void) | undefined
+    launchBrowser.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLaunch = resolve
+      })
+    )
+    const crawler = new LocalBrowserCrawler('/tmp/loci-browser-close-launch')
+
+    const opening = openBrowser(crawler)
+    await vi.waitFor(() => expect(launchBrowser).toHaveBeenCalledOnce())
+    const closing = crawler.close()
+    finishLaunch?.(browser)
+
+    await expect(opening).rejects.toThrow('浏览器正在关闭')
+    await closing
+    expect(closeBrowser).toHaveBeenCalledOnce()
+  })
+})
+
 function createExecutable(path: string): void {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, '')
   chmodSync(path, 0o755)
+}
+
+function openBrowser(crawler: LocalBrowserCrawler): Promise<unknown> {
+  return (crawler as unknown as { getBrowser: () => Promise<unknown> }).getBrowser()
 }

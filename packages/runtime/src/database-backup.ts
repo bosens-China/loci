@@ -23,7 +23,8 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
              cloud_library_id, cloud_revision, cloud_auto_sync, created_at, updated_at
              , document_kind, source_identity, github_archive_limit_mb, github_markdown_limit_mb,
              github_default_branch, github_revision, github_blocked_revision,
-             github_blocked_limit_kind, github_blocked_limit_bytes
+             github_blocked_limit_kind, github_blocked_limit_bytes, discovery_mode,
+             resolved_discovery, review_goal
            FROM document_sources ORDER BY created_at`
         )
         .all(),
@@ -77,8 +78,10 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         browser_concurrency, icon_url, source_type, cloud_server_url, cloud_library_id,
         cloud_revision, cloud_auto_sync, document_kind, source_identity, github_archive_limit_mb,
         github_markdown_limit_mb, github_default_branch, github_revision, github_blocked_revision,
-        github_blocked_limit_kind, github_blocked_limit_bytes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        github_blocked_limit_kind, github_blocked_limit_bytes, discovery_mode, resolved_discovery,
+        review_goal,
+        created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     for (const source of sources) {
       const sourceType = source.source_type ?? 'local'
@@ -117,6 +120,9 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         source.github_blocked_revision ?? null,
         source.github_blocked_limit_kind ?? null,
         source.github_blocked_limit_bytes ?? null,
+        source.discovery_mode ?? 'site',
+        source.resolved_discovery ?? null,
+        source.review_goal ?? null,
         source.created_at,
         source.updated_at
       )

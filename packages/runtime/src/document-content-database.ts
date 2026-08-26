@@ -9,6 +9,7 @@ import {
   toFtsExpression,
   toSearchTokens
 } from './database-values.js'
+import { withTransaction } from './sqlite.js'
 
 export type DocumentSearchMode = 'all' | 'any' | 'fuzzy'
 
@@ -25,6 +26,7 @@ export interface StoredDocument {
 
 export interface DocumentContentDatabase {
   listDocumentUrls: (sourceId: string) => string[]
+  listDocumentCandidates: (sourceId: string) => Array<{ url: string; title: string }>
   saveDocument: (document: StoredDocument) => void
   replaceSourceDocuments: (sourceId: string, documents: StoredDocument[]) => void
   deleteDocument: (sourceId: string, url: string) => void
@@ -56,14 +58,17 @@ export function createDocumentContentDatabase(database: DatabaseSync): DocumentC
           .prepare('SELECT url FROM documents WHERE source_id = ? ORDER BY crawled_at ASC')
           .all(sourceId) as unknown as { url: string }[]
       ).map((row) => row.url),
+    listDocumentCandidates: (sourceId) =>
+      database
+        .prepare('SELECT url, title FROM documents WHERE source_id = ? ORDER BY crawled_at ASC')
+        .all(sourceId) as unknown as Array<{ url: string; title: string }>,
     saveDocument: (document) =>
       withTransaction(database, () => {
         storeDocument(database, document)
       }),
     replaceSourceDocuments: (sourceId, documents) =>
       withTransaction(database, () => {
-        database.prepare('DELETE FROM documents_fts WHERE source_id = ?').run(sourceId)
-        database.prepare('DELETE FROM documents WHERE source_id = ?').run(sourceId)
+        deleteSourceDocuments(database, sourceId)
         for (const document of documents) storeDocument(database, document)
       }),
     deleteDocument: (sourceId, url) => {
@@ -252,14 +257,7 @@ export function deleteStoredDocument(database: DatabaseSync, sourceId: string, u
   database.prepare('DELETE FROM documents WHERE id = ?').run(document.id)
 }
 
-function withTransaction<T>(database: DatabaseSync, work: () => T): T {
-  database.exec('BEGIN')
-  try {
-    const result = work()
-    database.exec('COMMIT')
-    return result
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
-  }
+export function deleteSourceDocuments(database: DatabaseSync, sourceId: string): number {
+  database.prepare('DELETE FROM documents_fts WHERE source_id = ?').run(sourceId)
+  return Number(database.prepare('DELETE FROM documents WHERE source_id = ?').run(sourceId).changes)
 }

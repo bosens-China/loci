@@ -39,7 +39,12 @@ const ui = vi.hoisted(() => ({
 
 vi.mock('../../ui.js', () => ui)
 
-import { askLibraryInput, askSchedule, formatScheduleLiveHint } from '../admin.js'
+import {
+  askLibraryInput,
+  askSchedule,
+  formatScheduleLiveHint,
+  getAdminLibraryRemovalWarning
+} from '../admin.js'
 import { selectLibraries } from '../admin-sync.js'
 
 describe('CLI Admin 文档库交互', () => {
@@ -82,6 +87,35 @@ describe('CLI Admin 文档库交互', () => {
   it('实时解释有效计划，并引导尚未写完的表达式', () => {
     expect(formatScheduleLiveHint('*/15 * * * *')).toContain('预计下次')
     expect(formatScheduleLiveHint('0 2')).toContain('继续输入有效的 5 段 Cron')
+  })
+
+  it('Server 范围收窄时提示正文会立即删除', () => {
+    const current = {
+      id: 'library-1',
+      name: 'Docs',
+      url: 'https://example.com/docs',
+      hostname: 'example.com',
+      scopePath: '/docs',
+      pageLimit: 1000,
+      schedule: null,
+      pages: 10,
+      lastCrawledAt: null,
+      lastError: null,
+      revision: null,
+      publishedAt: null
+    }
+    const input = {
+      name: current.name,
+      url: current.url,
+      scopePath: current.scopePath,
+      pageLimit: current.pageLimit,
+      schedule: current.schedule
+    }
+    expect(getAdminLibraryRemovalWarning(current, input)).toBeNull()
+    expect(getAdminLibraryRemovalWarning(current, { ...input, scopePath: '/' })).toBeNull()
+    expect(getAdminLibraryRemovalWarning(current, { ...input, scopePath: '/docs/api' })).toContain(
+      '立即删除'
+    )
   })
 
   it('单库默认勾选，记住全选时直接保持全选', async () => {

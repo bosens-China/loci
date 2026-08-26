@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { CrawlFailure, CrawlProgress } from '@loci/shared'
+import { addColumn, withImmediateTransaction, withTransaction } from './sqlite.js'
 
 export interface CrawlHistoryRecord {
   id: string
@@ -90,8 +91,7 @@ function migrateCrawlFailureReasons(database: DatabaseSync): void {
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'crawl_failures'")
     .get() as unknown as { sql: string } | undefined
   if (!row || row.sql.includes('git_lfs_unsupported')) return
-  database.exec('BEGIN IMMEDIATE')
-  try {
+  withImmediateTransaction(database, () => {
     database.exec(`
     CREATE TABLE crawl_failures_next (
       id TEXT PRIMARY KEY,
@@ -109,11 +109,7 @@ function migrateCrawlFailureReasons(database: DatabaseSync): void {
     DROP TABLE crawl_failures;
     ALTER TABLE crawl_failures_next RENAME TO crawl_failures;
     `)
-    database.exec('COMMIT')
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
-  }
+  })
 }
 
 export function createCrawlHistoryDatabase(database: DatabaseSync): CrawlHistoryDatabase {
@@ -166,42 +162,7 @@ export function createCrawlHistoryDatabase(database: DatabaseSync): CrawlHistory
     },
     finishCrawlRun: (id, status, progress, error) => {
       withTransaction(database, () => {
-        database
-          .prepare(
-            `UPDATE crawl_runs
-             SET status = ?, finished_at = ?, discovered_count = ?, success_count = ?, failure_count = ?,
-                 progress_json = ?, error_message = ?, updated_at = ?
-             WHERE id = ?`
-          )
-          .run(
-            status,
-            new Date().toISOString(),
-            progress?.queued ?? 0,
-            progress?.succeeded ?? 0,
-            progress?.failed ?? 0,
-            progress ? JSON.stringify(withoutNode(progress)) : null,
-            error,
-            new Date().toISOString(),
-            id
-          )
-        database.prepare('DELETE FROM crawl_failures WHERE run_id = ?').run(id)
-        const insert = database.prepare(
-          `INSERT INTO crawl_failures
-           (id, run_id, url, reason, message, retryable, status_code, redirect_url)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        for (const failure of progress?.failures ?? []) {
-          insert.run(
-            randomUUID(),
-            id,
-            failure.url,
-            failure.reason,
-            failure.message,
-            Number(failure.retryable),
-            failure.statusCode ?? null,
-            failure.redirectUrl ?? null
-          )
-        }
+        finishCrawlRunRecord(database, id, status, progress, error)
       })
     },
     listCrawlHistory: (sourceId) => {
@@ -232,6 +193,54 @@ export function createCrawlHistoryDatabase(database: DatabaseSync): CrawlHistory
       }))
     }
   }
+}
+
+export function finishCrawlRunRecord(
+  database: DatabaseSync,
+  id: string,
+  status: 'completed' | 'failed',
+  progress: CrawlProgress | undefined,
+  error: string | null
+): boolean {
+  const now = new Date().toISOString()
+  const updated = database
+    .prepare(
+      `UPDATE crawl_runs
+       SET status = ?, finished_at = ?, discovered_count = ?, success_count = ?, failure_count = ?,
+           progress_json = ?, error_message = ?, updated_at = ?
+       WHERE id = ? AND status = 'running'`
+    )
+    .run(
+      status,
+      now,
+      progress?.queued ?? 0,
+      progress?.succeeded ?? 0,
+      progress?.failed ?? 0,
+      progress ? JSON.stringify(withoutNode(progress)) : null,
+      error,
+      now,
+      id
+    )
+  if (updated.changes !== 1) return false
+  database.prepare('DELETE FROM crawl_failures WHERE run_id = ?').run(id)
+  const insert = database.prepare(
+    `INSERT INTO crawl_failures
+     (id, run_id, url, reason, message, retryable, status_code, redirect_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+  for (const failure of progress?.failures ?? []) {
+    insert.run(
+      randomUUID(),
+      id,
+      failure.url,
+      failure.reason,
+      failure.message,
+      Number(failure.retryable),
+      failure.statusCode ?? null,
+      failure.redirectUrl ?? null
+    )
+  }
+  return true
 }
 
 const historyQuery = `
@@ -314,44 +323,6 @@ function withoutNode(progress: CrawlProgress): CrawlProgress {
   const snapshot = { ...progress }
   delete snapshot.node
   return snapshot
-}
-
-function withTransaction<T>(database: DatabaseSync, work: () => T): T {
-  database.exec('BEGIN')
-  try {
-    const result = work()
-    database.exec('COMMIT')
-    return result
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
-  }
-}
-
-function withImmediateTransaction<T>(database: DatabaseSync, work: () => T): T {
-  database.exec('BEGIN IMMEDIATE')
-  try {
-    const result = work()
-    database.exec('COMMIT')
-    return result
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
-  }
-}
-
-function addColumn(
-  database: DatabaseSync,
-  table: string,
-  column: string,
-  definition: string
-): void {
-  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{
-    name: string
-  }>
-  if (!columns.some((item) => item.name === column)) {
-    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
-  }
 }
 
 const runQuery = `SELECT id, source_id, status, progress_json, discovered_count,

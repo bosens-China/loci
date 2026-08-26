@@ -16,12 +16,28 @@ describe('explicit page service', () => {
       const source = runtime.createSource(sourceInput())
       const valid = 'https://docs.example.com/outside/new'
       const invalid = 'https://other.example.com/page'
+      const progress: Array<{ processed: number; status?: string; url?: string }> = []
 
-      const result = await runtime.fetchPages(source.id, [valid, invalid])
+      const result = await runtime.fetchPages(
+        source.id,
+        [valid, invalid],
+        undefined,
+        undefined,
+        (item) =>
+          progress.push({
+            processed: item.processed,
+            status: item.node?.status,
+            url: item.node?.url
+          })
+      )
 
       expect(result.items).toMatchObject([
         { url: valid, status: 'inserted' },
         { url: invalid, status: 'failed', message: expect.stringContaining('必须属于') }
+      ])
+      expect(progress).toEqual([
+        { processed: 1, status: 'failed', url: invalid },
+        { processed: 2, status: 'success', url: valid }
       ])
       expect(fetchPage).toHaveBeenCalledOnce()
     } finally {
@@ -60,9 +76,15 @@ describe('explicit page service', () => {
       })
       runtime.database.registerExplicitPageTargets(source.id, [`${origin}/outside/new`])
 
-      const progress = await runtime.crawlSource(source.id)
+      const pageEvents: Array<{ processed: number; url: string }> = []
+      const progress = await runtime.crawlSource(source.id, (current) => {
+        if (current.node?.status === 'success') {
+          pageEvents.push({ processed: current.processed, url: current.node.url })
+        }
+      })
 
       expect(progress.succeeded).toBe(2)
+      expect(pageEvents).toContainEqual({ processed: 2, url: `${origin}/outside/new` })
       expect(
         runtime.database
           .listDocuments()
@@ -77,6 +99,52 @@ describe('explicit page service', () => {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve()))
       )
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('逐页持久化混合有效与无效 URL 的聚合进度', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'loci-explicit-history-'))
+    let releaseSecond: (() => void) | undefined
+    const secondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve
+    })
+    const first = 'https://docs.example.com/outside/one'
+    const second = 'https://docs.example.com/outside/two'
+    const invalid = 'https://other.example.com/page'
+    const fetchPage = vi.fn(async (url: string): Promise<CrawledPage> => {
+      if (url === second) await secondGate
+      return page(url)
+    })
+    const runtime = createLocalRuntime({ dataDir: directory, browser: fakeBrowser(fetchPage) })
+    try {
+      const source = runtime.createSource(sourceInput())
+      const running = runtime.fetchPages(source.id, [first, invalid, second])
+
+      await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(2))
+      expect(runtime.database.getActiveCrawlRun(source.id)?.progress).toMatchObject({
+        queued: 3,
+        processed: 2,
+        succeeded: 1,
+        failed: 1
+      })
+
+      releaseSecond?.()
+      const result = await running
+      expect(runtime.database.getCrawlRun(result.runId ?? '')?.progress).toMatchObject({
+        queued: 3,
+        processed: 3,
+        succeeded: 2,
+        failed: 1
+      })
+      expect(runtime.database.listCrawlHistory(source.id)[0]).toMatchObject({
+        discovered: 3,
+        succeeded: 2,
+        failed: 1
+      })
+    } finally {
+      releaseSecond?.()
+      await runtime.close()
       rmSync(directory, { recursive: true, force: true })
     }
   })

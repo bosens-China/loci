@@ -1,4 +1,5 @@
 import type { OpenApiDocument } from './openapi.js'
+import { objectValue, stringValue } from './openapi-values.js'
 
 const httpMethods = new Set(['get', 'put', 'post', 'delete', 'patch', 'options', 'head', 'trace'])
 
@@ -254,16 +255,6 @@ function cell(input: string): string {
   return input.replace(/\|/gu, '\\|').replace(/[\r\n]+/gu, '<br>')
 }
 
-function objectValue(input: unknown): Record<string, unknown> | undefined {
-  return input !== null && typeof input === 'object' && !Array.isArray(input)
-    ? (input as Record<string, unknown>)
-    : undefined
-}
-
 function arrayValue(input: unknown): unknown[] {
   return Array.isArray(input) ? input : []
-}
-
-function stringValue(input: unknown): string | undefined {
-  return typeof input === 'string' && input.trim() ? input.trim() : undefined
 }

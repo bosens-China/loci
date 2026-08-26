@@ -28,7 +28,10 @@ export const source: DocumentSource = {
   githubArchiveLimitMb: null,
   githubMarkdownLimitMb: null,
   githubDefaultBranch: null,
-  githubRevision: null
+  githubRevision: null,
+  discoveryMode: 'site',
+  resolvedDiscovery: 'pages',
+  reviewGoal: null
 }
 
 export const document: DocumentRecord = {
@@ -109,6 +112,15 @@ export function createServices(): LociMcpServices {
       items: urls.map((url) => ({ url, status: 'unchanged' as const })),
       progress: completedProgress
     }),
+    startUrlReview: async () => {
+      throw new Error('fixture 未启用 URL 审查')
+    },
+    submitUrlReview: async () => {
+      throw new Error('fixture 未启用 URL 审查')
+    },
+    getUrlReview: () => undefined,
+    getActiveUrlReview: () => undefined,
+    cancelUrlReview: () => false,
     deleteSource: () => undefined,
     isCrawling: () => false,
     getCrawlState: () => ({ ...runningState(), progress: completedProgress, running: false }),

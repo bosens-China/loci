@@ -27,6 +27,7 @@ export function registerConfigCommands(program: Command): void {
     .action(() =>
       runWithRuntime('共享设置', async (runtime) => {
         const settings = runtime.database.getSettings()
+        const serverUrlOverride = process.env.LOCI_SERVER_URL?.trim()
         printTable(
           ['设置', '当前值'],
           [
@@ -36,7 +37,12 @@ export function registerConfigCommands(program: Command): void {
             ['batch-interval-seconds', settings.batchIntervalSeconds],
             ['github-archive-limit-mb', settings.githubArchiveLimitMb],
             ['github-markdown-limit-mb', settings.githubMarkdownLimitMb],
-            ['server-url', settings.serverUrl]
+            [
+              'server-url',
+              serverUrlOverride
+                ? `${settings.serverUrl}（由 LOCI_SERVER_URL 覆盖）`
+                : settings.serverUrl
+            ]
           ]
         )
         return '共享设置读取成功'
@@ -53,6 +59,12 @@ export function registerConfigCommands(program: Command): void {
           key ??
           (await askSelect<ConfigKey>('请选择设置', configOptions(runtime.database.getSettings())))
         if (!isConfigKey(selected)) throw new CliError(`不支持的设置：${selected}`, 2)
+        if (selected === 'server-url' && process.env.LOCI_SERVER_URL?.trim()) {
+          throw new CliError(
+            'LOCI_SERVER_URL 正在覆盖 Server 地址；请先取消该环境变量，再运行 config set server-url',
+            2
+          )
+        }
         const settings = runtime.database.getSettings()
         const current = configValue(settings, selected)
         const input = value ?? (await askConfigValue(selected, current))

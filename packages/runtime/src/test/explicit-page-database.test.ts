@@ -65,7 +65,7 @@ describe('explicit page database', () => {
     }
   })
 
-  it('网页文档源改为 GitHub 时清除显式页面目标', () => {
+  it('网页文档源改为 GitHub 时清除显式页面目标和旧正文', () => {
     const database = createDatabase(':memory:')
     try {
       const source = createSource(database)
@@ -76,6 +76,25 @@ describe('explicit page database', () => {
       database.updateSource(source.id, sourceInput(null, 'https://github.com/example/docs'))
 
       expect(database.listExplicitPageTargets(source.id)).toEqual([])
+      expect(database.listDocuments()).toEqual([])
+    } finally {
+      database.close()
+    }
+  })
+
+  it('GitHub 文档源切换仓库时立即清除旧正文', () => {
+    const database = createDatabase(':memory:')
+    try {
+      const source = database.createSource(sourceInput(null, 'https://github.com/example/docs'))
+      database.saveDocument({
+        sourceId: source.id,
+        ...fetched('https://github.com/example/docs/blob/main/README.md').document!
+      })
+
+      database.updateSource(source.id, sourceInput(null, 'https://github.com/example/other'))
+
+      expect(database.listDocuments()).toEqual([])
+      expect(database.searchDocuments('API')).toEqual([])
     } finally {
       database.close()
     }

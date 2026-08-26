@@ -63,10 +63,12 @@ describe('MCP source contract', () => {
       }
     )
 
-    expect(fetchPages).toHaveBeenCalledWith(source.id, [
-      'https://docs.example.com/one',
-      'https://docs.example.com/two'
-    ])
+    expect(fetchPages).toHaveBeenCalledWith(
+      source.id,
+      ['https://docs.example.com/one', 'https://docs.example.com/two'],
+      expect.any(Function),
+      undefined
+    )
     expect(crawlSource).not.toHaveBeenCalled()
     expect(response.structuredContent).toMatchObject({
       sync_status: 'completed',

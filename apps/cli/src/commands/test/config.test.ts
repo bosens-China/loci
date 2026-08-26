@@ -7,17 +7,21 @@ import { createCliRuntime } from '../../runtime.js'
 import { formatBatchIntervalHint } from '../config.js'
 
 const originalDataDir = process.env.LOCI_DATA_DIR
+const originalServerUrl = process.env.LOCI_SERVER_URL
 let dataDir = ''
 
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), 'loci-config-dx-'))
   process.env.LOCI_DATA_DIR = dataDir
+  delete process.env.LOCI_SERVER_URL
 })
 
 afterEach(() => {
   rmSync(dataDir, { recursive: true, force: true })
   if (originalDataDir === undefined) delete process.env.LOCI_DATA_DIR
   else process.env.LOCI_DATA_DIR = originalDataDir
+  if (originalServerUrl === undefined) delete process.env.LOCI_SERVER_URL
+  else process.env.LOCI_SERVER_URL = originalServerUrl
 })
 
 describe('CLI 共享设置', () => {
@@ -49,5 +53,24 @@ describe('CLI 共享设置', () => {
     expect(formatBatchIntervalHint('0')).toContain('不额外等待')
     expect(formatBatchIntervalHint('120')).toContain('约 2 分钟')
     expect(formatBatchIntervalHint('50')).toContain('100 到 3000')
+  })
+
+  it('环境变量覆盖 Server 地址时拒绝伪装保存成功', async () => {
+    await createProgram().parseAsync(
+      ['config', 'set', 'server-url', 'https://persisted.example.com'],
+      { from: 'user' }
+    )
+    process.env.LOCI_SERVER_URL = 'https://override.example.com'
+
+    await expect(
+      createProgram().parseAsync(['config', 'set', 'server-url', 'https://ignored.example.com'], {
+        from: 'user'
+      })
+    ).rejects.toThrow('LOCI_SERVER_URL 正在覆盖 Server 地址')
+
+    delete process.env.LOCI_SERVER_URL
+    const runtime = createCliRuntime()
+    expect(runtime.database.getSettings().serverUrl).toBe('https://persisted.example.com')
+    await runtime.close()
   })
 })

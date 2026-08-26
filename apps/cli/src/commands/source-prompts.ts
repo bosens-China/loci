@@ -1,12 +1,13 @@
 import {
   getSourceScopeOptions,
+  scopePathContains,
   type AppSettings,
   type CreateSourceInput,
   type DocumentSource,
   type FetchMode,
   type UpdateSourceInput
 } from '@loci/shared'
-import { isGithubRepositoryUrl } from '@loci/core'
+import { isGithubRepositoryUrl, parseGithubRepositoryUrl } from '@loci/core'
 import { CliError } from '../errors.js'
 import { askSelect } from '../ui.js'
 
@@ -118,6 +119,31 @@ export function sameSourceInput(
     current.githubArchiveLimitMb === (input.githubArchiveLimitMb ?? null) &&
     current.githubMarkdownLimitMb === (input.githubMarkdownLimitMb ?? null)
   )
+}
+
+/** 交互保存前说明会立即发生的正文删除，不把扩大范围或清空排除规则误报为删除。 */
+export function getSourceRemovalWarning(
+  current: DocumentSource,
+  input: Omit<UpdateSourceInput, 'schedule'>
+): string | null {
+  const repository = parseGithubRepositoryUrl(input.url)
+  const nextKind = input.kind ?? (repository ? 'github' : 'web')
+  if (
+    current.kind !== nextKind ||
+    new URL(current.url).hostname !== new URL(input.url).hostname ||
+    (nextKind === 'github' && current.url !== repository?.url)
+  ) {
+    return '文档来源已切换，现有正文和搜索索引会立即清空，需要重新同步'
+  }
+  const scopeMayRemoveDocuments = !scopePathContains(
+    input.scopePath ?? current.scopePath,
+    current.scopePath
+  )
+  const nextExclusion = input.excludePathPattern?.trim() || null
+  const currentExclusion = current.excludePathPattern?.trim() || null
+  const exclusionMayRemoveDocuments = nextExclusion !== null && nextExclusion !== currentExclusion
+  if (!scopeMayRemoveDocuments && !exclusionMayRemoveDocuments) return null
+  return '收窄范围或新增、修改排除规则会立即删除不再匹配的正文和搜索索引'
 }
 
 export function numberValue(value: string): number {

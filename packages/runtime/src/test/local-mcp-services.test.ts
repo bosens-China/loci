@@ -41,6 +41,13 @@ describe('后台服务 MCP', () => {
       crawlSource,
       isCrawling: () => false,
       getCrawlState: () => state,
+      urlReviews: {
+        start: vi.fn(),
+        submit: vi.fn(),
+        get: vi.fn(),
+        getActive: vi.fn(),
+        cancel: vi.fn()
+      },
       createSource: vi.fn(),
       deleteSource: vi.fn()
     } as unknown as LocalRuntime

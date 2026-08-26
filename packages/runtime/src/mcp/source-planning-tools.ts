@@ -37,11 +37,12 @@ function registerInspectSource(register: LociToolRegistrar, services: LociMcpSer
       outputSchema: inspectSourceOutputSchema,
       annotations: remoteReadAnnotations()
     },
-    async (input) => {
+    async (input, context) => {
       const inspection = await services.inspectSource({
         url: input.url,
         scopePath: input.scope_path,
-        excludePathPattern: input.exclude_path
+        excludePathPattern: input.exclude_path,
+        signal: context.signal
       })
       const output = {
         url: inspection.url,

@@ -1,7 +1,7 @@
 import * as z from 'zod/v4'
 import { fetchPagesOutputSchema } from './schemas.js'
 import type { LociMcpServices } from './services.js'
-import { failure, result, serializeProgress } from './server-support.js'
+import { createProgressReporter, failure, result, serializeProgress } from './server-support.js'
 import type { LociToolContext, LociToolRegistrar } from './tool-registry.js'
 
 const annotations = {
@@ -18,7 +18,7 @@ export function registerPageTools(register: LociToolRegistrar, services: LociMcp
     {
       title: '抓取或更新指定页面',
       description:
-        '把同一网页文档库下的指定 URL 插入或更新；允许越过 scope_path，但不能跨 hostname 或命中 exclude_path。只抓给出的页面，不发现 Sitemap，也不跟随页面链接。404/410 会移除旧正文并保留 missing 目标。默认后台执行。',
+        '把同一网页文档库下的指定 URL 插入或更新；允许越过 scope_path，但不能跨 hostname 或命中 exclude_path。只抓给出的页面，不发现 Sitemap，也不跟随页面链接。404/410 会移除旧正文并保留 missing 目标。等待完成时通过 MCP SDK Progress 逐页上报，并支持请求取消；默认后台执行。',
       inputSchema: z
         .object({
           library_id: z.string().min(1),
@@ -41,8 +41,10 @@ export function registerPageTools(register: LociToolRegistrar, services: LociMcp
           '指定页面已登记并开始抓取；请用 library_id 查询同步状态'
         )
       }
+      const reporter = createProgressReporter(context, library_id)
       try {
-        const output = await services.fetchPages(library_id, urls)
+        const output = await services.fetchPages(library_id, urls, reporter.report, context.signal)
+        await reporter.flush()
         return result(
           {
             library_id,
@@ -54,6 +56,8 @@ export function registerPageTools(register: LociToolRegistrar, services: LociMcp
           summarize(output.items)
         )
       } catch (error) {
+        await reporter.flush()
+        if (context.signal?.aborted) throw context.signal.reason
         return result(
           {
             library_id,

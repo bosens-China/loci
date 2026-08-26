@@ -87,13 +87,16 @@ describe('createDatabase', () => {
         source.id,
         'https://docs.react.dev/learn?from=redirect',
         'http',
-        'https://docs.react.dev/favicon.ico'
+        'https://docs.react.dev/favicon.ico',
+        undefined,
+        'llms'
       )
       expect(database.getSourceConfig(source.id)).toMatchObject({
         firstUrl: 'https://docs.react.dev/learn',
         hostname: 'docs.react.dev',
         fetchMode: 'http'
       })
+      expect(database.listSources()[0]?.resolvedDiscovery).toBe('llms')
       expect(database.listDocuments()).toHaveLength(1)
       expect(database.listDocumentSummaries(source.id)).toEqual([
         expect.objectContaining({ id: expect.any(String), title: 'Learn React' })

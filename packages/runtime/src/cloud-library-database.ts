@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { getHostname, normalizeUrl, parseGithubRepositoryUrl } from '@loci/core'
+import { withImmediateTransaction as transaction } from './sqlite.js'
 
 export interface CloudSnapshot {
   schemaVersion: 1
@@ -181,16 +182,5 @@ function toCloudSource(row: CloudSourceRow): CloudSourceRecord {
     libraryId: row.cloud_library_id,
     revision: row.cloud_revision,
     autoSync: Boolean(row.cloud_auto_sync)
-  }
-}
-
-function transaction(database: DatabaseSync, work: () => void): void {
-  database.exec('BEGIN IMMEDIATE')
-  try {
-    work()
-    database.exec('COMMIT')
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
   }
 }

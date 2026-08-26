@@ -15,7 +15,9 @@ describe('database backup', () => {
         excludePathPattern: '^/learn/legacy(?:/|$)',
         schedule: null,
         httpConcurrency: 4,
-        browserConcurrency: 2
+        browserConcurrency: 2,
+        discoveryMode: 'agent_review',
+        reviewGoal: '只收录 Learn API'
       })
       sourceDatabase.saveDocument({
         sourceId: source.id,
@@ -26,6 +28,7 @@ describe('database backup', () => {
         fetchMode: 'http',
         crawledAt: new Date().toISOString()
       })
+      sourceDatabase.updateResolvedSource(source.id, source.url, 'http', null, undefined, 'pages')
       sourceDatabase.saveSettings({
         theme: 'dark',
         httpConcurrency: 12,
@@ -85,7 +88,10 @@ describe('database backup', () => {
         httpConcurrency: 4,
         browserConcurrency: 2,
         scopePath: '/learn',
-        excludePathPattern: '^/learn/legacy(?:/|$)'
+        excludePathPattern: '^/learn/legacy(?:/|$)',
+        discoveryMode: 'agent_review',
+        resolvedDiscovery: 'pages',
+        reviewGoal: '只收录 Learn API'
       })
       expect(targetDatabase.searchDocuments('Components')[0]?.title).toBe('Learn React')
       expect(targetDatabase.getSettings()).toMatchObject({

@@ -66,14 +66,31 @@ describe('database GitHub sources', () => {
       expect(database.listDocuments()).toMatchObject([{ title: 'new.md', folder: 'guide' }])
       expect(database.searchDocuments('Old')).toEqual([])
 
-      database.updateResolvedSource(vue.id, vue.url, 'http', null, {
-        defaultBranch: 'main',
-        revision: 'new'
-      })
+      database.updateResolvedSource(
+        vue.id,
+        vue.url,
+        'http',
+        null,
+        {
+          defaultBranch: 'main',
+          revision: 'new'
+        },
+        'github'
+      )
       expect(database.getSourceConfig(vue.id)).toMatchObject({
         githubDefaultBranch: 'main',
         githubRevision: 'new'
       })
+      expect(database.listSources()[0]?.resolvedDiscovery).toBe('github')
+
+      expect(() =>
+        database.createSource({
+          ...defaults,
+          kind: 'web',
+          name: 'Wrong kind',
+          url: 'https://github.com/vuejs/core'
+        })
+      ).toThrow('普通站点不能使用 GitHub 仓库首页 URL')
       const runId = database.startCrawlRun(vue.id)
       database.finishCrawlRun(
         runId,

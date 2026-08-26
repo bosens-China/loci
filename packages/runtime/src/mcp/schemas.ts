@@ -23,7 +23,10 @@ export const librarySchema = z.object({
   kind: z.enum(['web', 'github']),
   github_archive_limit_mb: z.number().int().nullable(),
   github_markdown_limit_mb: z.number().int().nullable(),
-  icon_url: z.string().nullable()
+  icon_url: z.string().nullable(),
+  discovery_mode: z.enum(['site', 'agent_review']),
+  resolved_discovery: z.enum(['github', 'llms', 'openapi', 'pages']).nullable(),
+  review_goal: z.string().nullable()
 })
 
 export const failureSchema = z.object({
@@ -56,11 +59,40 @@ export const progressSchema = z.object({
 const syncStatusSchema = z.enum([
   'idle',
   'syncing',
+  'awaiting_review',
   'completed',
   'completed_with_errors',
   'failed',
   'not_found'
 ])
+
+export const urlReviewCandidateSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  title_source: z.enum(['provided', 'stored', 'link_text', 'llms', 'openapi', 'pathname']),
+  discovered_from: z.string().optional()
+})
+
+export const urlReviewOutputSchema = z.object({
+  run_id: z.string(),
+  library_id: z.string(),
+  status: z.enum(['discovering', 'awaiting_review', 'completed', 'failed', 'cancelled']),
+  goal: z.string(),
+  batch_id: z.string().optional(),
+  candidates: z.array(urlReviewCandidateSchema),
+  discovered_count: z.number().int().nonnegative(),
+  approved_count: z.number().int().nonnegative(),
+  excluded_count: z.number().int().nonnegative(),
+  processed_count: z.number().int().nonnegative(),
+  failed_count: z.number().int().nonnegative(),
+  limit_reached: z.boolean(),
+  error: z.string().optional()
+})
+
+export const cancelUrlReviewOutputSchema = z.object({
+  run_id: z.string(),
+  cancelled: z.boolean()
+})
 
 export const addLibraryOutputSchema = z.object({
   created: z.boolean(),
@@ -78,7 +110,8 @@ export const addLibraryOutputSchema = z.object({
         message: z.string().optional()
       })
     )
-    .optional()
+    .optional(),
+  url_review: urlReviewOutputSchema.optional()
 })
 
 export const explicitPageItemSchema = z.object({

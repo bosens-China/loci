@@ -1,41 +1,26 @@
-export type CrawlFailureReason =
-  'not_found' | 'out_of_scope_redirect' | 'http_error' | 'request_error' | 'git_lfs_unsupported'
+import type { CrawlFailure, CrawlProgress } from '@loci/shared'
 
-export interface CrawlFailure {
-  url: string
-  reason: CrawlFailureReason
-  message: string
-  retryable: boolean
-  statusCode?: number
-  redirectUrl?: string
-}
-
-export type CrawlNodeStatus = 'queued' | 'running' | 'success' | 'failed'
-
-export interface CrawlNode {
-  id: string
-  url: string
-  title: string
-  status: CrawlNodeStatus
-  parentId?: string
-}
-
-export interface CrawlProgress {
-  queued: number
-  processed: number
-  succeeded: number
-  failed: number
-  limitReached: boolean
-  failures?: CrawlFailure[]
-  node?: CrawlNode
-}
+export type {
+  CrawlFailure,
+  CrawlFailureReason,
+  CrawlNode,
+  CrawlNodeStatus,
+  CrawlProgress
+} from '@loci/shared'
 
 export interface ParsedPage {
   title: string
   language: string
   markdown: string
   links: string[]
+  linkCandidates?: PageLinkCandidate[]
   iconUrl?: string
+}
+
+export interface PageLinkCandidate {
+  url: string
+  title: string
+  titleSource: 'link_text' | 'pathname'
 }
 
 export interface CrawledDocument {

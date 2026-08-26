@@ -28,6 +28,8 @@ const HEADLESS_SHELL = 'chromium-headless-shell'
 /** 本地运行时统一使用 Playwright 执行浏览器抓取。 */
 export class LocalBrowserCrawler {
   private browser: Browser | undefined
+  private browserPromise: Promise<Browser> | undefined
+  private closePromise: Promise<void> | undefined
 
   constructor(private readonly browsersPath: string) {}
 
@@ -83,8 +85,11 @@ export class LocalBrowserCrawler {
   }
 
   async close(): Promise<void> {
-    await this.browser?.close()
-    this.browser = undefined
+    if (this.closePromise) return this.closePromise
+    this.closePromise = this.closeCurrentBrowser().finally(() => {
+      this.closePromise = undefined
+    })
+    return this.closePromise
   }
 
   async ensureInstalled(onMissing?: BrowserInstallPrompt): Promise<void> {
@@ -92,16 +97,35 @@ export class LocalBrowserCrawler {
   }
 
   private async getBrowser(): Promise<Browser> {
+    if (this.closePromise) await this.closePromise
     if (this.browser) return this.browser
+    if (this.browserPromise) return this.browserPromise
     configureBrowserPath(this.browsersPath)
-    try {
-      this.browser = await launchHeadlessShell()
-      return this.browser
-    } catch (error) {
-      throw new Error(
-        `无法启动无头浏览器：${error instanceof Error ? error.message : '未知错误'}\n请先运行 loci browser install。`
-      )
-    }
+    const launch = launchHeadlessShell()
+      .then(async (browser) => {
+        if (this.closePromise) {
+          await browser.close().catch(() => undefined)
+          throw new Error('浏览器正在关闭')
+        }
+        this.browser = browser
+        return browser
+      })
+      .catch((error: unknown) => {
+        throw new Error(
+          `无法启动无头浏览器：${error instanceof Error ? error.message : '未知错误'}\n请先运行 loci browser install。`
+        )
+      })
+      .finally(() => {
+        if (this.browserPromise === launch) this.browserPromise = undefined
+      })
+    this.browserPromise = launch
+    return launch
+  }
+
+  private async closeCurrentBrowser(): Promise<void> {
+    const browser = this.browser ?? (await this.browserPromise?.catch(() => undefined))
+    if (this.browser === browser) this.browser = undefined
+    await browser?.close()
   }
 }
 

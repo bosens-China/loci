@@ -1,4 +1,7 @@
 import { fromMarkdown } from 'mdast-util-from-markdown'
+import { frontmatterFromMarkdown } from 'mdast-util-frontmatter'
+import { frontmatter } from 'micromark-extension-frontmatter'
+import { deriveUrlPathTitle } from '@loci/shared'
 import { throwIfAborted } from './abort.js'
 import { immediateCrawlOptions, normalizeUrl, parsePage, runCrawlQueue } from './crawl.js'
 import { isUrlInScope } from './scope.js'
@@ -162,6 +165,27 @@ function normalizeMarkdown(markdown: string): string {
     .trim()
 }
 
+/** 清单占位标题不能遮蔽正文中已经存在的可读标题。 */
+function resolveMarkdownTitle(entry: LlmsEntry, markdown: string): string {
+  if (!/^(?:untitled|无标题)$/iu.test(entry.title.trim())) return entry.title
+  return firstMarkdownHeading(markdown) ?? deriveUrlPathTitle(entry.url, true)
+}
+
+function firstMarkdownHeading(markdown: string): string | undefined {
+  try {
+    const matters: Array<'yaml' | 'toml'> = ['yaml', 'toml']
+    const tree = fromMarkdown(markdown, {
+      extensions: [frontmatter(matters)],
+      mdastExtensions: [frontmatterFromMarkdown(matters)]
+    })
+    const heading = tree.children.find((node) => node.type === 'heading')
+    const title = nodeText(heading).trim()
+    return title || undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** llms.txt 及其静态资源直接请求，不应用网页抓取的超时、重试和退避策略。 */
 function fetchLlmsFile(url: string, options: LlmsFetchOptions): Promise<Response> {
   throwIfAborted(options.signal)
@@ -177,6 +201,7 @@ export async function fetchMarkdownPage(
   const url = normalizeUrl(response.url || entry.url)
   if (!response.ok) return { url, status: response.status }
   const body = await response.text()
+  const markdown = normalizeMarkdown(body)
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
   if (contentType.includes('text/html') && /^\s*<!?(?:doctype|html)\b/iu.test(body)) {
     return { url, status: response.status, page: parsePage(body, url) }
@@ -185,9 +210,9 @@ export async function fetchMarkdownPage(
     url,
     status: response.status,
     page: {
-      title: entry.title,
+      title: resolveMarkdownTitle(entry, markdown),
       language: 'und',
-      markdown: normalizeMarkdown(body),
+      markdown,
       links: []
     }
   }

@@ -6,7 +6,6 @@ import { runDurableSourceSync } from './local-source-sync.js'
 
 export interface LocalMcpServicesOptions {
   durableJobs?: boolean
-  signal?: AbortSignal
 }
 
 /** transport 只决定如何连接；启用 durableJobs 后统一提交持久队列。 */
@@ -22,9 +21,18 @@ export function createLocalMcpServices(
     inspectSource,
     updateSource: runtime.updateSourcePreservingSchedule,
     crawlSource: options.durableJobs
-      ? (sourceId, onProgress) => runDurableSync(runtime, sourceId, onProgress, options.signal)
-      : runtime.crawlSource,
-    fetchPages: (sourceId, urls) => runtime.fetchPages(sourceId, urls, undefined, options.signal),
+      ? (sourceId, onProgress, signal) => runDurableSync(runtime, sourceId, onProgress, signal)
+      : (sourceId, onProgress, signal) =>
+          runtime.crawlSource(sourceId, onProgress, undefined, signal),
+    fetchPages: (sourceId, urls, onProgress, signal) =>
+      runtime.fetchPages(sourceId, urls, undefined, signal, onProgress),
+    startUrlReview: (sourceId, goal, signal) =>
+      runtime.urlReviews.start(sourceId, goal, undefined, signal),
+    submitUrlReview: (runId, batchId, excludeUrls, signal) =>
+      runtime.urlReviews.submit(runId, batchId, excludeUrls, undefined, signal),
+    getUrlReview: runtime.urlReviews.get,
+    getActiveUrlReview: runtime.urlReviews.getActive,
+    cancelUrlReview: runtime.urlReviews.cancel,
     deleteSource: runtime.deleteSource,
     isCrawling: options.durableJobs
       ? (sourceId) =>

@@ -24,6 +24,7 @@ import {
   askScope,
   formatSourceChanges,
   formatSourceSummary,
+  getSourceRemovalWarning,
   hasSourceUpdates,
   modeLabel,
   numberValue,
@@ -290,9 +291,8 @@ export function registerSourceCommands(program: Command): void {
         if (editAll && sameSourceInput(current, input)) return `文档源“${current.name}”没有变化`
         let syncAfterSave = false
         if (editAll) {
-          if (current.url !== input.url) {
-            warning('起始 URL 已变化，现有文档会被清空，需要重新同步')
-          }
+          const removalWarning = getSourceRemovalWarning(current, input)
+          if (removalWarning) warning(removalWarning)
           note(formatSourceChanges(current, input), '请确认文档源变更')
           if (!(await askConfirm('确认保存这些修改吗？', true))) throw new CliCanceledError()
           if (current.url !== input.url) {

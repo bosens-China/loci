@@ -9,6 +9,7 @@ import {
   type LocalJobStatus,
   type LocalJobTrigger
 } from '@loci/shared'
+import { addColumn, withImmediateTransaction } from './sqlite.js'
 
 export type {
   EnqueueLocalJobResult,
@@ -173,7 +174,8 @@ export function createLocalJobDatabase(database: DatabaseSync): LocalJobDatabase
           .prepare(
             `UPDATE local_jobs SET status = 'running', started_at = COALESCE(started_at, ?),
                lease_owner = ?, lease_expires_at = ?, heartbeat_at = ?,
-               attempt_count = attempt_count + 1, updated_at = ?
+               attempt_count = attempt_count + 1, finished_at = NULL,
+               error_message = NULL, result_json = NULL, updated_at = ?
              WHERE id = ? AND status = 'pending'`
           )
           .run(
@@ -200,19 +202,23 @@ export function createLocalJobDatabase(database: DatabaseSync): LocalJobDatabase
           owner
         ).changes === 1,
     completeLocalJob: (id, owner, result) =>
-      finishJob(database, id, owner, 'completed', null, result),
-    failLocalJob: (id, owner, error) => finishJob(database, id, owner, 'failed', error, null),
+      finishLocalJob(database, id, owner, 'completed', null, result),
+    failLocalJob: (id, owner, error) => finishLocalJob(database, id, owner, 'failed', error, null),
     releaseLocalJob: (id, owner, reason) => {
       const now = new Date().toISOString()
       return (
         database
           .prepare(
-            `UPDATE local_jobs SET status = 'pending', scheduled_at = ?, lease_owner = NULL,
-               lease_expires_at = NULL, heartbeat_at = NULL, error_message = ?, result_json = NULL,
-               updated_at = ?
+            `UPDATE local_jobs SET
+               status = CASE WHEN cancel_requested = 1 THEN 'cancelled' ELSE 'pending' END,
+               scheduled_at = ?,
+               finished_at = CASE WHEN cancel_requested = 1 THEN ? ELSE NULL END,
+               lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+               error_message = CASE WHEN cancel_requested = 1 THEN '任务已取消' ELSE ? END,
+               result_json = NULL, updated_at = ?
              WHERE id = ? AND status = 'running' AND lease_owner = ?`
           )
-          .run(now, reason, now, id, owner).changes === 1
+          .run(now, now, reason, now, id, owner).changes === 1
       )
     },
     requestLocalJobCancellation: (id) => {
@@ -223,6 +229,8 @@ export function createLocalJobDatabase(database: DatabaseSync): LocalJobDatabase
              cancel_requested = 1,
              status = CASE WHEN status = 'pending' THEN 'cancelled' ELSE status END,
              finished_at = CASE WHEN status = 'pending' THEN ? ELSE finished_at END,
+             error_message = CASE WHEN status = 'pending' THEN '任务已取消' ELSE NULL END,
+             result_json = NULL,
              updated_at = ?
            WHERE id = ? AND status IN ('pending', 'running')`
         )
@@ -271,21 +279,35 @@ function recoverExpiredJobs(database: DatabaseSync, now: Date): void {
   const timestamp = now.toISOString()
   database
     .prepare(
+      `UPDATE local_jobs SET status = 'cancelled', finished_at = ?, lease_owner = NULL,
+         lease_expires_at = NULL, heartbeat_at = NULL, error_message = '任务已取消',
+         result_json = NULL, updated_at = ?
+       WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested = 1`
+    )
+    .run(timestamp, timestamp, timestamp)
+  database
+    .prepare(
       `UPDATE local_jobs SET status = 'pending', lease_owner = NULL, lease_expires_at = NULL,
-         heartbeat_at = NULL, error_message = '上一次执行进程已退出，任务等待重试', updated_at = ?
-       WHERE status = 'running' AND lease_expires_at <= ? AND attempt_count < 3`
+         heartbeat_at = NULL, finished_at = NULL,
+         error_message = '上一次执行进程已退出，任务等待重试',
+         result_json = NULL, updated_at = ?
+       WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested = 0
+         AND attempt_count < 3`
     )
     .run(timestamp, timestamp)
   database
     .prepare(
       `UPDATE local_jobs SET status = 'failed', finished_at = ?, lease_owner = NULL,
-         lease_expires_at = NULL, error_message = '后台任务连续中断，已停止自动重试', updated_at = ?
-       WHERE status = 'running' AND lease_expires_at <= ? AND attempt_count >= 3`
+         lease_expires_at = NULL, heartbeat_at = NULL,
+         error_message = '后台任务连续中断，已停止自动重试',
+         result_json = NULL, updated_at = ?
+       WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested = 0
+         AND attempt_count >= 3`
     )
     .run(timestamp, timestamp, timestamp)
 }
 
-function finishJob(
+export function finishLocalJob(
   database: DatabaseSync,
   id: string,
   owner: string,
@@ -299,7 +321,8 @@ function finishJob(
       .prepare(
         `UPDATE local_jobs SET status = CASE WHEN cancel_requested = 1 THEN 'cancelled' ELSE ? END,
            finished_at = ?, lease_owner = NULL, lease_expires_at = NULL,
-           error_message = ?, result_json = ?, updated_at = ?
+           error_message = CASE WHEN cancel_requested = 1 THEN '任务已取消' ELSE ? END,
+           result_json = CASE WHEN cancel_requested = 1 THEN NULL ELSE ? END, updated_at = ?
          WHERE id = ? AND status = 'running' AND lease_owner = ?`
       )
       .run(status, now, error, result ? JSON.stringify(result) : null, now, id, owner).changes === 1
@@ -310,18 +333,6 @@ function nextRun(schedule: string, after: Date): Date {
   const next = getUpcomingScheduleRuns(schedule, 1, after)[0]
   if (!next) throw new Error(`计划“${schedule}”没有下一次执行时间`)
   return next
-}
-
-function withImmediateTransaction<T>(database: DatabaseSync, action: () => T): T {
-  database.exec('BEGIN IMMEDIATE')
-  try {
-    const result = action()
-    database.exec('COMMIT')
-    return result
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
-  }
 }
 
 const jobQuery = `
@@ -380,19 +391,5 @@ function parseJobResult(value: string | null): CrawlProgress | null {
     return JSON.parse(value) as CrawlProgress
   } catch {
     return null
-  }
-}
-
-function addColumn(
-  database: DatabaseSync,
-  table: string,
-  column: string,
-  definition: string
-): void {
-  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{
-    name: string
-  }>
-  if (!columns.some((item) => item.name === column)) {
-    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
   }
 }

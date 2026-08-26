@@ -1,5 +1,8 @@
+import { setTimeout as wait } from 'node:timers/promises'
 import { abortableSleep, throwIfAborted } from './abort.js'
 import type { FetchOptions } from './types.js'
+
+const MAX_RETRY_AFTER_MS = 60_000
 
 export async function fetchWithRetry(url: string, options: FetchOptions = {}): Promise<Response> {
   const timeoutMs = options.timeoutMs ?? 30_000
@@ -16,6 +19,7 @@ export async function fetchWithRetry(url: string, options: FetchOptions = {}): P
         redirect: 'follow'
       })
       if (!isRetryableStatus(response.status) || attempt === maxRetries) return response
+      await response.body?.cancel().catch(() => undefined)
       await abortableSleep(retryAfterMs(response.headers.get('retry-after')), options.signal, sleep)
     } catch (error) {
       throwIfAborted(options.signal)
@@ -33,11 +37,15 @@ export function isRetryableStatus(status: number): boolean {
 export function retryAfterMs(value: string | null): number {
   if (!value) return 0
   const seconds = Number(value)
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
+  if (Number.isFinite(seconds)) return clampRetryAfter(seconds * 1000)
   const date = Date.parse(value)
-  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0
+  return Number.isFinite(date) ? clampRetryAfter(date - Date.now()) : 0
 }
 
-function defaultSleep(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
+function clampRetryAfter(milliseconds: number): number {
+  return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, milliseconds))
+}
+
+function defaultSleep(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return wait(milliseconds, undefined, { signal })
 }

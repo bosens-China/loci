@@ -15,6 +15,11 @@ describe('Loci Agent 全局规则区块', () => {
     expect(LOCI_AGENT_INSTRUCTIONS).toContain(
       'another documentation source or targeted web search only when'
     )
+    expect(LOCI_AGENT_INSTRUCTIONS).toContain('loci_submit_url_review')
+    expect(LOCI_AGENT_INSTRUCTIONS).toContain('approve_remaining: true')
+    expect(LOCI_AGENT_INSTRUCTIONS).toContain('status is `discovering`')
+    expect(LOCI_AGENT_INSTRUCTIONS).toContain('persisted discovery')
+    expect(LOCI_AGENT_INSTRUCTIONS).toContain('immediately deletes nonmatching stored documents')
   })
 
   it('追加规则并保持重复执行幂等', () => {

@@ -1,7 +1,7 @@
 import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import { APP_SETTINGS_LIMITS, DEFAULT_APP_SETTINGS, PRODUCTION_SERVER_URL } from '@loci/shared'
 
-export const LOCI_SCHEMA_VERSION = 13
+export const LOCI_SCHEMA_VERSION = 15
 
 // 基础表结构集中维护，具体子模块的增量表由各自初始化函数负责。
 export const LOCI_DATABASE_SCHEMA = `
@@ -29,6 +29,9 @@ export const LOCI_DATABASE_SCHEMA = `
     github_blocked_revision TEXT,
     github_blocked_limit_kind TEXT CHECK (github_blocked_limit_kind IS NULL OR github_blocked_limit_kind IN ('archive', 'markdown')),
     github_blocked_limit_bytes INTEGER,
+    discovery_mode TEXT NOT NULL DEFAULT 'site' CHECK (discovery_mode IN ('site', 'agent_review')),
+    resolved_discovery TEXT CHECK (resolved_discovery IS NULL OR resolved_discovery IN ('github', 'llms', 'openapi', 'pages')),
+    review_goal TEXT,
     source_type TEXT NOT NULL DEFAULT 'local' CHECK (source_type IN ('local', 'cloud')),
     cloud_server_url TEXT,
     cloud_library_id TEXT,

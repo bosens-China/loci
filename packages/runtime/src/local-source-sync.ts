@@ -1,4 +1,4 @@
-import type { CrawlProgress } from '@loci/shared'
+import type { CrawlProgress, LocalJobEvent } from '@loci/shared'
 import type { BrowserInstallPrompt } from './browser-crawler.js'
 import type { LocalJobTrigger } from './local-job-database.js'
 import { createLocalJobRunner } from './local-job-runner.js'
@@ -29,7 +29,7 @@ export async function runLocalSourceSync(
       options.onProgress,
       options.signal
     )
-    await runner.runOnce()
+    runner.start()
     return await task
   } finally {
     await runner.stop()
@@ -43,25 +43,41 @@ export async function runDurableSourceSync(
   onProgress?: (progress: CrawlProgress) => void,
   signal?: AbortSignal
 ): Promise<CrawlProgress> {
-  const { job } = runtime.database.enqueueSourceSync(sourceId, trigger)
+  const { job, reused } = runtime.database.enqueueSourceSync(sourceId, trigger)
+  let afterSequence = 0
   let reportedProcessed = -1
-  while (true) {
-    signal?.throwIfAborted()
-    const current = runtime.database.getLocalJob(job.id)
-    if (!current) throw new Error('后台同步任务不存在')
-    const state = runtime.getCrawlState(sourceId)
-    if (state && state.progress.processed !== reportedProcessed) {
-      reportedProcessed = state.progress.processed
-      onProgress?.(state.progress)
+  const cancelOwnedTask = (): void => {
+    if (!reused) runtime.database.requestLocalJobCancellation(job.id)
+  }
+  if (signal?.aborted) cancelOwnedTask()
+  signal?.addEventListener('abort', cancelOwnedTask, { once: true })
+  try {
+    while (true) {
+      signal?.throwIfAborted()
+      let events: LocalJobEvent[]
+      do {
+        events = runtime.database.listLocalJobEvents(job.id, afterSequence, 500)
+        for (const event of events) {
+          afterSequence = event.sequence
+          reportedProcessed = event.progress.processed
+          onProgress?.(event.progress)
+        }
+      } while (events.length === 500)
+      const current = runtime.database.getLocalJob(job.id)
+      if (!current) throw new Error('后台同步任务不存在')
+      if (current.status === 'completed') {
+        if (!current.result) throw new Error('后台同步完成，但没有找到运行结果')
+        if (current.result.processed !== reportedProcessed) onProgress?.(current.result)
+        return current.result
+      }
+      if (current.status === 'failed' || current.status === 'cancelled') {
+        throw new Error(
+          current.error ?? (current.status === 'cancelled' ? '同步已取消' : '同步失败')
+        )
+      }
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100))
     }
-    if (current.status === 'completed') {
-      if (!current.result) throw new Error('后台同步完成，但没有找到运行结果')
-      onProgress?.(current.result)
-      return current.result
-    }
-    if (current.status === 'failed' || current.status === 'cancelled') {
-      throw new Error(current.error ?? (current.status === 'cancelled' ? '同步已取消' : '同步失败'))
-    }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 200))
+  } finally {
+    signal?.removeEventListener('abort', cancelOwnedTask)
   }
 }

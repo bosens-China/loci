@@ -141,7 +141,8 @@ describe('database lifecycle', () => {
       expect(database.listSources().find((source) => source.id === 'legacy-source')).toMatchObject({
         httpConcurrency: 5,
         browserConcurrency: 5,
-        excludePathPattern: null
+        excludePathPattern: null,
+        resolvedDiscovery: null
       })
     } finally {
       database.close()

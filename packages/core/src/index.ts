@@ -6,6 +6,7 @@ export * from './github-source.js'
 export * from './llms.js'
 export * from './mode.js'
 export * from './openapi.js'
+export { renderOpenApiMarkdown } from './openapi-markdown.js'
 export * from './rendered.js'
 export * from './scope.js'
 export * from './source.js'
@@ -27,4 +28,10 @@ export {
   normalizeExcludePathPattern,
   parseGithubRepositoryUrl
 } from '@loci/shared'
-export type { GithubRepository } from '@loci/shared'
+export type {
+  CloudLibrary,
+  CloudLibraryInput,
+  CloudSyncJob,
+  CloudSyncJobStatus,
+  GithubRepository
+} from '@loci/shared'

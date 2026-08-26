@@ -15,11 +15,13 @@ import { registerPageTools } from './page-tools.js'
 import { registerSourcePlanningTools } from './source-planning-tools.js'
 import type { LociMcpServices } from './services.js'
 import { registerSyncTools } from './sync-tools.js'
+import { registerUrlReviewTools } from './url-review-tools.js'
 
 export interface LociToolContext {
   progressToken?: string | number
   notifyProgress?: (progress: number, total: number, message: string) => Promise<void>
   trackBackgroundTask?: (task: Promise<void>) => void
+  signal?: AbortSignal
 }
 
 interface LociToolConfig<InputSchema extends LociToolSchema, OutputSchema extends LociToolSchema> {
@@ -73,7 +75,8 @@ export function createMcpToolRegistrar(server: McpServer): LociToolRegistrar {
 export async function callLociMcpTool(
   services: LociMcpServices,
   name: string,
-  input: unknown
+  input: unknown,
+  context: LociToolContext = {}
 ): Promise<CallToolResult> {
   const tools = new Map<string, ExecutableTool>()
   const register: LociToolRegistrar = (toolName, config, execute) => {
@@ -81,6 +84,7 @@ export async function callLociMcpTool(
       invoke: async (rawInput) => {
         const backgroundTasks: Promise<void>[] = []
         const response = await execute(await config.inputSchema.parseAsync(rawInput), {
+          ...context,
           trackBackgroundTask: (task) => backgroundTasks.push(task)
         })
         await Promise.all(backgroundTasks)
@@ -102,6 +106,7 @@ export async function callLociMcpTool(
 
 export function registerLociTools(register: LociToolRegistrar, services: LociMcpServices): void {
   registerSyncTools(register, services)
+  registerUrlReviewTools(register, services)
   registerPageTools(register, services)
   registerSourcePlanningTools(register, services)
   registerListLibrariesTool(register, services)
@@ -114,6 +119,7 @@ export function registerLociTools(register: LociToolRegistrar, services: LociMcp
 function fromMcpContext(context: ServerContext): LociToolContext {
   return {
     progressToken: context.mcpReq._meta?.progressToken,
+    signal: context.mcpReq.signal,
     notifyProgress: (progress, total, message) =>
       context.mcpReq.notify({
         method: 'notifications/progress',
