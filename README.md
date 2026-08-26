@@ -16,7 +16,7 @@ Loci 将公开技术文档收录为本地 Markdown，提供全文搜索，并通
 
 ### CLI 与 Web UI
 
-需要 Node.js 22.13 或更高版本：
+需要 Node.js 22.16 或更高版本：
 
 ```bash
 npm install --global @boses/cli
