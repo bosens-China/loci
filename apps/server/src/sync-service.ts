@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { Cron } from 'croner'
 import PQueue from 'p-queue'
-import { crawlSource, GithubLimitError, normalizeCronSchedule } from '@loci/core'
-import type { CrawlProgress } from '@loci/core'
+import {
+  crawlSource,
+  GithubLimitError,
+  normalizeCronSchedule,
+  parseGithubRepositoryUrl
+} from '@loci/core'
 import { createBrowserCrawler } from './browser-crawl.js'
 import type { BrowserConfig } from './browser-config.js'
 import { ServerDatabase } from './database.js'
@@ -188,6 +192,7 @@ export class SyncService {
       const deletedUrls: string[] = []
       let replaceAll = false
       const result = await crawlSource({
+        kind: parseGithubRepositoryUrl(library.url) ? 'github' : 'web',
         firstUrl: library.url,
         hostname: library.hostname,
         scopePath: library.scopePath,
@@ -216,7 +221,7 @@ export class SyncService {
           deletedUrls.push(url)
         },
         onProgress: (progressEvent) => {
-          job.progress = withoutNode(progressEvent)
+          job.progress = progressEvent
           if (
             !this.database.syncJobs.heartbeat(job.id, this.#ownerId, leaseExpiresAt(), job.progress)
           ) {
@@ -238,7 +243,7 @@ export class SyncService {
         replaceAll,
         githubRevision: result.resolution.github?.revision
       })
-      job.progress = withoutNode(progress)
+      job.progress = progress
       job.failures = progress.failures ?? []
       job.status = progress.failed > 0 ? 'completed_with_errors' : 'completed'
       assignJob(
@@ -295,12 +300,6 @@ export class SyncService {
 
 function isActive(job: SyncJob): boolean {
   return job.status === 'queued' || job.status === 'running' || job.status === 'canceling'
-}
-
-function withoutNode(progress: CrawlProgress): CrawlProgress {
-  const snapshot = { ...progress }
-  delete snapshot.node
-  return snapshot
 }
 
 function leaseExpiresAt(): string {

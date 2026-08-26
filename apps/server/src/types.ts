@@ -1,21 +1,14 @@
-import type { CrawlFailure, CrawlProgress, GithubBlockedState } from '@loci/core'
+import type {
+  CloudLibrary,
+  CloudLibraryInput,
+  CloudSyncJob,
+  CloudSyncJobStatus,
+  GithubBlockedState
+} from '@loci/core'
 
-export interface LibraryInput {
-  name: string
-  url: string
-  scopePath: string
-  pageLimit: number
-  schedule: string | null
-}
+export type LibraryInput = CloudLibraryInput
 
-export interface Library extends LibraryInput {
-  id: string
-  hostname: string
-  pages: number
-  lastCrawledAt: string | null
-  lastError: string | null
-  revision: string | null
-  publishedAt: string | null
+export interface Library extends CloudLibrary {
   githubRevision: string | null
   githubBlocked: GithubBlockedState | null
 }
@@ -52,16 +45,5 @@ export interface LibrarySnapshot {
   documents: SnapshotDocument[]
 }
 
-export type SyncJobStatus =
-  'queued' | 'running' | 'canceling' | 'canceled' | 'completed' | 'completed_with_errors' | 'failed'
-
-export interface SyncJob {
-  id: string
-  libraryId: string
-  status: SyncJobStatus
-  createdAt: string
-  finishedAt: string | null
-  progress: CrawlProgress | null
-  failures: CrawlFailure[]
-  error: string | null
-}
+export type SyncJobStatus = CloudSyncJobStatus
+export type SyncJob = CloudSyncJob

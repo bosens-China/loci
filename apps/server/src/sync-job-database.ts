@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { CrawlFailure, CrawlProgress } from '@loci/core'
+import { withImmediateTransaction as transaction } from './sqlite.js'
 import type { SyncJob, SyncJobStatus } from './types.js'
 
 const activeStatuses = "('queued', 'running', 'canceling')"
@@ -215,18 +216,6 @@ function parseJson<T>(value: string | null, fallback: T): T {
 
 function isActive(status: SyncJobStatus): boolean {
   return status === 'queued' || status === 'running' || status === 'canceling'
-}
-
-function transaction<T>(database: DatabaseSync, work: () => T): T {
-  database.exec('BEGIN IMMEDIATE')
-  try {
-    const result = work()
-    database.exec('COMMIT')
-    return result
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
-  }
 }
 
 const jobQuery = `SELECT id, library_id, status, owner_id, lease_expires_at,

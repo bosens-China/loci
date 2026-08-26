@@ -27,6 +27,7 @@ import {
   saveServerDocument,
   type CrawlCommit
 } from './server-document-database.js'
+import { withImmediateTransaction as transaction } from './sqlite.js'
 
 export { ConflictError, NotFoundError } from './database-errors.js'
 
@@ -350,16 +351,5 @@ function toLibrary(row: LibraryRow): Library {
             limitBytes: Number(row.github_blocked_limit_bytes)
           }
         : null
-  }
-}
-
-function transaction(database: DatabaseSync, action: () => void): void {
-  database.exec('BEGIN IMMEDIATE')
-  try {
-    action()
-    database.exec('COMMIT')
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
   }
 }

@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { CrawledDocument } from '@loci/core'
 import { ConflictError, NotFoundError } from './database-errors.js'
 import { assertSyncJobOwned } from './sync-job-database.js'
+import { withImmediateTransaction as transaction } from './sqlite.js'
 import type { Library, LibrarySnapshot, SnapshotDocument } from './types.js'
 
 interface SnapshotRow {
@@ -176,15 +177,4 @@ function updateSuccessfulCrawl(
       now,
       libraryId
     )
-}
-
-function transaction(database: DatabaseSync, action: () => void): void {
-  database.exec('BEGIN IMMEDIATE')
-  try {
-    action()
-    database.exec('COMMIT')
-  } catch (error) {
-    database.exec('ROLLBACK')
-    throw error
-  }
 }
