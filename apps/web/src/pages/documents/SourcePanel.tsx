@@ -9,6 +9,13 @@ import { LibraryOriginTag } from '@/components/library/LibraryOriginTag'
 import { FETCH_MODE_LABELS } from '@/utils/status-labels'
 import { SourceActions, SourceFormModal } from '@/pages/documents/SourceFormModal'
 
+const DISCOVERY_LABELS = {
+  github: 'GitHub',
+  llms: 'llms.txt',
+  openapi: 'OpenAPI',
+  pages: '网页'
+} as const
+
 interface SourcePanelProps {
   selectedId: string
   onSelect: (sourceId: string) => void
@@ -81,41 +88,63 @@ function SourceGroup(props: {
       <div className="mb-1 px-2 text-[11px] font-650 tracking-wide text-muted uppercase">
         {props.label}
       </div>
-      {props.sources.map((source) => (
-        <button
-          key={source.id}
-          type="button"
-          onClick={() => props.onSelect(source.id)}
-          className={`focus-ring mb-1 w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
-            props.selectedId === source.id
-              ? 'border-accent/30 bg-[#eaf4f3]'
-              : 'border-transparent hover:bg-[#f3f7f6]'
-          }`}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <span className="min-w-0 truncate text-sm font-650">{source.name}</span>
-            <span className="shrink-0">
-              <StatusPill status={source.status} />
-            </span>
+      {props.sources.map((source) => {
+        const selected = props.selectedId === source.id
+        return (
+          <div
+            key={source.id}
+            className={`relative mb-1 w-full rounded-lg border text-left transition-colors ${
+              selected ? 'border-accent/30 bg-[#eaf4f3]' : 'border-transparent hover:bg-[#f3f7f6]'
+            }`}
+          >
+            <button
+              type="button"
+              aria-pressed={selected}
+              onClick={() => props.onSelect(source.id)}
+              className="focus-ring block w-full rounded-lg px-3 py-2.5 text-left"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="min-w-0 truncate text-sm font-650">{source.name}</span>
+                <span className="shrink-0">
+                  <StatusPill status={source.status} />
+                </span>
+              </div>
+              <div className="mt-1 truncate font-mono text-[11px] text-muted">{source.url}</div>
+              <div className="mt-1.5 flex min-h-6 items-center justify-between text-[11px] text-muted">
+                <span>
+                  {source.pages} 页{!source.cloud && ` · ${sourceRouteLabel(source)}`}
+                </span>
+                <span className={selected ? 'invisible' : ''}>
+                  {source.cloud ? (
+                    <LibraryOriginTag origin="cloud" autoSync={source.cloud.autoSync} />
+                  ) : (
+                    source.schedule
+                  )}
+                </span>
+              </div>
+            </button>
+            <div
+              className={`absolute right-3 bottom-2.5 ${
+                selected ? '' : 'pointer-events-none invisible'
+              }`}
+              aria-hidden={!selected}
+              inert={selected ? undefined : true}
+            >
+              <SourceActions compact source={source} onEdit={() => props.onEdit(source)} />
+            </div>
           </div>
-          <div className="mt-1 truncate font-mono text-[11px] text-muted">{source.url}</div>
-          <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted">
-            <span>
-              {source.pages} 页{source.cloud ? '' : ` · ${FETCH_MODE_LABELS[source.mode]}`}
-            </span>
-            {source.cloud ? (
-              <LibraryOriginTag origin="cloud" autoSync={source.cloud.autoSync} />
-            ) : (
-              source.schedule && <span>{source.schedule}</span>
-            )}
-          </div>
-          {props.selectedId === source.id && (
-            <SourceActions source={source} onEdit={() => props.onEdit(source)} />
-          )}
-        </button>
-      ))}
+        )
+      })}
     </section>
   )
+}
+
+function sourceRouteLabel(source: DocumentSource): string {
+  if (source.kind === 'github') return 'GitHub'
+  const discovery = source.resolvedDiscovery
+    ? DISCOVERY_LABELS[source.resolvedDiscovery]
+    : '普通站点'
+  return `${discovery} · ${FETCH_MODE_LABELS[source.mode]}`
 }
 
 function PanelHint({ children }: { children: React.ReactNode }): React.JSX.Element {

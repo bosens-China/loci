@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button } from 'antd'
+import { App, Button, Progress } from 'antd'
 import { cancelJob, listJobs } from '@/api/jobs'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
@@ -49,6 +49,7 @@ export function JobsPage(): React.JSX.Element {
               <tr>
                 <th className="px-5 py-3.5 font-650">来源</th>
                 <th className="px-5 py-3.5 font-650">状态</th>
+                <th className="px-5 py-3.5 font-650">进度</th>
                 <th className="px-5 py-3.5 font-650">触发</th>
                 <th className="px-5 py-3.5 font-650">时间</th>
                 <th className="px-5 py-3.5 text-right font-650">操作</th>
@@ -70,6 +71,9 @@ export function JobsPage(): React.JSX.Element {
                     </td>
                     <td className="px-5 py-3.5">
                       <StatusPill status={job.status} />
+                    </td>
+                    <td className="w-56 px-5 py-3.5">
+                      <JobProgress job={job} />
                     </td>
                     <td className="px-5 py-3.5 text-muted">{triggerLabel(job.trigger)}</td>
                     <td className="px-5 py-3.5 whitespace-nowrap text-muted">
@@ -95,6 +99,33 @@ export function JobsPage(): React.JSX.Element {
           </table>
         </div>
       </AsyncState>
+    </div>
+  )
+}
+
+function JobProgress({ job }: { job: import('@loci/shared').LocalJob }): React.JSX.Element {
+  const progress = job.result
+  if (!progress) return <span className="text-xs text-muted">等待开始</span>
+  const total = Math.max(progress.queued, progress.processed)
+  const percent = total > 0 ? Math.min(100, Math.round((progress.processed / total) * 100)) : 0
+  return (
+    <div className="min-w-44">
+      <Progress
+        percent={percent}
+        size="small"
+        showInfo={false}
+        status={
+          job.status === 'failed' ? 'exception' : job.status === 'completed' ? 'success' : 'active'
+        }
+      />
+      <div className="text-xs text-muted">
+        已处理 {progress.processed}/{total} · 失败 {progress.failed}
+      </div>
+      {progress.node && (
+        <div className="mt-0.5 truncate text-xs text-muted" title={progress.node.url}>
+          {progress.node.status} · {progress.node.title}
+        </div>
+      )}
     </div>
   )
 }

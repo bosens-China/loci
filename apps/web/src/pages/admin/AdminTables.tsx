@@ -239,6 +239,11 @@ function JobProgress({ job }: { job?: CloudSyncJob }): React.JSX.Element {
             ? `完成 ${processed} · 失败 ${failed}`
             : `完成 ${processed} 页`}
       </div>
+      {job.progress.node && (
+        <div className="truncate text-xs text-muted" title={job.progress.node.url}>
+          {job.progress.node.status} · {job.progress.node.title}
+        </div>
+      )}
     </div>
   )
 }

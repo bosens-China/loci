@@ -31,7 +31,7 @@ import {
 } from '@/pages/admin/admin-query-keys'
 import {
   availableAdminLibraryIds,
-  hasAdminLibraryUrlChanged,
+  getAdminLibraryRemovalWarning,
   isAdminAuthError,
   isAdminJobActive,
   latestAdminJobsByLibrary,
@@ -149,11 +149,13 @@ export function AdminWorkspace({ session }: { session: CloudAdminSession }): Rea
   const submitLibrary = (input: CloudLibraryInput): void => {
     const target = editing
     if (!target) return
-    if (target !== 'new' && hasAdminLibraryUrlChanged(target, input)) {
+    const removalWarning = target === 'new' ? null : getAdminLibraryRemovalWarning(target, input)
+    if (removalWarning) {
       modal.confirm({
-        title: '更换起始页面 URL？',
-        content: 'Server 会清空该文档库现有抓取内容。保存后需要重新同步，成功后才会发布新快照。',
-        okText: '更换并保存',
+        title: '保存并立即删除不匹配的文档？',
+        content: removalWarning,
+        okText: '删除并保存',
+        okButtonProps: { danger: true },
         cancelText: '取消',
         onOk: () => save.mutateAsync({ target, input })
       })

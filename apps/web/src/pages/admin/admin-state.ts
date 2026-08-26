@@ -1,4 +1,9 @@
-import type { CloudLibrary, CloudLibraryInput, CloudSyncJob } from '@loci/shared'
+import {
+  scopePathContains,
+  type CloudLibrary,
+  type CloudLibraryInput,
+  type CloudSyncJob
+} from '@loci/shared'
 
 export function isAdminJobActive(job: CloudSyncJob): boolean {
   return ['queued', 'running', 'canceling'].includes(job.status)
@@ -51,9 +56,13 @@ export function isAdminAuthError(error: unknown): boolean {
   )
 }
 
-export function hasAdminLibraryUrlChanged(
+export function getAdminLibraryRemovalWarning(
   library: CloudLibrary,
   input: CloudLibraryInput
-): boolean {
-  return library.url !== input.url
+): string | null {
+  if (library.url !== input.url) {
+    return 'Server 会立即清空该文档库现有抓取内容。保存后需要重新同步，成功后才会发布新快照。'
+  }
+  if (scopePathContains(input.scopePath, library.scopePath)) return null
+  return 'Server 会立即删除新收录范围之外的正文。保存后需要重新同步，成功后才会发布完整的新快照。'
 }

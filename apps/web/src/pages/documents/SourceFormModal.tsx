@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Select } from 'antd'
+import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Segmented, Select } from 'antd'
 import { SyncOutlined } from '@ant-design/icons'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
@@ -9,6 +9,7 @@ import {
   type CreateSourceResult,
   type DocumentSource,
   type FetchMode,
+  type SourceKind,
   type UpdateSourceInput
 } from '@loci/shared'
 import { enqueueSourceSync } from '@/api/jobs'
@@ -17,8 +18,10 @@ import {
   LibraryCoreFields,
   type LibraryCoreFormValue
 } from '@/components/library/LibraryCoreFields'
+import { getLocalLibraryRemovalWarning } from '@/components/library/library-form'
 
 interface SourceFormValue extends LibraryCoreFormValue {
+  kind: SourceKind
   mode: FetchMode
   excludePathPattern?: string
   httpConcurrency?: number
@@ -34,9 +37,10 @@ interface SourceFormModalProps {
 }
 
 export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element {
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const client = useQueryClient()
   const [form] = Form.useForm<SourceFormValue>()
+  const kind = Form.useWatch('kind', form) ?? 'web'
   const refresh = (): void => {
     void client.invalidateQueries({ queryKey: ['sources'] })
     void client.invalidateQueries({ queryKey: ['jobs'] })
@@ -66,6 +70,31 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
     },
     onError: (error: Error) => void message.error(error.message)
   })
+  const submit = async (): Promise<void> => {
+    const value = await form.validateFields()
+    const current = props.editing
+    if (current !== 'new' && current) {
+      const input = toInput(value)
+      const warning = getLocalLibraryRemovalWarning(current, {
+        kind: input.kind ?? current.kind,
+        url: input.url,
+        scopePath: input.scopePath ?? current.scopePath,
+        excludePathPattern: input.excludePathPattern
+      })
+      if (warning) {
+        modal.confirm({
+          title: '保存并立即删除不匹配的文档？',
+          content: warning,
+          okText: '删除并保存',
+          okButtonProps: { danger: true },
+          cancelText: '取消',
+          onOk: () => save.mutateAsync(value)
+        })
+        return
+      }
+    }
+    save.mutate(value)
+  }
 
   return (
     <Modal
@@ -75,7 +104,7 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
       cancelText="取消"
       confirmLoading={save.isPending}
       onCancel={props.onClose}
-      onOk={() => void form.validateFields().then((value) => save.mutate(value))}
+      onOk={() => void submit()}
       destroyOnHidden
       afterOpenChange={(open) => {
         if (!open) return
@@ -85,35 +114,59 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
       }}
     >
       <Form form={form} layout="vertical" className="pt-2" requiredMark="optional">
-        <LibraryCoreFields autoFocusUrl suggestName={props.editing === 'new'} />
-        <Form.Item name="mode" label="抓取方式">
-          <Select
+        <Form.Item name="kind" label="来源类型">
+          <Segmented
+            block
             options={[
-              { value: 'auto', label: '自动检测' },
-              { value: 'http', label: 'HTTP' },
-              { value: 'browser', label: '浏览器' }
+              { value: 'web', label: '普通站点' },
+              { value: 'github', label: 'GitHub 仓库' }
             ]}
           />
         </Form.Item>
-        <Form.Item
-          name="excludePathPattern"
-          label="排除路径正则（可选）"
-          rules={[
-            { max: DOCUMENT_SOURCE_LIMITS.excludePathPatternLength.max, message: '正则过长' }
-          ]}
-        >
-          <Input placeholder="^/(zh|de|fr)(?:/|$)" />
-        </Form.Item>
-        <div className="grid grid-cols-2 gap-3">
-          <OptionalNumberField name="httpConcurrency" label="HTTP 并发覆盖" />
-          <OptionalNumberField name="browserConcurrency" label="浏览器并发覆盖" />
-          <OptionalNumberField name="githubArchiveLimitMb" label="GitHub ZIP 上限（MB）" size />
-          <OptionalNumberField
-            name="githubMarkdownLimitMb"
-            label="GitHub Markdown 上限（MB）"
-            size
-          />
-        </div>
+        <LibraryCoreFields autoFocusUrl suggestName={props.editing === 'new'} kind={kind} />
+        {kind === 'web' ? (
+          <>
+            <Form.Item
+              name="mode"
+              label="页面获取方式"
+              extra="普通站点会先自动检查 llms.txt 和 OpenAPI；这里只控制网页使用 HTTP 还是浏览器读取。"
+            >
+              <Select
+                options={[
+                  { value: 'auto', label: '自动检测' },
+                  { value: 'http', label: 'HTTP' },
+                  { value: 'browser', label: '浏览器' }
+                ]}
+              />
+            </Form.Item>
+            <Form.Item
+              name="excludePathPattern"
+              label="排除路径正则（可选）"
+              extra="新增或修改后，保存会立即删除匹配页面的正文和搜索索引。"
+              rules={[
+                {
+                  max: DOCUMENT_SOURCE_LIMITS.excludePathPatternLength.max,
+                  message: '正则过长'
+                }
+              ]}
+            >
+              <Input placeholder="^/(zh|de|fr)(?:/|$)" />
+            </Form.Item>
+            <div className="grid grid-cols-2 gap-3">
+              <OptionalNumberField name="httpConcurrency" label="HTTP 并发覆盖" />
+              <OptionalNumberField name="browserConcurrency" label="浏览器并发覆盖" />
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <OptionalNumberField name="githubArchiveLimitMb" label="GitHub ZIP 上限（MB）" size />
+            <OptionalNumberField
+              name="githubMarkdownLimitMb"
+              label="GitHub Markdown 上限（MB）"
+              size
+            />
+          </div>
+        )}
       </Form>
     </Modal>
   )
@@ -203,6 +256,7 @@ export function SourceActions(props: SourceActionsProps): React.JSX.Element {
 const emptyForm: SourceFormValue = {
   name: '',
   url: '',
+  kind: 'web',
   mode: DOCUMENT_SOURCE_DEFAULTS.mode,
   pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
   scopePath: DOCUMENT_SOURCE_DEFAULTS.scopePath
@@ -212,6 +266,7 @@ function fromSource(source: DocumentSource): SourceFormValue {
   return {
     name: source.name,
     url: source.url,
+    kind: source.kind,
     mode: source.mode,
     pageLimit: source.pageLimit,
     scopePath: source.scopePath,
@@ -225,18 +280,20 @@ function fromSource(source: DocumentSource): SourceFormValue {
 }
 
 function toInput(value: SourceFormValue): CreateSourceInput | UpdateSourceInput {
+  const github = value.kind === 'github'
   return {
     name: value.name.trim(),
     url: value.url.trim(),
-    mode: value.mode,
+    kind: value.kind,
+    mode: github ? DOCUMENT_SOURCE_DEFAULTS.mode : value.mode,
     pageLimit: value.pageLimit,
-    scopePath: value.scopePath.trim() || '/',
-    excludePathPattern: value.excludePathPattern?.trim() || null,
+    scopePath: github ? DOCUMENT_SOURCE_DEFAULTS.scopePath : value.scopePath.trim() || '/',
+    excludePathPattern: github ? null : value.excludePathPattern?.trim() || null,
     schedule: normalizeCronSchedule(value.schedule),
-    httpConcurrency: value.httpConcurrency ?? null,
-    browserConcurrency: value.browserConcurrency ?? null,
-    githubArchiveLimitMb: value.githubArchiveLimitMb ?? null,
-    githubMarkdownLimitMb: value.githubMarkdownLimitMb ?? null
+    httpConcurrency: github ? null : (value.httpConcurrency ?? null),
+    browserConcurrency: github ? null : (value.browserConcurrency ?? null),
+    githubArchiveLimitMb: github ? (value.githubArchiveLimitMb ?? null) : null,
+    githubMarkdownLimitMb: github ? (value.githubMarkdownLimitMb ?? null) : null
   }
 }
 
