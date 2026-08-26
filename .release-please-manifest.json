@@ -1,7 +1,7 @@
 {
-  "apps/cli": "1.17.0",
-  "apps/server": "1.8.4",
-  "packages/core": "1.13.0",
-  "packages/shared": "1.21.0",
-  "packages/runtime": "1.15.0"
+  "apps/cli": "1.18.0",
+  "apps/server": "1.9.0",
+  "packages/core": "1.14.0",
+  "packages/shared": "1.22.0",
+  "packages/runtime": "1.16.0"
 }

@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.9.0](https://github.com/bosens-China/loci/compare/server-v1.8.4...server-v1.9.0) (2026-08-26)
+
+
+### Features
+
+* 支持跨进程资源状态刷新 ([8095a31](https://github.com/bosens-China/loci/commit/8095a3173ec18a6d35a3309e37de30ca75db40df))
+
+
+### Bug Fixes
+
+* 加固 Server 出站抓取与并发写入 ([0b692f1](https://github.com/bosens-China/loci/commit/0b692f14bff636b0c2133dd1b6378108c16e5c42))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.14.0
+
 ## [1.8.4](https://github.com/bosens-China/loci/compare/server-v1.8.3...server-v1.8.4) (2026-08-25)
 
 
