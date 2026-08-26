@@ -15,6 +15,12 @@ export interface AppSettings {
   githubMarkdownLimitMb: number
 }
 
+export const RESOURCE_REVISION_KEYS = ['sources', 'documents', 'jobs', 'settings'] as const
+
+export type ResourceRevisionKey = (typeof RESOURCE_REVISION_KEYS)[number]
+
+export type ResourceRevisions = Record<ResourceRevisionKey, number>
+
 export interface AgentImportResult {
   client: AgentClient
   message: string

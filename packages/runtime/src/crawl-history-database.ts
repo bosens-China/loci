@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { CrawlFailure, CrawlProgress } from '@loci/shared'
+import { and, desc, eq, sql } from 'drizzle-orm'
+import type { LociDrizzleDatabase } from './drizzle-database.js'
+import { crawlFailures, crawlRuns, documentSources } from './drizzle-schema.js'
 import { addColumn, withImmediateTransaction, withTransaction } from './sqlite.js'
 
 export interface CrawlHistoryRecord {
@@ -112,7 +115,10 @@ function migrateCrawlFailureReasons(database: DatabaseSync): void {
   })
 }
 
-export function createCrawlHistoryDatabase(database: DatabaseSync): CrawlHistoryDatabase {
+export function createCrawlHistoryDatabase(
+  database: DatabaseSync,
+  drizzleDatabase: LociDrizzleDatabase
+): CrawlHistoryDatabase {
   return {
     startCrawlRun: (sourceId) => {
       const id = randomUUID()
@@ -150,14 +156,20 @@ export function createCrawlHistoryDatabase(database: DatabaseSync): CrawlHistory
         )
     },
     getActiveCrawlRun: (sourceId) => {
-      const row = database
-        .prepare(`${runQuery} WHERE source_id = ? AND status = 'running' LIMIT 1`)
-        .get(sourceId) as unknown as CrawlRunSnapshotRow | undefined
+      const row = drizzleDatabase
+        .select(runSelection)
+        .from(crawlRuns)
+        .where(and(eq(crawlRuns.sourceId, sourceId), eq(crawlRuns.status, 'running')))
+        .limit(1)
+        .get()
       return row ? toRunSnapshot(row) : undefined
     },
     getCrawlRun: (id) => {
-      const row = database.prepare(`${runQuery} WHERE id = ?`).get(id) as unknown as
-        CrawlRunSnapshotRow | undefined
+      const row = drizzleDatabase
+        .select(runSelection)
+        .from(crawlRuns)
+        .where(eq(crawlRuns.id, id))
+        .get()
       return row ? toRunSnapshot(row) : undefined
     },
     finishCrawlRun: (id, status, progress, error) => {
@@ -166,30 +178,31 @@ export function createCrawlHistoryDatabase(database: DatabaseSync): CrawlHistory
       })
     },
     listCrawlHistory: (sourceId) => {
-      const rows = (sourceId
-        ? database
-            .prepare(`${historyQuery} WHERE r.source_id = ? ORDER BY r.started_at DESC LIMIT 50`)
-            .all(sourceId)
-        : database
-            .prepare(`${historyQuery} ORDER BY r.started_at DESC LIMIT 50`)
-            .all()) as unknown as CrawlHistoryRow[]
+      const rows = drizzleDatabase
+        .select(historySelection)
+        .from(crawlRuns)
+        .innerJoin(documentSources, eq(documentSources.id, crawlRuns.sourceId))
+        .where(sourceId ? eq(crawlRuns.sourceId, sourceId) : undefined)
+        .orderBy(desc(crawlRuns.startedAt))
+        .limit(50)
+        .all()
       return rows.map(toCrawlHistoryRecord)
     },
     listCrawlFailures: (runId) => {
-      const rows = database
-        .prepare(
-          `SELECT run_id, url, reason, message, retryable, status_code, redirect_url
-           FROM crawl_failures WHERE run_id = ? ORDER BY rowid`
-        )
-        .all(runId) as unknown as CrawlFailureRow[]
+      const rows = drizzleDatabase
+        .select(failureSelection)
+        .from(crawlFailures)
+        .where(eq(crawlFailures.runId, runId))
+        .orderBy(sql`rowid`)
+        .all()
       return rows.map((row) => ({
-        runId: row.run_id,
+        runId: row.runId,
         url: row.url,
         reason: row.reason,
         message: row.message,
         retryable: Boolean(row.retryable),
-        ...(row.status_code === null ? {} : { statusCode: Number(row.status_code) }),
-        ...(row.redirect_url ? { redirectUrl: row.redirect_url } : {})
+        ...(row.statusCode === null ? {} : { statusCode: row.statusCode }),
+        ...(row.redirectUrl ? { redirectUrl: row.redirectUrl } : {})
       }))
     }
   }
@@ -243,79 +256,98 @@ export function finishCrawlRunRecord(
   return true
 }
 
-const historyQuery = `
-  SELECT r.id, r.source_id, s.name AS source_name, r.status, r.started_at,
-    r.finished_at, r.discovered_count, r.success_count, r.failure_count, r.error_message
-  FROM crawl_runs r JOIN document_sources s ON s.id = r.source_id`
+const historySelection = {
+  id: crawlRuns.id,
+  sourceId: crawlRuns.sourceId,
+  sourceName: documentSources.name,
+  status: crawlRuns.status,
+  startedAt: crawlRuns.startedAt,
+  finishedAt: crawlRuns.finishedAt,
+  discoveredCount: crawlRuns.discoveredCount,
+  successCount: crawlRuns.successCount,
+  failureCount: crawlRuns.failureCount,
+  errorMessage: crawlRuns.errorMessage
+}
 
 interface CrawlHistoryRow {
   id: string
-  source_id: string
-  source_name: string
+  sourceId: string
+  sourceName: string
   status: CrawlHistoryRecord['status']
-  started_at: string | null
-  finished_at: string | null
-  discovered_count: number
-  success_count: number
-  failure_count: number
-  error_message: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  discoveredCount: number
+  successCount: number
+  failureCount: number
+  errorMessage: string | null
 }
 
-interface CrawlFailureRow {
-  run_id: string
-  url: string
-  reason: CrawlFailure['reason']
-  message: string
-  retryable: number
-  status_code: number | null
-  redirect_url: string | null
+const failureSelection = {
+  runId: crawlFailures.runId,
+  url: crawlFailures.url,
+  reason: crawlFailures.reason,
+  message: crawlFailures.message,
+  retryable: crawlFailures.retryable,
+  statusCode: crawlFailures.statusCode,
+  redirectUrl: crawlFailures.redirectUrl
+}
+
+const runSelection = {
+  id: crawlRuns.id,
+  sourceId: crawlRuns.sourceId,
+  status: crawlRuns.status,
+  progressJson: crawlRuns.progressJson,
+  discoveredCount: crawlRuns.discoveredCount,
+  successCount: crawlRuns.successCount,
+  failureCount: crawlRuns.failureCount,
+  errorMessage: crawlRuns.errorMessage
 }
 
 interface CrawlRunSnapshotRow {
   id: string
-  source_id: string
+  sourceId: string
   status: CrawlHistoryRecord['status']
-  progress_json: string | null
-  discovered_count: number
-  success_count: number
-  failure_count: number
-  error_message: string | null
+  progressJson: string | null
+  discoveredCount: number
+  successCount: number
+  failureCount: number
+  errorMessage: string | null
 }
 
 function toCrawlHistoryRecord(row: CrawlHistoryRow): CrawlHistoryRecord {
   return {
     id: row.id,
-    sourceId: row.source_id,
-    sourceName: row.source_name,
+    sourceId: row.sourceId,
+    sourceName: row.sourceName,
     status: row.status,
-    startedAt: row.started_at,
-    finishedAt: row.finished_at,
-    discovered: Number(row.discovered_count),
-    succeeded: Number(row.success_count),
-    failed: Number(row.failure_count),
-    error: row.error_message
+    startedAt: row.startedAt,
+    finishedAt: row.finishedAt,
+    discovered: row.discoveredCount,
+    succeeded: row.successCount,
+    failed: row.failureCount,
+    error: row.errorMessage
   }
 }
 
 function toRunSnapshot(row: CrawlRunSnapshotRow): CrawlRunSnapshot {
   let progress: CrawlProgress | undefined
   try {
-    progress = row.progress_json ? (JSON.parse(row.progress_json) as CrawlProgress) : undefined
+    progress = row.progressJson ? (JSON.parse(row.progressJson) as CrawlProgress) : undefined
   } catch {
     progress = undefined
   }
   return {
     id: row.id,
-    sourceId: row.source_id,
+    sourceId: row.sourceId,
     status: row.status,
     progress: progress ?? {
-      queued: Number(row.discovered_count),
-      processed: Number(row.success_count) + Number(row.failure_count),
-      succeeded: Number(row.success_count),
-      failed: Number(row.failure_count),
+      queued: row.discoveredCount,
+      processed: row.successCount + row.failureCount,
+      succeeded: row.successCount,
+      failed: row.failureCount,
       limitReached: false
     },
-    error: row.error_message
+    error: row.errorMessage
   }
 }
 
@@ -324,6 +356,3 @@ function withoutNode(progress: CrawlProgress): CrawlProgress {
   delete snapshot.node
   return snapshot
 }
-
-const runQuery = `SELECT id, source_id, status, progress_json, discovered_count,
-  success_count, failure_count, error_message FROM crawl_runs`

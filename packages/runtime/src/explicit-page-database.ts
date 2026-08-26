@@ -1,10 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { ExplicitPageResult } from '@loci/core'
+import { eq } from 'drizzle-orm'
 import {
   deleteStoredDocument,
   storeDocument,
   type StoredDocument
 } from './document-content-database.js'
+import type { LociDrizzleDatabase } from './drizzle-database.js'
+import { explicitPageTargets } from './drizzle-schema.js'
 import { withImmediateTransaction as withTransaction } from './sqlite.js'
 
 export type ExplicitPageTargetStatus = 'pending' | 'current' | 'missing' | 'failed'
@@ -55,7 +58,10 @@ export function initializeExplicitPageDatabase(database: DatabaseSync): void {
   `)
 }
 
-export function createExplicitPageDatabase(database: DatabaseSync): ExplicitPageDatabase {
+export function createExplicitPageDatabase(
+  database: DatabaseSync,
+  drizzleDatabase: LociDrizzleDatabase
+): ExplicitPageDatabase {
   return {
     registerExplicitPageTargets: (sourceId, urls) => {
       const now = new Date().toISOString()
@@ -69,14 +75,18 @@ export function createExplicitPageDatabase(database: DatabaseSync): ExplicitPage
       })
     },
     listExplicitPageTargets: (sourceId) =>
-      (
-        database
-          .prepare(
-            `SELECT source_id, url, status, last_crawled_at, last_error
-             FROM explicit_page_targets WHERE source_id = ? ORDER BY created_at, url`
-          )
-          .all(sourceId) as unknown as ExplicitPageTargetRow[]
-      ).map(toTarget),
+      drizzleDatabase
+        .select({
+          sourceId: explicitPageTargets.sourceId,
+          url: explicitPageTargets.url,
+          status: explicitPageTargets.status,
+          lastCrawledAt: explicitPageTargets.lastCrawledAt,
+          lastError: explicitPageTargets.lastError
+        })
+        .from(explicitPageTargets)
+        .where(eq(explicitPageTargets.sourceId, sourceId))
+        .orderBy(explicitPageTargets.createdAt, explicitPageTargets.url)
+        .all(),
     markExplicitPageTargetsFailed: (sourceId, urls, message) => {
       const now = new Date().toISOString()
       withTransaction(database, () => {
@@ -136,29 +146,11 @@ export function commitExplicitPageResults(
   })
 }
 
-interface ExplicitPageTargetRow {
-  source_id: string
-  url: string
-  status: ExplicitPageTargetStatus
-  last_crawled_at: string | null
-  last_error: string | null
-}
-
 interface DocumentSnapshot {
   title: string
   markdown: string
   language: string
   fetch_mode: 'http' | 'browser'
-}
-
-function toTarget(row: ExplicitPageTargetRow): ExplicitPageTarget {
-  return {
-    sourceId: row.source_id,
-    url: row.url,
-    status: row.status,
-    lastCrawledAt: row.last_crawled_at,
-    lastError: row.last_error
-  }
 }
 
 function compareDocument(

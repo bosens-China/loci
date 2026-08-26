@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { getHostname, normalizeUrl, parseGithubRepositoryUrl } from '@loci/core'
+import { and, eq } from 'drizzle-orm'
+import type { LociDrizzleDatabase } from './drizzle-database.js'
+import { documentSources } from './drizzle-schema.js'
 import { withImmediateTransaction as transaction } from './sqlite.js'
 
 export interface CloudSnapshot {
@@ -42,40 +45,49 @@ export interface CloudLibraryDatabase {
 }
 
 /** 云端快照使用现有文档表和 FTS，保证下载完成后本地浏览与 MCP 无需特殊分支。 */
-export function createCloudLibraryDatabase(database: DatabaseSync): CloudLibraryDatabase {
+export function createCloudLibraryDatabase(
+  database: DatabaseSync,
+  drizzleDatabase: LociDrizzleDatabase
+): CloudLibraryDatabase {
   const findCloudSource = (serverUrl: string, libraryId: string): CloudSourceRecord | null => {
-    const row = database
-      .prepare(
-        `SELECT id, cloud_server_url, cloud_library_id, cloud_revision, cloud_auto_sync
-         FROM document_sources
-         WHERE source_type = 'cloud' AND cloud_server_url = ? AND cloud_library_id = ?`
+    const row = drizzleDatabase
+      .select(cloudSourceSelection)
+      .from(documentSources)
+      .where(
+        and(
+          eq(documentSources.sourceType, 'cloud'),
+          eq(documentSources.cloudServerUrl, serverUrl),
+          eq(documentSources.cloudLibraryId, libraryId)
+        )
       )
-      .get(serverUrl, libraryId) as unknown as CloudSourceRow | undefined
+      .get()
     return row ? toCloudSource(row) : null
   }
 
   return {
     findCloudSource,
     getCloudSource: (sourceId) => {
-      const row = database
-        .prepare(
-          `SELECT id, cloud_server_url, cloud_library_id, cloud_revision, cloud_auto_sync
-           FROM document_sources WHERE id = ? AND source_type = 'cloud'`
-        )
-        .get(sourceId) as unknown as CloudSourceRow | undefined
+      const row = drizzleDatabase
+        .select(cloudSourceSelection)
+        .from(documentSources)
+        .where(and(eq(documentSources.id, sourceId), eq(documentSources.sourceType, 'cloud')))
+        .get()
       if (!row) throw new Error('云文档本地副本不存在')
       return toCloudSource(row)
     },
     listCloudSourcesForSync: (serverUrl) =>
-      (
-        database
-          .prepare(
-            `SELECT id, cloud_server_url, cloud_library_id, cloud_revision, cloud_auto_sync
-             FROM document_sources
-             WHERE source_type = 'cloud' AND cloud_server_url = ? AND cloud_auto_sync = 1`
+      drizzleDatabase
+        .select(cloudSourceSelection)
+        .from(documentSources)
+        .where(
+          and(
+            eq(documentSources.sourceType, 'cloud'),
+            eq(documentSources.cloudServerUrl, serverUrl),
+            eq(documentSources.cloudAutoSync, 1)
           )
-          .all(serverUrl) as unknown as CloudSourceRow[]
-      ).map(toCloudSource),
+        )
+        .all()
+        .map(toCloudSource),
     replaceCloudSnapshot: (serverUrl, snapshot, autoSync) => {
       const existing = findCloudSource(serverUrl, snapshot.library.id)
       if (existing?.revision === snapshot.library.revision) {
@@ -156,31 +168,41 @@ export function createCloudLibraryDatabase(database: DatabaseSync): CloudLibrary
       return { sourceId, updated: true }
     },
     setCloudAutoSync: (sourceId, enabled) => {
-      const result = database
-        .prepare(
-          `UPDATE document_sources SET cloud_auto_sync = ?, updated_at = ?
-           WHERE id = ? AND source_type = 'cloud'`
-        )
-        .run(Number(enabled), new Date().toISOString(), sourceId)
+      const result = drizzleDatabase
+        .update(documentSources)
+        .set({ cloudAutoSync: Number(enabled), updatedAt: new Date().toISOString() })
+        .where(and(eq(documentSources.id, sourceId), eq(documentSources.sourceType, 'cloud')))
+        .run()
       if (Number(result.changes) !== 1) throw new Error('云文档本地副本不存在')
     }
   }
 }
 
+const cloudSourceSelection = {
+  sourceId: documentSources.id,
+  serverUrl: documentSources.cloudServerUrl,
+  libraryId: documentSources.cloudLibraryId,
+  revision: documentSources.cloudRevision,
+  autoSync: documentSources.cloudAutoSync
+}
+
 interface CloudSourceRow {
-  id: string
-  cloud_server_url: string
-  cloud_library_id: string
-  cloud_revision: string
-  cloud_auto_sync: number
+  sourceId: string
+  serverUrl: string | null
+  libraryId: string | null
+  revision: string | null
+  autoSync: number
 }
 
 function toCloudSource(row: CloudSourceRow): CloudSourceRecord {
+  if (!row.serverUrl || !row.libraryId || !row.revision) {
+    throw new Error('云文档本地副本数据不完整')
+  }
   return {
-    sourceId: row.id,
-    serverUrl: row.cloud_server_url,
-    libraryId: row.cloud_library_id,
-    revision: row.cloud_revision,
-    autoSync: Boolean(row.cloud_auto_sync)
+    sourceId: row.sourceId,
+    serverUrl: row.serverUrl,
+    libraryId: row.libraryId,
+    revision: row.revision,
+    autoSync: Boolean(row.autoSync)
   }
 }

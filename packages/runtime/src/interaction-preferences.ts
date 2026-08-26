@@ -1,4 +1,6 @@
-import type { DatabaseSync } from 'node:sqlite'
+import { and, eq } from 'drizzle-orm'
+import type { LociDrizzleDatabase } from './drizzle-database.js'
+import { interactionPreferences } from './drizzle-schema.js'
 
 export interface InteractionPreferencesDatabase {
   getInteractionPreference: (scope: string, key: string) => unknown | null
@@ -7,18 +9,23 @@ export interface InteractionPreferencesDatabase {
 
 /** 交互偏好与业务设置分开存储；解析失败时按未记忆处理，不阻断正常命令。 */
 export function createInteractionPreferencesDatabase(
-  database: DatabaseSync
+  database: LociDrizzleDatabase
 ): InteractionPreferencesDatabase {
   return {
     getInteractionPreference: (scope, key) => {
       const row = database
-        .prepare(
-          'SELECT value_json FROM interaction_preferences WHERE scope = ? AND preference_key = ?'
+        .select({ valueJson: interactionPreferences.valueJson })
+        .from(interactionPreferences)
+        .where(
+          and(
+            eq(interactionPreferences.scope, scope),
+            eq(interactionPreferences.preferenceKey, key)
+          )
         )
-        .get(scope, key) as unknown as { value_json: string } | undefined
+        .get()
       if (!row) return null
       try {
-        return JSON.parse(row.value_json) as unknown
+        return JSON.parse(row.valueJson) as unknown
       } catch {
         return null
       }
@@ -26,15 +33,15 @@ export function createInteractionPreferencesDatabase(
     setInteractionPreference: (scope, key, value) => {
       const serialized = JSON.stringify(value)
       if (serialized === undefined) throw new Error('交互偏好无法序列化')
+      const updatedAt = new Date().toISOString()
       database
-        .prepare(
-          `INSERT INTO interaction_preferences (scope, preference_key, value_json, updated_at)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(scope, preference_key) DO UPDATE SET
-             value_json = excluded.value_json,
-             updated_at = excluded.updated_at`
-        )
-        .run(scope, key, serialized, new Date().toISOString())
+        .insert(interactionPreferences)
+        .values({ scope, preferenceKey: key, valueJson: serialized, updatedAt })
+        .onConflictDoUpdate({
+          target: [interactionPreferences.scope, interactionPreferences.preferenceKey],
+          set: { valueJson: serialized, updatedAt }
+        })
+        .run()
     }
   }
 }

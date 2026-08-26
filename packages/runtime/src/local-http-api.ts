@@ -29,12 +29,24 @@ export async function handleLocalApi(
 ): Promise<void> {
   if (await handleLocalAdmin(runtime, request, response, url)) return
   if (await handleAgentIntegrations(runtime, request, response, url)) return
+  if (handleResourceRevisions(runtime, request, response, url)) return
   if (await handleSources(runtime, request, response, url, options)) return
   if (await handleDocumentsAndJobs(runtime, request, response, url, options)) return
   if (await handleSettings(runtime, request, response, url)) return
   if (await handleCloud(runtime, request, response, url, options)) return
   if (await handleDataTransfer(runtime, request, response, url, options)) return
   response.writeHead(404).end()
+}
+
+function handleResourceRevisions(
+  runtime: LocalRuntime,
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL
+): boolean {
+  if (request.method !== 'GET' || url.pathname !== '/api/revisions') return false
+  json(response, 200, runtime.database.getResourceRevisions())
+  return true
 }
 
 async function handleSources(

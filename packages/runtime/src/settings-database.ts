@@ -6,7 +6,10 @@ import {
   PRODUCTION_SERVER_URL,
   type AppSettings
 } from '@loci/shared'
+import { eq, sql } from 'drizzle-orm'
 import { validateSettings } from './database-values.js'
+import type { LociDrizzleDatabase } from './drizzle-database.js'
+import { appSettings } from './drizzle-schema.js'
 
 export interface SettingsDatabase {
   getSettings: () => AppSettings
@@ -53,73 +56,63 @@ export function initializeSettings(
 }
 
 export function createSettingsDatabase(
-  database: DatabaseSync,
+  database: LociDrizzleDatabase,
   serverUrlOverride?: string
 ): SettingsDatabase {
   return {
     getSettings: () => {
       const row = database
-        .prepare(
-          `SELECT theme, http_concurrency, browser_concurrency, max_retries,
-             batch_interval_seconds, server_url, github_archive_limit_mb,
-             github_markdown_limit_mb FROM app_settings WHERE id = 1`
-        )
-        .get() as unknown as SettingsRow
+        .select({
+          theme: appSettings.theme,
+          httpConcurrency: appSettings.httpConcurrency,
+          browserConcurrency: appSettings.browserConcurrency,
+          maxRetries: appSettings.maxRetries,
+          batchIntervalSeconds: appSettings.batchIntervalSeconds,
+          serverUrl: appSettings.serverUrl,
+          githubArchiveLimitMb: appSettings.githubArchiveLimitMb,
+          githubMarkdownLimitMb: appSettings.githubMarkdownLimitMb
+        })
+        .from(appSettings)
+        .where(eq(appSettings.id, 1))
+        .get()
+      if (!row) throw new Error('应用设置不存在')
       return {
         theme: row.theme,
-        httpConcurrency: Number(row.http_concurrency),
-        browserConcurrency: Number(row.browser_concurrency),
-        maxRetries: Number(row.max_retries),
-        batchIntervalSeconds: Number(row.batch_interval_seconds),
-        serverUrl: serverUrlOverride ?? row.server_url,
-        githubArchiveLimitMb: Number(row.github_archive_limit_mb),
-        githubMarkdownLimitMb: Number(row.github_markdown_limit_mb)
+        httpConcurrency: row.httpConcurrency,
+        browserConcurrency: row.browserConcurrency,
+        maxRetries: row.maxRetries,
+        batchIntervalSeconds: row.batchIntervalSeconds,
+        serverUrl: serverUrlOverride ?? row.serverUrl,
+        githubArchiveLimitMb: row.githubArchiveLimitMb,
+        githubMarkdownLimitMb: row.githubMarkdownLimitMb
       }
     },
     saveSettings: (settings) => {
       const normalized = validateSettings(settings)
       const persistedServerUrl = serverUrlOverride
-        ? (
-            database
-              .prepare('SELECT server_url FROM app_settings WHERE id = 1')
-              .get() as unknown as {
-              server_url: string
-            }
-          ).server_url
+        ? database
+            .select({ serverUrl: appSettings.serverUrl })
+            .from(appSettings)
+            .where(eq(appSettings.id, 1))
+            .get()?.serverUrl
         : normalized.serverUrl
+      if (!persistedServerUrl) throw new Error('应用设置不存在')
       database
-        .prepare(
-          `UPDATE app_settings
-           SET theme = ?, http_concurrency = ?, browser_concurrency = ?,
-               max_retries = ?, batch_interval_seconds = ?,
-               github_archive_limit_mb = ?, github_markdown_limit_mb = ?,
-               server_url_customized = CASE WHEN server_url = ? THEN server_url_customized ELSE 1 END,
-               server_url = ?
-           WHERE id = 1`
-        )
-        .run(
-          normalized.theme,
-          normalized.httpConcurrency,
-          normalized.browserConcurrency,
-          normalized.maxRetries,
-          normalized.batchIntervalSeconds,
-          normalized.githubArchiveLimitMb,
-          normalized.githubMarkdownLimitMb,
-          persistedServerUrl,
-          persistedServerUrl
-        )
+        .update(appSettings)
+        .set({
+          theme: normalized.theme,
+          httpConcurrency: normalized.httpConcurrency,
+          browserConcurrency: normalized.browserConcurrency,
+          maxRetries: normalized.maxRetries,
+          batchIntervalSeconds: normalized.batchIntervalSeconds,
+          githubArchiveLimitMb: normalized.githubArchiveLimitMb,
+          githubMarkdownLimitMb: normalized.githubMarkdownLimitMb,
+          serverUrlCustomized: sql`CASE WHEN ${appSettings.serverUrl} = ${persistedServerUrl} THEN ${appSettings.serverUrlCustomized} ELSE 1 END`,
+          serverUrl: persistedServerUrl
+        })
+        .where(eq(appSettings.id, 1))
+        .run()
       return normalized
     }
   }
-}
-
-interface SettingsRow {
-  theme: AppSettings['theme']
-  http_concurrency: number
-  browser_concurrency: number
-  max_retries: number
-  batch_interval_seconds: number
-  server_url: string
-  github_archive_limit_mb: number
-  github_markdown_limit_mb: number
 }

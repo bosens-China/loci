@@ -14,6 +14,7 @@ import type { ExplicitPageDatabase } from './explicit-page-database.js'
 import type { InteractionPreferencesDatabase } from './interaction-preferences.js'
 import type { LocalJobDatabase } from './local-job-database.js'
 import type { LocalJobEventDatabase } from './local-job-event-database.js'
+import type { ResourceRevisionDatabase } from './resource-revision-database.js'
 import type { SettingsDatabase } from './settings-database.js'
 import type { SkillInstallationDatabase } from './skill-database.js'
 import type { UrlReviewDatabase } from './url-review-database.js'
@@ -44,6 +45,7 @@ export interface LociDatabase
     SkillInstallationDatabase,
     LocalJobDatabase,
     LocalJobEventDatabase,
+    ResourceRevisionDatabase,
     ExplicitPageDatabase,
     UrlReviewDatabase {
   schemaVersion: number

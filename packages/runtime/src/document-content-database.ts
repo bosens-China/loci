@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { DocumentRecord, DocumentSummary } from '@loci/shared'
+import { and, desc, eq, or, sql, type SQL } from 'drizzle-orm'
 import {
   type DocumentRow,
   type DocumentSummaryRow,
@@ -9,6 +10,8 @@ import {
   toFtsExpression,
   toSearchTokens
 } from './database-values.js'
+import type { LociDrizzleDatabase } from './drizzle-database.js'
+import { documents, documentSources } from './drizzle-schema.js'
 import { withTransaction } from './sqlite.js'
 
 export type DocumentSearchMode = 'all' | 'any' | 'fuzzy'
@@ -45,23 +48,27 @@ export interface DocumentContentDatabase {
 
 const DOCUMENT_SUMMARY_COLUMNS = `d.id, d.source_id, s.name AS source_name, d.title, d.url,
   d.language, d.crawled_at, d.relative_path`
-const DOCUMENT_SUMMARY_QUERY = `SELECT ${DOCUMENT_SUMMARY_COLUMNS}
-  FROM documents d JOIN document_sources s ON s.id = d.source_id`
-const DOCUMENT_RECORD_QUERY = `SELECT ${DOCUMENT_SUMMARY_COLUMNS}, d.markdown
-  FROM documents d JOIN document_sources s ON s.id = d.source_id`
 
-export function createDocumentContentDatabase(database: DatabaseSync): DocumentContentDatabase {
+export function createDocumentContentDatabase(
+  database: DatabaseSync,
+  drizzleDatabase: LociDrizzleDatabase
+): DocumentContentDatabase {
   return {
     listDocumentUrls: (sourceId) =>
-      (
-        database
-          .prepare('SELECT url FROM documents WHERE source_id = ? ORDER BY crawled_at ASC')
-          .all(sourceId) as unknown as { url: string }[]
-      ).map((row) => row.url),
+      drizzleDatabase
+        .select({ url: documents.url })
+        .from(documents)
+        .where(eq(documents.sourceId, sourceId))
+        .orderBy(documents.crawledAt)
+        .all()
+        .map((row) => row.url),
     listDocumentCandidates: (sourceId) =>
-      database
-        .prepare('SELECT url, title FROM documents WHERE source_id = ? ORDER BY crawled_at ASC')
-        .all(sourceId) as unknown as Array<{ url: string; title: string }>,
+      drizzleDatabase
+        .select({ url: documents.url, title: documents.title })
+        .from(documents)
+        .where(eq(documents.sourceId, sourceId))
+        .orderBy(documents.crawledAt)
+        .all(),
     saveDocument: (document) =>
       withTransaction(database, () => {
         storeDocument(database, document)
@@ -84,40 +91,66 @@ export function createDocumentContentDatabase(database: DatabaseSync): DocumentC
         database.exec('DELETE FROM documents_fts')
         return Number(database.prepare('DELETE FROM document_sources').run().changes)
       }),
-    listDocuments: () => {
-      const rows = database
-        .prepare(
-          `${DOCUMENT_RECORD_QUERY}
-           ORDER BY d.crawled_at DESC`
-        )
-        .all() as unknown as DocumentRow[]
-      return rows.map(toDocumentRecord)
-    },
+    listDocuments: () => selectDocumentRecords(drizzleDatabase).map(toDocumentRecord),
     searchDocuments: (query, mode = 'all') =>
       (mode === 'fuzzy'
-        ? searchDocumentMetadata(database, query)
+        ? searchDocumentMetadata(drizzleDatabase, query)
         : searchFts(database, query, mode)
       ).map(toDocumentRecord),
-    listDocumentSummaries: (sourceId) => listDocumentSummaries(database, sourceId),
+    listDocumentSummaries: (sourceId) => listDocumentSummaries(drizzleDatabase, sourceId),
     searchDocumentSummaries: (query, sourceId, mode = 'all') =>
       (mode === 'fuzzy'
-        ? searchDocumentMetadataSummaries(database, query, sourceId)
+        ? searchDocumentMetadataSummaries(drizzleDatabase, query, sourceId)
         : searchFtsSummaries(database, query, mode, sourceId)
       ).map(toDocumentSummary),
     getDocument: (id) => {
-      const row = database.prepare(`${DOCUMENT_RECORD_QUERY} WHERE d.id = ?`).get(id) as unknown as
-        DocumentRow | undefined
+      const row = drizzleDatabase
+        .select(documentRecordSelection)
+        .from(documents)
+        .innerJoin(documentSources, eq(documentSources.id, documents.sourceId))
+        .where(eq(documents.id, id))
+        .get()
       return row ? toDocumentRecord(row) : null
     }
   }
 }
 
-function listDocumentSummaries(database: DatabaseSync, sourceId?: string): DocumentSummary[] {
-  const statement = database.prepare(
-    `${DOCUMENT_SUMMARY_QUERY}${sourceId ? ' WHERE d.source_id = ?' : ''}
-     ORDER BY d.crawled_at DESC`
-  )
-  const rows = (sourceId ? statement.all(sourceId) : statement.all()) as DocumentSummaryRow[]
+const documentSummarySelection = {
+  id: documents.id,
+  source_id: documents.sourceId,
+  source_name: documentSources.name,
+  title: documents.title,
+  url: documents.url,
+  language: documents.language,
+  crawled_at: documents.crawledAt,
+  relative_path: documents.relativePath
+}
+
+const documentRecordSelection = {
+  ...documentSummarySelection,
+  markdown: documents.markdown
+}
+
+function selectDocumentRecords(database: LociDrizzleDatabase): DocumentRow[] {
+  return database
+    .select(documentRecordSelection)
+    .from(documents)
+    .innerJoin(documentSources, eq(documentSources.id, documents.sourceId))
+    .orderBy(desc(documents.crawledAt))
+    .all()
+}
+
+function listDocumentSummaries(
+  database: LociDrizzleDatabase,
+  sourceId?: string
+): DocumentSummary[] {
+  const rows = database
+    .select(documentSummarySelection)
+    .from(documents)
+    .innerJoin(documentSources, eq(documentSources.id, documents.sourceId))
+    .where(sourceId ? eq(documents.sourceId, sourceId) : undefined)
+    .orderBy(desc(documents.crawledAt))
+    .all()
   return rows.map(toDocumentSummary)
 }
 
@@ -162,49 +195,50 @@ function searchFtsSummaries(
   ) as DocumentSummaryRow[]
 }
 
-function searchDocumentMetadata(database: DatabaseSync, query: string): DocumentRow[] {
-  const search = metadataSearch(query)
-  if (!search) return []
+function searchDocumentMetadata(database: LociDrizzleDatabase, query: string): DocumentRow[] {
+  const condition = metadataCondition(query)
+  if (!condition) return []
   return database
-    .prepare(
-      `${DOCUMENT_RECORD_QUERY}
-       WHERE ${search.conditions}
-       ORDER BY d.crawled_at DESC LIMIT 500`
-    )
-    .all(...search.values) as unknown as DocumentRow[]
+    .select(documentRecordSelection)
+    .from(documents)
+    .innerJoin(documentSources, eq(documentSources.id, documents.sourceId))
+    .where(condition)
+    .orderBy(desc(documents.crawledAt))
+    .limit(500)
+    .all()
 }
 
 function searchDocumentMetadataSummaries(
-  database: DatabaseSync,
+  database: LociDrizzleDatabase,
   query: string,
   sourceId?: string
 ): DocumentSummaryRow[] {
-  const search = metadataSearch(query)
-  if (!search) return []
-  const statement = database.prepare(
-    `${DOCUMENT_SUMMARY_QUERY}
-     WHERE (${search.conditions})${sourceId ? ' AND d.source_id = ?' : ''}
-     ORDER BY d.crawled_at DESC LIMIT 500`
-  )
-  return (
-    sourceId ? statement.all(...search.values, sourceId) : statement.all(...search.values)
-  ) as DocumentSummaryRow[]
+  const condition = metadataCondition(query)
+  if (!condition) return []
+  return database
+    .select(documentSummarySelection)
+    .from(documents)
+    .innerJoin(documentSources, eq(documentSources.id, documents.sourceId))
+    .where(and(condition, sourceId ? eq(documents.sourceId, sourceId) : undefined))
+    .orderBy(desc(documents.crawledAt))
+    .limit(500)
+    .all()
 }
 
-function metadataSearch(query: string): { conditions: string; values: string[] } | null {
+function metadataCondition(query: string): SQL | undefined {
   const tokens = toSearchTokens(query)
     .filter((token) => token.length >= 2)
     .slice(0, 10)
-  if (!tokens.length) return null
-  return {
-    conditions: tokens
-      .map(() => `(d.title LIKE ? ESCAPE '\\' OR d.url LIKE ? ESCAPE '\\')`)
-      .join(' OR '),
-    values: tokens.flatMap((token) => {
+  if (!tokens.length) return undefined
+  return or(
+    ...tokens.flatMap((token) => {
       const pattern = `%${escapeLike(token)}%`
-      return [pattern, pattern]
+      return [
+        sql`${documents.title} LIKE ${pattern} ESCAPE '\\'`,
+        sql`${documents.url} LIKE ${pattern} ESCAPE '\\'`
+      ]
     })
-  }
+  )
 }
 
 function escapeLike(value: string): string {

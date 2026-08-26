@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { AppShell } from '@/components/AppShell'
-import { useJobEvents } from '@/hooks/use-job-events'
+import { useResourceRevisions } from '@/hooks/use-resource-revisions'
 import { migrateLegacyDocumentPath } from '@/pages/documents/use-document-route'
 import { resolveRoute, routePath, type AppRoute } from '@/routing'
 
@@ -40,7 +40,7 @@ export function App(): React.JSX.Element {
     window.addEventListener('popstate', update)
     return () => window.removeEventListener('popstate', update)
   }, [])
-  useJobEvents(true)
+  useResourceRevisions()
 
   const navigate = (next: AppRoute): void => {
     window.history.pushState({}, '', routePath(next))

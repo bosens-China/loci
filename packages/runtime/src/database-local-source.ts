@@ -2,7 +2,10 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { GithubBlockedState } from '@loci/core'
 import { getHostname, normalizeScopePath, normalizeUrl } from '@loci/core'
 import type { DocumentSource, ResolvedSourceDiscovery } from '@loci/shared'
-import { type SourceRow, toDocumentSource } from './database-values.js'
+import { and, count, desc, eq, max, ne, sql } from 'drizzle-orm'
+import { toDocumentSource } from './database-values.js'
+import type { LociDrizzleDatabase } from './drizzle-database.js'
+import { documents, documentSources } from './drizzle-schema.js'
 
 export { withImmediateTransaction as withTransaction } from './sqlite.js'
 
@@ -30,92 +33,57 @@ export function createWebSourceIdentity(hostname: string, scopePath: string): st
   return `${hostname.toLowerCase()}|${normalizeScopePath(scopePath)}`
 }
 
-interface SourceConfigRow {
-  id: string
-  first_url: string
-  hostname: string
-  fetch_mode: SourceConfig['fetchMode']
-  page_limit: number
-  scope_path: string
-  exclude_path_pattern: string | null
-  http_concurrency: number | null
-  browser_concurrency: number | null
-  source_type: 'local' | 'cloud'
-  document_kind: SourceConfig['kind']
-  github_archive_limit_mb: number | null
-  github_markdown_limit_mb: number | null
-  github_default_branch: string | null
-  github_revision: string | null
-  github_blocked_revision: string | null
-  github_blocked_limit_kind: 'archive' | 'markdown' | null
-  github_blocked_limit_bytes: number | null
-  discovery_mode: SourceConfig['discoveryMode']
-  review_goal: string | null
-}
-
-export function readSourceConfig(database: DatabaseSync, id: string): SourceConfig {
-  const source = database
-    .prepare(
-      `SELECT id, first_url, hostname, fetch_mode, page_limit, scope_path, exclude_path_pattern, http_concurrency,
-         browser_concurrency, source_type, document_kind, github_archive_limit_mb,
-         github_markdown_limit_mb, github_default_branch, github_revision,
-         github_blocked_revision, github_blocked_limit_kind, github_blocked_limit_bytes,
-         discovery_mode, review_goal
-       FROM document_sources WHERE id = ?`
-    )
-    .get(id) as unknown as SourceConfigRow | undefined
+export function readSourceConfig(database: LociDrizzleDatabase, id: string): SourceConfig {
+  const source = database.select().from(documentSources).where(eq(documentSources.id, id)).get()
   if (!source) throw new Error('文档源不存在')
-  if (source.source_type !== 'local') throw new Error('云文档只能从来源服务器更新')
+  if (source.sourceType !== 'local') throw new Error('云文档只能从来源服务器更新')
   return {
     id: source.id,
-    firstUrl: source.first_url,
+    firstUrl: source.firstUrl,
     hostname: source.hostname,
-    fetchMode: source.fetch_mode,
-    pageLimit: Number(source.page_limit),
-    scopePath: source.scope_path,
-    excludePathPattern: source.exclude_path_pattern,
-    httpConcurrency: source.http_concurrency === null ? null : Number(source.http_concurrency),
+    fetchMode: source.fetchMode,
+    pageLimit: source.pageLimit,
+    scopePath: source.scopePath,
+    excludePathPattern: source.excludePathPattern,
+    httpConcurrency: source.httpConcurrency,
     browserConcurrency:
-      source.browser_concurrency === null ? null : Number(source.browser_concurrency),
-    kind: source.document_kind,
-    githubArchiveLimitMb:
-      source.github_archive_limit_mb === null ? null : Number(source.github_archive_limit_mb),
-    githubMarkdownLimitMb:
-      source.github_markdown_limit_mb === null ? null : Number(source.github_markdown_limit_mb),
-    githubDefaultBranch: source.github_default_branch,
-    githubRevision: source.github_revision,
-    discoveryMode: source.discovery_mode,
-    reviewGoal: source.review_goal,
+      source.browserConcurrency === null ? null : Number(source.browserConcurrency),
+    kind: source.documentKind,
+    githubArchiveLimitMb: source.githubArchiveLimitMb,
+    githubMarkdownLimitMb: source.githubMarkdownLimitMb,
+    githubDefaultBranch: source.githubDefaultBranch,
+    githubRevision: source.githubRevision,
+    discoveryMode: source.discoveryMode,
+    reviewGoal: source.reviewGoal,
     githubBlocked:
-      source.github_blocked_revision &&
-      source.github_blocked_limit_kind &&
-      source.github_blocked_limit_bytes !== null
+      source.githubBlockedRevision &&
+      source.githubBlockedLimitKind &&
+      source.githubBlockedLimitBytes !== null
         ? {
-            revision: source.github_blocked_revision,
-            kind: source.github_blocked_limit_kind,
-            limitBytes: Number(source.github_blocked_limit_bytes)
+            revision: source.githubBlockedRevision,
+            kind: source.githubBlockedLimitKind,
+            limitBytes: source.githubBlockedLimitBytes
           }
         : null
   }
 }
 
 export function assertLocalSourceIdentityAvailable(
-  database: DatabaseSync,
+  database: LociDrizzleDatabase,
   identity: string,
   github: boolean,
   excludedId?: string
 ): void {
-  const duplicate = excludedId
-    ? database
-        .prepare(
-          "SELECT 1 FROM document_sources WHERE source_identity = ? AND source_type = 'local' AND id <> ?"
-        )
-        .get(identity, excludedId)
-    : database
-        .prepare(
-          "SELECT 1 FROM document_sources WHERE source_identity = ? AND source_type = 'local'"
-        )
-        .get(identity)
+  const conditions = [
+    eq(documentSources.sourceIdentity, identity),
+    eq(documentSources.sourceType, 'local')
+  ]
+  if (excludedId) conditions.push(ne(documentSources.id, excludedId))
+  const duplicate = database
+    .select({ id: documentSources.id })
+    .from(documentSources)
+    .where(and(...conditions))
+    .get()
   if (duplicate) {
     throw new Error(
       github ? '这个 GitHub 仓库已经存在于文档源中' : '这个域名和收录范围已经存在于文档源中'
@@ -176,29 +144,71 @@ export function updateResolvedSourceRecord(
     )
 }
 
-export function findLocalSourceId(database: DatabaseSync, identity: string): string | undefined {
+export function findLocalSourceId(
+  database: LociDrizzleDatabase,
+  identity: string
+): string | undefined {
   const row = database
-    .prepare("SELECT id FROM document_sources WHERE source_identity = ? AND source_type = 'local'")
-    .get(identity) as unknown as { id: string } | undefined
+    .select({ id: documentSources.id })
+    .from(documentSources)
+    .where(
+      and(eq(documentSources.sourceIdentity, identity), eq(documentSources.sourceType, 'local'))
+    )
+    .get()
   return row?.id
 }
 
-export function readDocumentSource(database: DatabaseSync, id: string): DocumentSource {
+const sourceSelection = {
+  id: documentSources.id,
+  name: documentSources.name,
+  first_url: documentSources.firstUrl,
+  fetch_mode: documentSources.fetchMode,
+  page_limit: documentSources.pageLimit,
+  scope_path: documentSources.scopePath,
+  exclude_path_pattern: documentSources.excludePathPattern,
+  schedule: documentSources.schedule,
+  http_concurrency: documentSources.httpConcurrency,
+  browser_concurrency: documentSources.browserConcurrency,
+  icon_url: documentSources.iconUrl,
+  page_count: count(documents.id),
+  content_size: sql<number>`coalesce(sum(length(cast(${documents.markdown} as blob))), 0)`.mapWith(
+    Number
+  ),
+  last_crawled_at: max(documents.crawledAt),
+  source_type: documentSources.sourceType,
+  cloud_server_url: documentSources.cloudServerUrl,
+  cloud_library_id: documentSources.cloudLibraryId,
+  cloud_revision: documentSources.cloudRevision,
+  cloud_auto_sync: documentSources.cloudAutoSync,
+  document_kind: documentSources.documentKind,
+  github_archive_limit_mb: documentSources.githubArchiveLimitMb,
+  github_markdown_limit_mb: documentSources.githubMarkdownLimitMb,
+  github_default_branch: documentSources.githubDefaultBranch,
+  github_revision: documentSources.githubRevision,
+  discovery_mode: documentSources.discoveryMode,
+  resolved_discovery: documentSources.resolvedDiscovery,
+  review_goal: documentSources.reviewGoal
+}
+
+export function listDocumentSources(database: LociDrizzleDatabase): DocumentSource[] {
+  const rows = database
+    .select(sourceSelection)
+    .from(documentSources)
+    .leftJoin(documents, eq(documents.sourceId, documentSources.id))
+    .groupBy(documentSources.id)
+    .orderBy(desc(documentSources.updatedAt))
+    .all()
+  return rows.map(toDocumentSource)
+}
+
+export function readDocumentSource(database: LociDrizzleDatabase, id: string): DocumentSource {
   const row = database
-    .prepare(
-      `SELECT s.id, s.name, s.first_url, s.fetch_mode, s.page_limit, s.scope_path, s.exclude_path_pattern, s.schedule,
-         s.http_concurrency, s.browser_concurrency, s.icon_url, s.source_type,
-         s.cloud_server_url, s.cloud_library_id, s.cloud_revision, s.cloud_auto_sync,
-         s.document_kind, s.github_archive_limit_mb, s.github_markdown_limit_mb,
-         s.github_default_branch, s.github_revision, s.discovery_mode, s.resolved_discovery,
-         s.review_goal,
-         COUNT(d.id) AS page_count,
-         COALESCE(SUM(length(CAST(d.markdown AS BLOB))), 0) AS content_size,
-         MAX(d.crawled_at) AS last_crawled_at
-       FROM document_sources s LEFT JOIN documents d ON d.source_id = s.id
-       WHERE s.id = ? GROUP BY s.id`
-    )
-    .get(id) as unknown as SourceRow | undefined
+    .select(sourceSelection)
+    .from(documentSources)
+    .leftJoin(documents, eq(documents.sourceId, documentSources.id))
+    .where(eq(documentSources.id, id))
+    .groupBy(documentSources.id)
+    .get()
   if (!row) throw new Error('文档源不存在')
   return toDocumentSource(row)
 }

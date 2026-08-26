@@ -44,11 +44,15 @@ export function AdminWorkspace({ session }: { session: CloudAdminSession }): Rea
   const [editing, setEditing] = useState<CloudLibrary | 'new' | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const previousActive = useRef(false)
-  const libraries = useQuery({ queryKey: ADMIN_LIBRARIES_KEY, queryFn: listAdminLibraries })
+  const libraries = useQuery({
+    queryKey: ADMIN_LIBRARIES_KEY,
+    queryFn: listAdminLibraries,
+    refetchInterval: 5_000
+  })
   const jobs = useQuery({
     queryKey: ADMIN_JOBS_KEY,
     queryFn: listAdminJobs,
-    refetchInterval: ({ state }) => (state.data?.some(isAdminJobActive) ? 1_000 : false)
+    refetchInterval: ({ state }) => (state.data?.some(isAdminJobActive) ? 1_000 : 5_000)
   })
   const jobByLibrary = useMemo(() => latestAdminJobsByLibrary(jobs.data ?? []), [jobs.data])
   const active = (jobs.data ?? []).some(isAdminJobActive)
