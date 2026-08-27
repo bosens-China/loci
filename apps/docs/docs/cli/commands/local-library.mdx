@@ -69,17 +69,26 @@ loci browser install
 
 ### `loci task`
 
-抓取任务具有稳定 ID，并持久保存每个页面的完成事件。可以在另一个终端查看、跟随或取消：
+抓取任务具有稳定 ID，并持久保存每个页面的完成事件、正文大小和恢复检查点。可以在另一个终端筛选、跟随和控制：
 
 ```bash
-loci task list
+loci task list --hostname docs.example.com --date 2026-08-27
 loci task status <任务 ID>
 loci task follow <任务 ID>
 loci task follow <任务 ID> --format jsonl
-loci task cancel <任务 ID>
+loci task pause <任务 ID> --yes
+loci task resume <任务 ID> --yes
+loci task stop <任务 ID> --yes
+loci task cancel <任务 ID> --yes
+loci task priority 50 <任务 ID> --yes
+loci task pause-all docs.example.com --yes
+loci task resume-all --yes
+loci task logs --date 2026-08-27 --hostname docs.example.com
 ```
 
-交互终端可以省略 `status`、`follow` 或 `cancel` 的任务 ID，再从最近任务中选择；脚本、管道和 Agent 等非交互调用必须显式提供任务 ID。`task follow` 会从持久事件按序读取逐页进度，轮询较慢或重新运行命令不会影响后台抓取。跟随时按 `Ctrl+C` 只退出当前显示并保留任务；`task cancel` 才会取消 pending 或 running 任务，重复取消会返回相同终态。
+交互终端可以省略单任务命令的任务 ID，再从最近任务中选择；脚本、管道和 Agent 等非交互调用必须显式提供任务 ID 和 `--yes`。`task follow` 会从持久事件按序读取逐页进度，轮询较慢或重新运行命令不会影响后台抓取。跟随时按 `Ctrl+C` 只退出当前显示并保留任务。
+
+暂停停止领取下一批页面；恢复复用原任务 ID。结束会提交已经抓取的正文、保存剩余 URL 并允许下次继续；取消会丢弃本次内容，首次任务取消且文档库仍为空时同时删库。`pause-all` 和 `resume-all` 省略 hostname 时作用于全部域名。`task logs` 查看按日期、类别、级别和 hostname 筛选的结构化操作记录。
 
 ### `loci source list`
 
@@ -177,5 +186,19 @@ loci document search "部署配置"
 ```bash
 loci document read a1b2c3d4
 ```
+
+### `loci document move <documents...>`
+
+把一篇或多篇本地文档移动到一个新文档库。目标名称、URL、范围和抓取参数都显式给出；默认会删除移动后已经为空的原文档库，使用 `--keep-empty-sources` 保留。操作会二次确认，脚本调用必须传 `--yes`：
+
+```bash
+loci document move <文档 ID> <文档 ID> \
+  --name "组合文档" \
+  --url https://combined.example.com/docs \
+  --scope /docs \
+  --yes
+```
+
+相同 `--operation-id` 和相同输入可以安全重试；同一操作 ID 对应不同输入会被拒绝。全文索引与正文归属在同一 SQLite 事务中更新。
 
 需要使用 Server 上预先发布的公开文档时，请查看[云端文档库](/cli/commands/cloud-library)。

@@ -39,6 +39,18 @@ Server 暂时不可访问时，已经下载的内容仍可离线读取，不会�
 loci cloud list
 ```
 
+### `loci cloud tree [library]` 与 `loci cloud read <library> <file>`
+
+无需下载完整快照即可按需浏览 Server 上的目录和正文：
+
+```bash
+loci cloud tree "React 文档" --depth 1
+loci cloud tree "React 文档" --parent /reference --depth 1
+loci cloud read "React 文档" <文件 ID>
+```
+
+`tree` 只读取指定目录层级；`read` 只读取指定文件，并可用 `--offset` 与 `--max-chars` 续读较长正文。按需阅读不会创建本地副本；需要离线使用时再执行 `cloud pull`。
+
 ### `loci cloud pull [library]`
 
 将一个公开文档库下载为本地副本。`[library]` 可以是云端文档库名称、完整 ID 或唯一短 ID；在交互终端中省略时可以从云端目录选择。

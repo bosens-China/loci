@@ -124,7 +124,7 @@ loci config set server-url https://your-loci.example.com
 | `http-concurrency`         | 调整普通网页抓取的并发数。             |
 | `browser-concurrency`      | 调整浏览器渲染页面的并发数。           |
 | `max-retries`              | 调整页面抓取失败后的重试次数。         |
-| `batch-interval-seconds`   | 降低连续抓取对目标站点的压力。         |
+| `batch-interval-seconds`   | 设置固定值或 `min-max` 随机批次间隔。  |
 | `github-archive-limit-mb`  | 调整 GitHub 仓库下载大小上限。         |
 | `github-markdown-limit-mb` | 调整 GitHub Markdown 文件的总量上限。  |
 
@@ -132,8 +132,20 @@ loci config set server-url https://your-loci.example.com
 
 ```bash
 loci config set http-concurrency 4
-loci config set batch-interval-seconds 2
+loci config set batch-interval-seconds 100-300
 ```
+
+只填写一个整数时使用固定间隔；填写 `min-max` 时，每个批次结束后在闭区间内重新选择等待秒数。`0` 表示不额外等待。Web 设置页还可以为单个 hostname 覆盖 HTTP/浏览器并发和批次间隔，运行中的任务会在下一批次读取新策略。
+
+CLI 使用同一组持久规则，保存后实时生效：
+
+```bash
+loci config domain-list
+loci config domain-set docs.example.com --http 2 --browser 1 --interval 100-300
+loci config domain-delete docs.example.com --yes
+```
+
+`default` 可用于清除单个覆盖字段并继承全局设置。同一 hostname 的文档库共享队列和限制；不同 hostname 仍可并发。
 
 云端文档库地址的作用范围请查看[云端文档库](/cli/commands/cloud-library)。Agent 的 stdio MCP 配置请查看[通过 MCP 接入](/agent/mcp)。
 

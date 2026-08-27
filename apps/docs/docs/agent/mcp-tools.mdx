@@ -117,3 +117,22 @@ Agent 逐项思考后，只提交不要的 URL，并明确批准其余项。候�
 同步响应会给出失败数量和样例。需要逐页排查时，再使用 `loci_list_sync_failures` 分页读取详情。对 `discovery_mode=agent_review` 的文档库，任何带活动 `run_id` 的审查运行都应先调用 `loci_get_url_review`，不论外层 `sync_status` 是 `syncing` 还是 `awaiting_review`。内层状态为 `discovering` 时，用同一 `library_id` 重调 `loci_start_url_review`；为 `awaiting_review` 时，提交返回的当前批次。不要把审查运行的 `syncing` 当作会自动推进的普通同步。
 
 详细输入字段以当前 MCP 工具 Schema 为准。CLI 的 `loci mcp call <tool> --input '<json>'` 与 MCP 使用相同的工具名和输入字段。
+
+## 持久任务、域名策略与操作日志
+
+- `loci_list_tasks` 按 hostname、状态和本地批次日期分页查看本机任务；`loci_control_task` 支持暂停、恢复、结束、取消和优先级；`loci_control_tasks` 支持全局或 hostname 级暂停/恢复。
+- `loci_list_hostname_policies`、`loci_save_hostname_policy` 和 `loci_delete_hostname_policy` 管理本机或 Server 规则。Server 目标需要管理员凭据。
+- `loci_list_operation_logs` 按日期、类别、级别和 hostname 查看结构化操作记录。
+- `loci_move_documents_to_new_library` 事务性地把多篇本地文档移到一个新库，并可删除已经为空的原库。该操作必须取得用户对目标和删除影响的明确授权。
+
+取消会丢弃本次运行产生的内容；首次任务取消且库仍为空时同时删库。结束会提交已抓取内容并保留剩余检查点。恢复和重复提交复用原任务，不应通过再次创建文档库模拟恢复。
+
+## Server 管理工具
+
+Server 管理工具只用于用户明确要求的管理任务，不属于普通技术文档检索流程：
+
+- `loci_list_server_libraries`、`loci_create_server_library`、`loci_update_server_library`、`loci_delete_server_library` 和 `loci_sync_server_libraries`；
+- `loci_list_server_tasks`、`loci_control_server_task` 和 `loci_control_server_tasks`；
+- `loci_publish_library_to_server` 将明确选择的本地库发布为新 Server 库，或显式覆盖指定目标。
+
+独立 stdio MCP 或 `loci mcp call` 通过 `LOCI_ADMIN_USERNAME` 和 `LOCI_ADMIN_PASSWORD` 建立只保存在进程内存中的管理员会话。不要把密码放入工具参数。删除、覆盖发布、取消、结束、收窄范围或其他破坏性操作必须先说明影响并取得用户授权。

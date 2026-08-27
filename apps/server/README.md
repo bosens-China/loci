@@ -70,6 +70,8 @@ pnpm server:start
 - `GET /health`：健康检查。
 - `GET /api/v1/libraries`：列出已经发布的文档库，包括页面数和下载后将保存的 Markdown UTF-8 原始字节数 `contentSize`。
 - `GET /api/v1/libraries/:id/snapshot`：下载完整 JSON 快照。
+- `GET /api/v1/libraries/:id/tree`：按 `parent` 和 `depth` 读取目录节点，不下载完整快照。
+- `GET /api/v1/libraries/:id/files/:fileId`：按 `offset` 和 `maxChars` 读取或续读单篇正文。
 
 快照响应提供 `ETag`。客户端再次请求时传入 `If-None-Match`，内容未变化会返回 `304 Not Modified`。
 只有至少包含一个页面的快照才会发布和出现在公开目录中；同步结果为 0 页时保留旧快照，首次同步为 0 页时不产生可下载快照。
@@ -107,7 +109,11 @@ interface LibrarySnapshot {
 - `POST /api/v1/admin/libraries/sync`：使用 `{ libraryIds: string[] }` 批量提交同步任务。
 - `GET /api/v1/admin/jobs`：列出活动和最近的同步任务。
 - `GET /api/v1/admin/jobs/:id`：查询同步状态和失败页面。
-- `POST /api/v1/admin/jobs/:id/cancel`：取消排队或运行中的同步任务。
+- `POST /api/v1/admin/jobs/:id/pause|resume|stop|cancel`：控制单个任务。
+- `PUT /api/v1/admin/jobs/:id/priority`：调整同 hostname 队列优先级。
+- `POST /api/v1/admin/jobs/pause-all|resume-all`：全局或按请求正文中的 `hostname` 批量控制。
+- `GET /api/v1/admin/hostname-policies` 与 `PUT|DELETE /api/v1/admin/hostname-policies/:hostname`：实时管理 hostname 并发和批次间隔。
+- `POST /api/v1/admin/publish`：接收经过校验的 `application/zip` 本地文档库发布归档。
 
 创建和更新文档库的请求正文：
 
@@ -125,10 +131,8 @@ interface LibrarySnapshot {
 但同一域名与范围组合不能重复。PUT 更换起始 URL 会立即清空全部正文，缩小范围会立即删除范围外的旧文档。
 
 `schedule` 使用五段 Linux Cron，传 `null` 表示关闭定时同步。批量同步任务由 Server
-统一排队，最多同时抓取 3 个文档库。任务、进度、所有者和租约保存在 SQLite；共享同一
-数据库的多个 Server 进程同时提交同一文档库时会返回同一个活动任务，不同文档库仍可
-并行。取消会传递到 HTTP、浏览器、GitHub 下载和 ZIP 解析，取消后不会提交工作文档、
-成功 revision 或公开快照。进程异常退出后的过期租约会失败收口，后续请求可以重试。配置浏览器
+统一排队，最多同时抓取 3 个文档库。同一 hostname 的文档库共享串行队列和实时限速，不同 hostname 可以并发。任务、进度、正文大小、剩余检查点、优先级、所有者和租约保存在 SQLite；共享同一
+数据库的多个 Server 进程同时提交同一文档库时会返回同一个活动任务。暂停和恢复复用原任务；结束发布已抓取正文并保留剩余检查点；取消会传递到 HTTP、浏览器、GitHub 下载和 ZIP 解析，取消后不会提交本次工作内容。首次任务取消且库仍为空时同时删库，已有成功内容不会受影响。进程异常退出后的过期租约会失败收口，后续请求可以重试。配置浏览器
 后，服务端会比较入口页的 HTTP 与浏览器渲染结果，再为整个文档库选择一种抓取方式；
 后续页面不会重复双通道抓取。
 
