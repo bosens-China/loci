@@ -30,9 +30,11 @@ export function SourcePanel(props: SourcePanelProps): React.JSX.Element {
 
   return (
     <>
-      <div className="workspace-pane h-full border-r">
-        <div className="pane-header">
-          <span className="pane-title">文档来源</span>
+      <div className="flex flex-col overflow-hidden border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] h-full border-r">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
+          <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
+            文档来源
+          </span>
           <Button
             type="primary"
             size="small"
@@ -85,7 +87,7 @@ function SourceGroup(props: {
 }): React.JSX.Element {
   return (
     <section className="mb-4">
-      <div className="mb-1 px-2 text-[11px] font-650 tracking-wide text-muted uppercase">
+      <div className="mb-1 px-2 text-[11px] font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
         {props.label}
       </div>
       {props.sources.map((source) => {
@@ -94,14 +96,16 @@ function SourceGroup(props: {
           <div
             key={source.id}
             className={`relative mb-1 w-full rounded-lg border text-left transition-colors ${
-              selected ? 'border-accent/30 bg-[#eaf4f3]' : 'border-transparent hover:bg-[#f3f7f6]'
+              selected
+                ? 'border-[var(--ant-color-primary)]/30 bg-[var(--ant-color-fill-quaternary)]'
+                : 'border-transparent hover:bg-[var(--ant-color-fill-quaternary)]'
             }`}
           >
             <button
               type="button"
               aria-pressed={selected}
               onClick={() => props.onSelect(source.id)}
-              className="focus-ring block w-full rounded-lg px-3 py-2.5 text-left"
+              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] block w-full rounded-lg px-3 py-2.5 text-left"
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="min-w-0 truncate text-sm font-650">{source.name}</span>
@@ -109,8 +113,10 @@ function SourceGroup(props: {
                   <StatusPill status={source.status} />
                 </span>
               </div>
-              <div className="mt-1 truncate font-mono text-[11px] text-muted">{source.url}</div>
-              <div className="mt-1.5 flex min-h-6 items-center justify-between text-[11px] text-muted">
+              <div className="mt-1 truncate font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
+                {source.url}
+              </div>
+              <div className="mt-1.5 flex min-h-6 items-center justify-between text-[11px] text-[var(--ant-color-text-secondary)]">
                 <span>
                   {source.pages} 页{!source.cloud && ` · ${sourceRouteLabel(source)}`}
                 </span>
@@ -148,5 +154,9 @@ function sourceRouteLabel(source: DocumentSource): string {
 }
 
 function PanelHint({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <p className="px-3 py-6 text-center text-xs leading-5 text-muted">{children}</p>
+  return (
+    <p className="px-3 py-6 text-center text-xs leading-5 text-[var(--ant-color-text-secondary)]">
+      {children}
+    </p>
+  )
 }

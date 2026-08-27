@@ -31,17 +31,21 @@ export function DocumentListPanel(props: DocumentListPanelProps): React.JSX.Elem
   )
 
   return (
-    <div className="workspace-pane h-full w-full border-r">
-      <div className="pane-header">
+    <div className="flex flex-col overflow-hidden border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] h-full w-full border-r">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="pane-title truncate">{props.source?.name || '选择来源'}</span>
+          <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase truncate">
+            {props.source?.name || '选择来源'}
+          </span>
           {props.source?.cloud && (
             <LibraryOriginTag origin="cloud" autoSync={props.source.cloud.autoSync} />
           )}
         </div>
-        <span className="font-mono text-[11px] text-muted">{props.documents?.length ?? 0}</span>
+        <span className="font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
+          {props.documents?.length ?? 0}
+        </span>
       </div>
-      <div className="border-b border-[#e4eaea] px-3 py-2">
+      <div className="border-b border-[var(--ant-color-border-secondary)] px-3 py-2">
         <Input
           allowClear
           size="small"
@@ -60,7 +64,7 @@ export function DocumentListPanel(props: DocumentListPanelProps): React.JSX.Elem
             文档加载失败，请
             <button
               type="button"
-              className="focus-ring ml-1 text-accent underline"
+              className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] ml-1 text-[var(--ant-color-primary)] underline"
               onClick={props.onRetry}
             >
               重试
@@ -107,5 +111,9 @@ function toTreeData(nodes: UrlTreeNode[]): DocumentTreeNode[] {
 }
 
 function Hint({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <p className="px-2 py-8 text-center text-xs leading-5 text-muted">{children}</p>
+  return (
+    <p className="px-2 py-8 text-center text-xs leading-5 text-[var(--ant-color-text-secondary)]">
+      {children}
+    </p>
+  )
 }

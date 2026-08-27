@@ -79,11 +79,17 @@ export function AgentsPage(): React.JSX.Element {
         error={query.error}
         onRetry={() => void query.refetch()}
       >
-        <div className="panel overflow-hidden">
-          <div className="grid grid-cols-[220px_1fr_180px] border-b border-[#d8e0e0] bg-[#f6f9f8] px-5 py-3">
-            <span className="eyebrow">Agent</span>
-            <span className="eyebrow">接入线路</span>
-            <span className="eyebrow text-right">操作</span>
+        <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] overflow-hidden">
+          <div className="grid grid-cols-[220px_1fr_180px] border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-5 py-3">
+            <span className="text-[11px] font-650 tracking-[.14em] text-[var(--ant-color-text-secondary)] uppercase">
+              Agent
+            </span>
+            <span className="text-[11px] font-650 tracking-[.14em] text-[var(--ant-color-text-secondary)] uppercase">
+              接入线路
+            </span>
+            <span className="text-[11px] font-650 tracking-[.14em] text-[var(--ant-color-text-secondary)] uppercase text-right">
+              操作
+            </span>
           </div>
           {query.data?.map((status) => (
             <AgentRow
@@ -124,17 +130,19 @@ function AgentRow(props: AgentRowProps): React.JSX.Element {
   const ready = props.status.overall === 'ready'
   const hasAutomatic = canRemoveAgentIntegration(props.status.components)
   return (
-    <section className="grid min-h-132px grid-cols-[220px_1fr_180px] items-center gap-5 border-b border-[#e4eaea] px-5 py-5 last:border-b-0">
+    <section className="grid min-h-132px grid-cols-[220px_1fr_180px] items-center gap-5 border-b border-[var(--ant-color-border-secondary)] px-5 py-5 last:border-b-0">
       <div>
         <div className="flex items-center gap-2">
-          <h2 className="m-0 text-base font-700 text-ink">{props.status.label}</h2>
+          <h2 className="m-0 text-base font-700 text-[var(--ant-color-text)]">
+            {props.status.label}
+          </h2>
           <OverallTag status={props.status.overall} />
         </div>
-        <p className="mb-0 mt-2 text-xs leading-5 text-muted">
+        <p className="mb-0 mt-2 text-xs leading-5 text-[var(--ant-color-text-secondary)]">
           {ready ? '三项能力均已连接' : overallDescription(props.status)}
         </p>
       </div>
-      <div className="relative grid grid-cols-3 gap-3 before:absolute before:left-[16%] before:right-[16%] before:top-5 before:h-px before:bg-[#cbd7d7]">
+      <div className="relative grid grid-cols-3 gap-3 before:absolute before:left-[16%] before:right-[16%] before:top-5 before:h-px before:bg-[var(--ant-color-border-secondary)]">
         {props.status.components.map((component) => (
           <ComponentNode key={component.component} component={component} onCopy={props.onCopy} />
         ))}
@@ -174,11 +182,11 @@ function ComponentNode(props: {
   return (
     <div className="relative z-1 flex min-w-0 flex-col items-center text-center">
       <div
-        className={`flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white text-base ${nodeClass(component.status)}`}
+        className={`flex h-10 w-10 items-center justify-center rounded-full border-2 bg-[var(--ant-color-bg-container)] text-base ${nodeClass(component.status)}`}
       >
         {component.status === 'current' ? <CheckCircleFilled /> : icon}
       </div>
-      <strong className="mt-2 text-xs font-700 text-ink">
+      <strong className="mt-2 text-xs font-700 text-[var(--ant-color-text)]">
         {component.component === 'mcp'
           ? 'MCP'
           : component.component === 'skill'
@@ -191,7 +199,7 @@ function ComponentNode(props: {
       {component.status === 'manual' && component.manualContent && (
         <button
           type="button"
-          className="focus-ring mt-1 flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-accent hover:bg-[#e7f3f3]"
+          className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] mt-1 flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[var(--ant-color-primary)] hover:bg-[var(--ant-color-fill-secondary)]"
           onClick={() => void props.onCopy(component.manualContent!)}
         >
           <CopyOutlined />
@@ -200,7 +208,7 @@ function ComponentNode(props: {
       )}
       {component.message && component.status !== 'manual' && (
         <span
-          className="mt-1 max-w-42 truncate text-[10px] text-[#a4473f]"
+          className="mt-1 max-w-42 truncate text-[10px] text-[var(--ant-color-error)]"
           title={component.message}
         >
           {component.message}
@@ -239,18 +247,18 @@ function statusLabel(status: AgentIntegrationComponentState['status']): string {
 
 function nodeClass(status: AgentIntegrationComponentState['status']): string {
   return {
-    missing: 'border-[#cbd7d7] text-[#7c9092]',
-    current: 'border-[#4c9472] text-[#2f7d5c]',
-    outdated: 'border-[#d69a45] text-[#b86d10]',
-    conflict: 'border-[#c9625b] text-[#b6423c]',
-    manual: 'border-[#4d8d96] text-accent'
+    missing: 'border-[var(--ant-color-border-secondary)] text-[var(--ant-color-text-secondary)]',
+    current: 'border-[var(--ant-color-success)] text-[var(--ant-color-success)]',
+    outdated: 'border-[var(--ant-color-warning)] text-[var(--ant-color-warning)]',
+    conflict: 'border-[var(--ant-color-error)] text-[var(--ant-color-error)]',
+    manual: 'border-[var(--ant-color-primary)] text-[var(--ant-color-primary)]'
   }[status]
 }
 
 function statusTextClass(status: AgentIntegrationComponentState['status']): string {
   return status === 'conflict'
-    ? 'text-[#b6423c]'
+    ? 'text-[var(--ant-color-error)]'
     : status === 'current'
-      ? 'text-[#2f7d5c]'
-      : 'text-muted'
+      ? 'text-[var(--ant-color-success)]'
+      : 'text-[var(--ant-color-text-secondary)]'
 }

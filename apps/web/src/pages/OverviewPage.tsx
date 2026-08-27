@@ -52,25 +52,27 @@ export function OverviewPage(): React.JSX.Element {
         </section>
 
         <section className="mt-6 grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-          <div className="panel overflow-hidden">
-            <div className="pane-header">
-              <span className="pane-title">最近任务</span>
+          <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
+              <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
+                最近任务
+              </span>
               <button
                 type="button"
-                className="text-xs text-accent hover:underline"
+                className="text-xs text-[var(--ant-color-primary)] hover:underline"
                 onClick={() => void navigate({ to: '/jobs' })}
               >
                 查看全部
               </button>
             </div>
-            <div className="max-h-96 divide-y divide-[#e8eded] overflow-y-auto px-4">
+            <div className="max-h-96 divide-y divide-[var(--ant-color-border-secondary)] overflow-y-auto px-4">
               {(jobs.data ?? []).slice(0, 8).map((job) => {
                 const source = sources.data?.find((item) => item.id === job.sourceId)
                 return (
                   <div key={job.id} className="flex items-center justify-between gap-4 py-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-650">{source?.name ?? '来源同步'}</div>
-                      <div className="mt-0.5 truncate font-mono text-[11px] text-muted">
+                      <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
                         {job.sourceId}
                       </div>
                     </div>
@@ -79,31 +81,37 @@ export function OverviewPage(): React.JSX.Element {
                 )
               })}
               {jobs.data?.length === 0 && (
-                <p className="py-10 text-center text-sm text-muted">还没有执行过任务</p>
+                <p className="py-10 text-center text-sm text-[var(--ant-color-text-secondary)]">
+                  还没有执行过任务
+                </p>
               )}
             </div>
           </div>
 
-          <div className="panel overflow-hidden">
-            <div className="pane-header">
-              <span className="pane-title">定时计划</span>
+          <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
+              <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
+                定时计划
+              </span>
             </div>
             <div className="max-h-96 overflow-y-auto p-4">
               {scheduled.slice(0, 8).map((source) => (
                 <button
                   key={source.id}
                   type="button"
-                  className="focus-ring mb-2 block w-full rounded-lg px-3 py-2.5 text-left hover:bg-[#f3f7f6]"
+                  className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] mb-2 block w-full rounded-lg px-3 py-2.5 text-left hover:bg-[var(--ant-color-fill-quaternary)]"
                   onClick={() => void navigate({ to: '/documents', search: { source: source.id } })}
                 >
                   <div className="text-sm font-650">{source.name}</div>
-                  <div className="mt-0.5 font-mono text-[11px] text-muted">
+                  <div className="mt-0.5 font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
                     {source.cloud?.autoSync ? '每日检查' : source.schedule}
                   </div>
                 </button>
               ))}
               {scheduled.length === 0 && (
-                <p className="py-10 text-center text-sm text-muted">尚未设置定时同步</p>
+                <p className="py-10 text-center text-sm text-[var(--ant-color-text-secondary)]">
+                  尚未设置定时同步
+                </p>
               )}
             </div>
           </div>
@@ -125,19 +133,27 @@ function MetricCard(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className={`focus-ring panel p-5 text-left transition-transform hover:-translate-y-0.5 ${
-        props.accent ? 'bg-accent text-white' : props.warn ? 'ring-1 ring-[#d38a22]/40' : ''
+      className={`focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] p-5 text-left transition-transform hover:-translate-y-0.5 ${
+        props.accent
+          ? 'bg-[var(--ant-color-primary)] text-[var(--ant-color-text-light-solid)]'
+          : props.warn
+            ? 'ring-1 ring-[var(--ant-color-warning)]'
+            : ''
       }`}
     >
       <div
         className={`text-xs font-650 tracking-wide uppercase ${
-          props.accent ? 'text-white/70' : 'text-muted'
+          props.accent
+            ? 'text-[var(--ant-color-text-light-solid)]'
+            : 'text-[var(--ant-color-text-secondary)]'
         }`}
       >
         {props.label}
       </div>
-      <div className="mt-2 font-serif text-4xl font-600">{props.value}</div>
-      <div className={`mt-1.5 text-xs ${props.accent ? 'text-white/75' : 'text-muted'}`}>
+      <div className="mt-2 text-4xl font-600">{props.value}</div>
+      <div
+        className={`mt-1.5 text-xs ${props.accent ? 'text-[var(--ant-color-text-light-solid)]' : 'text-[var(--ant-color-text-secondary)]'}`}
+      >
         {props.note}
       </div>
     </button>

@@ -1,15 +1,17 @@
-const styles = {
-  healthy: 'bg-[#e4f2eb] text-[#226446]',
-  syncing: 'bg-[#e1f1f3] text-[#086a72]',
-  attention: 'bg-[#fae9e6] text-[#963b36]',
-  pending: 'bg-[#fff0d7] text-[#8b570f]',
-  running: 'bg-[#e1f1f3] text-[#086a72]',
-  completed: 'bg-[#e4f2eb] text-[#226446]',
-  failed: 'bg-[#fae9e6] text-[#963b36]',
-  cancelled: 'bg-[#edf0f0] text-[#667476]'
+import { Tag } from 'antd'
+
+const colors = {
+  healthy: 'success',
+  syncing: 'processing',
+  attention: 'error',
+  pending: 'warning',
+  running: 'processing',
+  completed: 'success',
+  failed: 'error',
+  cancelled: 'default'
 } as const
 
-const labels: Record<keyof typeof styles, string> = {
+const labels: Record<keyof typeof colors, string> = {
   healthy: '正常',
   syncing: '同步中',
   attention: '需关注',
@@ -20,13 +22,6 @@ const labels: Record<keyof typeof styles, string> = {
   cancelled: '已取消'
 }
 
-export function StatusPill({ status }: { status: keyof typeof styles }): React.JSX.Element {
-  return (
-    <span
-      role="status"
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-650 ${styles[status]}`}
-    >
-      {labels[status]}
-    </span>
-  )
+export function StatusPill({ status }: { status: keyof typeof colors }): React.JSX.Element {
+  return <Tag color={colors[status]}>{labels[status]}</Tag>
 }

@@ -38,9 +38,11 @@ export function DataTransferPanel(): React.JSX.Element {
   }
 
   return (
-    <section className="panel mt-5 overflow-hidden">
-      <div className="pane-header">
-        <span className="pane-title">备份与恢复</span>
+    <section className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] mt-5 overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
+        <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
+          备份与恢复
+        </span>
       </div>
       <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
         <TransferAction
@@ -93,10 +95,12 @@ function TransferAction(props: {
 }): React.JSX.Element {
   return (
     <div
-      className={`rounded-xl border-l-3 bg-[#f8faf9] p-4 ${props.danger ? 'border-[#b6423c]' : 'border-accent'}`}
+      className={`rounded-xl border-l-3 bg-[var(--ant-color-fill-quaternary)] p-4 ${props.danger ? 'border-[var(--ant-color-error)]' : 'border-[var(--ant-color-primary)]'}`}
     >
       <h3 className="m-0 text-sm font-700">{props.title}</h3>
-      <p className="mb-4 mt-2 text-xs leading-5 text-muted">{props.description}</p>
+      <p className="mb-4 mt-2 text-xs leading-5 text-[var(--ant-color-text-secondary)]">
+        {props.description}
+      </p>
       {props.children}
     </div>
   )

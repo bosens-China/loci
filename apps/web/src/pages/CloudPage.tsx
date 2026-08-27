@@ -89,7 +89,7 @@ export function CloudPage(): React.JSX.Element {
               key={item.id}
               role="button"
               tabIndex={0}
-              className="panel min-w-0 cursor-pointer p-5 transition-shadow hover:shadow-md"
+              className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] min-w-0 cursor-pointer p-5 transition-shadow hover:shadow-md"
               onClick={() => setSelectedLibraryId(item.id)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') setSelectedLibraryId(item.id)
@@ -97,9 +97,9 @@ export function CloudPage(): React.JSX.Element {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="m-0 truncate font-serif text-lg font-600">{item.name}</h2>
+                  <h2 className="m-0 truncate text-lg font-600">{item.name}</h2>
                   <a
-                    className="mt-1 block truncate font-mono text-[11px] text-accent hover:underline"
+                    className="mt-1 block truncate font-mono text-[11px] text-[var(--ant-color-primary)] hover:underline"
                     href={item.url}
                     target="_blank"
                     rel="noreferrer"
@@ -115,7 +115,7 @@ export function CloudPage(): React.JSX.Element {
                 <Tag variant="filled">发布 {formatDate(item.publishedAt)}</Tag>
               </div>
               <div
-                className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e5ebeb] pt-4"
+                className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--ant-color-border-secondary)] pt-4"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="flex flex-wrap gap-2">
@@ -182,7 +182,7 @@ export function CloudPage(): React.JSX.Element {
                   )}
                 </div>
                 {item.localSourceId && (
-                  <label className="flex items-center gap-2 text-xs text-muted">
+                  <label className="flex items-center gap-2 text-xs text-[var(--ant-color-text-secondary)]">
                     每日检查
                     <Switch
                       size="small"

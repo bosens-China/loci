@@ -169,11 +169,13 @@ export function AdminWorkspace({ session }: { session: CloudAdminSession }): Rea
   return (
     <>
       <PageHeader title="Server 管理" description="维护公开文档库、同步计划和发布任务。" />
-      <div className="mb-5 flex items-center gap-4 rounded-xl border border-[#cfe2e2] bg-[#edf6f5] px-5 py-3">
-        <CloudServerOutlined className="text-lg text-accent" />
+      <div className="mb-5 flex items-center gap-4 rounded-xl border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-5 py-3">
+        <CloudServerOutlined className="text-lg text-[var(--ant-color-primary)]" />
         <div className="min-w-0 flex-1">
-          <div className="truncate font-mono text-xs text-ink">{session.serverUrl}</div>
-          <div className="mt-1 text-xs text-muted">
+          <div className="truncate font-mono text-xs text-[var(--ant-color-text)]">
+            {session.serverUrl}
+          </div>
+          <div className="mt-1 text-xs text-[var(--ant-color-text-secondary)]">
             {session.username} · 会话至 {formatDateTime(session.expiresAt)}
           </div>
         </div>
@@ -213,9 +215,11 @@ export function AdminWorkspace({ session }: { session: CloudAdminSession }): Rea
             key: 'libraries',
             label: '文档库',
             children: (
-              <div className="panel overflow-hidden">
-                <div className="pane-header">
-                  <span className="pane-title">Server 文档库</span>
+              <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] overflow-hidden">
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
+                  <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
+                    Server 文档库
+                  </span>
                   <Space>
                     <Button
                       icon={<CloudSyncOutlined />}
@@ -313,7 +317,7 @@ function AdminSummary(props: {
   active: number
 }): React.JSX.Element {
   return (
-    <div className="mb-4 grid grid-cols-4 divide-x divide-[#d8e0e0] rounded-xl border border-[#d8e0e0] bg-white px-2 py-3">
+    <div className="mb-4 grid grid-cols-4 divide-x divide-[var(--ant-color-border-secondary)] rounded-xl border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] px-2 py-3">
       <SummaryItem label="文档库" value={props.total} />
       <SummaryItem label="已发布" value={props.published} />
       <SummaryItem label="活动任务" value={props.active} accent={props.active > 0} />
@@ -330,9 +334,15 @@ function SummaryItem(props: {
 }): React.JSX.Element {
   return (
     <div className="flex items-baseline justify-center gap-2 px-4">
-      <span className="text-xs text-muted">{props.label}</span>
+      <span className="text-xs text-[var(--ant-color-text-secondary)]">{props.label}</span>
       <strong
-        className={props.warning ? 'text-[#a13d35]' : props.accent ? 'text-accent' : 'text-ink'}
+        className={
+          props.warning
+            ? 'text-[var(--ant-color-error)]'
+            : props.accent
+              ? 'text-[var(--ant-color-primary)]'
+              : 'text-[var(--ant-color-text)]'
+        }
       >
         {props.value}
       </strong>

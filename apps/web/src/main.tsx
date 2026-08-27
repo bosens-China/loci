@@ -1,12 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RouterProvider } from '@tanstack/react-router'
-import { App as AntApp, ConfigProvider } from 'antd'
-import '@unocss/reset/tailwind.css'
 import 'uno.css'
-import '@/styles/ant-fix.css'
-import { router } from '@/router'
+import { AppProviders } from '@/components/AppProviders'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,24 +13,8 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ConfigProvider
-      theme={{
-        token: {
-          colorPrimary: '#0a7c86',
-          colorInfo: '#0a7c86',
-          colorSuccess: '#2f7d5c',
-          colorWarning: '#c77a17',
-          colorError: '#b6423c',
-          borderRadius: 10,
-          fontFamily: '"Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif'
-        }
-      }}
-    >
-      <QueryClientProvider client={queryClient}>
-        <AntApp>
-          <RouterProvider router={router} />
-        </AntApp>
-      </QueryClientProvider>
-    </ConfigProvider>
+    <QueryClientProvider client={queryClient}>
+      <AppProviders />
+    </QueryClientProvider>
   </React.StrictMode>
 )

@@ -9,12 +9,17 @@ export function PageHeader(props: PageHeaderProps): React.JSX.Element {
   return (
     <header className="mb-6 flex items-end justify-between gap-6">
       <div>
-        <h1 className="mb-0 font-serif text-2xl font-600 tracking-tight text-ink">{props.title}</h1>
+        <Typography.Title level={2} className="mb-0!">
+          {props.title}
+        </Typography.Title>
         {props.description && (
-          <p className="mb-0 mt-1.5 max-w-3xl text-sm leading-6 text-muted">{props.description}</p>
+          <Typography.Paragraph type="secondary" className="mb-0! mt-1.5! max-w-3xl">
+            {props.description}
+          </Typography.Paragraph>
         )}
       </div>
       {props.action}
     </header>
   )
 }
+import { Typography } from 'antd'

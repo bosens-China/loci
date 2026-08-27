@@ -154,7 +154,7 @@
 - 当前决策：仓库开发脚本默认使用 `.loci-dev` 下的隔离数据、缓存和模拟用户目录，Agent 接入写入也不会触碰真实用户文件；只有显式运行 `pnpm dev:user` 才复用正式 Loci 数据、缓存与真实用户目录，并在终端提示 Web 写操作会直接修改对应数据和 Agent 文件。两种模式共享同一套 Web、API、Worker 和启动实现。
 - 当前决策：Web 设置页、CLI `config`、后台服务和备份协议共用 `AppSettings`、`DEFAULT_APP_SETTINGS` 与 `APP_SETTINGS_LIMITS`；最终由运行时数据库校验并保存同一份 SQLite 设置。各界面不得自行缩小、放大或重新定义取值边界。
 - 当前决策：`LOCI_SERVER_URL` 是进程级 Server 地址覆盖；生效时 CLI 明确标注覆盖并拒绝把 `config set server-url` 伪装成当前有效配置。自定义 `LOCI_DATA_DIR` 的按需任务可以启动 detached worker，但注销和重启恢复不由 Loci 自动保证；长期运行应由外部服务管理器托管 `loci service run`。`LOCI_CACHE_DIR` 是进程级的浏览器缓存目录覆盖，不写入持久设置；所有 CLI、MCP 和 worker 进程必须使用同一个值，单次命令的临时覆盖不代表已配置后续长期进程。
-- 当前决策：MCP 只使用 stdio，不配置网络端口。主题支持自动、浅色和深色；自动模式跟随系统。
+- 当前决策：MCP 只使用 stdio，不配置网络端口。主题支持自动、浅色和深色；自动模式跟随系统。Web UI 通过共享 `AppSettings` 持久化主题选择，并使用 Ant Design 默认浅色/深色主题和默认 token；UnoCSS 仅用于布局与响应式辅助，不定义项目配色、字体或组件视觉主题。
 - 当前决策：SQLite 数据库位于后台服务与 CLI 共同解析的标准 Loci 数据目录；Web UI、普通 CLI、`loci mcp call` 和 stdio MCP 直接复用同一份数据。SQLite 使用 WAL 与忙等待支持跨进程访问；同一文档源同步使用资源文件租约与持久运行记录，云端快照使用来源级租约，维护操作使用全库排他租约，计划宿主使用单独租约。
 - 为什么：单一图形入口、共享边界与单一数据源可以防止 Web、CLI、后台服务和 Agent 结果不一致。
 - 边界 / 非目标：本地库不会自动上传；只有管理员明确确认的“发布到服务器”会上传所选库的公开正文。云端副本仍只允许服务器到本地客户端的单向同步，不提供自动双向同步和冲突合并。

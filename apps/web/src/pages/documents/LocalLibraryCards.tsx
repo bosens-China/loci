@@ -24,11 +24,11 @@ export function LocalLibraryCards(props: {
             <button
               key={source.id}
               type="button"
-              className="panel focus-ring min-w-0 p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
+              className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] min-w-0 p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
               onClick={() => props.onSelect(source.id)}
             >
               <div className="flex items-start justify-between gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#edf6f5] text-accent">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--ant-color-fill-quaternary)] text-[var(--ant-color-primary)]">
                   {source.kind === 'github' ? (
                     <GithubOutlined />
                   ) : source.cloud ? (
@@ -41,11 +41,13 @@ export function LocalLibraryCards(props: {
                   {source.status === 'attention' ? '需检查' : '可用'}
                 </Tag>
               </div>
-              <h2 className="mt-4 truncate font-serif text-lg font-600 text-ink">{source.name}</h2>
-              <div className="truncate font-mono text-[11px] text-muted">
+              <h2 className="mt-4 truncate text-lg font-600 text-[var(--ant-color-text)]">
+                {source.name}
+              </h2>
+              <div className="truncate font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
                 {new URL(source.url).hostname}
               </div>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted">
+              <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--ant-color-text-secondary)]">
                 <span>{source.pages} 页</span>
                 <span>·</span>
                 <span>{formatBytes(source.contentSize)}</span>
@@ -56,7 +58,7 @@ export function LocalLibraryCards(props: {
           ))}
         </div>
       ) : (
-        <div className="panel py-16">
+        <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] py-16">
           <Empty description="还没有本地文档库" />
         </div>
       )}

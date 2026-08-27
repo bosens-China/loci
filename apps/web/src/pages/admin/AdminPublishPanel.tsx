@@ -54,11 +54,13 @@ export function AdminPublishPanel({ libraries }: { libraries: CloudLibrary[] }):
   }
 
   return (
-    <section className="panel overflow-hidden">
-      <div className="pane-header">
+    <section className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
         <div>
-          <span className="pane-title">发布本地文档库</span>
-          <p className="mb-0 mt-1 text-xs text-muted">
+          <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
+            发布本地文档库
+          </span>
+          <p className="mb-0 mt-1 text-xs text-[var(--ant-color-text-secondary)]">
             使用带校验的压缩二进制归档上传；创建与覆盖必须显式选择。
           </p>
         </div>
@@ -76,7 +78,7 @@ export function AdminPublishPanel({ libraries }: { libraries: CloudLibrary[] }):
                 />
               ))}
             </div>
-            <div className="mt-5 flex flex-col gap-3 rounded-xl bg-[#f5f8f7] p-4 md:flex-row md:items-center">
+            <div className="mt-5 flex flex-col gap-3 rounded-xl bg-[var(--ant-color-fill-quaternary)] p-4 md:flex-row md:items-center">
               <Radio.Group
                 value={mode}
                 onChange={(event) => setMode(event.target.value as 'create' | 'replace')}
@@ -127,16 +129,18 @@ function SourceCard(props: {
       type="button"
       className={`rounded-xl border p-4 text-left transition ${
         props.selected
-          ? 'border-accent bg-[#edf6f5]'
-          : 'border-[#dce6e5] bg-white hover:border-accent'
+          ? 'border-[var(--ant-color-primary)] bg-[var(--ant-color-fill-quaternary)]'
+          : 'border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] hover:border-[var(--ant-color-primary)]'
       }`}
       onClick={props.onSelect}
     >
-      <strong className="block truncate text-sm text-ink">{props.source.name}</strong>
-      <span className="mt-2 block text-xs text-muted">
+      <strong className="block truncate text-sm text-[var(--ant-color-text)]">
+        {props.source.name}
+      </strong>
+      <span className="mt-2 block text-xs text-[var(--ant-color-text-secondary)]">
         {props.source.pages} 页 · {formatBytes(props.source.contentSize)}
       </span>
-      <span className="mt-1 block truncate font-mono text-[11px] text-muted">
+      <span className="mt-1 block truncate font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
         {new URL(props.source.url).hostname}
       </span>
     </button>

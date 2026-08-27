@@ -20,8 +20,10 @@ export function DocumentReaderPanel(props: DocumentReaderPanelProps): React.JSX.
   if (props.error) {
     return (
       <ReaderMessage>
-        <div className="font-serif text-xl text-[#3a5254]">文档加载失败</div>
-        <p className="mt-2 text-sm leading-6 text-muted">请检查本地服务后重试。</p>
+        <div className="text-xl text-[var(--ant-color-text-secondary)]">文档加载失败</div>
+        <p className="mt-2 text-sm leading-6 text-[var(--ant-color-text-secondary)]">
+          请检查本地服务后重试。
+        </p>
         <Button className="mt-3" onClick={props.onRetry}>
           重试
         </Button>
@@ -34,12 +36,12 @@ export function DocumentReaderPanel(props: DocumentReaderPanelProps): React.JSX.
   }
 
   return (
-    <article className="workspace-pane h-full min-w-0 flex-1">
-      <header className="pane-header">
+    <article className="flex flex-col overflow-hidden border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] h-full min-w-0 flex-1">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
         <div className="min-w-0">
           <div className="truncate text-sm font-650">{props.document.title}</div>
           <a
-            className="mt-0.5 block truncate font-mono text-[11px] text-accent hover:underline"
+            className="mt-0.5 block truncate font-mono text-[11px] text-[var(--ant-color-primary)] hover:underline"
             href={props.document.url}
             target="_blank"
             rel="noreferrer"
@@ -66,12 +68,12 @@ export function DocumentReaderPanel(props: DocumentReaderPanelProps): React.JSX.
 
 function ReaderMessage(props: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="workspace-pane h-full min-w-0 flex-1 items-center justify-center bg-[#fafcfc]">
+    <div className="flex flex-col overflow-hidden border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] h-full min-w-0 flex-1 items-center justify-center bg-[var(--ant-color-fill-quaternary)]">
       <div className="max-w-sm text-center">
         {typeof props.children === 'string' ? (
           <>
-            <div className="font-serif text-xl text-[#3a5254]">{props.children}</div>
-            <p className="mt-2 text-sm leading-6 text-muted">
+            <div className="text-xl text-[var(--ant-color-text-secondary)]">{props.children}</div>
+            <p className="mt-2 text-sm leading-6 text-[var(--ant-color-text-secondary)]">
               文档保存在本机 SQLite 索引中，搜索与阅读均离线可用。
             </p>
           </>

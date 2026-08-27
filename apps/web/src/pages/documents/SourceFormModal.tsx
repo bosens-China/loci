@@ -206,7 +206,7 @@ export function SourceActions(props: SourceActionsProps): React.JSX.Element {
   })
 
   if (props.source.cloud) {
-    return <span className="text-[11px] text-muted">只读快照</span>
+    return <span className="text-[11px] text-[var(--ant-color-text-secondary)]">只读快照</span>
   }
 
   return (

@@ -32,17 +32,17 @@ export function LibraryBrowserWorkspace(props: {
   const document = file.data ? toDocument(file.data, props.title) : null
   return (
     <div className="flex h-[calc(100vh-3.25rem)] min-w-0 flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[#d8e0e0] bg-white px-4">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] px-4">
         <Button type="text" icon={<ArrowLeftOutlined />} onClick={props.onBack}>
           返回文档库
         </Button>
-        <strong className="truncate font-serif text-lg">{props.title}</strong>
-        <span className="rounded bg-[#edf6f5] px-2 py-1 text-xs text-accent">
+        <strong className="truncate text-lg">{props.title}</strong>
+        <span className="rounded bg-[var(--ant-color-fill-quaternary)] px-2 py-1 text-xs text-[var(--ant-color-primary)]">
           {props.location === 'cloud' ? '云端按需阅读' : '本地文档'}
         </span>
       </header>
       <div className="flex min-h-0 flex-1">
-        <aside className="w-80 shrink-0 overflow-y-auto border-r border-[#d8e0e0] bg-[#f7faf9] p-3">
+        <aside className="w-80 shrink-0 overflow-y-auto border-r border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] p-3">
           <AsyncState
             loading={root.isLoading}
             error={root.error}

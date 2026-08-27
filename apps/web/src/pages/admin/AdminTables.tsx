@@ -74,8 +74,12 @@ function libraryColumns(
             <strong>{item.name}</strong>
             <LibraryOriginTag origin="server" />
           </div>
-          <div className="max-w-96 truncate font-mono text-xs text-muted">{item.url}</div>
-          <div className="mt-0.5 text-xs text-muted">范围：{item.scopePath}</div>
+          <div className="max-w-96 truncate font-mono text-xs text-[var(--ant-color-text-secondary)]">
+            {item.url}
+          </div>
+          <div className="mt-0.5 text-xs text-[var(--ant-color-text-secondary)]">
+            范围：{item.scopePath}
+          </div>
         </div>
       )
     },
@@ -193,11 +197,16 @@ export function AdminJobsTable(props: {
           </Popconfirm>
         </div>
         {groups.map((group) => (
-          <section key={group.hostname} className="panel overflow-hidden">
-            <header className="border-b border-[#dce6e5] bg-[#f4f8f7] px-4 py-3 sm:px-5">
+          <section
+            key={group.hostname}
+            className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] overflow-hidden"
+          >
+            <header className="border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-3 sm:px-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-mono text-sm font-700 text-ink">{group.hostname}</span>
-                <span className="text-xs text-muted">
+                <span className="font-mono text-sm font-700 text-[var(--ant-color-text)]">
+                  {group.hostname}
+                </span>
+                <span className="text-xs text-[var(--ant-color-text-secondary)]">
                   {group.jobs.length} 个任务 · {group.jobs.filter(isAdminJobActive).length} 个活动
                 </span>
                 <Space size={4}>
@@ -232,7 +241,7 @@ export function AdminJobsTable(props: {
                 </Space>
               </div>
             </header>
-            <div className="max-h-96 divide-y divide-[#e5ecec] overflow-y-auto">
+            <div className="max-h-96 divide-y divide-[var(--ant-color-border-secondary)] overflow-y-auto">
               {group.jobs.map((job) => {
                 const library = libraries.get(job.libraryId)
                 const elapsed =
@@ -249,21 +258,21 @@ export function AdminJobsTable(props: {
                         <Tag color={statusColor(job.status)}>{statusLabel(job.status)}</Tag>
                       </div>
                       <div
-                        className="mt-1 truncate font-mono text-[11px] text-muted"
+                        className="mt-1 truncate font-mono text-[11px] text-[var(--ant-color-text-secondary)]"
                         title={job.id}
                       >
                         {job.id}
                       </div>
                       {job.error && (
                         <Tooltip title={job.error} placement="bottomLeft">
-                          <div className="mt-1 truncate text-xs text-[#a13d35]">
+                          <div className="mt-1 truncate text-xs text-[var(--ant-color-error)]">
                             失败原因：{job.error}
                           </div>
                         </Tooltip>
                       )}
                     </div>
                     <JobProgress job={job} />
-                    <div className="text-xs text-muted">
+                    <div className="text-xs text-[var(--ant-color-text-secondary)]">
                       <div>耗时 {formatDuration(elapsed)}</div>
                       <div className="mt-1">正文 {formatBytes(job.contentBytes)}</div>
                       {isAdminJobActive(job) && (
@@ -314,14 +323,17 @@ function estimateAdminRemaining(job: CloudSyncJob, elapsed: number): number | nu
 }
 
 function JobProgress({ job }: { job?: CloudSyncJob }): React.JSX.Element {
-  if (!job) return <span className="text-xs text-muted">—</span>
+  if (!job) return <span className="text-xs text-[var(--ant-color-text-secondary)]">—</span>
   if (job.paused || job.pauseRequested) return <Tag color="warning">已暂停</Tag>
   if (job.partial) return <Tag color="warning">已结束，可继续</Tag>
   if (job.status === 'failed') {
     return (
       <div className="max-w-44">
         <Tag color="error">同步失败</Tag>
-        <div className="mt-1 truncate text-xs text-[#a13d35]" title={job.error ?? ''}>
+        <div
+          className="mt-1 truncate text-xs text-[var(--ant-color-error)]"
+          title={job.error ?? ''}
+        >
           {job.error ?? '请检查 Server 日志'}
         </div>
       </div>
@@ -339,7 +351,9 @@ function JobProgress({ job }: { job?: CloudSyncJob }): React.JSX.Element {
   return (
     <div className="w-40">
       <Progress percent={getAdminSyncPercent(job)} size="small" status={status} showInfo={false} />
-      <div className={`text-xs ${failed ? 'text-[#a66a1f]' : 'text-muted'}`}>
+      <div
+        className={`text-xs ${failed ? 'text-[var(--ant-color-warning)]' : 'text-[var(--ant-color-text-secondary)]'}`}
+      >
         {active
           ? `已处理 ${processed} · 待处理 ${queued}`
           : failed
@@ -347,7 +361,10 @@ function JobProgress({ job }: { job?: CloudSyncJob }): React.JSX.Element {
             : `完成 ${processed} 页`}
       </div>
       {job.progress.node && (
-        <div className="truncate text-xs text-muted" title={job.progress.node.url}>
+        <div
+          className="truncate text-xs text-[var(--ant-color-text-secondary)]"
+          title={job.progress.node.url}
+        >
           {job.progress.node.status} · {job.progress.node.title}
         </div>
       )}

@@ -78,15 +78,15 @@ export function HostnamePolicyPanel({
   }
 
   return (
-    <section className="panel mt-5 p-5">
+    <section className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] mt-5 p-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="m-0 text-base font-700">{title}</h2>
-          <p className="mb-0 mt-1 text-xs text-muted">
+          <p className="mb-0 mt-1 text-xs text-[var(--ant-color-text-secondary)]">
             同一域名共享队列与策略；留空表示继承全局设置，只填一个间隔时按固定值执行。
           </p>
         </div>
-        <span className="rounded-full bg-[#e1f1f3] px-2.5 py-1 text-[11px] font-650 text-[#086a72]">
+        <span className="rounded-full bg-[var(--ant-color-info-bg)] px-2.5 py-1 text-[11px] font-650 text-[var(--ant-color-primary)]">
           实时生效
         </span>
       </div>
@@ -147,9 +147,11 @@ function PolicyRow(props: {
 }): React.JSX.Element {
   const policy = props.policy
   return (
-    <div className="grid gap-3 rounded-xl border border-[#dce6e5] bg-[#fafcfc] px-3 py-3 sm:grid-cols-[minmax(12rem,1fr)_2fr_auto] sm:items-center">
-      <span className="truncate font-mono text-xs font-650 text-ink">{policy.hostname}</span>
-      <span className="text-xs text-muted">
+    <div className="grid gap-3 rounded-xl border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-3 py-3 sm:grid-cols-[minmax(12rem,1fr)_2fr_auto] sm:items-center">
+      <span className="truncate font-mono text-xs font-650 text-[var(--ant-color-text)]">
+        {policy.hostname}
+      </span>
+      <span className="text-xs text-[var(--ant-color-text-secondary)]">
         HTTP {value(policy.httpConcurrency)} · 浏览器 {value(policy.browserConcurrency)} · 间隔{' '}
         {intervalLabel(policy)}
       </span>

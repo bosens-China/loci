@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Form, Input, InputNumber } from 'antd'
+import { App, Button, Form, Input, InputNumber, Segmented } from 'antd'
 import { APP_SETTINGS_LIMITS, isValidBatchIntervalSeconds, type AppSettings } from '@loci/shared'
 import { getSettings, saveSettings } from '@/api/settings'
 import { AsyncState } from '@/components/AsyncState'
@@ -53,7 +53,19 @@ export function SettingsPage(): React.JSX.Element {
       >
         <Form form={form} layout="vertical" onFinish={(value) => save.mutate(value)}>
           <div className="grid gap-5 lg:grid-cols-2">
-            <section className="panel p-5">
+            <section className="lg:col-span-2">
+              <Form.Item name="theme" label="界面主题" className="mb-0">
+                <Segmented
+                  block
+                  options={[
+                    { label: '跟随系统', value: 'auto' },
+                    { label: '浅色', value: 'light' },
+                    { label: '深色', value: 'dark' }
+                  ]}
+                />
+              </Form.Item>
+            </section>
+            <section className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] p-5">
               <h2 className="mb-4 mt-0 text-base font-700">抓取并发</h2>
               <div className="grid grid-cols-2 gap-4">
                 <NumberField
@@ -87,7 +99,7 @@ export function SettingsPage(): React.JSX.Element {
                 />
               </div>
             </section>
-            <section className="panel p-5">
+            <section className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] p-5">
               <h2 className="mb-4 mt-0 text-base font-700">GitHub 体积限制</h2>
               <div className="grid grid-cols-2 gap-4">
                 <NumberField
@@ -102,9 +114,9 @@ export function SettingsPage(): React.JSX.Element {
                 />
               </div>
             </section>
-            <section className="panel p-5 lg:col-span-2">
+            <section className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] p-5 lg:col-span-2">
               <h2 className="mb-1 mt-0 text-base font-700">云服务连接</h2>
-              <p className="mb-4 mt-0 text-xs text-muted">
+              <p className="mb-4 mt-0 text-xs text-[var(--ant-color-text-secondary)]">
                 用于云端目录、云端副本更新和管理员登录，与 GitHub 抓取限制无关。
               </p>
               <Form.Item
@@ -120,7 +132,9 @@ export function SettingsPage(): React.JSX.Element {
             </section>
           </div>
           <div className="mt-5 flex items-center justify-between">
-            <p className="mb-0 text-xs text-muted">Web 端口默认随机分配，仅监听 127.0.0.1。</p>
+            <p className="mb-0 text-xs text-[var(--ant-color-text-secondary)]">
+              Web 端口默认随机分配，仅监听 127.0.0.1。
+            </p>
             <Button type="primary" htmlType="submit" loading={save.isPending}>
               保存设置
             </Button>

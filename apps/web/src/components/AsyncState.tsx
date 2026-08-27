@@ -1,4 +1,4 @@
-import { Alert, Button, Empty, Skeleton } from 'antd'
+import { Alert, Button, Card, Empty, Skeleton } from 'antd'
 
 interface AsyncStateProps {
   loading: boolean
@@ -12,9 +12,9 @@ interface AsyncStateProps {
 export function AsyncState(props: AsyncStateProps): React.JSX.Element {
   if (props.loading) {
     return (
-      <div className="panel p-6">
+      <Card>
         <Skeleton active paragraph={{ rows: 5 }} />
-      </div>
+      </Card>
     )
   }
   if (props.error) {
@@ -30,9 +30,9 @@ export function AsyncState(props: AsyncStateProps): React.JSX.Element {
   }
   if (props.empty) {
     return (
-      <div className="panel py-16">
+      <Card className="py-16">
         <Empty description={props.emptyText} />
-      </div>
+      </Card>
     )
   }
   return <>{props.children}</>

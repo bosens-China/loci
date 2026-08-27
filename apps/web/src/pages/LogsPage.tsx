@@ -22,13 +22,13 @@ export function LogsPage(): React.JSX.Element {
         title="操作日志"
         description="按日期查看任务、设置、云端和数据维护的结构化记录。"
       />
-      <div className="panel-muted mb-4 grid gap-3 p-3 sm:grid-cols-4">
+      <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] mb-4 grid gap-3 p-3 sm:grid-cols-4">
         <input
           aria-label="日志日期"
           type="date"
           value={filters.date ?? ''}
           onChange={(event) => update({ date: event.target.value || undefined })}
-          className="focus-ring h-8 rounded-lg border border-[#d8e0e0] bg-white px-3 text-sm text-ink"
+          className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] h-8 rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] px-3 text-sm text-[var(--ant-color-text)]"
         />
         <Select
           allowClear
@@ -54,9 +54,9 @@ export function LogsPage(): React.JSX.Element {
         />
       </div>
       <AsyncState loading={logs.isLoading} error={logs.error} onRetry={() => void logs.refetch()}>
-        <div className="panel max-h-[65vh] overflow-y-auto">
+        <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] max-h-[65vh] overflow-y-auto">
           {logs.data?.items.length ? (
-            <div className="divide-y divide-[#e5ecec]">
+            <div className="divide-y divide-[var(--ant-color-border-secondary)]">
               {logs.data.items.map((item) => (
                 <LogItem key={item.id} item={item} />
               ))}
@@ -73,7 +73,9 @@ export function LogsPage(): React.JSX.Element {
 function LogItem({ item }: { item: OperationLog }): React.JSX.Element {
   return (
     <article className="grid gap-2 px-4 py-3 sm:grid-cols-[9rem_7rem_minmax(0,1fr)_10rem] sm:items-center">
-      <time className="text-xs text-muted">{formatDateTime(item.createdAt)}</time>
+      <time className="text-xs text-[var(--ant-color-text-secondary)]">
+        {formatDateTime(item.createdAt)}
+      </time>
       <div className="flex gap-1">
         <Tag>{categoryLabels[item.category]}</Tag>
         <Tag
@@ -85,14 +87,18 @@ function LogItem({ item }: { item: OperationLog }): React.JSX.Element {
         </Tag>
       </div>
       <div className="min-w-0">
-        <div className="truncate text-sm text-ink" title={item.message}>
+        <div className="truncate text-sm text-[var(--ant-color-text)]" title={item.message}>
           {item.message}
         </div>
         {item.resourceId && (
-          <div className="truncate font-mono text-[11px] text-muted">{item.resourceId}</div>
+          <div className="truncate font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
+            {item.resourceId}
+          </div>
         )}
       </div>
-      <div className="truncate text-right font-mono text-xs text-muted">{item.hostname ?? '—'}</div>
+      <div className="truncate text-right font-mono text-xs text-[var(--ant-color-text-secondary)]">
+        {item.hostname ?? '—'}
+      </div>
     </article>
   )
 }
