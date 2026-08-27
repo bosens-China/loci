@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import { DOCUMENT_SOURCE_LIMITS, normalizeExcludePathPattern } from '@loci/core'
-import { APP_SETTINGS_LIMITS, isValidBatchIntervalSeconds } from '@loci/shared'
+import {
+  APP_SETTINGS_LIMITS,
+  isValidBatchIntervalRange,
+  isValidBatchIntervalSeconds
+} from '@loci/shared'
 
 const pageLimitSchema = z
   .number()
@@ -140,9 +144,52 @@ const settingsSchema = z
       .max(APP_SETTINGS_LIMITS.maxRetries.max)
       .optional(),
     batch_interval_seconds: z.number().int().refine(isValidBatchIntervalSeconds).optional(),
+    batch_interval_max_seconds: z.number().int().refine(isValidBatchIntervalSeconds).optional(),
     server_url: z.string().url().optional(),
     github_archive_limit_mb: githubSizeSchema.optional(),
     github_markdown_limit_mb: githubSizeSchema.optional()
+  })
+  .strict()
+  .refine(
+    (settings) =>
+      isValidBatchIntervalRange(
+        settings.batch_interval_seconds ?? 0,
+        settings.batch_interval_max_seconds ?? 0
+      ),
+    '批次间隔最大值不能小于最小值'
+  )
+
+const hostnameCrawlPolicySchema = z
+  .object({
+    hostname: z.string().min(1),
+    http_concurrency: concurrencySchema.nullable(),
+    browser_concurrency: concurrencySchema.nullable(),
+    batch_interval_min_seconds: z.number().int().refine(isValidBatchIntervalSeconds).nullable(),
+    batch_interval_max_seconds: z.number().int().refine(isValidBatchIntervalSeconds).nullable(),
+    updated_at: z.string().datetime()
+  })
+  .strict()
+  .refine(
+    (policy) =>
+      isValidBatchIntervalRange(
+        policy.batch_interval_min_seconds ?? 0,
+        policy.batch_interval_max_seconds ?? 0
+      ),
+    '域名批次间隔最大值不能小于最小值'
+  )
+
+const operationLogSchema = z
+  .object({
+    id: z.number().int().positive(),
+    category: z.enum(['task', 'library', 'settings', 'cloud', 'maintenance', 'system']),
+    action: z.string().min(1),
+    level: z.enum(['info', 'warning', 'error']),
+    resource_type: z.string().nullable(),
+    resource_id: z.string().nullable(),
+    hostname: z.string().nullable(),
+    message: z.string(),
+    details_json: z.string().nullable(),
+    created_at: z.string().datetime()
   })
   .strict()
 
@@ -158,6 +205,8 @@ export const lociBackupSchema = z
         explicitPageTargets: z.array(explicitPageTargetSchema).optional(),
         crawlRuns: z.array(crawlRunSchema),
         crawlFailures: z.array(crawlFailureSchema).optional(),
+        hostnameCrawlPolicies: z.array(hostnameCrawlPolicySchema).optional(),
+        operationLogs: z.array(operationLogSchema).optional(),
         settings: settingsSchema
       })
       .strict()

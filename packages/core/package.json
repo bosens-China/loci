@@ -25,14 +25,15 @@
     "mdream": "^1.5.8",
     "micromark-extension-frontmatter": "^2.0.0",
     "node-html-parser": "^9.0.1",
-    "yauzl": "^3.4.0"
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/mdast": "^4.0.4",
     "@types/yauzl": "^3.4.0",
     "@types/yazl": "^3.3.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.10",
-    "yazl": "^3.3.1"
+    "vitest": "^4.1.10"
   }
 }

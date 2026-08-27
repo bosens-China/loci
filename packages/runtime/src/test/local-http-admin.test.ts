@@ -40,7 +40,7 @@ describe('本机 Admin API', () => {
     vi.spyOn(runtime.admin, 'deleteLibrary').mockResolvedValue()
     vi.spyOn(runtime.admin, 'syncLibraries').mockResolvedValue([job])
     vi.spyOn(runtime.admin, 'listSyncJobs').mockResolvedValue([job])
-    vi.spyOn(runtime.admin, 'cancelSyncJob').mockResolvedValue({ ...job, status: 'canceling' })
+    vi.spyOn(runtime.admin, 'controlSyncJob').mockResolvedValue({ ...job, status: 'canceling' })
     vi.spyOn(runtime.admin, 'logout').mockResolvedValue()
 
     const headers = { origin: server.endpoint, 'content-type': 'application/json' }
@@ -149,8 +149,17 @@ function cloudJob(): CloudSyncJob {
   return {
     id: 'job-1',
     libraryId: 'library-1',
+    hostname: 'hono.dev',
     status: 'queued',
+    priority: 0,
+    paused: false,
+    pauseRequested: false,
+    stopRequested: false,
+    partial: false,
+    contentBytes: 0,
+    remainingCount: 0,
     createdAt: '2026-08-21T00:00:00.000Z',
+    updatedAt: '2026-08-21T00:00:00.000Z',
     finishedAt: null,
     progress: null,
     failures: [],

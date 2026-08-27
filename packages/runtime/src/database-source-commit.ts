@@ -8,7 +8,7 @@ import {
   storeDocument
 } from './document-content-database.js'
 import { commitExplicitPageResults } from './explicit-page-database.js'
-import { finishLocalJob } from './local-job-database.js'
+import { completePartialLocalJob, finishLocalJob } from './local-job-record.js'
 import { withImmediateTransaction } from './sqlite.js'
 
 /** 抓取正文、来源解析结果与 URL 审查终态必须在同一事务内提交。 */
@@ -56,16 +56,23 @@ export function commitSourceCrawl(
         ) {
           throw new Error('抓取运行提交状态已变化')
         }
-        if (
-          !finishLocalJob(
-            database,
-            commit.localJob.id,
-            commit.localJob.owner,
-            'completed',
-            null,
-            commit.localJob.result
-          )
-        ) {
+        const finished = commit.localJob.partial
+          ? completePartialLocalJob(
+              database,
+              commit.localJob.id,
+              commit.localJob.owner,
+              commit.localJob.result,
+              commit.localJob.contentBytes ?? 0
+            )
+          : finishLocalJob(
+              database,
+              commit.localJob.id,
+              commit.localJob.owner,
+              'completed',
+              null,
+              commit.localJob.result
+            )
+        if (!finished) {
           throw new Error('持久任务提交状态已变化')
         }
       }
@@ -87,9 +94,10 @@ function canCompleteLocalJob(
         `SELECT 1 FROM local_jobs AS job
          JOIN crawl_runs AS run ON run.id = ? AND run.source_id = job.source_id
          WHERE job.id = ? AND job.source_id = ? AND job.status = 'running'
-           AND job.lease_owner = ? AND job.cancel_requested = 0 AND run.status = 'running'`
+           AND job.lease_owner = ? AND job.cancel_requested = 0 AND run.status = 'running'
+           AND ((? = 1 AND job.stop_requested = 1) OR (? = 0 AND job.stop_requested = 0))`
       )
-      .get(job.runId, job.id, sourceId, job.owner)
+      .get(job.runId, job.id, sourceId, job.owner, job.partial ? 1 : 0, job.partial ? 1 : 0)
   )
 }
 

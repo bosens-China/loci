@@ -4,6 +4,7 @@ import type {
   CrawlFailure,
   ResolvedSourceDiscovery,
   ResourceRevisionKey,
+  OperationLog,
   SkillScope
 } from '@loci/shared'
 import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
@@ -114,10 +115,42 @@ export const appSettings = sqliteTable('app_settings', {
   browserConcurrency: integer('browser_concurrency').notNull(),
   maxRetries: integer('max_retries').notNull(),
   batchIntervalSeconds: integer('batch_interval_seconds').notNull(),
+  batchIntervalMaxSeconds: integer('batch_interval_max_seconds').notNull(),
   serverUrl: text('server_url').notNull(),
   serverUrlCustomized: integer('server_url_customized').notNull(),
   githubArchiveLimitMb: integer('github_archive_limit_mb').notNull(),
   githubMarkdownLimitMb: integer('github_markdown_limit_mb').notNull()
+})
+
+export const hostnameCrawlPolicies = sqliteTable('hostname_crawl_policies', {
+  hostname: text('hostname').primaryKey(),
+  httpConcurrency: integer('http_concurrency'),
+  browserConcurrency: integer('browser_concurrency'),
+  batchIntervalMinSeconds: integer('batch_interval_min_seconds'),
+  batchIntervalMaxSeconds: integer('batch_interval_max_seconds'),
+  updatedAt: text('updated_at').notNull()
+})
+
+export const operationLogs = sqliteTable('operation_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  category: text('category').$type<OperationLog['category']>().notNull(),
+  action: text('action').notNull(),
+  level: text('level').$type<OperationLog['level']>().notNull(),
+  resourceType: text('resource_type'),
+  resourceId: text('resource_id'),
+  hostname: text('hostname'),
+  message: text('message').notNull(),
+  detailsJson: text('details_json'),
+  createdAt: text('created_at').notNull()
+})
+
+export const documentMoveOperations = sqliteTable('document_move_operations', {
+  operationId: text('operation_id').primaryKey(),
+  requestHash: text('request_hash').notNull(),
+  targetSourceId: text('target_source_id').notNull(),
+  movedCount: integer('moved_count').notNull(),
+  deletedSourceIdsJson: text('deleted_source_ids_json').notNull(),
+  createdAt: text('created_at').notNull()
 })
 
 export const interactionPreferences = sqliteTable(

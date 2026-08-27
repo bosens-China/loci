@@ -10,6 +10,7 @@ export interface AppSettings {
   browserConcurrency: number
   maxRetries: number
   batchIntervalSeconds: number
+  batchIntervalMaxSeconds: number
   serverUrl: string
   githubArchiveLimitMb: number
   githubMarkdownLimitMb: number
@@ -88,6 +89,15 @@ export interface CloudLibrary extends CloudLibraryInput {
   publishedAt: string | null
 }
 
+export interface CloudLibraryPublishResult {
+  library: CloudLibrary
+  revision: string
+  publishedAt: string
+  pages: number
+  contentSize: number
+  reused: boolean
+}
+
 export interface CloudCatalogItem {
   id: string
   name: string
@@ -115,8 +125,17 @@ export type CloudSyncJobStatus =
 export interface CloudSyncJob {
   id: string
   libraryId: string
+  hostname: string
   status: CloudSyncJobStatus
+  priority: number
+  paused: boolean
+  pauseRequested: boolean
+  stopRequested: boolean
+  partial: boolean
+  contentBytes: number
+  remainingCount: number
   createdAt: string
+  updatedAt: string
   finishedAt: string | null
   progress: CrawlProgress | null
   failures: CrawlFailure[]
@@ -132,10 +151,22 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   browserConcurrency: 5,
   maxRetries: 3,
   batchIntervalSeconds: 0,
+  batchIntervalMaxSeconds: 0,
   serverUrl: PRODUCTION_SERVER_URL,
   githubArchiveLimitMb: 200,
   githubMarkdownLimitMb: 100
 }
+
+export interface HostnameCrawlPolicy {
+  hostname: string
+  httpConcurrency: number | null
+  browserConcurrency: number | null
+  batchIntervalMinSeconds: number | null
+  batchIntervalMaxSeconds: number | null
+  updatedAt: string
+}
+
+export type SaveHostnameCrawlPolicyInput = Omit<HostnameCrawlPolicy, 'updatedAt'>
 
 export type SourceStatus = 'healthy' | 'syncing' | 'attention'
 export type SourceKind = 'web' | 'github'
@@ -246,8 +277,16 @@ export interface LocalJob {
   kind: LocalJobKind
   resourceKey: string
   sourceId: string
+  hostname: string
   trigger: LocalJobTrigger
   status: LocalJobStatus
+  priority: number
+  paused: boolean
+  pauseRequested: boolean
+  stopRequested: boolean
+  partial: boolean
+  contentBytes: number
+  remainingCount: number
   scheduledAt: string
   startedAt: string | null
   finishedAt: string | null
@@ -280,6 +319,30 @@ export interface LocalJobEvent {
   createdAt: string
 }
 
+export type OperationLogLevel = 'info' | 'warning' | 'error'
+
+/** 跨 UI、CLI、MCP、worker 的结构化操作记录。 */
+export interface OperationLog {
+  id: number
+  category: 'task' | 'library' | 'settings' | 'cloud' | 'maintenance' | 'system'
+  action: string
+  level: OperationLogLevel
+  resourceType: string | null
+  resourceId: string | null
+  hostname: string | null
+  message: string
+  details: Record<string, unknown> | null
+  createdAt: string
+}
+
+export type CreateOperationLogInput = Pick<
+  OperationLog,
+  'category' | 'action' | 'level' | 'message'
+> &
+  Partial<Pick<OperationLog, 'resourceType' | 'resourceId' | 'hostname' | 'details'>> & {
+    createdAt?: string
+  }
+
 export interface CreateSourceResult {
   source: DocumentSource
   sync: EnqueueLocalJobResult | null
@@ -299,4 +362,23 @@ export interface DocumentSummary {
 
 export interface DocumentRecord extends DocumentSummary {
   content: string
+}
+
+/** 本地与云端渐进浏览共用的轻量文件契约。 */
+export interface LibraryFileSummary {
+  id: string
+  libraryId: string
+  title: string
+  url: string
+  path: string
+  language: string
+  updatedAt: string
+}
+
+export interface LibraryFileRecord extends LibraryFileSummary {
+  content: string
+  offset: number
+  nextOffset?: number
+  totalChars: number
+  truncated: boolean
 }

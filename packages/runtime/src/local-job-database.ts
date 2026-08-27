@@ -5,11 +5,34 @@ import {
   type CrawlProgress,
   type EnqueueLocalJobResult,
   type LocalJob,
-  type LocalJobKind,
-  type LocalJobStatus,
   type LocalJobTrigger
 } from '@loci/shared'
 import { addColumn, withImmediateTransaction } from './sqlite.js'
+import {
+  releaseCancelledOrPendingJob,
+  requestLocalJobCancellation
+} from './local-job-cancellation.js'
+import {
+  LOCAL_JOB_QUERY,
+  type LocalJobRow,
+  checkpointLocalJob,
+  completePartialLocalJob,
+  finishLocalJob,
+  initializeLocalJobControlColumns,
+  pauseLocalJob,
+  pauseLocalJobs,
+  promoteHostnameJob,
+  recoverExpiredJobs,
+  readLocalJobResumeUrls,
+  releasePausedLocalJob,
+  resumeLocalJob,
+  resumeLocalJobs,
+  setLocalJobPriority,
+  stopLocalJob,
+  toLocalJob
+} from './local-job-record.js'
+
+export { finishLocalJob } from './local-job-record.js'
 
 export type {
   EnqueueLocalJobResult,
@@ -23,7 +46,8 @@ export interface LocalJobDatabase {
   enqueueSourceSync: (
     sourceId: string,
     trigger: LocalJobTrigger,
-    scheduledAt?: Date
+    scheduledAt?: Date,
+    options?: { deleteSourceOnCancel?: boolean }
   ) => EnqueueLocalJobResult
   refreshSourceSchedules: (now?: Date) => void
   enqueueDueSourceSchedules: (now?: Date) => EnqueueLocalJobResult[]
@@ -33,6 +57,27 @@ export interface LocalJobDatabase {
   failLocalJob: (id: string, owner: string, error: string) => boolean
   releaseLocalJob: (id: string, owner: string, reason: string) => boolean
   requestLocalJobCancellation: (id: string) => LocalJob | undefined
+  requestLocalJobPause: (id: string) => LocalJob | undefined
+  resumeLocalJob: (id: string) => LocalJob | undefined
+  pauseLocalJobs: (hostname?: string) => number
+  resumeLocalJobs: (hostname?: string) => number
+  requestLocalJobStop: (id: string) => LocalJob | undefined
+  setLocalJobPriority: (id: string, priority: number) => LocalJob | undefined
+  releasePausedLocalJob: (id: string, owner: string) => boolean
+  completePartialLocalJob: (
+    id: string,
+    owner: string,
+    result: CrawlProgress,
+    contentBytes: number
+  ) => boolean
+  checkpointLocalJob: (
+    id: string,
+    owner: string,
+    progress: CrawlProgress,
+    pendingUrls: readonly string[],
+    contentBytes: number
+  ) => boolean
+  getLocalJobResumeUrls: (id: string) => string[]
   getLocalJob: (id: string) => LocalJob | undefined
   listLocalJobs: (limit?: number) => LocalJob[]
 }
@@ -56,6 +101,14 @@ export function initializeLocalJobDatabase(database: DatabaseSync): void {
       cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK (cancel_requested IN (0, 1)),
       error_message TEXT,
       result_json TEXT,
+      priority INTEGER NOT NULL DEFAULT 0,
+      paused INTEGER NOT NULL DEFAULT 0 CHECK (paused IN (0, 1)),
+      pause_requested INTEGER NOT NULL DEFAULT 0 CHECK (pause_requested IN (0, 1)),
+      stop_requested INTEGER NOT NULL DEFAULT 0 CHECK (stop_requested IN (0, 1)),
+      partial INTEGER NOT NULL DEFAULT 0 CHECK (partial IN (0, 1)),
+      content_bytes INTEGER NOT NULL DEFAULT 0,
+      resume_urls_json TEXT,
+      delete_source_on_cancel INTEGER NOT NULL DEFAULT 0 CHECK (delete_source_on_cancel IN (0, 1)),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     ) STRICT;
@@ -75,11 +128,12 @@ export function initializeLocalJobDatabase(database: DatabaseSync): void {
     ) STRICT;
   `)
   addColumn(database, 'local_jobs', 'result_json', 'TEXT')
+  initializeLocalJobControlColumns(database)
 }
 
 export function createLocalJobDatabase(database: DatabaseSync): LocalJobDatabase {
   const getLocalJob = (id: string): LocalJob | undefined => {
-    const row = database.prepare(`${jobQuery} WHERE id = ?`).get(id) as unknown as
+    const row = database.prepare(`${LOCAL_JOB_QUERY} WHERE job.id = ?`).get(id) as unknown as
       LocalJobRow | undefined
     return row ? toLocalJob(row) : undefined
   }
@@ -87,10 +141,11 @@ export function createLocalJobDatabase(database: DatabaseSync): LocalJobDatabase
   const enqueueSourceSync = (
     sourceId: string,
     trigger: LocalJobTrigger,
-    scheduledAt = new Date()
+    scheduledAt = new Date(),
+    options?: { deleteSourceOnCancel?: boolean }
   ): EnqueueLocalJobResult =>
     withImmediateTransaction(database, () =>
-      enqueueSourceSyncInTransaction(database, sourceId, trigger, scheduledAt)
+      enqueueSourceSyncInTransaction(database, sourceId, trigger, scheduledAt, options)
     )
 
   return {
@@ -164,8 +219,15 @@ export function createLocalJobDatabase(database: DatabaseSync): LocalJobDatabase
         recoverExpiredJobs(database, now)
         const row = database
           .prepare(
-            `${jobQuery} WHERE status = 'pending' AND cancel_requested = 0 AND scheduled_at <= ?
-             ORDER BY scheduled_at, created_at LIMIT 1`
+            `${LOCAL_JOB_QUERY} WHERE job.status = 'pending' AND job.cancel_requested = 0
+             AND job.paused = 0 AND job.pause_requested = 0 AND job.stop_requested = 0
+             AND job.scheduled_at <= ?
+             AND NOT EXISTS (
+               SELECT 1 FROM local_jobs AS active_job
+               JOIN document_sources AS active_source ON active_source.id = active_job.source_id
+               WHERE active_job.status = 'running' AND active_source.hostname = source.hostname
+             )
+             ORDER BY job.priority DESC, job.scheduled_at, job.created_at LIMIT 1`
           )
           .get(now.toISOString()) as unknown as LocalJobRow | undefined
         if (!row) return undefined
@@ -204,44 +266,28 @@ export function createLocalJobDatabase(database: DatabaseSync): LocalJobDatabase
     completeLocalJob: (id, owner, result) =>
       finishLocalJob(database, id, owner, 'completed', null, result),
     failLocalJob: (id, owner, error) => finishLocalJob(database, id, owner, 'failed', error, null),
-    releaseLocalJob: (id, owner, reason) => {
-      const now = new Date().toISOString()
-      return (
-        database
-          .prepare(
-            `UPDATE local_jobs SET
-               status = CASE WHEN cancel_requested = 1 THEN 'cancelled' ELSE 'pending' END,
-               scheduled_at = ?,
-               finished_at = CASE WHEN cancel_requested = 1 THEN ? ELSE NULL END,
-               lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
-               error_message = CASE WHEN cancel_requested = 1 THEN '任务已取消' ELSE ? END,
-               result_json = NULL, updated_at = ?
-             WHERE id = ? AND status = 'running' AND lease_owner = ?`
-          )
-          .run(now, now, reason, now, id, owner).changes === 1
-      )
-    },
-    requestLocalJobCancellation: (id) => {
-      const now = new Date().toISOString()
-      database
-        .prepare(
-          `UPDATE local_jobs SET
-             cancel_requested = 1,
-             status = CASE WHEN status = 'pending' THEN 'cancelled' ELSE status END,
-             finished_at = CASE WHEN status = 'pending' THEN ? ELSE finished_at END,
-             error_message = CASE WHEN status = 'pending' THEN '任务已取消' ELSE NULL END,
-             result_json = NULL,
-             updated_at = ?
-           WHERE id = ? AND status IN ('pending', 'running')`
-        )
-        .run(now, now, id)
-      return getLocalJob(id)
-    },
+    releaseLocalJob: (id, owner, reason) =>
+      releaseCancelledOrPendingJob(database, id, owner, reason),
+    requestLocalJobCancellation: (id) => requestLocalJobCancellation(database, id, getLocalJob),
+    requestLocalJobPause: (id) => pauseLocalJob(database, id, getLocalJob),
+    resumeLocalJob: (id) => resumeLocalJob(database, id, getLocalJob),
+    pauseLocalJobs: (hostname) =>
+      withImmediateTransaction(database, () => pauseLocalJobs(database, hostname)),
+    resumeLocalJobs: (hostname) =>
+      withImmediateTransaction(database, () => resumeLocalJobs(database, hostname)),
+    requestLocalJobStop: (id) => stopLocalJob(database, id, getLocalJob),
+    setLocalJobPriority: (id, priority) => setLocalJobPriority(database, id, priority, getLocalJob),
+    releasePausedLocalJob: (id, owner) => releasePausedLocalJob(database, id, owner),
+    completePartialLocalJob: (id, owner, result, contentBytes) =>
+      completePartialLocalJob(database, id, owner, result, contentBytes),
+    checkpointLocalJob: (id, owner, progress, pendingUrls, contentBytes) =>
+      checkpointLocalJob(database, id, owner, progress, pendingUrls, contentBytes),
+    getLocalJobResumeUrls: (id) => readLocalJobResumeUrls(database, id),
     getLocalJob,
     listLocalJobs: (limit = 100) => {
       const safeLimit = Math.max(1, Math.min(500, Math.trunc(limit)))
       const rows = database
-        .prepare(`${jobQuery} ORDER BY created_at DESC LIMIT ?`)
+        .prepare(`${LOCAL_JOB_QUERY} ORDER BY job.created_at DESC LIMIT ?`)
         .all(safeLimit) as unknown as LocalJobRow[]
       return rows.map(toLocalJob)
     }
@@ -252,144 +298,60 @@ function enqueueSourceSyncInTransaction(
   database: DatabaseSync,
   sourceId: string,
   trigger: LocalJobTrigger,
-  scheduledAt: Date
+  scheduledAt: Date,
+  options?: { deleteSourceOnCancel?: boolean }
 ): EnqueueLocalJobResult {
   const resourceKey = `source:${sourceId}`
   const existing = database
     .prepare(
-      `${jobQuery} WHERE kind = 'source_sync' AND resource_key = ?
-       AND status IN ('pending', 'running') LIMIT 1`
+      `${LOCAL_JOB_QUERY} WHERE job.kind = 'source_sync' AND job.resource_key = ?
+       AND job.status IN ('pending', 'running') LIMIT 1`
     )
     .get(resourceKey) as unknown as LocalJobRow | undefined
-  if (existing) return { job: toLocalJob(existing), reused: true }
+  if (existing) {
+    if (trigger === 'ui') promoteHostnameJob(database, existing.id, sourceId, scheduledAt)
+    const current = database
+      .prepare(`${LOCAL_JOB_QUERY} WHERE job.id = ?`)
+      .get(existing.id) as unknown as LocalJobRow
+    return { job: toLocalJob(current), reused: true }
+  }
   const id = randomUUID()
   const now = new Date().toISOString()
+  const previous = database
+    .prepare(
+      `SELECT partial, resume_urls_json FROM local_jobs
+       WHERE source_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(sourceId) as unknown as { partial: number; resume_urls_json: string | null } | undefined
+  const resumeUrls = previous?.partial ? previous.resume_urls_json : null
   database
     .prepare(
       `INSERT INTO local_jobs
-       (id, kind, resource_key, source_id, trigger, status, scheduled_at, created_at, updated_at)
-       VALUES (?, 'source_sync', ?, ?, ?, 'pending', ?, ?, ?)`
+       (id, kind, resource_key, source_id, trigger, status, priority, scheduled_at,
+        resume_urls_json, delete_source_on_cancel, created_at, updated_at)
+       VALUES (?, 'source_sync', ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`
     )
-    .run(id, resourceKey, sourceId, trigger, scheduledAt.toISOString(), now, now)
-  const row = database.prepare(`${jobQuery} WHERE id = ?`).get(id) as unknown as LocalJobRow
+    .run(
+      id,
+      resourceKey,
+      sourceId,
+      trigger,
+      trigger === 'ui' ? 100 : 0,
+      scheduledAt.toISOString(),
+      resumeUrls,
+      options?.deleteSourceOnCancel ? 1 : 0,
+      now,
+      now
+    )
+  if (trigger === 'ui') promoteHostnameJob(database, id, sourceId, scheduledAt)
+  const row = database
+    .prepare(`${LOCAL_JOB_QUERY} WHERE job.id = ?`)
+    .get(id) as unknown as LocalJobRow
   return { job: toLocalJob(row), reused: false }
-}
-
-function recoverExpiredJobs(database: DatabaseSync, now: Date): void {
-  const timestamp = now.toISOString()
-  database
-    .prepare(
-      `UPDATE local_jobs SET status = 'cancelled', finished_at = ?, lease_owner = NULL,
-         lease_expires_at = NULL, heartbeat_at = NULL, error_message = '任务已取消',
-         result_json = NULL, updated_at = ?
-       WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested = 1`
-    )
-    .run(timestamp, timestamp, timestamp)
-  database
-    .prepare(
-      `UPDATE local_jobs SET status = 'pending', lease_owner = NULL, lease_expires_at = NULL,
-         heartbeat_at = NULL, finished_at = NULL,
-         error_message = '上一次执行进程已退出，任务等待重试',
-         result_json = NULL, updated_at = ?
-       WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested = 0
-         AND attempt_count < 3`
-    )
-    .run(timestamp, timestamp)
-  database
-    .prepare(
-      `UPDATE local_jobs SET status = 'failed', finished_at = ?, lease_owner = NULL,
-         lease_expires_at = NULL, heartbeat_at = NULL,
-         error_message = '后台任务连续中断，已停止自动重试',
-         result_json = NULL, updated_at = ?
-       WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested = 0
-         AND attempt_count >= 3`
-    )
-    .run(timestamp, timestamp, timestamp)
-}
-
-export function finishLocalJob(
-  database: DatabaseSync,
-  id: string,
-  owner: string,
-  status: 'completed' | 'failed',
-  error: string | null,
-  result: CrawlProgress | null
-): boolean {
-  const now = new Date().toISOString()
-  return (
-    database
-      .prepare(
-        `UPDATE local_jobs SET status = CASE WHEN cancel_requested = 1 THEN 'cancelled' ELSE ? END,
-           finished_at = ?, lease_owner = NULL, lease_expires_at = NULL,
-           error_message = CASE WHEN cancel_requested = 1 THEN '任务已取消' ELSE ? END,
-           result_json = CASE WHEN cancel_requested = 1 THEN NULL ELSE ? END, updated_at = ?
-         WHERE id = ? AND status = 'running' AND lease_owner = ?`
-      )
-      .run(status, now, error, result ? JSON.stringify(result) : null, now, id, owner).changes === 1
-  )
 }
 
 function nextRun(schedule: string, after: Date): Date {
   const next = getUpcomingScheduleRuns(schedule, 1, after)[0]
   if (!next) throw new Error(`计划“${schedule}”没有下一次执行时间`)
   return next
-}
-
-const jobQuery = `
-  SELECT id, kind, resource_key, source_id, trigger, status, scheduled_at, started_at,
-    finished_at, lease_owner, lease_expires_at, heartbeat_at, attempt_count,
-    cancel_requested, error_message, result_json, created_at, updated_at
-  FROM local_jobs`
-
-interface LocalJobRow {
-  id: string
-  kind: LocalJobKind
-  resource_key: string
-  source_id: string
-  trigger: LocalJobTrigger
-  status: LocalJobStatus
-  scheduled_at: string
-  started_at: string | null
-  finished_at: string | null
-  lease_owner: string | null
-  lease_expires_at: string | null
-  heartbeat_at: string | null
-  attempt_count: number
-  cancel_requested: number
-  error_message: string | null
-  result_json: string | null
-  created_at: string
-  updated_at: string
-}
-
-function toLocalJob(row: LocalJobRow): LocalJob {
-  return {
-    id: row.id,
-    kind: row.kind,
-    resourceKey: row.resource_key,
-    sourceId: row.source_id,
-    trigger: row.trigger,
-    status: row.status,
-    scheduledAt: row.scheduled_at,
-    startedAt: row.started_at,
-    finishedAt: row.finished_at,
-    leaseOwner: row.lease_owner,
-    leaseExpiresAt: row.lease_expires_at,
-    heartbeatAt: row.heartbeat_at,
-    attemptCount: Number(row.attempt_count),
-    cancelRequested: Boolean(row.cancel_requested),
-    error: row.error_message,
-    result: parseJobResult(row.result_json),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  }
-}
-
-function parseJobResult(value: string | null): CrawlProgress | null {
-  if (!value) return null
-  try {
-    return JSON.parse(value) as CrawlProgress
-  } catch {
-    return null
-  }
 }

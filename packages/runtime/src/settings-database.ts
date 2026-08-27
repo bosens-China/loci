@@ -31,9 +31,9 @@ export function initializeSettings(
     .prepare(
       `INSERT OR IGNORE INTO app_settings
        (id, theme, http_concurrency, browser_concurrency, max_retries,
-        batch_interval_seconds, server_url, server_url_customized, github_archive_limit_mb,
+        batch_interval_seconds, batch_interval_max_seconds, server_url, server_url_customized, github_archive_limit_mb,
         github_markdown_limit_mb)
-       VALUES (1, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
     )
     .run(
       DEFAULT_APP_SETTINGS.theme,
@@ -41,6 +41,7 @@ export function initializeSettings(
       DEFAULT_APP_SETTINGS.browserConcurrency,
       DEFAULT_APP_SETTINGS.maxRetries,
       DEFAULT_APP_SETTINGS.batchIntervalSeconds,
+      DEFAULT_APP_SETTINGS.batchIntervalMaxSeconds,
       serverUrl,
       DEFAULT_APP_SETTINGS.githubArchiveLimitMb,
       DEFAULT_APP_SETTINGS.githubMarkdownLimitMb
@@ -68,6 +69,7 @@ export function createSettingsDatabase(
           browserConcurrency: appSettings.browserConcurrency,
           maxRetries: appSettings.maxRetries,
           batchIntervalSeconds: appSettings.batchIntervalSeconds,
+          batchIntervalMaxSeconds: appSettings.batchIntervalMaxSeconds,
           serverUrl: appSettings.serverUrl,
           githubArchiveLimitMb: appSettings.githubArchiveLimitMb,
           githubMarkdownLimitMb: appSettings.githubMarkdownLimitMb
@@ -82,6 +84,7 @@ export function createSettingsDatabase(
         browserConcurrency: row.browserConcurrency,
         maxRetries: row.maxRetries,
         batchIntervalSeconds: row.batchIntervalSeconds,
+        batchIntervalMaxSeconds: row.batchIntervalMaxSeconds,
         serverUrl: serverUrlOverride ?? row.serverUrl,
         githubArchiveLimitMb: row.githubArchiveLimitMb,
         githubMarkdownLimitMb: row.githubMarkdownLimitMb
@@ -105,6 +108,7 @@ export function createSettingsDatabase(
           browserConcurrency: normalized.browserConcurrency,
           maxRetries: normalized.maxRetries,
           batchIntervalSeconds: normalized.batchIntervalSeconds,
+          batchIntervalMaxSeconds: normalized.batchIntervalMaxSeconds,
           githubArchiveLimitMb: normalized.githubArchiveLimitMb,
           githubMarkdownLimitMb: normalized.githubMarkdownLimitMb,
           serverUrlCustomized: sql`CASE WHEN ${appSettings.serverUrl} = ${persistedServerUrl} THEN ${appSettings.serverUrlCustomized} ELSE 1 END`,

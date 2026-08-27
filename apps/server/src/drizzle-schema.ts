@@ -58,5 +58,34 @@ export const syncJobs = sqliteTable('sync_jobs', {
       | 'completed_with_errors'
       | 'failed'
     >()
+    .notNull(),
+  priority: integer('priority').notNull(),
+  paused: integer('paused', { mode: 'boolean' }).notNull(),
+  pauseRequested: integer('pause_requested', { mode: 'boolean' }).notNull(),
+  stopRequested: integer('stop_requested', { mode: 'boolean' }).notNull(),
+  partial: integer('partial', { mode: 'boolean' }).notNull(),
+  contentBytes: integer('content_bytes').notNull(),
+  remainingUrlsJson: text('remaining_urls_json'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  finishedAt: text('finished_at')
+})
+
+export const hostnameCrawlPolicies = sqliteTable('hostname_crawl_policies', {
+  hostname: text('hostname').primaryKey(),
+  httpConcurrency: integer('http_concurrency'),
+  browserConcurrency: integer('browser_concurrency'),
+  batchIntervalMinSeconds: integer('batch_interval_min_seconds'),
+  batchIntervalMaxSeconds: integer('batch_interval_max_seconds'),
+  updatedAt: text('updated_at').notNull()
+})
+
+export const publishRequests = sqliteTable('publish_requests', {
+  publishId: text('publish_id').primaryKey(),
+  checksum: text('checksum').notNull(),
+  libraryId: text('library_id')
     .notNull()
+    .references(() => libraries.id, { onDelete: 'cascade' }),
+  revision: text('revision').notNull(),
+  createdAt: text('created_at').notNull()
 })

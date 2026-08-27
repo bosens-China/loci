@@ -55,6 +55,13 @@ const schema = `
     progress_json TEXT,
     failures_json TEXT NOT NULL DEFAULT '[]',
     error_message TEXT,
+    priority INTEGER NOT NULL DEFAULT 0,
+    paused INTEGER NOT NULL DEFAULT 0 CHECK (paused IN (0, 1)),
+    pause_requested INTEGER NOT NULL DEFAULT 0 CHECK (pause_requested IN (0, 1)),
+    stop_requested INTEGER NOT NULL DEFAULT 0 CHECK (stop_requested IN (0, 1)),
+    partial INTEGER NOT NULL DEFAULT 0 CHECK (partial IN (0, 1)),
+    content_bytes INTEGER NOT NULL DEFAULT 0,
+    remaining_urls_json TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     finished_at TEXT
@@ -63,6 +70,23 @@ const schema = `
   CREATE UNIQUE INDEX IF NOT EXISTS sync_jobs_active_library
     ON sync_jobs(library_id)
     WHERE status IN ('queued', 'running', 'canceling');
+
+  CREATE TABLE IF NOT EXISTS hostname_crawl_policies (
+    hostname TEXT PRIMARY KEY,
+    http_concurrency INTEGER,
+    browser_concurrency INTEGER,
+    batch_interval_min_seconds INTEGER,
+    batch_interval_max_seconds INTEGER,
+    updated_at TEXT NOT NULL
+  ) STRICT;
+
+  CREATE TABLE IF NOT EXISTS publish_requests (
+    publish_id TEXT PRIMARY KEY,
+    checksum TEXT NOT NULL,
+    library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+    revision TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  ) STRICT;
 `
 
 /** 初始化当前结构，并兼容迁移只有 hostname 唯一约束的旧版数据库。 */
@@ -73,6 +97,13 @@ export function initializeServerDatabase(database: DatabaseSync): void {
   addColumn(database, 'libraries', 'github_blocked_revision', 'TEXT')
   addColumn(database, 'libraries', 'github_blocked_limit_kind', 'TEXT')
   addColumn(database, 'libraries', 'github_blocked_limit_bytes', 'INTEGER')
+  addColumn(database, 'sync_jobs', 'priority', 'INTEGER NOT NULL DEFAULT 0')
+  addColumn(database, 'sync_jobs', 'paused', 'INTEGER NOT NULL DEFAULT 0')
+  addColumn(database, 'sync_jobs', 'pause_requested', 'INTEGER NOT NULL DEFAULT 0')
+  addColumn(database, 'sync_jobs', 'stop_requested', 'INTEGER NOT NULL DEFAULT 0')
+  addColumn(database, 'sync_jobs', 'partial', 'INTEGER NOT NULL DEFAULT 0')
+  addColumn(database, 'sync_jobs', 'content_bytes', 'INTEGER NOT NULL DEFAULT 0')
+  addColumn(database, 'sync_jobs', 'remaining_urls_json', 'TEXT')
   const columns = database.prepare('PRAGMA table_info(libraries)').all() as unknown as Array<{
     name: string
   }>

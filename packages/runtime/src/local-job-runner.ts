@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { LocalJob } from './local-job-database.js'
 import type { BrowserInstallPrompt } from './browser-crawler.js'
 import type { LocalRuntime } from './local-runtime.js'
+import { LocalJobControlError } from './local-job-control.js'
 import { RuntimeLockedError } from './runtime-lock.js'
 
 export interface LocalJobRunnerOptions {
@@ -77,12 +78,16 @@ export function createLocalJobRunner(
             controller.signal,
             { id: job.id, owner }
           )
-          runtime.database.completeLocalJob(job.id, owner, result)
+          if (runtime.database.getLocalJob(job.id)?.status === 'running') {
+            runtime.database.completeLocalJob(job.id, owner, result)
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : '后台任务执行失败'
         const current = runtime.database.getLocalJob(job.id)
-        if (current?.cancelRequested) runtime.database.failLocalJob(job.id, owner, message)
+        if (error instanceof LocalJobControlError && error.action === 'pause') {
+          runtime.database.releasePausedLocalJob(job.id, owner)
+        } else if (current?.cancelRequested) runtime.database.failLocalJob(job.id, owner, message)
         else if (stopping)
           runtime.database.releaseLocalJob(job.id, owner, '后台服务正在停止，任务等待恢复')
         else if (error instanceof RuntimeLockedError)

@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import { getRouteApi } from '@tanstack/react-router'
+import { canonicalDocumentSearch } from '@/routing'
 
 export interface DocumentRouteState {
   sourceId: string
   documentId: string
   query: string
 }
+
+const documentsRoute = getRouteApi('/documents')
 
 /** 文档工作区的 URL 状态：来源、当前文档、搜索词。 */
 export function useDocumentRoute(): {
@@ -13,30 +17,40 @@ export function useDocumentRoute(): {
   selectDocument: (documentId: string) => void
   setQuery: (query: string) => void
 } {
-  const [state, setState] = useState(readDocumentRoute)
+  const search = documentsRoute.useSearch()
+  const navigate = documentsRoute.useNavigate()
+  const state = {
+    sourceId: search.source ?? '',
+    documentId: search.doc ?? search.document ?? '',
+    query: search.q ?? ''
+  }
   const rememberedDocuments = useRef(new Map<string, string>())
-  useEffect(() => {
-    const update = (): void => setState(readDocumentRoute())
-    window.addEventListener('popstate', update)
-    return () => window.removeEventListener('popstate', update)
-  }, [])
   useEffect(() => {
     if (state.sourceId && state.documentId)
       rememberedDocuments.current.set(state.sourceId, state.documentId)
   }, [state.documentId, state.sourceId])
-  const write = useCallback((next: Partial<DocumentRouteState>) => {
-    const url = new URL(window.location.href)
-    url.pathname = '/documents'
-    const merged = { ...readDocumentRoute(), ...next }
-    if (merged.sourceId) url.searchParams.set('source', merged.sourceId)
-    else url.searchParams.delete('source')
-    if (merged.documentId) url.searchParams.set('doc', merged.documentId)
-    else url.searchParams.delete('doc')
-    if (merged.query) url.searchParams.set('q', merged.query)
-    else url.searchParams.delete('q')
-    window.history.replaceState({}, '', url)
-    setState(readDocumentRoute())
-  }, [])
+  const write = useCallback(
+    (next: Partial<DocumentRouteState>) => {
+      void navigate({
+        search: (previous) => {
+          const merged = {
+            sourceId: previous.source ?? '',
+            documentId: previous.doc ?? previous.document ?? '',
+            query: previous.q ?? '',
+            ...next
+          }
+          return canonicalDocumentSearch({
+            source: merged.sourceId,
+            doc: merged.documentId,
+            q: merged.query
+          })
+        },
+        replace: true,
+        resetScroll: false
+      })
+    },
+    [navigate]
+  )
   const selectSource = useCallback(
     (sourceId: string) =>
       write({ sourceId, documentId: rememberedDocuments.current.get(sourceId) ?? '' }),
@@ -50,26 +64,4 @@ export function useDocumentRoute(): {
     selectDocument,
     setQuery
   }
-}
-
-function readDocumentRoute(): DocumentRouteState {
-  const params = new URLSearchParams(window.location.search)
-  return {
-    sourceId: params.get('source') ?? '',
-    documentId: params.get('doc') ?? params.get('document') ?? '',
-    query: params.get('q') ?? ''
-  }
-}
-
-/** 从旧 /library、/sources 链接迁移 query 参数。 */
-export function migrateLegacyDocumentPath(pathname: string): void {
-  if (pathname !== '/library' && pathname !== '/sources') return
-  const url = new URL(window.location.href)
-  url.pathname = '/documents'
-  const legacyDoc = url.searchParams.get('document')
-  if (legacyDoc && !url.searchParams.get('doc')) {
-    url.searchParams.set('doc', legacyDoc)
-    url.searchParams.delete('document')
-  }
-  window.history.replaceState({}, '', url)
 }

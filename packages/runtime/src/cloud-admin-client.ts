@@ -5,7 +5,10 @@ import type {
   CloudAdminSession,
   CloudLibrary,
   CloudLibraryInput,
-  CloudSyncJob
+  CloudLibraryPublishResult,
+  CloudSyncJob,
+  HostnameCrawlPolicy,
+  SaveHostnameCrawlPolicyInput
 } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
 
@@ -28,6 +31,7 @@ const librarySchema = z.object({
 const syncJobSchema = z.object({
   id: z.string(),
   libraryId: z.string(),
+  hostname: z.string(),
   status: z.enum([
     'queued',
     'running',
@@ -37,7 +41,15 @@ const syncJobSchema = z.object({
     'completed_with_errors',
     'failed'
   ]),
+  priority: z.number().int(),
+  paused: z.boolean(),
+  pauseRequested: z.boolean(),
+  stopRequested: z.boolean(),
+  partial: z.boolean(),
+  contentBytes: z.number().int().nonnegative(),
+  remainingCount: z.number().int().nonnegative(),
   createdAt: z.string(),
+  updatedAt: z.string(),
   finishedAt: z.string().nullable(),
   progress: z
     .object({
@@ -51,16 +63,40 @@ const syncJobSchema = z.object({
   failures: z.array(z.unknown()),
   error: z.string().nullable()
 })
+const hostnamePolicySchema = z.object({
+  hostname: z.string(),
+  httpConcurrency: z.number().int().nullable(),
+  browserConcurrency: z.number().int().nullable(),
+  batchIntervalMinSeconds: z.number().int().nullable(),
+  batchIntervalMaxSeconds: z.number().int().nullable(),
+  updatedAt: z.string()
+})
+const publishResultSchema = z.object({
+  library: librarySchema,
+  revision: z.string(),
+  publishedAt: z.string(),
+  pages: z.number().int().nonnegative(),
+  contentSize: z.number().int().nonnegative(),
+  reused: z.boolean()
+})
 
 interface PrivateSession extends CloudAdminSession {
   token: string
+}
+
+export interface CloudAdminMutation {
+  method: string
+  path: string
 }
 
 /** 云端令牌只保存在 Runtime 内存中，CLI 与 Web 只能读取脱敏会话。 */
 export class CloudAdminClient {
   private session: PrivateSession | null = null
 
-  constructor(private readonly fetcher: typeof fetch = fetch) {}
+  constructor(
+    private readonly fetcher: typeof fetch = fetch,
+    private readonly onMutation?: (mutation: CloudAdminMutation) => void
+  ) {}
 
   async login(serverUrlInput: string, input: CloudAdminLoginInput): Promise<CloudAdminSession> {
     const serverUrl = normalizeServerUrl(serverUrlInput)
@@ -160,12 +196,75 @@ export class CloudAdminClient {
   }
 
   async cancelSyncJob(id: string): Promise<CloudSyncJob> {
+    return this.controlSyncJob(id, 'cancel')
+  }
+
+  async controlSyncJob(
+    id: string,
+    action: 'pause' | 'resume' | 'stop' | 'cancel'
+  ): Promise<CloudSyncJob> {
     const result = z.object({ job: syncJobSchema }).parse(
-      await this.authRequest(`/api/v1/admin/jobs/${encodeURIComponent(id)}/cancel`, {
+      await this.authRequest(`/api/v1/admin/jobs/${encodeURIComponent(id)}/${action}`, {
         method: 'POST'
       })
     )
     return result.job as CloudSyncJob
+  }
+
+  async setSyncJobPriority(id: string, priority: number): Promise<CloudSyncJob> {
+    const result = z.object({ job: syncJobSchema }).parse(
+      await this.authRequest(`/api/v1/admin/jobs/${encodeURIComponent(id)}/priority`, {
+        method: 'PUT',
+        body: JSON.stringify({ priority })
+      })
+    )
+    return result.job as CloudSyncJob
+  }
+
+  async controlSyncJobs(action: 'pause-all' | 'resume-all', hostname?: string): Promise<number> {
+    const result = z.object({ changed: z.number().int().nonnegative() }).parse(
+      await this.authRequest(`/api/v1/admin/jobs/${action}`, {
+        method: 'POST',
+        body: JSON.stringify(hostname ? { hostname } : {})
+      })
+    )
+    return result.changed
+  }
+
+  async listHostnamePolicies(): Promise<HostnameCrawlPolicy[]> {
+    const result = z
+      .object({ policies: z.array(hostnamePolicySchema) })
+      .parse(await this.authRequest('/api/v1/admin/hostname-policies'))
+    return result.policies
+  }
+
+  async saveHostnamePolicy(input: SaveHostnameCrawlPolicyInput): Promise<HostnameCrawlPolicy> {
+    const result = z
+      .object({ policy: hostnamePolicySchema })
+      .parse(
+        await this.authRequest(
+          `/api/v1/admin/hostname-policies/${encodeURIComponent(input.hostname)}`,
+          { method: 'PUT', body: JSON.stringify(input) }
+        )
+      )
+    return result.policy
+  }
+
+  async deleteHostnamePolicy(hostname: string): Promise<void> {
+    await this.authRequest(`/api/v1/admin/hostname-policies/${encodeURIComponent(hostname)}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async publishLibrary(archive: Buffer): Promise<CloudLibraryPublishResult> {
+    return publishResultSchema.parse(
+      await this.authRequest('/api/v1/admin/publish', {
+        method: 'POST',
+        body: new Uint8Array(archive),
+        headers: { 'Content-Type': 'application/zip' },
+        signal: AbortSignal.timeout(120_000)
+      })
+    )
   }
 
   private async authRequest(path: string, init: RequestInit = {}): Promise<unknown> {
@@ -182,19 +281,29 @@ export class CloudAdminClient {
   ): Promise<unknown> {
     let response: Response
     try {
+      const headers = new Headers(init.headers)
+      if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+      if (session) headers.set('Authorization', `Bearer ${session.token}`)
       response = await this.fetcher(`${serverUrl}${path}`, {
         ...init,
-        signal: AbortSignal.timeout(15_000),
-        headers: {
-          ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-          ...(session ? { Authorization: `Bearer ${session.token}` } : {})
-        }
+        signal: init.signal ?? AbortSignal.timeout(15_000),
+        headers
       })
     } catch {
       throw new Error('无法连接云端服务器，请检查地址和网络')
     }
     const body = response.status === 204 ? null : await response.json().catch(() => null)
-    if (response.ok) return body
+    if (response.ok) {
+      const method = init.method?.toUpperCase() ?? 'GET'
+      if (method !== 'GET') {
+        try {
+          this.onMutation?.({ method, path })
+        } catch {
+          // 云端操作已成功时，本地日志故障不能把成功响应改成失败。
+        }
+      }
+      return body
+    }
     if (response.status === 401 && session) this.session = null
     const parsed = errorResponseSchema.safeParse(body)
     throw new Error(parsed.success ? parsed.data.error : `服务器请求失败（${response.status}）`)

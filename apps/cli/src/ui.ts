@@ -1,6 +1,7 @@
 import * as p from '@clack/prompts'
 import { TextPrompt } from '@clack/core'
 import { styleText } from 'node:util'
+import type { UrlTreeNode } from '@loci/shared'
 import Table from 'cli-table3'
 import { CliCanceledError, CliError } from './errors.js'
 
@@ -95,6 +96,23 @@ export async function askConfirm(message: string, initialValue = false): Promise
   return unwrap(await p.confirm({ message, initialValue }))
 }
 
+export async function confirmAction(
+  message: string,
+  yes: boolean | undefined,
+  nonInteractiveMessage: string
+): Promise<boolean> {
+  if (yes) return true
+  requireYesInNonInteractive(yes, nonInteractiveMessage)
+  return askConfirm(message)
+}
+
+export function requireYesInNonInteractive(
+  yes: boolean | undefined,
+  nonInteractiveMessage: string
+): void {
+  if (!yes && !process.stdin.isTTY) throw new CliError(nonInteractiveMessage, 2)
+}
+
 export async function askSelect<T extends string>(
   message: string,
   options: ReadonlyArray<{ value: T; label: string; hint?: string }>,
@@ -176,6 +194,13 @@ export function printTable(
 
 export function printList(lines: readonly string[]): void {
   process.stdout.write(lines.map((line) => `• ${line}`).join('\n') + '\n')
+}
+
+export function printTree(nodes: readonly UrlTreeNode[], indent = '  '): void {
+  for (const node of nodes) {
+    process.stdout.write(`${indent}└─ ${node.title}${node.readable ? `  [${node.id}]` : ''}\n`)
+    printTree(node.children ?? [], `${indent}  `)
+  }
 }
 
 export function note(message: string, title?: string): void {

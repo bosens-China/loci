@@ -1,10 +1,13 @@
 import type {
   CloudCatalogItem,
+  CloudLibrary,
+  CloudSyncJob,
   CrawlFailure,
   CrawlProgress,
   CrawlRunState,
   DocumentRecord,
-  DocumentSource
+  DocumentSource,
+  LocalJob
 } from '@loci/shared'
 import type { LociMcpServices } from '../server.js'
 
@@ -56,6 +59,55 @@ export const completedProgress: CrawlProgress = {
 
 export const runId = 'run-vue-1'
 
+export const localJob: LocalJob = {
+  id: 'task-vue-1',
+  kind: 'source_sync',
+  resourceKey: `source_sync:${source.id}`,
+  sourceId: source.id,
+  hostname: 'cn.vuejs.org',
+  trigger: 'mcp',
+  status: 'pending',
+  priority: 0,
+  paused: false,
+  pauseRequested: false,
+  stopRequested: false,
+  partial: false,
+  contentBytes: 0,
+  remainingCount: 0,
+  scheduledAt: '2026-08-03T00:00:00.000Z',
+  startedAt: null,
+  finishedAt: null,
+  leaseOwner: null,
+  leaseExpiresAt: null,
+  heartbeatAt: null,
+  attemptCount: 0,
+  cancelRequested: false,
+  error: null,
+  result: null,
+  createdAt: '2026-08-03T00:00:00.000Z',
+  updatedAt: '2026-08-03T00:00:00.000Z'
+}
+
+export const serverJob: CloudSyncJob = {
+  id: 'server-task-1',
+  libraryId: 'server-library',
+  hostname: 'cn.vuejs.org',
+  status: 'queued',
+  priority: 0,
+  paused: false,
+  pauseRequested: false,
+  stopRequested: false,
+  partial: false,
+  contentBytes: 0,
+  remainingCount: 0,
+  createdAt: '2026-08-03T00:00:00.000Z',
+  updatedAt: '2026-08-03T00:00:00.000Z',
+  finishedAt: null,
+  progress: null,
+  failures: [],
+  error: null
+}
+
 export const crawlFailures: CrawlFailure[] = [
   {
     url: 'https://cn.vuejs.org/missing.md',
@@ -79,6 +131,21 @@ export const cloudLibrary: CloudCatalogItem = {
   localRevision: null,
   autoSync: false,
   updateAvailable: false
+}
+
+export const serverLibrary: CloudLibrary = {
+  id: 'server-library',
+  name: source.name,
+  url: source.url,
+  hostname: new URL(source.url).hostname,
+  scopePath: source.scopePath,
+  pageLimit: source.pageLimit,
+  schedule: null,
+  pages: source.pages,
+  lastCrawledAt: source.lastUpdated,
+  lastError: null,
+  revision: 'sha256:test',
+  publishedAt: '2026-08-27T00:00:00.000Z'
 }
 
 export function createServices(): LociMcpServices {
@@ -127,8 +194,73 @@ export function createServices(): LociMcpServices {
     getLatestCrawlRunId: () => runId,
     getCrawlRunLibraryId: (id) => (id === runId ? source.id : undefined),
     listCrawlFailures: (id) => (id === runId ? crawlFailures : []),
+    listLocalJobs: () => [localJob],
+    getLocalJob: (id) => (id === localJob.id ? localJob : undefined),
+    pauseLocalJob: (id) => (id === localJob.id ? { ...localJob, paused: true } : undefined),
+    resumeLocalJob: (id) => (id === localJob.id ? localJob : undefined),
+    stopLocalJob: (id) =>
+      id === localJob.id ? { ...localJob, status: 'completed', partial: true } : undefined,
+    cancelLocalJob: (id) =>
+      id === localJob.id ? { ...localJob, status: 'cancelled', cancelRequested: true } : undefined,
+    setLocalJobPriority: (id, priority) =>
+      id === localJob.id ? { ...localJob, priority } : undefined,
+    pauseLocalJobs: () => 1,
+    resumeLocalJobs: () => 1,
+    listOperationLogs: () => ({ total: 0, items: [] }),
+    listHostnameCrawlPolicies: () => [],
+    saveHostnameCrawlPolicy: (input) => ({ ...input, updatedAt: '2026-08-27T00:00:00.000Z' }),
+    deleteHostnameCrawlPolicy: () => true,
+    listServerHostnamePolicies: async () => [],
+    saveServerHostnamePolicy: async (input) => ({
+      ...input,
+      updatedAt: '2026-08-27T00:00:00.000Z'
+    }),
+    deleteServerHostnamePolicy: async () => undefined,
     listCloudLibraries: async () => [cloudLibrary],
-    pullCloudLibrary: async () => ({ source, updated: true, documents: source.pages })
+    getCloudLibraryTree: async () => [{ id: document.id, title: document.title, readable: true }],
+    readCloudLibraryFile: async () => ({
+      id: document.id,
+      libraryId: cloudLibrary.id,
+      title: document.title,
+      url: document.url,
+      path: '/guide',
+      language: document.language,
+      updatedAt: document.updatedAt,
+      content: document.content,
+      offset: 0,
+      totalChars: document.content.length,
+      truncated: false
+    }),
+    pullCloudLibrary: async () => ({ source, updated: true, documents: source.pages }),
+    publishLocalLibrary: async () => ({
+      library: serverLibrary,
+      revision: 'sha256:test',
+      publishedAt: '2026-08-27T00:00:00.000Z',
+      pages: source.pages,
+      contentSize: source.contentSize,
+      reused: false
+    }),
+    moveDocumentsToNewSource: () => ({
+      operationId: 'move-1',
+      target: source,
+      moved: 1,
+      deletedSourceIds: [],
+      reused: false
+    }),
+    listServerTasks: async () => [serverJob],
+    controlServerTask: async (id, action) => ({
+      ...serverJob,
+      id,
+      paused: action === 'pause',
+      status: action === 'cancel' ? 'canceled' : serverJob.status
+    }),
+    setServerTaskPriority: async (id, priority) => ({ ...serverJob, id, priority }),
+    controlServerTasks: async () => 1,
+    listServerLibraries: async () => [serverLibrary],
+    createServerLibrary: async () => serverLibrary,
+    updateServerLibrary: async () => serverLibrary,
+    deleteServerLibrary: async () => undefined,
+    syncServerLibraries: async () => [serverJob]
   }
 }
 

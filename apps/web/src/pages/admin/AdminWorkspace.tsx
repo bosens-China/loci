@@ -10,12 +10,14 @@ import {
 import { Alert, App, Button, Popconfirm, Space, Tabs } from 'antd'
 import type { CloudAdminSession, CloudLibrary, CloudLibraryInput, CloudSyncJob } from '@loci/shared'
 import {
-  cancelAdminJob,
   createAdminLibrary,
+  deleteAdminHostnamePolicy,
   deleteAdminLibrary,
+  listAdminHostnamePolicies,
   listAdminJobs,
   listAdminLibraries,
   logoutAdmin,
+  saveAdminHostnamePolicy,
   syncAdminLibraries,
   updateAdminLibrary
 } from '@/api/admin'
@@ -23,7 +25,10 @@ import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { formatDateTime } from '@/utils/format'
 import { AdminLibraryModal } from '@/pages/admin/AdminLibraryModal'
+import { AdminPublishPanel } from '@/pages/admin/AdminPublishPanel'
 import { AdminJobsTable, AdminLibrariesTable } from '@/pages/admin/AdminTables'
+import { useAdminJobControls } from '@/pages/admin/use-admin-job-controls'
+import { HostnamePolicyPanel } from '@/pages/settings/HostnamePolicyPanel'
 import {
   ADMIN_JOBS_KEY,
   ADMIN_LIBRARIES_KEY,
@@ -43,6 +48,7 @@ export function AdminWorkspace({ session }: { session: CloudAdminSession }): Rea
   const { message, modal } = App.useApp()
   const [editing, setEditing] = useState<CloudLibrary | 'new' | null>(null)
   const [selected, setSelected] = useState<string[]>([])
+  const jobControls = useAdminJobControls()
   const previousActive = useRef(false)
   const libraries = useQuery({
     queryKey: ADMIN_LIBRARIES_KEY,
@@ -104,16 +110,6 @@ export function AdminWorkspace({ session }: { session: CloudAdminSession }): Rea
           `Server 文档库已添加，但首次发布未启动：${error instanceof Error ? error.message : '同步失败'}`
         )
       }
-    },
-    onError: (error: Error) => void message.error(error.message)
-  })
-  const cancel = useMutation({
-    mutationFn: cancelAdminJob,
-    onSuccess: (job) => {
-      client.setQueryData<CloudSyncJob[]>(ADMIN_JOBS_KEY, (current = []) =>
-        mergeAdminJobs(current, [job])
-      )
-      void message.success('已提交取消请求')
     },
     onError: (error: Error) => void message.error(error.message)
   })
@@ -258,7 +254,7 @@ export function AdminWorkspace({ session }: { session: CloudAdminSession }): Rea
                     onEdit={setEditing}
                     onDelete={(id) => remove.mutate(id)}
                     onSync={(id) => void runSync([id], '同步任务已提交').catch(() => undefined)}
-                    onCancel={(id) => cancel.mutate(id)}
+                    onCancel={(id) => jobControls.control(id, 'cancel')}
                     onAdd={() => setEditing('new')}
                   />
                 </AsyncState>
@@ -271,10 +267,32 @@ export function AdminWorkspace({ session }: { session: CloudAdminSession }): Rea
             children: (
               <AdminJobsTable
                 query={jobs}
-                onCancel={(id) => cancel.mutate(id)}
-                cancelingId={cancel.isPending ? cancel.variables : undefined}
+                libraries={libraries.data}
+                onControl={jobControls.control}
+                onPriority={jobControls.setPriority}
+                onDomainControl={jobControls.controlDomain}
+                pendingKey={jobControls.pendingKey}
               />
             )
+          },
+          {
+            key: 'hostname-policies',
+            label: '域名限速',
+            children: (
+              <HostnamePolicyPanel
+                queryKey={['admin', 'hostname-policies']}
+                listPolicies={listAdminHostnamePolicies}
+                savePolicy={saveAdminHostnamePolicy}
+                deletePolicy={deleteAdminHostnamePolicy}
+                hostnames={(libraries.data ?? []).map((library) => library.hostname)}
+                title="Server 域名抓取限制"
+              />
+            )
+          },
+          {
+            key: 'publish',
+            label: '发布本地库',
+            children: <AdminPublishPanel libraries={libraries.data ?? []} />
           }
         ]}
       />

@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { DOCUMENT_SOURCE_LIMITS } from '@loci/core'
-import type { CloudCatalogItem, CloudImportResult } from '@loci/shared'
+import type {
+  CloudCatalogItem,
+  CloudImportResult,
+  LibraryFileRecord,
+  UrlTreeNode
+} from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
 import type { CloudSnapshot } from './cloud-library-database.js'
 import type { LociDatabase } from './database.js'
@@ -47,6 +52,37 @@ const snapshotSchema = z.object({
     .max(DOCUMENT_SOURCE_LIMITS.pageLimit.max)
 })
 
+const treeNodeSchema: z.ZodType<UrlTreeNode> = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    title: z.string(),
+    readable: z.boolean(),
+    children: z.array(treeNodeSchema).optional()
+  })
+)
+const cloudTreeSchema = z.object({
+  libraryId: z.string(),
+  title: z.string(),
+  parentId: z.string().nullable(),
+  nodes: z.array(treeNodeSchema)
+})
+const cloudFileSchema = z.object({
+  file: z.object({
+    id: z.string(),
+    libraryId: z.string(),
+    title: z.string(),
+    url: z.string(),
+    path: z.string(),
+    language: z.string(),
+    updatedAt: z.string(),
+    content: z.string(),
+    offset: z.number().int(),
+    nextOffset: z.number().int().optional(),
+    totalChars: z.number().int(),
+    truncated: z.boolean()
+  })
+})
+
 export class CloudLibraryService {
   private readonly updating = new Map<string, Promise<CloudImportResult>>()
 
@@ -85,6 +121,40 @@ export class CloudLibraryService {
     const normalized = normalizeServerUrl(serverUrl)
     const local = this.database.findCloudSource(normalized, libraryId)
     return this.download(normalized, libraryId, local?.sourceId ?? null, local?.revision, autoSync)
+  }
+
+  async getLibraryTree(
+    serverUrl: string,
+    libraryId: string,
+    parentId?: string,
+    depth = 1
+  ): Promise<{ libraryId: string; title: string; parentId: string | null; nodes: UrlTreeNode[] }> {
+    const normalized = normalizeServerUrl(serverUrl)
+    const query = new URLSearchParams({ depth: String(depth) })
+    if (parentId) query.set('parent_id', parentId)
+    return cloudTreeSchema.parse(
+      await this.request(
+        normalized,
+        `/api/v1/libraries/${encodeURIComponent(libraryId)}/tree?${query}`
+      )
+    )
+  }
+
+  async readLibraryFile(
+    serverUrl: string,
+    libraryId: string,
+    fileId: string,
+    offset = 0,
+    maxChars = 20_000
+  ): Promise<LibraryFileRecord> {
+    const normalized = normalizeServerUrl(serverUrl)
+    const query = new URLSearchParams({ offset: String(offset), max_chars: String(maxChars) })
+    return cloudFileSchema.parse(
+      await this.request(
+        normalized,
+        `/api/v1/libraries/${encodeURIComponent(libraryId)}/files/${encodeURIComponent(fileId)}?${query}`
+      )
+    ).file
   }
 
   async updateLibrary(sourceId: string, currentServerUrl: string): Promise<CloudImportResult> {

@@ -11,6 +11,7 @@ import {
   ADMIN_LIBRARIES_KEY,
   ADMIN_SESSION_KEY
 } from '@/pages/admin/admin-query-keys'
+import { HostnamePolicyPanel } from '@/pages/settings/HostnamePolicyPanel'
 
 export function SettingsPage(): React.JSX.Element {
   const { message } = App.useApp()
@@ -40,7 +41,7 @@ export function SettingsPage(): React.JSX.Element {
   })
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         title="服务设置"
         description="CLI、Web UI、按需 worker 和定时任务共用同一份本机配置。"
@@ -51,7 +52,7 @@ export function SettingsPage(): React.JSX.Element {
         onRetry={() => void query.refetch()}
       >
         <Form form={form} layout="vertical" onFinish={(value) => save.mutate(value)}>
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid gap-5 lg:grid-cols-2">
             <section className="panel p-5">
               <h2 className="mb-4 mt-0 text-base font-700">抓取并发</h2>
               <div className="grid grid-cols-2 gap-4">
@@ -72,7 +73,14 @@ export function SettingsPage(): React.JSX.Element {
                 />
                 <NumberField
                   name="batchIntervalSeconds"
-                  label="批次间隔（秒）"
+                  label="批次间隔最小（秒）"
+                  min={0}
+                  max={APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
+                  batchInterval
+                />
+                <NumberField
+                  name="batchIntervalMaxSeconds"
+                  label="批次间隔最大（秒）"
                   min={0}
                   max={APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
                   batchInterval
@@ -93,11 +101,15 @@ export function SettingsPage(): React.JSX.Element {
                   {...APP_SETTINGS_LIMITS.githubSizeMb}
                 />
               </div>
+            </section>
+            <section className="panel p-5 lg:col-span-2">
+              <h2 className="mb-1 mt-0 text-base font-700">云服务连接</h2>
+              <p className="mb-4 mt-0 text-xs text-muted">
+                用于云端目录、云端副本更新和管理员登录，与 GitHub 抓取限制无关。
+              </p>
               <Form.Item
                 name="serverUrl"
                 label="云服务地址"
-                className="mt-2"
-                extra="云端目录、云端副本更新和管理员登录共用这个地址。"
                 rules={[
                   { required: true, message: '请输入云服务地址' },
                   { type: 'url', message: '请输入完整的 HTTP 或 HTTPS 地址' }
@@ -114,6 +126,7 @@ export function SettingsPage(): React.JSX.Element {
             </Button>
           </div>
         </Form>
+        <HostnamePolicyPanel />
         <DataTransferPanel />
       </AsyncState>
     </div>

@@ -3,18 +3,17 @@ import {
   APP_SETTINGS_LIMITS,
   DEFAULT_APP_SETTINGS,
   isValidBatchIntervalSeconds,
+  isValidBatchIntervalRange,
   normalizeCronSchedule,
-  PRODUCTION_SERVER_URL
+  normalizeServerUrl,
+  PRODUCTION_SERVER_URL,
+  type AppSettings,
+  type CreateSourceInput,
+  type DocumentRecord,
+  type DocumentSource,
+  type DocumentSummary,
+  type ResolvedSourceDiscovery
 } from '@loci/shared'
-import type {
-  AppSettings,
-  CreateSourceInput,
-  DocumentRecord,
-  DocumentSource,
-  DocumentSummary,
-  ResolvedSourceDiscovery
-} from '@loci/shared'
-import { normalizeServerUrl } from '@loci/shared'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
   DOCUMENT_SOURCE_LIMITS,
@@ -84,6 +83,9 @@ export function validateSettings(settings: AppSettings): AppSettings {
     throw new Error(
       `批次间隔必须为 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled}，或 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.min} 到 ${APP_SETTINGS_LIMITS.batchIntervalSeconds.max} 之间的整数秒`
     )
+  }
+  if (!isValidBatchIntervalRange(settings.batchIntervalSeconds, settings.batchIntervalMaxSeconds)) {
+    throw new Error('批次间隔最大值不能小于最小值')
   }
   validateMegabytes(settings.githubArchiveLimitMb, 'GitHub ZIP 默认上限')
   validateMegabytes(settings.githubMarkdownLimitMb, 'GitHub Markdown 默认上限')
@@ -246,6 +248,12 @@ export function migrateDatabase(database: DatabaseSync, previousVersion = 0): vo
     database,
     'app_settings',
     'batch_interval_seconds',
+    `INTEGER NOT NULL DEFAULT ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled}`
+  )
+  addColumn(
+    database,
+    'app_settings',
+    'batch_interval_max_seconds',
     `INTEGER NOT NULL DEFAULT ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled}`
   )
   if (addedCrawlDefaults) {

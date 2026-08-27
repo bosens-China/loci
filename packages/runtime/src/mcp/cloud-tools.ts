@@ -57,6 +57,57 @@ export function registerCloudTools(register: LociToolRegistrar, services: LociMc
   )
 
   register(
+    'loci_get_cloud_library_tree',
+    {
+      title: '读取云端文档库目录',
+      description: '按目录和深度读取云端文档库结构，不下载正文。先读取一级，再按需展开子目录。',
+      inputSchema: z
+        .object({
+          library_id: z.string().trim().min(1),
+          parent: z.string().trim().optional(),
+          depth: z.number().int().min(1).max(10).default(1)
+        })
+        .strict(),
+      outputSchema: z.object({ tree: z.array(z.record(z.string(), z.unknown())) }),
+      annotations: remoteReadAnnotations()
+    },
+    async ({ library_id, parent, depth }) => {
+      try {
+        const tree = await services.getCloudLibraryTree(library_id, parent, depth)
+        return result({ tree }, `已读取 ${tree.length} 个云端目录节点`)
+      } catch (error) {
+        return failure(`云端目录读取失败：${errorMessage(error)}`)
+      }
+    }
+  )
+
+  register(
+    'loci_read_cloud_library_file',
+    {
+      title: '读取云端文档正文',
+      description: '按 file_id 和字符区间读取云端正文；正文较长时根据 next_offset 继续读取。',
+      inputSchema: z
+        .object({
+          library_id: z.string().trim().min(1),
+          file_id: z.string().trim().min(1),
+          offset: z.number().int().min(0).default(0),
+          max_chars: z.number().int().min(1_000).max(50_000).default(20_000)
+        })
+        .strict(),
+      outputSchema: z.object({ file: z.record(z.string(), z.unknown()) }),
+      annotations: remoteReadAnnotations()
+    },
+    async ({ library_id, file_id, offset, max_chars }) => {
+      try {
+        const file = await services.readCloudLibraryFile(library_id, file_id, offset, max_chars)
+        return result({ file }, file.truncated ? '已读取部分正文，可继续读取' : '已读取完整正文')
+      } catch (error) {
+        return failure(`云端正文读取失败：${errorMessage(error)}`)
+      }
+    }
+  )
+
+  register(
     'loci_pull_cloud_library',
     {
       title: '拉取云端公开文档库',
@@ -85,6 +136,39 @@ export function registerCloudTools(register: LociToolRegistrar, services: LociMc
         )
       } catch (error) {
         return failure(`云端文档库拉取失败：${errorMessage(error)}。请重新查询云端目录后再试`)
+      }
+    }
+  )
+
+  register(
+    'loci_publish_library_to_server',
+    {
+      title: '发布本地文档库到 Server',
+      description:
+        '把一个本地文档库作为校验过的压缩二进制归档发布到当前 Server。create 创建新公开库；replace 必须明确指定目标。调用前必须取得用户确认。',
+      inputSchema: z
+        .object({
+          library_id: z.string().trim().min(1),
+          mode: z.enum(['create', 'replace']),
+          target_library_id: z.string().trim().min(1).optional()
+        })
+        .strict()
+        .refine(
+          (input) => input.mode === 'create' || Boolean(input.target_library_id),
+          '覆盖发布必须指定 target_library_id'
+        ),
+      outputSchema: z.object({ publish: z.record(z.string(), z.unknown()) }),
+      annotations: writeAnnotations(true)
+    },
+    async ({ library_id, mode, target_library_id }) => {
+      try {
+        const published = await services.publishLocalLibrary(library_id, mode, target_library_id)
+        return result(
+          { publish: published },
+          `${published.reused ? '已复用' : '已完成'}发布：${published.library.name}`
+        )
+      } catch (error) {
+        return failure(`文档库发布失败：${errorMessage(error)}`)
       }
     }
   )

@@ -2,6 +2,35 @@ import { describe, expect, it } from 'vitest'
 import { createDatabase } from '../database.js'
 
 describe('database backup', () => {
+  it('uses a checksummed ZIP index and restores the split archive', async () => {
+    const sourceDatabase = createDatabase(':memory:')
+    const targetDatabase = createDatabase(':memory:')
+    try {
+      sourceDatabase.createSource({
+        name: 'ZIP Docs',
+        url: 'https://zip.example.com/docs',
+        mode: 'http',
+        pageLimit: 10,
+        schedule: null,
+        httpConcurrency: null,
+        browserConcurrency: null
+      })
+      const archive = await sourceDatabase.exportBackupArchive()
+      expect(archive.subarray(0, 2).toString()).toBe('PK')
+      expect(await targetDatabase.importBackupArchive(archive)).toEqual({
+        sources: 1,
+        documents: 0
+      })
+      expect(targetDatabase.listSources()[0]?.name).toBe('ZIP Docs')
+
+      const corrupted = archive.subarray(0, archive.length - 20)
+      await expect(targetDatabase.importBackupArchive(corrupted)).rejects.toThrow()
+    } finally {
+      sourceDatabase.close()
+      targetDatabase.close()
+    }
+  })
+
   it('validates and restores all searchable data', () => {
     const sourceDatabase = createDatabase(':memory:')
     const targetDatabase = createDatabase(':memory:')
@@ -35,9 +64,17 @@ describe('database backup', () => {
         browserConcurrency: 3,
         maxRetries: 4,
         batchIntervalSeconds: 100,
+        batchIntervalMaxSeconds: 300,
         serverUrl: 'https://docs.example.com',
         githubArchiveLimitMb: 200,
         githubMarkdownLimitMb: 100
+      })
+      sourceDatabase.saveHostnameCrawlPolicy({
+        hostname: 'react.dev',
+        httpConcurrency: 2,
+        browserConcurrency: null,
+        batchIntervalMinSeconds: 100,
+        batchIntervalMaxSeconds: 300
       })
       const runId = sourceDatabase.startCrawlRun(source.id)
       sourceDatabase.finishCrawlRun(
@@ -79,6 +116,10 @@ describe('database backup', () => {
       const invalidRegex = structuredClone(backup)
       invalidRegex.data.sources[0]!.exclude_path_pattern = '['
       expect(() => targetDatabase.importBackup(invalidRegex)).toThrow()
+      const invalidInterval = structuredClone(backup)
+      invalidInterval.data.settings.batch_interval_seconds = 300
+      invalidInterval.data.settings.batch_interval_max_seconds = 100
+      expect(() => targetDatabase.importBackup(invalidInterval)).toThrow()
       expect(targetDatabase.listSources()[0]?.name).toBe('Existing')
 
       expect(targetDatabase.importBackup(backup)).toEqual({ sources: 1, documents: 1 })
@@ -99,6 +140,14 @@ describe('database backup', () => {
         maxRetries: 4,
         batchIntervalSeconds: 100
       })
+      expect(targetDatabase.listHostnameCrawlPolicies()).toMatchObject([
+        {
+          hostname: 'react.dev',
+          httpConcurrency: 2,
+          batchIntervalMinSeconds: 100,
+          batchIntervalMaxSeconds: 300
+        }
+      ])
       expect(targetDatabase.listCrawlFailures(runId)).toMatchObject([
         { runId, reason: 'http_error', statusCode: 503, retryable: true }
       ])

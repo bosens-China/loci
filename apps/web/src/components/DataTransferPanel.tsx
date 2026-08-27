@@ -42,17 +42,17 @@ export function DataTransferPanel(): React.JSX.Element {
       <div className="pane-header">
         <span className="pane-title">备份与恢复</span>
       </div>
-      <div className="grid grid-cols-2 gap-5 p-5">
+      <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
         <TransferAction
           title="下载完整备份"
-          description="包含来源、文档、抓取记录和运行设置，文件只保存到你选择的浏览器下载位置。"
+          description="ZIP 内含 index.json 校验清单及按数据域拆分的 JSON，只保存到你选择的浏览器下载位置。"
         >
           <Button
             icon={<DownloadOutlined />}
             loading={exporting.isPending}
             onClick={() => exporting.mutate()}
           >
-            导出 JSON
+            导出 ZIP
           </Button>
         </TransferAction>
         <TransferAction
@@ -69,14 +69,14 @@ export function DataTransferPanel(): React.JSX.Element {
             onConfirm={chooseFile}
           >
             <Button danger icon={<UploadOutlined />} loading={importing.isPending}>
-              导入 JSON
+              导入 ZIP
             </Button>
           </Popconfirm>
           <input
             ref={input}
             className="hidden"
             type="file"
-            accept="application/json,.json"
+            accept="application/zip,.zip"
             onChange={onFile}
           />
         </TransferAction>

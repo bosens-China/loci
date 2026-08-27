@@ -236,21 +236,22 @@ describe('本机 HTTP 服务', () => {
       await runtime.close()
       rmSync(root, { recursive: true, force: true })
     })
-    const headers = { origin: server.endpoint, 'content-type': 'application/json' }
+    const headers = { origin: server.endpoint, 'content-type': 'application/zip' }
 
     const catalog = await fetch(`${server.endpoint}/api/cloud/catalog`)
     expect(await catalog.json()).toEqual([cloudItem])
 
     const exported = await fetch(`${server.endpoint}/api/data/export`)
     expect(exported.headers.get('content-disposition')).toContain('loci-backup-')
-    const backup = await exported.json()
+    expect(exported.headers.get('content-type')).toBe('application/zip')
+    const backup = Buffer.from(await exported.arrayBuffer())
     runtime.deleteSource(source.id)
     expect(runtime.database.listSources()).toHaveLength(0)
 
     const imported = await fetch(`${server.endpoint}/api/data/import`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(backup)
+      body: backup
     })
     expect(await imported.json()).toEqual({
       sources: 1,

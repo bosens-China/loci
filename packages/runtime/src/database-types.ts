@@ -10,10 +10,13 @@ import type { CloudLibraryDatabase } from './cloud-library-database.js'
 import type { CrawlHistoryDatabase } from './crawl-history-database.js'
 import type { SourceConfig } from './database-local-source.js'
 import type { DocumentContentDatabase, StoredDocument } from './document-content-database.js'
+import type { MoveDocumentsInput, MoveDocumentsResult } from './document-move-database.js'
 import type { ExplicitPageDatabase } from './explicit-page-database.js'
 import type { InteractionPreferencesDatabase } from './interaction-preferences.js'
+import type { HostnameCrawlPolicyDatabase } from './hostname-crawl-policy-database.js'
 import type { LocalJobDatabase } from './local-job-database.js'
 import type { LocalJobEventDatabase } from './local-job-event-database.js'
+import type { OperationLogDatabase } from './operation-log-database.js'
 import type { ResourceRevisionDatabase } from './resource-revision-database.js'
 import type { SettingsDatabase } from './settings-database.js'
 import type { SkillInstallationDatabase } from './skill-database.js'
@@ -24,7 +27,14 @@ export interface SourceCrawlCommit {
   deletedUrls: string[]
   replaceAll: boolean
   urlReview?: { runId: string; limitReached: boolean }
-  localJob?: { id: string; owner: string; runId: string; result: CrawlProgress }
+  localJob?: {
+    id: string
+    owner: string
+    runId: string
+    result: CrawlProgress
+    partial?: boolean
+    contentBytes?: number
+  }
   explicitPages?: readonly ExplicitPageResult[]
   resolution: {
     firstUrl: string
@@ -40,11 +50,13 @@ export interface LociDatabase
     CloudLibraryDatabase,
     SettingsDatabase,
     InteractionPreferencesDatabase,
+    HostnameCrawlPolicyDatabase,
     CrawlHistoryDatabase,
     DocumentContentDatabase,
     SkillInstallationDatabase,
     LocalJobDatabase,
     LocalJobEventDatabase,
+    OperationLogDatabase,
     ResourceRevisionDatabase,
     ExplicitPageDatabase,
     UrlReviewDatabase {
@@ -69,5 +81,13 @@ export interface LociDatabase
   deleteSource: (id: string) => void
   exportBackup: () => LociBackup
   importBackup: (input: unknown) => BackupImportSummary
+  exportBackupArchive: () => Promise<Buffer>
+  importBackupArchive: (input: Buffer) => Promise<BackupImportSummary>
+  exportLibraryPublishArchive: (
+    sourceId: string,
+    mode: 'create' | 'replace',
+    targetLibraryId?: string
+  ) => Promise<Buffer>
+  moveDocumentsToNewSource: (input: MoveDocumentsInput) => MoveDocumentsResult
   close: () => void
 }

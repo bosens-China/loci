@@ -275,6 +275,8 @@ function toCrawlOptions(
     batchIntervalMs: options.batchIntervalMs,
     signal: options.signal,
     waitIfPaused: options.waitIfPaused,
+    getBatchPolicy: options.getBatchPolicy,
+    onCheckpoint: options.onCheckpoint,
     onDocument: options.onDocument,
     onDuplicate: options.onDuplicate,
     onError: options.onError,

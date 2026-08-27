@@ -16,3 +16,9 @@ export function isValidBatchIntervalSeconds(value: unknown): value is number {
     (value === limits.disabled || (value >= limits.min && value <= limits.max))
   )
 }
+
+export function isValidBatchIntervalRange(minimum: unknown, maximum: unknown): boolean {
+  if (!isValidBatchIntervalSeconds(minimum) || !isValidBatchIntervalSeconds(maximum)) return false
+  if (minimum === 0 || maximum === 0) return true
+  return minimum <= maximum
+}

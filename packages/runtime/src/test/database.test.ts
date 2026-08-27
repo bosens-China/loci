@@ -123,6 +123,7 @@ describe('createDatabase', () => {
         browserConcurrency: 5,
         maxRetries: 3,
         batchIntervalSeconds: 0,
+        batchIntervalMaxSeconds: 0,
         serverUrl: 'https://loci.xiaowo.live',
         githubArchiveLimitMb: 200,
         githubMarkdownLimitMb: 100
@@ -134,6 +135,7 @@ describe('createDatabase', () => {
           browserConcurrency: 3,
           maxRetries: 4,
           batchIntervalSeconds: 100,
+          batchIntervalMaxSeconds: 300,
           serverUrl: 'https://docs.example.com/',
           githubArchiveLimitMb: 200,
           githubMarkdownLimitMb: 100
@@ -144,6 +146,7 @@ describe('createDatabase', () => {
         browserConcurrency: 3,
         maxRetries: 4,
         batchIntervalSeconds: 100,
+        batchIntervalMaxSeconds: 300,
         serverUrl: 'https://docs.example.com',
         githubArchiveLimitMb: 200,
         githubMarkdownLimitMb: 100
@@ -154,6 +157,7 @@ describe('createDatabase', () => {
         browserConcurrency: 3,
         maxRetries: 4,
         batchIntervalSeconds: 100,
+        batchIntervalMaxSeconds: 300,
         serverUrl: 'https://docs.example.com',
         githubArchiveLimitMb: 200,
         githubMarkdownLimitMb: 100
@@ -176,6 +180,7 @@ describe('createDatabase', () => {
           browserConcurrency: 5,
           maxRetries: 3,
           batchIntervalSeconds: 0,
+          batchIntervalMaxSeconds: 0,
           serverUrl: 'http://localhost:7001',
           githubArchiveLimitMb: 200,
           githubMarkdownLimitMb: 100

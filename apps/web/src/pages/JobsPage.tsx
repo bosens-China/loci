@@ -1,131 +1,234 @@
+import { useMemo, useState } from 'react'
+import { CaretRightOutlined, PauseOutlined, SearchOutlined } from '@ant-design/icons'
+import type { LocalJob } from '@loci/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Progress } from 'antd'
-import { cancelJob, listJobs } from '@/api/jobs'
+import { App, Button, Empty, Input, Select } from 'antd'
+import {
+  cancelJob,
+  controlAllJobs,
+  controlJob,
+  listJobs,
+  setJobPriority,
+  type JobControlAction
+} from '@/api/jobs'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
+import { ConfirmedActionButton } from '@/components/ConfirmedActionButton'
 import { PageHeader } from '@/components/PageHeader'
-import { StatusPill } from '@/components/StatusPill'
-import { triggerLabel } from '@/utils/status-labels'
+import { useCurrentTime } from '@/hooks/use-current-time'
+import { JobDomainCard } from '@/pages/jobs/JobDomainCard'
+import {
+  filterJobs,
+  groupJobsByHostname,
+  type JobFilters,
+  type JobViewStatus
+} from '@/pages/jobs/job-state'
 
-const jobDateTimeFormatter = new Intl.DateTimeFormat('sv-SE', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23'
-})
+const JOBS_KEY = ['jobs'] as const
+
+type ItemAction = JobControlAction | 'cancel' | 'continue'
 
 export function JobsPage(): React.JSX.Element {
-  const { message } = App.useApp()
-  const queryClient = useQueryClient()
-  const jobs = useQuery({ queryKey: ['jobs'], queryFn: listJobs })
+  const { message, modal } = App.useApp()
+  const client = useQueryClient()
+  const now = useCurrentTime()
+  const [filters, setFilters] = useState<JobFilters>({ query: '', date: '', status: 'all' })
+  const jobs = useQuery({
+    queryKey: JOBS_KEY,
+    queryFn: listJobs,
+    refetchInterval: ({ state }) =>
+      state.data?.some((job) => job.status === 'pending' || job.status === 'running')
+        ? 1_000
+        : 5_000
+  })
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
-  const cancel = useMutation({
-    mutationFn: cancelJob,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['jobs'] })
-      void message.success('已请求停止任务')
+  const sourceNames = useMemo(
+    () => new Map((sources.data ?? []).map((source) => [source.id, source.name])),
+    [sources.data]
+  )
+  const groups = useMemo(
+    () => groupJobsByHostname(filterJobs(jobs.data ?? [], sourceNames, filters)),
+    [filters, jobs.data, sourceNames]
+  )
+
+  const itemControl = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: ItemAction }) =>
+      action === 'cancel'
+        ? cancelJob(id)
+        : controlJob(id, action === 'continue' ? 'resume' : action),
+    onSuccess: (job, value) => {
+      updateCachedJob(client, job)
+      void message.success(actionSuccess[value.action])
     },
     onError: (error: Error) => void message.error(error.message)
   })
+  const bulkControl = useMutation({
+    mutationFn: ({ action, hostname }: { action: 'pause-all' | 'resume-all'; hostname?: string }) =>
+      controlAllJobs(action, hostname),
+    onSuccess: ({ changed }, value) => {
+      void client.invalidateQueries({ queryKey: JOBS_KEY })
+      void message.success(
+        `${value.action === 'pause-all' ? '已暂停' : '已恢复'} ${changed} 个任务`
+      )
+    },
+    onError: (error: Error) => void message.error(error.message)
+  })
+  const priority = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: number }) => setJobPriority(id, value),
+    onSuccess: (job) => {
+      updateCachedJob(client, job)
+      void message.success('优先级已调整')
+    },
+    onError: (error: Error) => void message.error(error.message)
+  })
+  const pendingAction = pendingActionKey(itemControl, bulkControl, priority)
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         title="后台任务"
-        description="任务写入本机数据库并由独立 worker 执行，关闭 UI 不会中断抓取。"
+        description="域名共享抓取队列与限速；不同域名保持并发，关闭 UI 不会中断任务。"
+        action={
+          <div className="flex gap-2">
+            <ConfirmedActionButton
+              title="暂停全部活动任务？"
+              description="已经发出的页面请求会完成，所有域名将在下一批次暂停。"
+              label="全部暂停"
+              icon={<PauseOutlined />}
+              type="default"
+              size="middle"
+              loading={bulkControl.isPending && bulkControl.variables.action === 'pause-all'}
+              onConfirm={() => bulkControl.mutate({ action: 'pause-all' })}
+            />
+            <ConfirmedActionButton
+              title="恢复全部暂停任务？"
+              description="任务会继续使用原任务 ID 和已保存的检查点。"
+              label="全部恢复"
+              icon={<CaretRightOutlined />}
+              type="default"
+              size="middle"
+              loading={bulkControl.isPending && bulkControl.variables.action === 'resume-all'}
+              onConfirm={() => bulkControl.mutate({ action: 'resume-all' })}
+            />
+          </div>
+        }
       />
+      <JobFiltersBar value={filters} onChange={setFilters} />
       <AsyncState
-        loading={jobs.isLoading}
-        error={jobs.error}
-        empty={jobs.data?.length === 0}
-        emptyText="任务队列还是空的"
-        onRetry={() => void jobs.refetch()}
+        loading={jobs.isLoading || sources.isLoading}
+        error={jobs.error ?? sources.error}
+        onRetry={() => void Promise.all([jobs.refetch(), sources.refetch()])}
       >
-        <div className="panel overflow-hidden">
-          <table className="w-full border-collapse text-left text-sm">
-            <thead className="bg-[#f5f8f8] text-xs text-muted uppercase">
-              <tr>
-                <th className="px-5 py-3.5 font-650">来源</th>
-                <th className="px-5 py-3.5 font-650">状态</th>
-                <th className="px-5 py-3.5 font-650">进度</th>
-                <th className="px-5 py-3.5 font-650">触发</th>
-                <th className="px-5 py-3.5 font-650">时间</th>
-                <th className="px-5 py-3.5 text-right font-650">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#e5ecec]">
-              {jobs.data?.map((job) => {
-                const source = sources.data?.find((item) => item.id === job.sourceId)
-                return (
-                  <tr key={job.id} className="hover:bg-[#f9fbfa]">
-                    <td className="px-5 py-3.5">
-                      <div className="font-650">{source?.name ?? '来源同步'}</div>
-                      <div className="mt-0.5 max-w-xs truncate font-mono text-[11px] text-muted">
-                        {job.sourceId}
-                      </div>
-                      {job.error && (
-                        <div className="mt-1.5 max-w-lg text-xs text-[#a33e38]">{job.error}</div>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <StatusPill status={job.status} />
-                    </td>
-                    <td className="w-56 px-5 py-3.5">
-                      <JobProgress job={job} />
-                    </td>
-                    <td className="px-5 py-3.5 text-muted">{triggerLabel(job.trigger)}</td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-muted">
-                      {jobDateTimeFormatter.format(new Date(job.createdAt))}
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      {(job.status === 'pending' || job.status === 'running') && (
-                        <Button
-                          danger
-                          type="text"
-                          size="small"
-                          loading={cancel.isPending && cancel.variables === job.id}
-                          onClick={() => cancel.mutate(job.id)}
-                        >
-                          停止
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        {groups.length ? (
+          <div className="space-y-4">
+            {groups.map((group) => (
+              <JobDomainCard
+                key={group.hostname}
+                group={group}
+                now={now}
+                sourceNames={sourceNames}
+                pendingAction={pendingAction}
+                onJobAction={(job, action) => itemControl.mutate({ id: job.id, action })}
+                onDomainAction={(hostname, action) => bulkControl.mutate({ action, hostname })}
+                onPriorityChange={(job, value) => {
+                  modal.confirm({
+                    title: '调整任务优先级？',
+                    content: '同域名任务会按新优先级领取，不会影响其他域名的并发。',
+                    okText: '确认调整',
+                    cancelText: '返回',
+                    onOk: () => priority.mutateAsync({ id: job.id, value })
+                  })
+                }}
+                onContinue={(job) => itemControl.mutate({ id: job.id, action: 'continue' })}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="panel py-16">
+            <Empty
+              description={jobs.data?.length ? '没有符合筛选条件的任务' : '任务队列还是空的'}
+            />
+          </div>
+        )}
       </AsyncState>
     </div>
   )
 }
 
-function JobProgress({ job }: { job: import('@loci/shared').LocalJob }): React.JSX.Element {
-  const progress = job.result
-  if (!progress) return <span className="text-xs text-muted">等待开始</span>
-  const total = Math.max(progress.queued, progress.processed)
-  const percent = total > 0 ? Math.min(100, Math.round((progress.processed / total) * 100)) : 0
+function JobFiltersBar(props: {
+  value: JobFilters
+  onChange: (filters: JobFilters) => void
+}): React.JSX.Element {
+  const update = (patch: Partial<JobFilters>): void => props.onChange({ ...props.value, ...patch })
   return (
-    <div className="min-w-44">
-      <Progress
-        percent={percent}
-        size="small"
-        showInfo={false}
-        status={
-          job.status === 'failed' ? 'exception' : job.status === 'completed' ? 'success' : 'active'
-        }
+    <div className="panel-muted mb-4 grid gap-3 p-3 sm:grid-cols-[minmax(12rem,1fr)_11rem_10rem_auto]">
+      <Input
+        allowClear
+        prefix={<SearchOutlined className="text-muted" />}
+        placeholder="筛选域名、文档或任务 ID"
+        value={props.value.query}
+        onChange={(event) => update({ query: event.target.value })}
       />
-      <div className="text-xs text-muted">
-        已处理 {progress.processed}/{total} · 失败 {progress.failed}
-      </div>
-      {progress.node && (
-        <div className="mt-0.5 truncate text-xs text-muted" title={progress.node.url}>
-          {progress.node.status} · {progress.node.title}
-        </div>
-      )}
+      <input
+        aria-label="批次日期"
+        type="date"
+        value={props.value.date}
+        onChange={(event) => update({ date: event.target.value })}
+        className="focus-ring h-8 rounded-lg border border-[#d8e0e0] bg-white px-3 text-sm text-ink"
+      />
+      <Select<JobViewStatus | 'all'>
+        aria-label="任务状态"
+        value={props.value.status}
+        options={statusOptions}
+        onChange={(status) => update({ status })}
+      />
+      <Button onClick={() => props.onChange({ query: '', date: '', status: 'all' })}>
+        清除筛选
+      </Button>
     </div>
   )
 }
+
+function updateCachedJob(client: ReturnType<typeof useQueryClient>, incoming: LocalJob): void {
+  client.setQueryData<LocalJob[]>(JOBS_KEY, (current = []) => {
+    const found = current.some((job) => job.id === incoming.id)
+    return found
+      ? current.map((job) => (job.id === incoming.id ? incoming : job))
+      : [incoming, ...current]
+  })
+}
+
+function pendingActionKey(
+  item: { isPending: boolean; variables?: { id: string; action: ItemAction } },
+  bulk: {
+    isPending: boolean
+    variables?: { action: 'pause-all' | 'resume-all'; hostname?: string }
+  },
+  priority: { isPending: boolean; variables?: { id: string } }
+): string | undefined {
+  if (item.isPending && item.variables) return `${item.variables.action}:${item.variables.id}`
+  if (bulk.isPending && bulk.variables) {
+    return `${bulk.variables.action}:${bulk.variables.hostname ?? '*'}`
+  }
+  if (priority.isPending && priority.variables) return `priority:${priority.variables.id}`
+  return undefined
+}
+
+const actionSuccess: Record<ItemAction, string> = {
+  pause: '任务将在当前批次后暂停',
+  resume: '任务已恢复',
+  stop: '任务将在当前批次后结束并保留内容',
+  cancel: '已提交取消请求',
+  continue: '任务已从保存的检查点恢复'
+}
+
+const statusOptions: Array<{ value: JobViewStatus | 'all'; label: string }> = [
+  { value: 'all', label: '全部状态' },
+  { value: 'running', label: '运行中' },
+  { value: 'pending', label: '等待中' },
+  { value: 'paused', label: '已暂停' },
+  { value: 'stopped', label: '已结束' },
+  { value: 'completed', label: '已完成' },
+  { value: 'failed', label: '失败' },
+  { value: 'cancelled', label: '已取消' }
+]

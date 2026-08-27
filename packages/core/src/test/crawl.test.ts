@@ -28,7 +28,7 @@ describe('静态 Pages 抓取', () => {
     expect(isImmediateStaticHostname('group.gitlab.io.example.com')).toBe(false)
   })
 
-  it('无 Sitemap 的 GitHub Pages 也立即抓取页面链接', async () => {
+  it('无 Sitemap 的 GitHub Pages 整批抓取但仍响应批次控制', async () => {
     const baseUrl = 'https://owner.github.io/project'
     const sleep = vi.fn(async () => undefined)
     const waitIfPaused = vi.fn(async () => undefined)
@@ -58,7 +58,7 @@ describe('静态 Pages 抓取', () => {
 
     expect(result).toMatchObject({ queued: 3, succeeded: 3, failed: 0 })
     expect(sleep).not.toHaveBeenCalled()
-    expect(waitIfPaused).not.toHaveBeenCalled()
+    expect(waitIfPaused).toHaveBeenCalledTimes(2)
   })
 
   it('展开 Sitemap 索引并将页面清单作为权威发现来源', async () => {
@@ -97,7 +97,7 @@ describe('静态 Pages 抓取', () => {
 })
 
 describe('Sitemap 权威清单抓取', () => {
-  it('普通站点也按页面上限整批并发且跳过等待', async () => {
+  it('普通站点按页面上限整批并发且仍响应批次控制', async () => {
     let release = (): void => undefined
     const gate = new Promise<void>((resolve) => {
       release = resolve
@@ -131,6 +131,6 @@ describe('Sitemap 权威清单抓取', () => {
     release()
     await expect(task).resolves.toMatchObject({ queued: 3, succeeded: 3 })
     expect(sleep).not.toHaveBeenCalled()
-    expect(waitIfPaused).not.toHaveBeenCalled()
+    expect(waitIfPaused).toHaveBeenCalledOnce()
   })
 })

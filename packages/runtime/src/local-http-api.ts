@@ -3,16 +3,16 @@ import type {
   AppSettings,
   CreateSourceInput,
   CreateSourceResult,
+  SaveHostnameCrawlPolicyInput,
   UpdateSourceInput
 } from '@loci/shared'
-import { inspectPersistentBackgroundRequirements } from './background-requirements.js'
-import { acquireMaintenanceRuntimeLock } from './runtime-lock.js'
 import type { LocalRuntime } from './local-runtime.js'
 import { handleLocalAdmin } from './local-http-admin.js'
 import { handleAgentIntegrations } from './local-http-agent.js'
+import { handleOperationLogs } from './local-http-logs.js'
+import { handleLibraryBrowser } from './local-http-library-browser.js'
+import { handleDataTransfer } from './local-http-data-transfer.js'
 import { json, mutationJson, readJson, safeClientError } from './local-http-response.js'
-
-const BACKUP_LIMIT_BYTES = 256 * 1024 * 1024
 
 export interface LocalApiOptions {
   runMaintenance?: <T>(action: () => T | Promise<T>) => Promise<T>
@@ -29,6 +29,8 @@ export async function handleLocalApi(
 ): Promise<void> {
   if (await handleLocalAdmin(runtime, request, response, url)) return
   if (await handleAgentIntegrations(runtime, request, response, url)) return
+  if (handleOperationLogs(runtime, request, response, url)) return
+  if (handleLibraryBrowser(runtime, request, response, url)) return
   if (handleResourceRevisions(runtime, request, response, url)) return
   if (await handleSources(runtime, request, response, url, options)) return
   if (await handleDocumentsAndJobs(runtime, request, response, url, options)) return
@@ -64,10 +66,13 @@ async function handleSources(
     await mutationJson(response, 201, async () => {
       const input = (await readJson(request)) as CreateSourceInput
       if (input.schedule) await options.ensurePersistentBackground?.()
+      const sourceIds = new Set(runtime.database.listSources().map((item) => item.id))
       const source = runtime.createSource(input)
       const sync =
         url.searchParams.get('sync') === 'true'
-          ? runtime.database.enqueueSourceSync(source.id, 'ui')
+          ? runtime.database.enqueueSourceSync(source.id, 'ui', undefined, {
+              deleteSourceOnCancel: !sourceIds.has(source.id)
+            })
           : null
       let workerError: string | null = null
       if (sync) {
@@ -150,6 +155,49 @@ async function handleDocumentsAndJobs(
     else json(response, 200, job)
     return true
   }
+  const controlMatch = /^\/api\/jobs\/([^/]+)\/(pause|resume|stop)$/u.exec(url.pathname)
+  if (request.method === 'POST' && controlMatch) {
+    const id = decodeURIComponent(controlMatch[1]!)
+    const action = controlMatch[2]
+    const job =
+      action === 'pause'
+        ? runtime.database.requestLocalJobPause(id)
+        : action === 'resume'
+          ? runtime.database.resumeLocalJob(id)
+          : runtime.database.requestLocalJobStop(id)
+    if (!job) json(response, 404, { error: '任务不存在' })
+    else {
+      if (action === 'resume') await options.startJobWorker?.()
+      json(response, 200, job)
+    }
+    return true
+  }
+  const priorityMatch = /^\/api\/jobs\/([^/]+)\/priority$/u.exec(url.pathname)
+  if (request.method === 'PUT' && priorityMatch) {
+    const body = await readJson(request)
+    if (!isNumberField(body, 'priority')) json(response, 400, { error: '缺少任务优先级' })
+    else {
+      const job = runtime.database.setLocalJobPriority(
+        decodeURIComponent(priorityMatch[1]!),
+        body.priority
+      )
+      if (!job) json(response, 404, { error: '任务不存在' })
+      else json(response, 200, job)
+    }
+    return true
+  }
+  if (request.method === 'POST' && /^\/api\/jobs\/(pause-all|resume-all)$/u.test(url.pathname)) {
+    const body = await readJson(request)
+    const hostname = isStringField(body, 'hostname')
+      ? body.hostname.trim().toLowerCase()
+      : undefined
+    const changed = url.pathname.endsWith('/pause-all')
+      ? runtime.database.pauseLocalJobs(hostname || undefined)
+      : runtime.database.resumeLocalJobs(hostname || undefined)
+    if (url.pathname.endsWith('/resume-all')) await options.startJobWorker?.()
+    json(response, 200, { changed })
+    return true
+  }
   return false
 }
 
@@ -174,6 +222,25 @@ async function handleSettings(
     })
     return true
   }
+  if (request.method === 'GET' && url.pathname === '/api/settings/hostname-policies') {
+    json(response, 200, runtime.database.listHostnameCrawlPolicies())
+    return true
+  }
+  const policyMatch = /^\/api\/settings\/hostname-policies\/([^/]+)$/u.exec(url.pathname)
+  if (request.method === 'PUT' && policyMatch) {
+    await mutationJson(response, 200, async () => {
+      const hostname = decodeURIComponent(policyMatch[1]!)
+      const input = (await readJson(request)) as SaveHostnameCrawlPolicyInput
+      return runtime.database.saveHostnameCrawlPolicy({ ...input, hostname })
+    })
+    return true
+  }
+  if (request.method === 'DELETE' && policyMatch) {
+    json(response, 200, {
+      deleted: runtime.database.deleteHostnameCrawlPolicy(decodeURIComponent(policyMatch[1]!))
+    })
+    return true
+  }
   return false
 }
 
@@ -187,6 +254,31 @@ async function handleCloud(
   const serverUrl = runtime.database.getSettings().serverUrl
   if (request.method === 'GET' && url.pathname === '/api/cloud/catalog') {
     await mutationJson(response, 200, () => runtime.cloud.listCatalog(serverUrl))
+    return true
+  }
+  const cloudTree = /^\/api\/cloud\/libraries\/([^/]+)\/tree$/u.exec(url.pathname)
+  if (request.method === 'GET' && cloudTree) {
+    await mutationJson(response, 200, () =>
+      runtime.cloud.getLibraryTree(
+        serverUrl,
+        decodeURIComponent(cloudTree[1]!),
+        url.searchParams.get('parent_id') ?? undefined,
+        Number(url.searchParams.get('depth') ?? 1)
+      )
+    )
+    return true
+  }
+  const cloudFile = /^\/api\/cloud\/libraries\/([^/]+)\/files\/([^/]+)$/u.exec(url.pathname)
+  if (request.method === 'GET' && cloudFile) {
+    await mutationJson(response, 200, () =>
+      runtime.cloud.readLibraryFile(
+        serverUrl,
+        decodeURIComponent(cloudFile[1]!),
+        decodeURIComponent(cloudFile[2]!),
+        Number(url.searchParams.get('offset') ?? 0),
+        Number(url.searchParams.get('max_chars') ?? 20_000)
+      )
+    )
     return true
   }
   const pull = /^\/api\/cloud\/libraries\/([^/]+)\/pull$/u.exec(url.pathname)
@@ -223,64 +315,6 @@ async function handleCloud(
   return false
 }
 
-async function handleDataTransfer(
-  runtime: LocalRuntime,
-  request: IncomingMessage,
-  response: ServerResponse,
-  url: URL,
-  options: LocalApiOptions
-): Promise<boolean> {
-  if (request.method === 'GET' && url.pathname === '/api/data/export') {
-    try {
-      const backup = await runMaintenance(runtime, options, () => runtime.database.exportBackup())
-      json(response, 200, backup, {
-        'content-disposition': `attachment; filename="loci-backup-${new Date().toISOString().slice(0, 10)}.json"`
-      })
-    } catch (error) {
-      json(response, 409, { error: safeClientError(error) })
-    }
-    return true
-  }
-  if (request.method === 'POST' && url.pathname === '/api/data/import') {
-    await mutationJson(response, 200, async () => {
-      const backup = await readJson(request, BACKUP_LIMIT_BYTES)
-      const summary = await runMaintenance(runtime, options, () => {
-        const imported = runtime.database.importBackup(backup)
-        runtime.resetCrawlStates()
-        runtime.database.refreshSourceSchedules()
-        return imported
-      })
-      let backgroundError: string | null = null
-      if (inspectPersistentBackgroundRequirements(runtime.database.listSources()).required) {
-        try {
-          await options.ensurePersistentBackground?.()
-        } catch (error) {
-          backgroundError = safeClientError(error)
-        }
-      }
-      return { ...summary, backgroundError }
-    })
-    return true
-  }
-  return false
-}
-
-async function runMaintenance<T>(
-  runtime: LocalRuntime,
-  options: LocalApiOptions,
-  action: () => T | Promise<T>
-): Promise<T> {
-  const run = async (): Promise<T> => {
-    const lock = acquireMaintenanceRuntimeLock(runtime.dataDir, 'Web 数据维护')
-    try {
-      return await action()
-    } finally {
-      lock.release()
-    }
-  }
-  return options.runMaintenance ? options.runMaintenance(run) : run()
-}
-
 function isStringField(value: unknown, key: string): value is Record<string, string> {
   if (!value || typeof value !== 'object') return false
   return typeof (value as Record<string, unknown>)[key] === 'string'
@@ -289,6 +323,11 @@ function isStringField(value: unknown, key: string): value is Record<string, str
 function isBooleanField(value: unknown, key: string): value is Record<string, boolean> {
   if (!value || typeof value !== 'object') return false
   return typeof (value as Record<string, unknown>)[key] === 'boolean'
+}
+
+function isNumberField(value: unknown, key: string): value is Record<string, number> {
+  if (!value || typeof value !== 'object') return false
+  return typeof (value as Record<string, unknown>)[key] === 'number'
 }
 
 function readBooleanField(value: unknown, key: string, fallback: boolean): boolean {

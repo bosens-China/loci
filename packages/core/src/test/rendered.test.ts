@@ -140,7 +140,7 @@ describe('crawlRenderedSource', () => {
     expect(progress).toMatchObject({ queued: 2, succeeded: 2, failed: 0 })
   })
 
-  it('有效 Sitemap 的浏览器页面按页面上限整批并发且跳过等待', async () => {
+  it('有效 Sitemap 的浏览器页面整批并发且仍响应批次控制', async () => {
     let release = (): void => undefined
     const gate = new Promise<void>((resolve) => {
       release = resolve
@@ -176,6 +176,6 @@ describe('crawlRenderedSource', () => {
     release()
     await expect(task).resolves.toMatchObject({ queued: 3, succeeded: 3 })
     expect(sleep).not.toHaveBeenCalled()
-    expect(waitIfPaused).not.toHaveBeenCalled()
+    expect(waitIfPaused).toHaveBeenCalledOnce()
   })
 })

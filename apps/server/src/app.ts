@@ -5,9 +5,16 @@ import {
   DOCUMENT_SOURCE_DEFAULTS,
   DOCUMENT_SOURCE_LIMITS,
   normalizeCronSchedule,
-  normalizeScopePath
+  normalizeScopePath,
+  parseLibraryPublishArchive
 } from '@loci/core'
 import { z } from 'zod'
+import {
+  APP_SETTINGS_LIMITS,
+  buildUrlTree,
+  getUrlTreeSlice,
+  isValidBatchIntervalSeconds
+} from '@loci/shared'
 import { AdminAuth, readBearerToken } from './auth.js'
 import { ConflictError, NotFoundError, ServerDatabase } from './database.js'
 import { SyncService } from './sync-service.js'
@@ -38,6 +45,32 @@ const syncBatchSchema = z.object({
   libraryIds: z.array(z.string().min(1)).min(1).max(100)
 })
 
+const prioritySchema = z.object({ priority: z.number().int().min(-100).max(100) })
+const hostnameSchema = z.object({ hostname: z.string().trim().min(1).optional() })
+const hostnamePolicySchema = z.object({
+  hostname: z.string().trim().min(1).optional(),
+  httpConcurrency: z
+    .number()
+    .int()
+    .min(APP_SETTINGS_LIMITS.concurrency.min)
+    .max(APP_SETTINGS_LIMITS.concurrency.max)
+    .nullable(),
+  browserConcurrency: z
+    .number()
+    .int()
+    .min(APP_SETTINGS_LIMITS.concurrency.min)
+    .max(APP_SETTINGS_LIMITS.concurrency.max)
+    .nullable(),
+  batchIntervalMinSeconds: z
+    .number()
+    .refine(isValidBatchIntervalSeconds, '批次间隔超出允许范围')
+    .nullable(),
+  batchIntervalMaxSeconds: z
+    .number()
+    .refine(isValidBatchIntervalSeconds, '批次间隔超出允许范围')
+    .nullable()
+})
+
 class InputError extends Error {}
 
 interface AppServices {
@@ -62,6 +95,34 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
   app.get('/health', (c) => c.json({ status: 'ok' }))
 
   app.get('/api/v1/libraries', (c) => c.json({ libraries: database.listPublishedLibraries() }))
+
+  app.get('/api/v1/libraries/:id/tree', (c) => {
+    const id = c.req.param('id')
+    const library = database.getLibrary(id)
+    const files = database.listLibraryFiles(id, 0, 10_000).items
+    const parentId = c.req.query('parent_id')
+    const depth = queryInteger(c.req.query('depth'), 1, 1, 5)
+    const nodes = getUrlTreeSlice(buildUrlTree(files, id), parentId, depth)
+    if (!nodes) throw new NotFoundError('目录节点不存在')
+    return c.json({ libraryId: id, title: library.name, parentId: parentId ?? null, nodes })
+  })
+
+  app.get('/api/v1/libraries/:id/files', (c) => {
+    const offset = queryInteger(c.req.query('offset'), 0, 0, 1_000_000)
+    const limit = queryInteger(c.req.query('limit'), 100, 1, 500)
+    return c.json(database.listLibraryFiles(c.req.param('id'), offset, limit))
+  })
+
+  app.get('/api/v1/libraries/:id/files/:fileId', (c) => {
+    const file = database.readLibraryFile(
+      c.req.param('id'),
+      c.req.param('fileId'),
+      queryInteger(c.req.query('offset'), 0, 0, 10_000_000),
+      queryInteger(c.req.query('max_chars'), 20_000, 1_000, 50_000)
+    )
+    if (!file) throw new NotFoundError('文档文件不存在')
+    return c.json({ file })
+  })
 
   app.get('/api/v1/libraries/:id/snapshot', (c) => {
     const snapshot = database.getSnapshot(c.req.param('id'))
@@ -98,6 +159,29 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
 
   app.get('/api/v1/admin/libraries', (c) => c.json({ libraries: database.listLibraries() }))
 
+  app.post('/api/v1/admin/publish', async (c) => {
+    const length = Number(c.req.header('Content-Length') ?? 0)
+    if (length > 256 * 1024 * 1024) throw new InputError('发布归档不能超过 256 MB')
+    try {
+      const payload = await parseLibraryPublishArchive(Buffer.from(await c.req.arrayBuffer()))
+      const published = database.publishImportedLibrary(payload)
+      return c.json({
+        library: published.library,
+        revision: published.snapshot.library.revision,
+        publishedAt: published.snapshot.library.publishedAt,
+        pages: published.snapshot.documents.length,
+        contentSize: published.snapshot.documents.reduce(
+          (total, document) => total + Buffer.byteLength(document.markdown),
+          0
+        ),
+        reused: published.reused
+      })
+    } catch (error) {
+      if (error instanceof ConflictError || error instanceof NotFoundError) throw error
+      throw new InputError(error instanceof Error ? error.message : '发布归档无效')
+    }
+  })
+
   app.post('/api/v1/admin/libraries', async (c) => {
     const library = database.createLibrary(await readLibraryInput(c))
     sync.reschedule(library.id)
@@ -133,14 +217,57 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
 
   app.get('/api/v1/admin/jobs', (c) => c.json({ jobs: sync.listJobs() }))
 
+  app.get('/api/v1/admin/hostname-policies', (c) =>
+    c.json({ policies: database.hostnamePolicies.list() })
+  )
+
+  app.put('/api/v1/admin/hostname-policies/:hostname', async (c) => {
+    const input = await parseJson(c, hostnamePolicySchema)
+    return c.json({
+      policy: database.hostnamePolicies.save({ ...input, hostname: c.req.param('hostname') })
+    })
+  })
+
+  app.delete('/api/v1/admin/hostname-policies/:hostname', (c) => {
+    database.hostnamePolicies.delete(c.req.param('hostname'))
+    return c.body(null, 204)
+  })
+
   app.get('/api/v1/admin/jobs/:id', (c) => {
     const job = sync.getJob(c.req.param('id'))
     if (!job) throw new NotFoundError('同步任务不存在')
     return c.json({ job })
   })
 
-  app.post('/api/v1/admin/jobs/:id/cancel', (c) => {
-    const job = sync.cancel(c.req.param('id'))
+  app.post('/api/v1/admin/jobs/pause-all', async (c) => {
+    const { hostname } = await parseJson(c, hostnameSchema)
+    return c.json({ changed: sync.controlMany('pause', hostname?.toLowerCase()) })
+  })
+
+  app.post('/api/v1/admin/jobs/resume-all', async (c) => {
+    const { hostname } = await parseJson(c, hostnameSchema)
+    return c.json({ changed: sync.controlMany('resume', hostname?.toLowerCase()) })
+  })
+
+  app.post('/api/v1/admin/jobs/:id/:action', (c) => {
+    const action = c.req.param('action')
+    const job =
+      action === 'cancel'
+        ? sync.cancel(c.req.param('id'))
+        : action === 'pause'
+          ? sync.pause(c.req.param('id'))
+          : action === 'resume'
+            ? sync.resume(c.req.param('id'))
+            : action === 'stop'
+              ? sync.stop(c.req.param('id'))
+              : undefined
+    if (!job) throw new NotFoundError('同步任务不存在')
+    return c.json({ job })
+  })
+
+  app.put('/api/v1/admin/jobs/:id/priority', async (c) => {
+    const { priority } = await parseJson(c, prioritySchema)
+    const job = sync.setPriority(c.req.param('id'), priority)
     if (!job) throw new NotFoundError('同步任务不存在')
     return c.json({ job })
   })
@@ -174,4 +301,18 @@ async function parseJson<T extends z.ZodType>(
   const result = schema.safeParse(body)
   if (!result.success) throw new InputError(result.error.issues[0]?.message ?? '请求参数无效')
   return result.data
+}
+
+function queryInteger(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number
+): number {
+  if (value === undefined) return fallback
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new InputError(`查询参数必须是 ${minimum} 到 ${maximum} 之间的整数`)
+  }
+  return parsed
 }

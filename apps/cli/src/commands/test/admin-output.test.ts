@@ -29,8 +29,17 @@ function job(status: CloudSyncJob['status'], id = `job-${status}`): CloudSyncJob
   return {
     id,
     libraryId: 'library-1',
+    hostname: 'example.com',
     status,
+    priority: 0,
+    paused: false,
+    pauseRequested: false,
+    stopRequested: false,
+    partial: false,
+    contentBytes: 0,
+    remainingCount: 0,
     createdAt: '2026-08-21T00:00:00.000Z',
+    updatedAt: '2026-08-21T00:00:00.000Z',
     finishedAt: null,
     progress: {
       queued: 2,

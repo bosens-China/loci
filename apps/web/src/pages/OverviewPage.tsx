@@ -1,17 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { listJobs } from '@/api/jobs'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusPill } from '@/components/StatusPill'
-import { routePath, type AppRoute } from '@/routing'
 
-interface OverviewPageProps {
-  onNavigate?: (route: AppRoute) => void
-}
-
-export function OverviewPage({ onNavigate }: OverviewPageProps): React.JSX.Element {
-  const navigate = onNavigate ?? defaultNavigate
+export function OverviewPage(): React.JSX.Element {
+  const navigate = useNavigate()
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: listJobs })
   const error = sources.error ?? jobs.error
@@ -23,51 +19,51 @@ export function OverviewPage({ onNavigate }: OverviewPageProps): React.JSX.Eleme
   const documentCount = sources.data?.reduce((count, source) => count + source.pages, 0) ?? 0
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader title="概览" />
       <AsyncState loading={sources.isLoading || jobs.isLoading} error={error}>
-        <section className="grid grid-cols-4 gap-4">
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             label="文档来源"
             value={sources.data?.length ?? 0}
             note={`${scheduled.length} 个定时计划`}
-            onClick={() => navigate('documents')}
+            onClick={() => void navigate({ to: '/documents' })}
           />
           <MetricCard
             label="已收录页面"
             value={documentCount}
             note="本机 SQLite 索引"
-            onClick={() => navigate('documents')}
+            onClick={() => void navigate({ to: '/documents' })}
           />
           <MetricCard
             label="活动任务"
             value={active.length}
             note="支持重启后恢复"
             accent={active.length > 0}
-            onClick={() => navigate('jobs')}
+            onClick={() => void navigate({ to: '/jobs' })}
           />
           <MetricCard
             label="需要处理"
             value={attention}
             note="失败或需关注"
             warn={attention > 0}
-            onClick={() => navigate('documents')}
+            onClick={() => void navigate({ to: '/documents' })}
           />
         </section>
 
-        <section className="mt-6 grid grid-cols-[1.4fr_1fr] gap-5">
+        <section className="mt-6 grid gap-5 lg:grid-cols-[1.4fr_1fr]">
           <div className="panel overflow-hidden">
             <div className="pane-header">
               <span className="pane-title">最近任务</span>
               <button
                 type="button"
                 className="text-xs text-accent hover:underline"
-                onClick={() => navigate('jobs')}
+                onClick={() => void navigate({ to: '/jobs' })}
               >
                 查看全部
               </button>
             </div>
-            <div className="divide-y divide-[#e8eded] px-4">
+            <div className="max-h-96 divide-y divide-[#e8eded] overflow-y-auto px-4">
               {(jobs.data ?? []).slice(0, 8).map((job) => {
                 const source = sources.data?.find((item) => item.id === job.sourceId)
                 return (
@@ -92,13 +88,13 @@ export function OverviewPage({ onNavigate }: OverviewPageProps): React.JSX.Eleme
             <div className="pane-header">
               <span className="pane-title">定时计划</span>
             </div>
-            <div className="p-4">
+            <div className="max-h-96 overflow-y-auto p-4">
               {scheduled.slice(0, 8).map((source) => (
                 <button
                   key={source.id}
                   type="button"
                   className="focus-ring mb-2 block w-full rounded-lg px-3 py-2.5 text-left hover:bg-[#f3f7f6]"
-                  onClick={() => openDocumentSource(source.id)}
+                  onClick={() => void navigate({ to: '/documents', search: { source: source.id } })}
                 >
                   <div className="text-sm font-650">{source.name}</div>
                   <div className="mt-0.5 font-mono text-[11px] text-muted">
@@ -146,17 +142,4 @@ function MetricCard(props: {
       </div>
     </button>
   )
-}
-
-function defaultNavigate(route: AppRoute): void {
-  window.history.pushState({}, '', routePath(route))
-  window.dispatchEvent(new PopStateEvent('popstate'))
-}
-
-function openDocumentSource(sourceId: string): void {
-  const url = new URL(window.location.origin)
-  url.pathname = '/documents'
-  url.searchParams.set('source', sourceId)
-  window.history.pushState({}, '', url)
-  window.dispatchEvent(new PopStateEvent('popstate'))
 }

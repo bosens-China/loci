@@ -4,7 +4,8 @@ import { dirname, join, resolve } from 'node:path'
 import type { Command } from 'commander'
 import {
   acquireMaintenanceRuntimeLock,
-  inspectPersistentBackgroundRequirements
+  inspectPersistentBackgroundRequirements,
+  parseBackupArchive
 } from '@loci/runtime'
 import { ensurePersistentBackgroundService } from '../background-host.js'
 import { runWithRuntime } from '../command-runtime.js'
@@ -25,11 +26,9 @@ export function registerDataCommands(
       runWithRuntime('导出 Loci 数据', async (runtime) => {
         const directory = readRecentResource(runtime.database, 'data-directory') ?? process.cwd()
         const target = resolve(file ?? join(directory, defaultBackupFilename()))
-        await writeFile(
-          target,
-          JSON.stringify(runtime.database.exportBackup(), null, 2),
-          file ? 'utf8' : { encoding: 'utf8', flag: 'wx' }
-        )
+        await writeFile(target, await runtime.database.exportBackupArchive(), {
+          flag: file ? 'w' : 'wx'
+        })
         saveRecentResource(runtime.database, 'data-directory', dirname(target))
         return `数据已导出到 ${target}`
       })
@@ -49,16 +48,17 @@ export function registerDataCommands(
               validate: validateBackupPath
             }))
         )
-        let input: unknown
+        let archive: Buffer
+        let preview: Awaited<ReturnType<typeof parseBackupArchive>>
         try {
-          input = JSON.parse(await readFile(source, 'utf8')) as unknown
+          archive = await readFile(source)
+          preview = await parseBackupArchive(archive)
         } catch (error) {
-          if (error instanceof SyntaxError) {
-            throw new CliError('备份文件不是有效 JSON，请确认文件来源', 2)
-          }
-          throw error
+          throw new CliError(
+            error instanceof Error ? error.message : '备份 ZIP 无法读取，请确认文件来源',
+            2
+          )
         }
-        const preview = backupCounts(input)
         if (
           !options.yes &&
           !(await askConfirm(
@@ -68,9 +68,9 @@ export function registerDataCommands(
           throw new CliCanceledError()
         }
         const lock = acquireMaintenanceRuntimeLock(runtime.dataDir, 'CLI 数据导入')
-        let summary: ReturnType<typeof runtime.database.importBackup>
+        let summary: Awaited<ReturnType<typeof runtime.database.importBackupArchive>>
         try {
-          summary = runtime.database.importBackup(input)
+          summary = await runtime.database.importBackupArchive(archive)
           saveRecentResource(runtime.database, 'data-directory', dirname(source))
         } finally {
           lock.release()
@@ -141,18 +141,5 @@ function validateBackupPath(value: string | undefined): string | undefined {
 }
 
 export function defaultBackupFilename(now: Date = new Date()): string {
-  return `loci-backup-${now.toISOString().replace(/[:.]/g, '-')}.json`
-}
-
-function backupCounts(input: unknown): { sources: number; documents: number } {
-  if (!input || typeof input !== 'object' || !('data' in input)) {
-    throw new CliError('备份文件格式无效', 2)
-  }
-  const data = input.data
-  if (!data || typeof data !== 'object') throw new CliError('备份文件缺少数据', 2)
-  const sources = 'sources' in data && Array.isArray(data.sources) ? data.sources.length : -1
-  const documents =
-    'documents' in data && Array.isArray(data.documents) ? data.documents.length : -1
-  if (sources < 0 || documents < 0) throw new CliError('备份文件内容无效', 2)
-  return { sources, documents }
+  return `loci-backup-${now.toISOString().replace(/[:.]/g, '-')}.zip`
 }

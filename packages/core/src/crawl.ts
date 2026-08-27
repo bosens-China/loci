@@ -14,6 +14,7 @@ import { isUrlInScope } from './scope.js'
 import type {
   CrawledDocument,
   CrawledPage,
+  CrawlBatchPolicy,
   CrawlFailure,
   CrawlNode,
   CrawlProgress,
@@ -27,6 +28,8 @@ export { getHostname, isAllowedNavigation, isSameHostname, normalizeUrl } from '
 export type {
   CrawledDocument,
   CrawledPage,
+  CrawlBatchPolicy,
+  CrawlCheckpoint,
   CrawlDuplicate,
   CrawlFailure,
   CrawlNode,
@@ -60,15 +63,13 @@ const immediateStaticHostnameSuffixes = ['.github.io', '.gitlab.io'] as const
 interface ImmediateCrawlOptions {
   concurrency: number
   batchIntervalMs: undefined
-  waitIfPaused: undefined
 }
 
 /** 已知可整批直取的静态页面不受用户批次节流配置影响。 */
 export function immediateCrawlOptions(pageCount: number): ImmediateCrawlOptions {
   return {
     concurrency: Math.max(1, pageCount),
-    batchIntervalMs: undefined,
-    waitIfPaused: undefined
+    batchIntervalMs: undefined
   }
 }
 
@@ -348,17 +349,32 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
     throwIfAborted(options.signal)
     await options.waitIfPaused?.()
     throwIfAborted(options.signal)
-    const batch = queue.slice(cursor, cursor + Math.max(1, options.concurrency))
+    const policy = await resolveBatchPolicy(options)
+    const batch = queue.slice(cursor, cursor + policy.concurrency)
     cursor += batch.length
     await Promise.all(batch.map(processPage))
     throwIfAborted(options.signal)
-    if (cursor < queue.length && options.batchIntervalMs) {
-      await abortableSleep(options.batchIntervalMs, options.signal, options.sleep ?? defaultSleep)
+    await options.onCheckpoint?.({ pendingUrls: queue.slice(cursor).map((item) => item.url) })
+    if (cursor < queue.length && policy.batchIntervalMs) {
+      await abortableSleep(policy.batchIntervalMs, options.signal, options.sleep ?? defaultSleep)
     }
   }
   const completed = failures.length ? { ...progress, failures } : progress
   options.onProgress?.(completed)
   return completed
+}
+
+async function resolveBatchPolicy(options: CrawlRunnerOptions): Promise<CrawlBatchPolicy> {
+  const current = await options.getBatchPolicy?.()
+  return {
+    concurrency: Math.max(1, Math.trunc(current?.concurrency ?? options.concurrency)),
+    batchIntervalMs: normalizeBatchInterval(current?.batchIntervalMs ?? options.batchIntervalMs)
+  }
+}
+
+function normalizeBatchInterval(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) return undefined
+  return Math.trunc(value)
 }
 
 function trailingSlashGroup(input: string): string | undefined {

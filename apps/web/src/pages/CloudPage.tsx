@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import type { CloudCatalogItem } from '@loci/shared'
 import { App, Button, Popconfirm, Switch, Tag } from 'antd'
 import {
@@ -17,11 +19,14 @@ import { deleteSource } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { formatBytes, formatDate } from '@/utils/format'
+import { LibraryBrowserWorkspace } from '@/pages/documents/LibraryBrowserWorkspace'
 
 type CatalogAction = { item: CloudCatalogItem; run: () => Promise<unknown>; success: string }
 
 export function CloudPage(): React.JSX.Element {
   const { message } = App.useApp()
+  const navigate = useNavigate()
+  const [selectedLibraryId, setSelectedLibraryId] = useState<string>()
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['cloud-catalog'], queryFn: listCloudCatalog })
   const action = useMutation({
@@ -40,16 +45,24 @@ export function CloudPage(): React.JSX.Element {
     action.mutate({ item, run: task, success })
   }
   const openLibrary = (sourceId: string): void => {
-    const url = new URL(window.location.origin)
-    url.pathname = '/documents'
-    url.searchParams.set('source', sourceId)
-    window.history.pushState({}, '', url)
-    window.dispatchEvent(new PopStateEvent('popstate'))
+    void navigate({ to: '/documents', search: { source: sourceId } })
   }
   const busyId = action.isPending ? action.variables?.item.id : null
+  const selectedLibrary = query.data?.find((item) => item.id === selectedLibraryId)
+
+  if (selectedLibrary) {
+    return (
+      <LibraryBrowserWorkspace
+        location="cloud"
+        libraryId={selectedLibrary.id}
+        title={selectedLibrary.name}
+        onBack={() => setSelectedLibraryId(undefined)}
+      />
+    )
+  }
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         title="云端目录"
         description="从公开目录拉取只读快照到本机。阅读走本地 SQLite，离线可用。"
@@ -70,9 +83,18 @@ export function CloudPage(): React.JSX.Element {
         emptyText="当前云服务没有可用的公开文档库"
         onRetry={() => void query.refetch()}
       >
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid min-w-0 gap-4 md:grid-cols-2">
           {query.data?.map((item) => (
-            <article key={item.id} className="panel p-5">
+            <article
+              key={item.id}
+              role="button"
+              tabIndex={0}
+              className="panel min-w-0 cursor-pointer p-5 transition-shadow hover:shadow-md"
+              onClick={() => setSelectedLibraryId(item.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') setSelectedLibraryId(item.id)
+              }}
+            >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <h2 className="m-0 truncate font-serif text-lg font-600">{item.name}</h2>
@@ -92,8 +114,18 @@ export function CloudPage(): React.JSX.Element {
                 <Tag variant="filled">{formatBytes(item.contentSize)}</Tag>
                 <Tag variant="filled">发布 {formatDate(item.publishedAt)}</Tag>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e5ebeb] pt-4">
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e5ebeb] pt-4"
+                onClick={(event) => event.stopPropagation()}
+              >
                 <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="small"
+                    icon={<FileSearchOutlined />}
+                    onClick={() => setSelectedLibraryId(item.id)}
+                  >
+                    在线阅读
+                  </Button>
                   {item.localSourceId ? (
                     <>
                       <Button

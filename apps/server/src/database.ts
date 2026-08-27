@@ -6,10 +6,32 @@ import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm'
 import type { Library, LibraryInput, LibrarySnapshot, PublicLibrary } from './types.js'
 import { initializeServerDatabase } from './database-schema.js'
 import { createServerDrizzleDatabase, type ServerDrizzleDatabase } from './drizzle-database.js'
-import { libraries, librarySnapshots, syncJobs as syncJobsTable } from './drizzle-schema.js'
+import {
+  libraries,
+  librarySnapshots,
+  serverDocuments,
+  syncJobs as syncJobsTable
+} from './drizzle-schema.js'
 import { normalizeLibraryScope } from './library-input.js'
 import { selectLibraries } from './library-query.js'
+import {
+  createServerHostnamePolicyDatabase,
+  type ServerHostnamePolicyDatabase
+} from './hostname-policy-database.js'
+import { listServerLibraryFiles, readServerLibraryFile } from './library-browser-database.js'
+import { publishImportedLibrary } from './library-publish-database.js'
+import type { LibraryPublishPayload } from '@loci/core'
 import { ConflictError, NotFoundError } from './database-errors.js'
+import {
+  checkpointSyncJob,
+  finishPartialSyncJob,
+  readSyncJobResumeUrls,
+  releasePausedSyncJob,
+  requestSyncJobPause,
+  requestSyncJobStop,
+  resumeSyncJob,
+  setSyncJobPriority
+} from './sync-job-control-database.js'
 import {
   expireSyncJobLeases,
   finishSyncJob,
@@ -39,6 +61,7 @@ export { ConflictError, NotFoundError } from './database-errors.js'
 export class ServerDatabase {
   readonly #database: DatabaseSync
   readonly #drizzle: ServerDrizzleDatabase
+  readonly hostnamePolicies: ServerHostnamePolicyDatabase
 
   constructor(filename: string) {
     this.#database = new DatabaseSync(filename, {
@@ -47,6 +70,7 @@ export class ServerDatabase {
     })
     initializeServerDatabase(this.#database)
     this.#drizzle = createServerDrizzleDatabase(this.#database)
+    this.hostnamePolicies = createServerHostnamePolicyDatabase(this.#drizzle)
   }
 
   listLibraries(): Library[] {
@@ -76,6 +100,27 @@ export class ServerDatabase {
       error: string | null
     ) => finishSyncJob(this.#database, id, ownerId, status, progress, failures, error),
     cancel: (id: string) => requestSyncJobCancel(this.#database, id),
+    pause: (id: string) => requestSyncJobPause(this.#database, id),
+    resume: (id: string, ownerId: string, leaseExpiresAt: string) =>
+      resumeSyncJob(this.#database, id, ownerId, leaseExpiresAt),
+    stop: (id: string) => requestSyncJobStop(this.#database, id),
+    setPriority: (id: string, priority: number) => setSyncJobPriority(this.#database, id, priority),
+    checkpoint: (
+      id: string,
+      ownerId: string,
+      progress: CrawlProgress,
+      pendingUrls: readonly string[],
+      contentBytes: number
+    ) => checkpointSyncJob(this.#database, id, ownerId, progress, pendingUrls, contentBytes),
+    releasePaused: (id: string, ownerId: string) =>
+      releasePausedSyncJob(this.#database, id, ownerId),
+    finishPartial: (
+      id: string,
+      ownerId: string,
+      progress: CrawlProgress | null,
+      contentBytes: number
+    ) => finishPartialSyncJob(this.#database, id, ownerId, progress, contentBytes),
+    getResumeUrls: (id: string) => readSyncJobResumeUrls(this.#database, id),
     expire: () => expireSyncJobLeases(this.#database)
   }
 
@@ -186,7 +231,7 @@ export class ServerDatabase {
         .where(eq(libraries.id, id))
         .run()
       if (current.url !== url || current.hostname !== hostname) {
-        this.#database.prepare('DELETE FROM documents WHERE library_id = ?').run(id)
+        this.#drizzle.delete(serverDocuments).where(eq(serverDocuments.libraryId, id)).run()
       } else if (current.scopePath !== scopePath) {
         this.deleteDocumentsOutsideScope(id, hostname, scopePath)
       }
@@ -226,6 +271,20 @@ export class ServerDatabase {
     return listServerDocumentUrls(this.#database, libraryId)
   }
 
+  listLibraryFiles(libraryId: string, offset?: number, limit?: number) {
+    this.getLibrary(libraryId)
+    return listServerLibraryFiles(this.#drizzle, libraryId, offset, limit)
+  }
+
+  readLibraryFile(libraryId: string, fileId: string, offset?: number, maxChars?: number) {
+    this.getLibrary(libraryId)
+    return readServerLibraryFile(this.#drizzle, libraryId, fileId, offset, maxChars)
+  }
+
+  publishImportedLibrary(payload: LibraryPublishPayload) {
+    return publishImportedLibrary(this.#database, this.#drizzle, payload)
+  }
+
   saveDocument(libraryId: string, document: CrawledDocument): void {
     saveServerDocument(this.#database, libraryId, document)
   }
@@ -244,18 +303,17 @@ export class ServerDatabase {
   }
 
   deleteDocumentsOutsideScope(libraryId: string, hostname: string, scopePath: string): number {
-    const rows = this.#database
-      .prepare('SELECT url FROM documents WHERE library_id = ?')
-      .all(libraryId) as unknown as Array<{ url: string }>
-    const statement = this.#database.prepare(
-      'DELETE FROM documents WHERE library_id = ? AND url = ?'
+    const ids = this.#drizzle
+      .select({ id: serverDocuments.id, url: serverDocuments.url })
+      .from(serverDocuments)
+      .where(eq(serverDocuments.libraryId, libraryId))
+      .all()
+      .filter((row) => !isUrlInScope(row.url, hostname, scopePath))
+      .map((row) => row.id)
+    if (!ids.length) return 0
+    return Number(
+      this.#drizzle.delete(serverDocuments).where(inArray(serverDocuments.id, ids)).run().changes
     )
-    let removed = 0
-    for (const row of rows) {
-      if (isUrlInScope(row.url, hostname, scopePath)) continue
-      removed += Number(statement.run(libraryId, row.url).changes)
-    }
-    return removed
   }
 
   finishCrawl(libraryId: string, error: string | null): void {

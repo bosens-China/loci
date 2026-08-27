@@ -1,27 +1,64 @@
+import { setTimeout as delay } from 'node:timers/promises'
 import { Option, type Command } from 'commander'
-import type { LocalJob, LocalJobEvent } from '@loci/shared'
+import { formatLocalDate, type LocalJob, type LocalJobEvent, type OperationLog } from '@loci/shared'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { createCliRuntime, type CliRuntime } from '../runtime.js'
 import { ensureLocalJobWorkerRunning } from '../service-manager.js'
-import { askSelect, printTable } from '../ui.js'
+import { askSelect, confirmAction, printTable } from '../ui.js'
 
 interface FollowOptions {
   format: 'text' | 'jsonl'
 }
 
+interface ConfirmOptions {
+  yes?: boolean
+}
+
+interface ListOptions {
+  hostname?: string
+  status?: LocalJob['status']
+  date?: string
+}
+
+interface LogOptions {
+  date?: string
+  category?: OperationLog['category']
+  level?: OperationLog['level']
+  hostname?: string
+}
+
 export function registerTaskCommands(program: Command): void {
-  const task = program.command('task').description('查看、跟随和取消本地持久任务')
+  const task = program.command('task').description('查看、跟随和控制本地持久任务')
 
   task
     .command('list')
     .description('列出最近的本地任务')
-    .action(() =>
+    .option('--hostname <hostname>', '按 hostname 筛选')
+    .addOption(
+      new Option('--status <status>', '按状态筛选').choices([
+        'pending',
+        'running',
+        'completed',
+        'failed',
+        'cancelled'
+      ])
+    )
+    .option('--date <yyyy-mm-dd>', '按本地批次日期筛选')
+    .action((options: ListOptions) =>
       runWithRuntime('本地任务', async (runtime) => {
-        const jobs = runtime.database.listLocalJobs()
+        const jobs = filterListedJobs(runtime.database.listLocalJobs(), options)
         printTable(
-          ['任务 ID', '来源 ID', '状态', '进度', '触发'],
-          jobs.map((job) => [job.id, job.sourceId, job.status, progressText(job), job.trigger])
+          ['任务 ID', '来源 ID', '域名', '状态', '进度', '触发', '批次日期'],
+          jobs.map((job) => [
+            job.id,
+            job.sourceId,
+            job.hostname,
+            describeJobState(job),
+            progressText(job),
+            job.trigger,
+            formatLocalDate(job.scheduledAt)
+          ])
         )
         return `共 ${jobs.length} 个任务`
       })
@@ -56,9 +93,11 @@ export function registerTaskCommands(program: Command): void {
   task
     .command('cancel [task]')
     .description('请求取消 pending 或 running 任务；省略时交互选择')
-    .action((reference: string | undefined) =>
+    .option('-y, --yes', '跳过二次确认')
+    .action((reference: string | undefined, options: ConfirmOptions) =>
       runWithRuntime('取消任务', async (runtime) => {
         const job = await resolveTaskInteractive(runtime, reference)
+        await requireConfirmation(`确认取消任务 ${job.id} 并丢弃本次内容？`, options)
         const current = runtime.database.requestLocalJobCancellation(job.id)
         if (!current) throw new CliError('任务不存在', 2)
         return current.status === 'cancelled'
@@ -68,6 +107,148 @@ export function registerTaskCommands(program: Command): void {
             : `任务 ${current.id} 已经结束，当前状态为 ${current.status}`
       })
     )
+
+  registerSingleJobControl(task, 'pause', '暂停任务', async (runtime, id) =>
+    runtime.database.requestLocalJobPause(id)
+  )
+  registerSingleJobControl(task, 'resume', '恢复任务', async (runtime, id) => {
+    const job = runtime.database.resumeLocalJob(id)
+    if (job) await ensureLocalJobWorkerRunning()
+    return job
+  })
+  registerSingleJobControl(task, 'stop', '结束任务并保留已抓取内容', async (runtime, id) =>
+    runtime.database.requestLocalJobStop(id)
+  )
+
+  task
+    .command('priority <priority> [task]')
+    .description('调整任务优先级，数值越大越先执行；省略任务时交互选择')
+    .option('-y, --yes', '跳过二次确认')
+    .action((priorityValue: string, reference: string | undefined, options: ConfirmOptions) =>
+      runWithRuntime('调整任务优先级', async (runtime) => {
+        const priority = Number(priorityValue)
+        if (!Number.isInteger(priority) || priority < -100 || priority > 100) {
+          throw new CliError('优先级必须是 -100 到 100 之间的整数', 2)
+        }
+        const job = await resolveTaskInteractive(runtime, reference)
+        await requireConfirmation(`确认将任务 ${job.id} 的优先级调整为 ${priority}？`, options)
+        const current = runtime.database.setLocalJobPriority(job.id, priority)
+        if (!current) throw new CliError('任务不存在', 2)
+        return `任务 ${current.id} 的优先级已调整为 ${current.priority}`
+      })
+    )
+
+  registerBulkJobControl(task, 'pause-all', '暂停', (runtime, hostname) =>
+    runtime.database.pauseLocalJobs(hostname)
+  )
+  registerBulkJobControl(task, 'resume-all', '恢复', async (runtime, hostname) => {
+    const changed = runtime.database.resumeLocalJobs(hostname)
+    if (changed > 0) await ensureLocalJobWorkerRunning()
+    return changed
+  })
+
+  task
+    .command('logs')
+    .description('查看结构化操作日志')
+    .option('--date <yyyy-mm-dd>', '按本地日期筛选')
+    .addOption(
+      new Option('--category <category>', '按分类筛选').choices([
+        'task',
+        'library',
+        'settings',
+        'cloud',
+        'maintenance',
+        'system'
+      ])
+    )
+    .addOption(new Option('--level <level>', '按级别筛选').choices(['info', 'warning', 'error']))
+    .option('--hostname <hostname>', '按 hostname 筛选')
+    .action((options: LogOptions) =>
+      runWithRuntime('操作日志', async (runtime) => {
+        const response = runtime.database.listOperationLogs({ ...options, limit: 100 })
+        printTable(
+          ['时间', '分类', '操作', '级别', '域名', '消息'],
+          response.items.map((item) => [
+            item.createdAt,
+            item.category,
+            item.action,
+            item.level,
+            item.hostname ?? '—',
+            item.message
+          ])
+        )
+        return `共 ${response.total} 条操作记录`
+      })
+    )
+}
+
+function registerSingleJobControl(
+  task: Command,
+  action: 'pause' | 'resume' | 'stop',
+  label: string,
+  control: (runtime: CliRuntime, id: string) => Promise<LocalJob | undefined>
+): void {
+  task
+    .command(`${action} [task]`)
+    .description(`${label}；省略任务时交互选择`)
+    .option('-y, --yes', '跳过二次确认')
+    .action((reference: string | undefined, options: ConfirmOptions) =>
+      runWithRuntime(label, async (runtime) => {
+        const job = await resolveTaskInteractive(runtime, reference)
+        await requireConfirmation(`确认${label} ${job.id}？`, options)
+        const current = await control(runtime, job.id)
+        if (!current) throw new CliError('任务不存在', 2)
+        return `任务 ${current.id} 当前状态：${describeJobState(current)}`
+      })
+    )
+}
+
+function registerBulkJobControl(
+  task: Command,
+  command: 'pause-all' | 'resume-all',
+  label: '暂停' | '恢复',
+  control: (runtime: CliRuntime, hostname?: string) => number | Promise<number>
+): void {
+  task
+    .command(`${command} [hostname]`)
+    .description(`${label}全部活动任务；可仅处理一个 hostname`)
+    .option('-y, --yes', '跳过二次确认')
+    .action((hostname: string | undefined, options: ConfirmOptions) =>
+      runWithRuntime(`${label}全部任务`, async (runtime) => {
+        const scope = hostname ? `域名 ${hostname}` : '全部域名'
+        await requireConfirmation(`确认${label}${scope}的活动任务？`, options)
+        const changed = await control(runtime, hostname?.trim().toLowerCase() || undefined)
+        return `已${label} ${changed} 个任务`
+      })
+    )
+}
+
+async function requireConfirmation(message: string, options: ConfirmOptions): Promise<void> {
+  const confirmed = await confirmAction(
+    message,
+    options.yes,
+    '非交互终端执行任务控制必须传入 --yes'
+  )
+  if (!confirmed) throw new CliError('操作已取消', 2)
+}
+
+function describeJobState(job: LocalJob): string {
+  if (job.stopRequested) return '等待结束'
+  if (job.pauseRequested || job.paused) return '已暂停'
+  return job.status
+}
+
+function filterListedJobs(jobs: LocalJob[], options: ListOptions): LocalJob[] {
+  const hostname = options.hostname?.trim().toLowerCase()
+  if (options.date && !/^\d{4}-\d{2}-\d{2}$/u.test(options.date)) {
+    throw new CliError('--date 必须使用 YYYY-MM-DD 格式', 2)
+  }
+  return jobs.filter(
+    (job) =>
+      (!hostname || job.hostname === hostname) &&
+      (!options.status || job.status === options.status) &&
+      (!options.date || formatLocalDate(job.scheduledAt) === options.date)
+  )
 }
 
 async function followTask(
@@ -179,8 +360,4 @@ function progressText(job: LocalJob): string {
 
 function isActive(job: LocalJob): boolean {
   return job.status === 'pending' || job.status === 'running'
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }

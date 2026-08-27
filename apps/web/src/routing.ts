@@ -1,30 +1,43 @@
-export type AppRoute = 'overview' | 'documents' | 'cloud' | 'jobs' | 'agents' | 'admin' | 'settings'
-
-const routes: Record<AppRoute, string> = {
-  overview: '/',
-  documents: '/documents',
-  cloud: '/cloud',
-  jobs: '/jobs',
-  agents: '/agents',
-  admin: '/admin',
-  settings: '/settings'
+export interface DocumentSearch {
+  source?: string
+  doc?: string
+  q?: string
+  document?: string
 }
 
-/** 旧路径重定向，保证书签与外部链接仍可用。 */
-const legacyRoutes: Record<string, AppRoute> = {
-  '/sources': 'documents',
-  '/library': 'documents'
+export interface CanonicalDocumentSearch {
+  source?: string
+  doc?: string
+  q?: string
 }
 
-export function resolveRoute(pathname: string): AppRoute {
-  const legacy = legacyRoutes[pathname]
-  if (legacy) return legacy
-  const found = (Object.entries(routes) as Array<[AppRoute, string]>).find(
-    ([, path]) => path === pathname
-  )
-  return found?.[0] ?? 'overview'
+/** Router 会 JSON 解析查询值；这里恢复原有 URLSearchParams 的字符串语义。 */
+export function parseDocumentSearch(search: Record<string, unknown>): DocumentSearch {
+  return {
+    source: optionalString(search.source),
+    doc: optionalString(search.doc),
+    q: optionalString(search.q),
+    document: optionalString(search.document)
+  }
 }
 
-export function routePath(route: AppRoute): string {
-  return routes[route]
+/** 旧 document 参数只在入口兼容，所有后续导航都写回规范 doc 参数。 */
+export function canonicalDocumentSearch(search: DocumentSearch): CanonicalDocumentSearch {
+  return compactSearch({
+    source: search.source,
+    doc: search.doc ?? search.document,
+    q: search.q
+  })
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value || undefined
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return undefined
+}
+
+function compactSearch(search: CanonicalDocumentSearch): CanonicalDocumentSearch {
+  return Object.fromEntries(
+    Object.entries(search).filter(([, value]) => value !== undefined && value !== '')
+  ) as CanonicalDocumentSearch
 }

@@ -1,23 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { resolveRoute, routePath } from '@/routing'
+import { canonicalDocumentSearch, parseDocumentSearch } from '@/routing'
 
-describe('Web 路由', () => {
-  it('为主页面生成可刷新路径', () => {
-    expect(routePath('documents')).toBe('/documents')
-    expect(routePath('cloud')).toBe('/cloud')
-    expect(routePath('admin')).toBe('/admin')
-    expect(routePath('agents')).toBe('/agents')
-    expect(resolveRoute('/jobs')).toBe('jobs')
-    expect(resolveRoute('/admin')).toBe('admin')
-    expect(resolveRoute('/agents')).toBe('agents')
+describe('Web 路由兼容性', () => {
+  it('把 Router 解析后的基础值恢复为文档工作区字符串', () => {
+    expect(
+      parseDocumentSearch({ source: 42, doc: true, q: ['ignored'], document: 'legacy' })
+    ).toEqual({ source: '42', doc: 'true', q: undefined, document: 'legacy' })
   })
 
-  it('旧路径映射到文档工作区', () => {
-    expect(resolveRoute('/sources')).toBe('documents')
-    expect(resolveRoute('/library')).toBe('documents')
-  })
-
-  it('未知路径回到概览', () => {
-    expect(resolveRoute('/missing')).toBe('overview')
+  it('规范化旧 document 参数并优先保留 doc', () => {
+    expect(canonicalDocumentSearch({ source: 'source', document: 'legacy', q: '' })).toEqual({
+      source: 'source',
+      doc: 'legacy'
+    })
+    expect(canonicalDocumentSearch({ doc: 'current', document: 'legacy' })).toEqual({
+      doc: 'current'
+    })
   })
 })

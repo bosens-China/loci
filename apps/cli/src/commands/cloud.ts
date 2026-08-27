@@ -5,7 +5,15 @@ import { applyPersistentBackgroundSetting } from '../background-host.js'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
 import { readRecentResource, saveRecentResource } from '../preferences.js'
-import { askConfirm, askSelect, createSpinner, printTable } from '../ui.js'
+import {
+  askConfirm,
+  askSelect,
+  confirmAction,
+  createSpinner,
+  printTable,
+  printTree,
+  requireYesInNonInteractive
+} from '../ui.js'
 
 export function registerCloudCommands(
   program: Command,
@@ -61,6 +69,55 @@ export function registerCloudCommands(
           spinner.error('下载失败')
           throw error
         }
+      })
+    )
+
+  cloud
+    .command('tree [library]')
+    .description('按需读取云端文档库目录，不下载正文')
+    .option('--parent <path>', '只读取指定目录')
+    .option('--depth <number>', '返回目录深度', '1')
+    .action((reference: string | undefined, options: { parent?: string; depth: string }) =>
+      runWithRuntime('云端文档目录', async (runtime) => {
+        const serverUrl = runtime.database.getSettings().serverUrl
+        const item = await selectCatalog(
+          await runtime.cloud.listCatalog(serverUrl),
+          reference,
+          runtime.database
+        )
+        const depth = Math.max(1, Math.min(10, Number.parseInt(options.depth, 10) || 1))
+        const tree = (await runtime.cloud.getLibraryTree(serverUrl, item.id, options.parent, depth))
+          .nodes
+        process.stdout.write(`${item.name}\n`)
+        printTree(tree)
+        return `已读取云端文档库“${item.name}”的目录`
+      })
+    )
+
+  cloud
+    .command('read <library> <file>')
+    .description('按需读取一篇云端文档，可分段读取')
+    .option('--offset <number>', '正文起始字符', '0')
+    .option('--limit <number>', '本次最多字符数', '20000')
+    .action((reference: string, file: string, options: { offset: string; limit: string }) =>
+      runWithRuntime('读取云端文档', async (runtime) => {
+        const serverUrl = runtime.database.getSettings().serverUrl
+        const item = await selectCatalog(
+          await runtime.cloud.listCatalog(serverUrl),
+          reference,
+          runtime.database
+        )
+        const record = await runtime.cloud.readLibraryFile(
+          serverUrl,
+          item.id,
+          file,
+          Math.max(0, Number.parseInt(options.offset, 10) || 0),
+          Math.max(1_000, Number.parseInt(options.limit, 10) || 20_000)
+        )
+        process.stdout.write(`\n# ${record.title}\n\n来源：${record.url}\n\n${record.content}\n`)
+        return record.truncated
+          ? `已读取部分正文，下次 offset=${record.nextOffset}`
+          : '已读取完整正文'
       })
     )
 
@@ -136,14 +193,16 @@ export function registerCloudCommands(
     .action((reference: string | undefined, options: { yes?: boolean }) =>
       runWithRuntime('删除云端副本', async (runtime) => {
         runtime.assertWritable()
-        if (!options.yes && !process.stdin.isTTY) {
-          throw new CliError('非交互终端请传入 --yes 跳过删除确认', 2)
-        }
+        requireYesInNonInteractive(options.yes, '非交互终端请传入 --yes 跳过删除确认')
         const source = await selectCloudSource(runtime.database.listSources(), reference)
-        if (!options.yes) {
-          if (!(await askConfirm(`确定删除本地副本“${source.name}”吗？`))) {
-            return `未删除本地云端副本“${source.name}”`
-          }
+        if (
+          !(await confirmAction(
+            `确定删除本地副本“${source.name}”吗？`,
+            options.yes,
+            '非交互终端请传入 --yes 跳过删除确认'
+          ))
+        ) {
+          return `未删除本地云端副本“${source.name}”`
         }
         runtime.deleteSource(source.id)
         return `已删除本地云端副本“${source.name}”，Server 内容未受影响`

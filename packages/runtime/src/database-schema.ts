@@ -1,7 +1,7 @@
 import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import { APP_SETTINGS_LIMITS, DEFAULT_APP_SETTINGS, PRODUCTION_SERVER_URL } from '@loci/shared'
 
-export const LOCI_SCHEMA_VERSION = 16
+export const LOCI_SCHEMA_VERSION = 18
 
 // 基础表结构集中维护，具体子模块的增量表由各自初始化函数负责。
 export const LOCI_DATABASE_SCHEMA = `
@@ -70,10 +70,48 @@ export const LOCI_DATABASE_SCHEMA = `
     batch_interval_seconds INTEGER NOT NULL DEFAULT ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled} CHECK (
       batch_interval_seconds = ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled} OR batch_interval_seconds BETWEEN ${APP_SETTINGS_LIMITS.batchIntervalSeconds.min} AND ${APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
     ),
+    batch_interval_max_seconds INTEGER NOT NULL DEFAULT ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled} CHECK (
+      batch_interval_max_seconds = ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled} OR batch_interval_max_seconds BETWEEN ${APP_SETTINGS_LIMITS.batchIntervalSeconds.min} AND ${APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
+    ),
     server_url TEXT NOT NULL DEFAULT '${PRODUCTION_SERVER_URL}',
     server_url_customized INTEGER NOT NULL DEFAULT 0 CHECK (server_url_customized IN (0, 1)),
     github_archive_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubArchiveLimitMb} CHECK (github_archive_limit_mb BETWEEN ${APP_SETTINGS_LIMITS.githubSizeMb.min} AND ${APP_SETTINGS_LIMITS.githubSizeMb.max}),
     github_markdown_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubMarkdownLimitMb} CHECK (github_markdown_limit_mb BETWEEN ${APP_SETTINGS_LIMITS.githubSizeMb.min} AND ${APP_SETTINGS_LIMITS.githubSizeMb.max})
+  ) STRICT;
+
+  CREATE TABLE IF NOT EXISTS hostname_crawl_policies (
+    hostname TEXT PRIMARY KEY,
+    http_concurrency INTEGER,
+    browser_concurrency INTEGER,
+    batch_interval_min_seconds INTEGER,
+    batch_interval_max_seconds INTEGER,
+    updated_at TEXT NOT NULL
+  ) STRICT;
+
+  CREATE TABLE IF NOT EXISTS operation_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL CHECK (
+      category IN ('task', 'library', 'settings', 'cloud', 'maintenance', 'system')
+    ),
+    action TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (level IN ('info', 'warning', 'error')),
+    resource_type TEXT,
+    resource_id TEXT,
+    hostname TEXT,
+    message TEXT NOT NULL,
+    details_json TEXT,
+    created_at TEXT NOT NULL
+  ) STRICT;
+
+  CREATE INDEX IF NOT EXISTS operation_logs_created_at ON operation_logs(created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS document_move_operations (
+    operation_id TEXT PRIMARY KEY,
+    request_hash TEXT NOT NULL,
+    target_source_id TEXT NOT NULL,
+    moved_count INTEGER NOT NULL,
+    deleted_source_ids_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
   ) STRICT;
 
   CREATE TABLE IF NOT EXISTS interaction_preferences (

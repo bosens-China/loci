@@ -8,13 +8,19 @@ import type {
 } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
 import { registerCloudTools } from './cloud-tools.js'
+import { registerHostnamePolicyTools } from './hostname-policy-tools.js'
+import { registerDocumentMoveTools } from './document-move-tools.js'
 import { registerLibraryContentTools, registerListLibrariesTool } from './core-tools.js'
+import { registerLogTools } from './log-tools.js'
 import { registerDeleteLibraryTool } from './delete-tool.js'
 import { registerSearchTool } from './search-tool.js'
 import { registerPageTools } from './page-tools.js'
 import { registerSourcePlanningTools } from './source-planning-tools.js'
 import type { LociMcpServices } from './services.js'
 import { registerSyncTools } from './sync-tools.js'
+import { registerTaskTools } from './task-tools.js'
+import { registerServerTaskTools } from './server-task-tools.js'
+import { registerServerLibraryTools } from './server-library-tools.js'
 import { registerUrlReviewTools } from './url-review-tools.js'
 
 export interface LociToolContext {
@@ -106,11 +112,17 @@ export async function callLociMcpTool(
 
 export function registerLociTools(register: LociToolRegistrar, services: LociMcpServices): void {
   registerSyncTools(register, services)
+  registerTaskTools(register, services)
+  registerServerTaskTools(register, services)
+  registerServerLibraryTools(register, services)
+  registerLogTools(register, services)
   registerUrlReviewTools(register, services)
   registerPageTools(register, services)
   registerSourcePlanningTools(register, services)
   registerListLibrariesTool(register, services)
   registerCloudTools(register, services)
+  registerHostnamePolicyTools(register, services)
+  registerDocumentMoveTools(register, services)
   registerLibraryContentTools(register, services)
   registerSearchTool(register, services)
   registerDeleteLibraryTool(register, services)

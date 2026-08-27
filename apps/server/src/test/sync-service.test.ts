@@ -44,6 +44,88 @@ describe('SyncService 队列', () => {
     await Promise.all(jobs.map((job) => sync.wait(job.id)))
   })
 
+  it('同 hostname 串行，不同 hostname 保持并发', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const database = new ServerDatabase(':memory:')
+    const sync = new SyncService(
+      database,
+      async () => {
+        await gate
+        return new Response('', { status: 404 })
+      },
+      undefined,
+      3
+    )
+    cleanup.push(() => {
+      void sync.close()
+      database.close()
+    })
+    const libraries = [
+      ['Same A', 'https://docs.example.com/a', '/a'],
+      ['Same B', 'https://docs.example.com/b', '/b'],
+      ['Other', 'https://other.example.com/docs', '/docs']
+    ].map(([name, url, scopePath]) =>
+      database.createLibrary({
+        name: name!,
+        url: url!,
+        scopePath: scopePath!,
+        pageLimit: 10,
+        schedule: null
+      })
+    )
+
+    const jobs = sync.startMany(libraries.map((library) => library.id))
+    await vi.waitFor(() => expect(jobs.filter((job) => job.status === 'running')).toHaveLength(2))
+    expect(jobs[0]?.status).toBe('running')
+    expect(jobs[1]?.status).toBe('queued')
+    expect(jobs[2]?.status).toBe('running')
+    release()
+    await Promise.all(jobs.map((job) => sync.wait(job.id)))
+  })
+
+  it('手动启动同 hostname 的另一文档库时暂停原任务', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const database = new ServerDatabase(':memory:')
+    const sync = new SyncService(database, async () => {
+      await gate
+      return new Response('', { status: 404 })
+    })
+    cleanup.push(() => {
+      void sync.close()
+      database.close()
+    })
+    const firstLibrary = database.createLibrary({
+      name: 'First',
+      url: 'https://same.example.com/first',
+      scopePath: '/first',
+      pageLimit: 10,
+      schedule: null
+    })
+    const secondLibrary = database.createLibrary({
+      name: 'Second',
+      url: 'https://same.example.com/second',
+      scopePath: '/second',
+      pageLimit: 10,
+      schedule: null
+    })
+
+    const first = sync.start(firstLibrary.id)
+    await vi.waitFor(() => expect(first.status).toBe('running'))
+    const second = sync.start(secondLibrary.id)
+
+    expect(sync.getJob(first.id)?.pauseRequested).toBe(true)
+    expect(second.status).toBe('queued')
+    sync.cancel(first.id)
+    release()
+    await Promise.all([sync.wait(first.id), sync.wait(second.id)])
+  })
+
   it('运行中的任务协作式取消后不发布快照', async () => {
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
@@ -74,8 +156,8 @@ describe('SyncService 队列', () => {
     await vi.waitFor(() => expect(job.status).toBe('running'))
     expect(sync.cancel(job.id)?.status).toBe('canceling')
     release()
-    expect((await sync.wait(job.id))?.status).toBe('canceled')
-    expect(() => database.getSnapshot(library.id)).toThrow()
+    await sync.wait(job.id)
+    expect(() => database.getLibrary(library.id)).toThrow()
     expect(database.listDocumentUrls(library.id)).toEqual([])
   })
 
@@ -213,7 +295,8 @@ describe('SyncService 队列', () => {
     expect(remote.cancel(job.id)?.status).toBe('canceling')
     await new Promise((resolve) => setTimeout(resolve, 1_100))
     release()
-    expect((await owner.wait(job.id))?.status).toBe('canceled')
+    await owner.wait(job.id)
+    expect(() => ownerDatabase.getLibrary(library.id)).toThrow()
     expect(ownerDatabase.listDocumentUrls(library.id)).toEqual([])
   })
 })

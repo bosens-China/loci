@@ -1,11 +1,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { RouterProvider } from '@tanstack/react-router'
 import { App as AntApp, ConfigProvider } from 'antd'
 import '@unocss/reset/tailwind.css'
 import 'uno.css'
 import '@/styles/ant-fix.css'
-import { App } from '@/App'
+import { router } from '@/router'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,7 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     >
       <QueryClientProvider client={queryClient}>
         <AntApp>
-          <App />
+          <RouterProvider router={router} />
         </AntApp>
       </QueryClientProvider>
     </ConfigProvider>

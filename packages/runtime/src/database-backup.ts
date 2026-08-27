@@ -39,10 +39,14 @@ export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
         )
         .all(),
       crawlFailures: database.prepare('SELECT * FROM crawl_failures ORDER BY rowid').all(),
+      hostnameCrawlPolicies: database
+        .prepare('SELECT * FROM hostname_crawl_policies ORDER BY hostname')
+        .all(),
+      operationLogs: database.prepare('SELECT * FROM operation_logs ORDER BY id').all(),
       settings: database
         .prepare(
           `SELECT theme, http_concurrency, browser_concurrency, max_retries,
-             batch_interval_seconds, server_url, github_archive_limit_mb,
+             batch_interval_seconds, batch_interval_max_seconds, server_url, github_archive_limit_mb,
              github_markdown_limit_mb FROM app_settings WHERE id = 1`
         )
         .get()
@@ -58,6 +62,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
     explicitPageTargets = [],
     crawlRuns,
     crawlFailures = [],
+    hostnameCrawlPolicies = [],
+    operationLogs = [],
     settings
   } = backup.data
 
@@ -70,6 +76,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
       DELETE FROM documents;
       DELETE FROM explicit_page_targets;
       DELETE FROM document_sources;
+      DELETE FROM hostname_crawl_policies;
+      DELETE FROM operation_logs;
     `)
 
     const insertSource = database.prepare(
@@ -205,11 +213,48 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
       )
     }
 
+    const insertPolicy = database.prepare(
+      `INSERT INTO hostname_crawl_policies
+       (hostname, http_concurrency, browser_concurrency, batch_interval_min_seconds,
+        batch_interval_max_seconds, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    for (const policy of hostnameCrawlPolicies) {
+      insertPolicy.run(
+        policy.hostname,
+        policy.http_concurrency,
+        policy.browser_concurrency,
+        policy.batch_interval_min_seconds,
+        policy.batch_interval_max_seconds,
+        policy.updated_at
+      )
+    }
+
+    const insertLog = database.prepare(
+      `INSERT INTO operation_logs
+       (id, category, action, level, resource_type, resource_id, hostname, message, details_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    for (const log of operationLogs) {
+      insertLog.run(
+        log.id,
+        log.category,
+        log.action,
+        log.level,
+        log.resource_type,
+        log.resource_id,
+        log.hostname,
+        log.message,
+        log.details_json,
+        log.created_at
+      )
+    }
+
     database
       .prepare(
         `UPDATE app_settings
          SET theme = ?, http_concurrency = ?, browser_concurrency = ?,
-             max_retries = ?, batch_interval_seconds = ?, server_url = ?,
+             max_retries = ?, batch_interval_seconds = ?, batch_interval_max_seconds = ?,
+             server_url = ?,
              server_url_customized = ?, github_archive_limit_mb = ?,
              github_markdown_limit_mb = ?
          WHERE id = 1`
@@ -220,6 +265,7 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         settings.browser_concurrency,
         settings.max_retries ?? DEFAULT_APP_SETTINGS.maxRetries,
         settings.batch_interval_seconds ?? DEFAULT_APP_SETTINGS.batchIntervalSeconds,
+        settings.batch_interval_max_seconds ?? DEFAULT_APP_SETTINGS.batchIntervalMaxSeconds,
         normalizeServerUrl(settings.server_url ?? DEFAULT_APP_SETTINGS.serverUrl),
         settings.server_url ? 1 : 0,
         settings.github_archive_limit_mb ?? DEFAULT_APP_SETTINGS.githubArchiveLimitMb,

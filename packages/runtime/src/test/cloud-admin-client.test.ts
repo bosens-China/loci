@@ -21,9 +21,9 @@ describe('CloudAdminClient', () => {
       expect.objectContaining({ serverUrl: 'https://docs.example.com', username: 'admin' })
     )
     expect(session).not.toHaveProperty('token')
-    expect(fetcher.mock.calls[1]?.[1]?.headers).toMatchObject({
-      Authorization: 'Bearer secret-token'
-    })
+    expect(new Headers(fetcher.mock.calls[1]?.[1]?.headers).get('Authorization')).toBe(
+      'Bearer secret-token'
+    )
     expect(fetcher.mock.calls[2]?.[0]).toBe('https://docs.example.com/api/v1/admin/jobs/job-1')
   })
 
@@ -81,8 +81,17 @@ function syncJob(): Record<string, unknown> {
   return {
     id: 'job-1',
     libraryId: 'library-1',
+    hostname: 'docs.example.com',
     status: 'running',
+    priority: 0,
+    paused: false,
+    pauseRequested: false,
+    stopRequested: false,
+    partial: false,
+    contentBytes: 0,
+    remainingCount: 0,
     createdAt: '2026-08-03T00:00:00.000Z',
+    updatedAt: '2026-08-03T00:00:00.000Z',
     finishedAt: null,
     progress: null,
     failures: [],

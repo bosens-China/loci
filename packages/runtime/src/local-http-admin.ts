@@ -31,6 +31,26 @@ export async function handleLocalAdmin(
     })
     return true
   }
+  const publish = /^\/api\/admin\/publish\/([^/]+)$/u.exec(url.pathname)
+  if (request.method === 'POST' && publish) {
+    await mutationJson(response, 200, async () => {
+      const body = (await readJson(request)) as {
+        mode?: unknown
+        targetLibraryId?: unknown
+      }
+      const mode = body.mode === 'replace' ? 'replace' : body.mode === 'create' ? 'create' : null
+      if (!mode) throw new Error('发布模式无效')
+      const target = typeof body.targetLibraryId === 'string' ? body.targetLibraryId : undefined
+      if (mode === 'replace' && !target) throw new Error('覆盖发布必须指定目标文档库')
+      const archive = await runtime.database.exportLibraryPublishArchive(
+        decodeURIComponent(publish[1]!),
+        mode,
+        target
+      )
+      return runtime.admin.publishLibrary(archive)
+    })
+    return true
+  }
   if (request.method === 'GET' && url.pathname === '/api/admin/libraries') {
     await mutationJson(response, 200, () => runtime.admin.listLibraries())
     return true
@@ -77,11 +97,57 @@ export async function handleLocalAdmin(
     await mutationJson(response, 200, () => runtime.admin.listSyncJobs())
     return true
   }
-  const cancel = /^\/api\/admin\/jobs\/([^/]+)\/cancel$/u.exec(url.pathname)
-  if (request.method === 'POST' && cancel) {
-    await mutationJson(response, 200, () =>
-      runtime.admin.cancelSyncJob(decodeURIComponent(cancel[1]!))
+  if (request.method === 'GET' && url.pathname === '/api/admin/hostname-policies') {
+    await mutationJson(response, 200, () => runtime.admin.listHostnamePolicies())
+    return true
+  }
+  const hostnamePolicy = /^\/api\/admin\/hostname-policies\/([^/]+)$/u.exec(url.pathname)
+  if (request.method === 'PUT' && hostnamePolicy) {
+    await mutationJson(response, 200, async () =>
+      runtime.admin.saveHostnamePolicy({
+        ...((await readJson(request)) as Parameters<typeof runtime.admin.saveHostnamePolicy>[0]),
+        hostname: decodeURIComponent(hostnamePolicy[1]!)
+      })
     )
+    return true
+  }
+  if (request.method === 'DELETE' && hostnamePolicy) {
+    await mutationJson(response, 200, async () => {
+      await runtime.admin.deleteHostnamePolicy(decodeURIComponent(hostnamePolicy[1]!))
+      return { deleted: true }
+    })
+    return true
+  }
+  const bulk = /^\/api\/admin\/jobs\/(pause-all|resume-all)$/u.exec(url.pathname)
+  if (request.method === 'POST' && bulk) {
+    await mutationJson(response, 200, async () => {
+      const body = (await readJson(request)) as { hostname?: unknown }
+      const hostname = typeof body.hostname === 'string' ? body.hostname : undefined
+      const changed = await runtime.admin.controlSyncJobs(
+        bulk[1] as 'pause-all' | 'resume-all',
+        hostname
+      )
+      return { changed }
+    })
+    return true
+  }
+  const control = /^\/api\/admin\/jobs\/([^/]+)\/(pause|resume|stop|cancel)$/u.exec(url.pathname)
+  if (request.method === 'POST' && control) {
+    await mutationJson(response, 200, () =>
+      runtime.admin.controlSyncJob(
+        decodeURIComponent(control[1]!),
+        control[2] as 'pause' | 'resume' | 'stop' | 'cancel'
+      )
+    )
+    return true
+  }
+  const priority = /^\/api\/admin\/jobs\/([^/]+)\/priority$/u.exec(url.pathname)
+  if (request.method === 'PUT' && priority) {
+    await mutationJson(response, 200, async () => {
+      const body = (await readJson(request)) as { priority?: unknown }
+      if (typeof body.priority !== 'number') throw new Error('缺少任务优先级')
+      return runtime.admin.setSyncJobPriority(decodeURIComponent(priority[1]!), body.priority)
+    })
     return true
   }
   return false

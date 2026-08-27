@@ -114,8 +114,8 @@ describe('local job database', () => {
       expect(database.claimNextLocalJob('worker-4', 1_000, now)).toBeUndefined()
       expect(database.getLocalJob(job.id)).toMatchObject({
         status: 'failed',
-        error: '后台任务连续中断，已停止自动重试',
-        result: null,
+        error: '后台任务连续中断，已停止自动恢复',
+        result: { processed: 3 },
         heartbeatAt: null
       })
     } finally {
@@ -123,7 +123,7 @@ describe('local job database', () => {
     }
   })
 
-  it('过期恢复与随后取消都不保留上一次执行的进度或错误', () => {
+  it('过期恢复保留检查点进度，随后取消再丢弃本次进度', () => {
     const database = createMemoryDatabase()
     try {
       const startedAt = new Date('2026-08-20T00:00:00.000Z')
@@ -139,8 +139,8 @@ describe('local job database', () => {
       expect(database.claimNextLocalJob('worker-b', 1_000, recoveredAt)?.id).toBe(otherJob.id)
       expect(database.getLocalJob(job.id)).toMatchObject({
         status: 'pending',
-        result: null,
-        error: '上一次执行进程已退出，任务等待重试'
+        result: { processed: 1 },
+        error: '执行进程意外退出，任务等待恢复'
       })
 
       expect(database.requestLocalJobCancellation(job.id)).toMatchObject({

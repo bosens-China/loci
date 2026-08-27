@@ -1,6 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 export async function readJson(request: IncomingMessage, maxBytes = 1_048_576): Promise<unknown> {
+  const buffer = await readBuffer(request, maxBytes)
+  if (buffer.length === 0) return null
+  try {
+    return JSON.parse(buffer.toString('utf8')) as unknown
+  } catch {
+    throw new Error('请求 JSON 无效')
+  }
+}
+
+export async function readBuffer(request: IncomingMessage, maxBytes = 1_048_576): Promise<Buffer> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request) {
@@ -9,12 +19,7 @@ export async function readJson(request: IncomingMessage, maxBytes = 1_048_576): 
     if (size > maxBytes) throw new Error(`请求内容不能超过 ${formatMegabytes(maxBytes)} MB`)
     chunks.push(buffer)
   }
-  if (chunks.length === 0) return null
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
-  } catch {
-    throw new Error('请求 JSON 无效')
-  }
+  return Buffer.concat(chunks)
 }
 
 export function json(

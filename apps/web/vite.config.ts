@@ -1,4 +1,5 @@
 import { fileURLToPath, URL } from 'node:url'
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
 import UnoCSS from 'unocss/vite'
 import { defineConfig } from 'vite'
@@ -7,7 +8,11 @@ import { defineConfig } from 'vite'
 const devApiOrigin = `http://127.0.0.1:${process.env.LOCI_DEV_API_PORT ?? '12334'}`
 
 export default defineConfig({
-  plugins: [react({ babel: { plugins: ['babel-plugin-react-compiler'] } }), UnoCSS()],
+  plugins: [
+    tanstackRouter({ target: 'react', autoCodeSplitting: true }),
+    react({ babel: { plugins: ['babel-plugin-react-compiler'] } }),
+    UnoCSS()
+  ],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) }
   },
