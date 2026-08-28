@@ -3,6 +3,11 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { Cron } from 'croner'
 import PQueue from 'p-queue'
 import { normalizeCronSchedule } from '@loci/core'
+import {
+  createRevisionEventStream,
+  type RevisionEventStream,
+  type ServerResourceRevisions
+} from '@loci/shared'
 import type { BrowserConfig } from './browser-config.js'
 import { checkServerBrowserStatus } from './browser-status.js'
 import type { ServerBrowserStatus } from '@loci/shared'
@@ -22,6 +27,7 @@ export class SyncService {
   readonly #schedules = new Map<string, Cron>()
   readonly #domainQueues = new Map<string, PQueue>()
   readonly #queue: PQueue
+  readonly resourceEvents: RevisionEventStream<ServerResourceRevisions>
 
   constructor(
     private readonly database: ServerDatabase,
@@ -31,6 +37,7 @@ export class SyncService {
     this.#queue = new PQueue({
       concurrency: database.crawlSettings.get().maxConcurrentJobs
     })
+    this.resourceEvents = createRevisionEventStream(() => database.resourceRevisions.get(), 1_000)
   }
 
   restoreSchedules(): void {
@@ -249,6 +256,7 @@ export class SyncService {
   }
 
   async close(): Promise<void> {
+    this.resourceEvents.close()
     for (const job of this.#schedules.values()) job.stop()
     this.#schedules.clear()
     for (const job of this.#jobs.values()) if (isActive(job)) this.cancel(job.id)

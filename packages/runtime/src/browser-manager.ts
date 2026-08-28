@@ -44,6 +44,7 @@ export class BrowserManager {
   private operation: BrowserOperationStatus | null = null
   private active: ActiveOperation | null = null
   private verified: LocalBrowserStatus | null = null
+  private readonly listeners = new Set<(operation: BrowserOperationStatus) => void>()
   private readonly runCommand: typeof runBrowserCommand
   private readonly verify: (browsersPath: string) => Promise<BrowserVerification>
 
@@ -126,6 +127,12 @@ export class BrowserManager {
     await this.active?.promise
   }
 
+  /** Web transport 订阅当前 Runtime 的浏览器操作进度，不影响 CLI 回调。 */
+  subscribe(listener: (operation: BrowserOperationStatus) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
   private async execute(operation: BrowserOperationStatus, lock: RuntimeLock): Promise<void> {
     try {
       if (operation.kind === 'install') await this.install(operation)
@@ -203,7 +210,10 @@ export class BrowserManager {
   }
 
   private notify(): void {
-    if (this.operation) this.options.onChange?.(cloneOperation(this.operation)!)
+    if (!this.operation) return
+    const operation = cloneOperation(this.operation)!
+    this.options.onChange?.(operation)
+    for (const listener of this.listeners) listener(operation)
   }
 }
 

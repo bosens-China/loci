@@ -109,3 +109,10 @@ export const adminAuditLogs = sqliteTable('admin_audit_logs', {
   statusCode: integer('status_code').notNull(),
   createdAt: text('created_at').notNull()
 })
+
+export const serverResourceRevisions = sqliteTable('server_resource_revisions', {
+  resource: text('resource')
+    .$type<'libraries' | 'jobs' | 'hostnamePolicies' | 'crawlSettings' | 'auditLogs'>()
+    .primaryKey(),
+  revision: integer('revision').notNull()
+})

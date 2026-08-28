@@ -1,13 +1,30 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
 import { createDatabase } from '../database.js'
+import { LOCI_DATABASE_SCHEMA } from '../database-schema.js'
 
 describe('资源 revision', () => {
   it('通过触发器观察另一数据库连接的来源、文档、任务和设置写入', () => {
     const root = mkdtempSync(join(tmpdir(), 'loci-resource-revisions-'))
     const filename = join(root, 'loci.sqlite')
+    const legacy = new DatabaseSync(filename)
+    legacy.exec(`
+      ${LOCI_DATABASE_SCHEMA}
+      CREATE TABLE resource_revisions (
+        resource TEXT PRIMARY KEY CHECK (resource IN ('sources', 'documents', 'jobs', 'settings')),
+        revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0)
+      ) STRICT;
+      INSERT INTO resource_revisions (resource, revision) VALUES ('sources', 7);
+      CREATE TRIGGER resource_revision_document_sources_insert
+      AFTER INSERT ON document_sources
+      BEGIN
+        UPDATE resource_revisions SET revision = revision + 1 WHERE resource = 'sources';
+      END;
+    `)
+    legacy.close()
     const reader = createDatabase(filename)
     const writer = createDatabase(filename)
     try {
@@ -43,6 +60,14 @@ describe('资源 revision', () => {
 
       writer.saveSettings({ ...writer.getSettings(), theme: 'dark' })
       expect(reader.getResourceRevisions().settings).toBeGreaterThan(initial.settings)
+
+      writer.recordOperationLog({
+        category: 'system',
+        action: 'test',
+        level: 'info',
+        message: 'revision test'
+      })
+      expect(reader.getResourceRevisions().logs).toBeGreaterThan(initial.logs)
     } finally {
       writer.close()
       reader.close()

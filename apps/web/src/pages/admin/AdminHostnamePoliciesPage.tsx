@@ -16,8 +16,7 @@ import { AdminCrawlSettingsPanel } from '@/pages/admin/AdminCrawlSettingsPanel'
 export function AdminHostnamePoliciesPage(): React.JSX.Element {
   const libraries = useQuery({
     queryKey: ADMIN_LIBRARIES_KEY,
-    queryFn: listAdminLibraries,
-    refetchInterval: 5_000
+    queryFn: listAdminLibraries
   })
 
   return (

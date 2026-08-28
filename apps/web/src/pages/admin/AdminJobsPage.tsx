@@ -4,7 +4,6 @@ import { PageHeader } from '@/components/PageHeader'
 import { AdminJobsPanel } from '@/pages/admin/AdminJobsPanel'
 import { useAdminJobControls } from '@/pages/admin/use-admin-job-controls'
 import { ADMIN_JOBS_KEY, ADMIN_LIBRARIES_KEY } from '@/pages/admin/admin-query-keys'
-import { isAdminJobActive } from '@/pages/admin/admin-state'
 
 /** Server 同步任务中心独立页面 */
 export function AdminJobsPage(): React.JSX.Element {
@@ -12,13 +11,11 @@ export function AdminJobsPage(): React.JSX.Element {
 
   const libraries = useQuery({
     queryKey: ADMIN_LIBRARIES_KEY,
-    queryFn: listAdminLibraries,
-    refetchInterval: 5_000
+    queryFn: listAdminLibraries
   })
   const jobs = useQuery({
     queryKey: ADMIN_JOBS_KEY,
-    queryFn: listAdminJobs,
-    refetchInterval: ({ state }) => (state.data?.some(isAdminJobActive) ? 1_000 : 5_000)
+    queryFn: listAdminJobs
   })
 
   return (

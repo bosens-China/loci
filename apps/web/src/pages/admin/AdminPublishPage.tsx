@@ -16,8 +16,7 @@ export function AdminPublishPage({ sourceId }: { sourceId?: string }): React.JSX
   const settings = useQuery({ queryKey: ['settings'], queryFn: getSettings })
   const libraries = useQuery({
     queryKey: ADMIN_LIBRARIES_KEY,
-    queryFn: listAdminLibraries,
-    refetchInterval: 5_000
+    queryFn: listAdminLibraries
   })
   const source = sources.data?.find((item) => item.id === sourceId)
   const returnToLocalLibraries = (): void => {

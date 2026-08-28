@@ -16,8 +16,7 @@ export function AdminAuditLogsPage(): React.JSX.Element {
   const offset = (page - 1) * pageSize
   const logs = useQuery({
     queryKey: ['admin', 'audit-logs', offset, pageSize],
-    queryFn: () => listAdminAuditLogs(offset, pageSize),
-    refetchInterval: 5_000
+    queryFn: () => listAdminAuditLogs(offset, pageSize)
   })
 
   return (

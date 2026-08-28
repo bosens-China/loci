@@ -12,7 +12,7 @@ export function useJobNotifications(): void {
   const { notification } = App.useApp()
   const navigate = useNavigate()
   const previous = useRef<Map<string, LocalJob['status']> | null>(null)
-  const jobs = useQuery({ queryKey: ['jobs'], queryFn: listJobs, refetchInterval: 2_000 })
+  const jobs = useQuery({ queryKey: ['jobs'], queryFn: listJobs })
 
   useEffect(() => {
     if (!jobs.data) return

@@ -23,8 +23,7 @@ export function LogsPage(): React.JSX.Element {
   const [filters, setFilters] = useState<OperationLogQuery>({ limit: 100 })
   const logs = useQuery({
     queryKey: ['operation-logs', filters],
-    queryFn: () => listOperationLogs(filters),
-    refetchInterval: 5_000
+    queryFn: () => listOperationLogs(filters)
   })
   const update = (patch: Partial<OperationLogQuery>): void =>
     setFilters((current) => ({ ...current, ...patch }))

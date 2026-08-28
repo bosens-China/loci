@@ -19,6 +19,7 @@ import {
 } from '@loci/shared'
 import type { ServerAdminAuditMethod } from '@loci/shared'
 import { AdminAuth, readBearerToken } from './auth.js'
+import { createAdminEventsHandler } from './admin-event-route.js'
 import { ConflictError, NotFoundError, ServerDatabase } from './database.js'
 import { SyncService } from './sync-service.js'
 import type { LibraryInput } from './types.js'
@@ -204,6 +205,8 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
     if (token) auth.logout(token)
     return c.body(null, 204)
   })
+
+  app.get('/api/v1/admin/events', createAdminEventsHandler(sync, auth))
 
   app.get('/api/v1/admin/libraries', (c) => c.json({ libraries: database.listLibraries() }))
 

@@ -37,17 +37,16 @@ type ItemAction = JobControlAction | 'cancel' | 'continue'
 export function JobsPage(): React.JSX.Element {
   const { message, modal } = App.useApp()
   const client = useQueryClient()
-  const now = useCurrentTime()
   const [filters, setFilters] = useState<JobFilters>({ query: '', date: '', status: 'all' })
   const jobs = useQuery({
     queryKey: JOBS_KEY,
-    queryFn: listJobs,
-    refetchInterval: ({ state }) =>
-      state.data?.some((job) => job.status === 'pending' || job.status === 'running')
-        ? 1_000
-        : 5_000
+    queryFn: listJobs
   })
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
+  const hasActiveJobs = (jobs.data ?? []).some(
+    (job) => job.status === 'pending' || job.status === 'running'
+  )
+  const now = useCurrentTime(hasActiveJobs)
   const sourceNames = useMemo(
     () => new Map((sources.data ?? []).map((source) => [source.id, source.name])),
     [sources.data]

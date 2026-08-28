@@ -19,9 +19,9 @@ interface AdminJobsPanelProps {
 
 /** Server 任务管理面板：按域名分组聚合、展示实时抓取速率、进度状态与控制操作。 */
 export function AdminJobsPanel(props: AdminJobsPanelProps): React.JSX.Element {
-  const now = useCurrentTime()
   const libraries = new Map((props.libraries ?? []).map((library) => [library.id, library]))
   const allJobs = props.query.data ?? []
+  const now = useCurrentTime(allJobs.some(isAdminJobActive))
   const groups = groupAdminJobs(allJobs, libraries)
   const globalActiveCount = allJobs.filter(isAdminJobActive).length
   const globalPausedCount = allJobs.filter((j) => j.paused || j.pauseRequested).length

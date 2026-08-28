@@ -8,9 +8,7 @@ import { listJobs } from '@/api/jobs'
 export function ActiveTaskIndicator(): React.JSX.Element | null {
   const query = useQuery({
     queryKey: ['jobs'],
-    queryFn: listJobs,
-    refetchInterval: ({ state }) =>
-      state.data?.some((j) => j.status === 'running') ? 2_000 : 8_000
+    queryFn: listJobs
   })
 
   const activeJobs = (query.data ?? []).filter((j) => j.status === 'running')

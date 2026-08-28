@@ -17,6 +17,39 @@ afterEach(async () => {
 })
 
 describe('本机 HTTP 服务', () => {
+  it('通过 SSE 推送跨入口写入的资源 revision', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'loci-http-events-'))
+    const runtime = createLocalRuntime({
+      dataDir: join(root, 'data'),
+      cacheDir: join(root, 'cache')
+    })
+    const server = await startLocalHttpServer(runtime, { revisionEventIntervalMs: 10 })
+    cleanups.push(async () => {
+      await server.close()
+      await runtime.close()
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    const response = await fetch(`${server.endpoint}/api/events`)
+    expect(response.headers.get('content-type')).toContain('text/event-stream')
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('未建立 SSE 响应体')
+    const initial = await readSseRevisions(reader)
+
+    runtime.createSource({
+      name: 'Vite',
+      url: 'https://vite.dev',
+      mode: 'http',
+      pageLimit: 1,
+      schedule: null,
+      httpConcurrency: null,
+      browserConcurrency: null
+    })
+    const updated = await readSseRevisions(reader)
+    expect(updated.sources).toBeGreaterThan(initial.sources)
+    await reader.cancel()
+  })
+
   it('文档列表只返回元数据，并在选中时按 ID 读取正文', async () => {
     const root = mkdtempSync(join(tmpdir(), 'loci-http-documents-'))
     const runtime = createLocalRuntime({
@@ -301,3 +334,22 @@ describe('本机 HTTP 服务', () => {
     expect(await setupResponse.json()).toMatchObject({ status: { overall: 'ready' } })
   })
 })
+
+async function readSseRevisions(
+  reader: ReadableStreamDefaultReader<Uint8Array>
+): Promise<ResourceRevisions> {
+  const decoder = new TextDecoder()
+  let body = ''
+  while (!body.includes('\n\n')) {
+    const chunk = await reader.read()
+    if (chunk.done) throw new Error('SSE 在收到 revision 前关闭')
+    body += decoder.decode(chunk.value, { stream: true })
+  }
+  const payload = body
+    .split(/\r?\n/u)
+    .find((line) => line.startsWith('data:'))
+    ?.slice('data:'.length)
+    .trim()
+  if (!payload) throw new Error('SSE 未返回 revision 数据')
+  return JSON.parse(payload) as ResourceRevisions
+}

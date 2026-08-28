@@ -16,11 +16,24 @@ export interface AppSettings {
   githubMarkdownLimitMb: number
 }
 
-export const RESOURCE_REVISION_KEYS = ['sources', 'documents', 'jobs', 'settings'] as const
+export const RESOURCE_REVISION_KEYS = ['sources', 'documents', 'jobs', 'settings', 'logs'] as const
 
 export type ResourceRevisionKey = (typeof RESOURCE_REVISION_KEYS)[number]
 
 export type ResourceRevisions = Record<ResourceRevisionKey, number>
+
+export const SERVER_RESOURCE_REVISION_KEYS = [
+  'libraries',
+  'jobs',
+  'hostnamePolicies',
+  'crawlSettings',
+  'auditLogs'
+] as const
+
+export type ServerResourceRevisionKey = (typeof SERVER_RESOURCE_REVISION_KEYS)[number]
+
+/** Server 管理 UI 可观察的持久资源版本，仅用于失效本地查询缓存。 */
+export type ServerResourceRevisions = Record<ServerResourceRevisionKey, number>
 
 export interface AgentImportResult {
   client: AgentClient

@@ -42,13 +42,11 @@ export function AdminLibrariesPage(): React.JSX.Element {
 
   const libraries = useQuery({
     queryKey: ADMIN_LIBRARIES_KEY,
-    queryFn: listAdminLibraries,
-    refetchInterval: 5_000
+    queryFn: listAdminLibraries
   })
   const jobs = useQuery({
     queryKey: ADMIN_JOBS_KEY,
-    queryFn: listAdminJobs,
-    refetchInterval: ({ state }) => (state.data?.some(isAdminJobActive) ? 1_000 : 5_000)
+    queryFn: listAdminJobs
   })
 
   const jobByLibrary = useMemo(() => latestAdminJobsByLibrary(jobs.data ?? []), [jobs.data])

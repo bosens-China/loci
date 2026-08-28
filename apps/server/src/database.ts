@@ -62,6 +62,11 @@ import {
   createServerAdminAuditDatabase,
   type ServerAdminAuditDatabase
 } from './admin-audit-database.js'
+import {
+  createServerResourceRevisionDatabase,
+  initializeServerResourceRevisionDatabase,
+  type ServerResourceRevisionDatabase
+} from './resource-revision-database.js'
 
 export { ConflictError, NotFoundError } from './database-errors.js'
 
@@ -72,6 +77,7 @@ export class ServerDatabase {
   readonly hostnamePolicies: ServerHostnamePolicyDatabase
   readonly crawlSettings: ServerCrawlSettingsDatabase
   readonly adminAudit: ServerAdminAuditDatabase
+  readonly resourceRevisions: ServerResourceRevisionDatabase
 
   constructor(filename: string) {
     this.#database = new DatabaseSync(filename, {
@@ -79,10 +85,12 @@ export class ServerDatabase {
       enableForeignKeyConstraints: true
     })
     initializeServerDatabase(this.#database)
+    initializeServerResourceRevisionDatabase(this.#database)
     this.#drizzle = createServerDrizzleDatabase(this.#database)
     this.hostnamePolicies = createServerHostnamePolicyDatabase(this.#drizzle)
     this.crawlSettings = createServerCrawlSettingsDatabase(this.#drizzle)
     this.adminAudit = createServerAdminAuditDatabase(this.#drizzle)
+    this.resourceRevisions = createServerResourceRevisionDatabase(this.#drizzle)
   }
 
   listLibraries(): Library[] {

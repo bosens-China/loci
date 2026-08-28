@@ -28,6 +28,7 @@ describe('BrowserManager', () => {
       }
     )
     const changes: number[] = []
+    const subscriptions: number[] = []
     const manager = new BrowserManager({
       browsersPath: join(root, 'playwright'),
       lockRoot: root,
@@ -37,6 +38,9 @@ describe('BrowserManager', () => {
       onChange: (operation) => {
         if (operation.progress !== null) changes.push(operation.progress)
       }
+    })
+    const unsubscribe = manager.subscribe((operation) => {
+      if (operation.progress !== null) subscriptions.push(operation.progress)
     })
 
     const first = manager.start('install')
@@ -52,6 +56,8 @@ describe('BrowserManager', () => {
     await waiting
     expect((await manager.getStatus()).operation).toMatchObject({ state: 'succeeded' })
     expect(changes).toContain(45)
+    expect(subscriptions).toContain(45)
+    unsubscribe()
   })
 
   it('跨进程管理锁阻止另一个实例并发操作', async () => {

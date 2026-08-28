@@ -14,11 +14,7 @@ import { isAdminJobActive } from './admin-state'
 export function AdminOverviewPage(): React.JSX.Element {
   const navigate = useNavigate()
   const libraries = useQuery({ queryKey: ADMIN_LIBRARIES_KEY, queryFn: listAdminLibraries })
-  const jobs = useQuery({
-    queryKey: ADMIN_JOBS_KEY,
-    queryFn: listAdminJobs,
-    refetchInterval: ({ state }) => (state.data?.some(isAdminJobActive) ? 1_000 : 5_000)
-  })
+  const jobs = useQuery({ queryKey: ADMIN_JOBS_KEY, queryFn: listAdminJobs })
   const settings = useQuery({
     queryKey: ADMIN_CRAWL_SETTINGS_KEY,
     queryFn: getAdminCrawlSettings

@@ -29,14 +29,13 @@ import { formatDateTime } from '@/utils/format'
 
 const LOCAL_BROWSER_KEY = ['local-browser'] as const
 
-/** 本机浏览器页只呈现用户可操作的状态，安装细节由 Runtime 轮询提供。 */
+/** 本机浏览器页只呈现用户可操作的状态，安装进度由 Runtime SSE 推送。 */
 export function LocalBrowserManagerPanel(): React.JSX.Element {
   const { message } = App.useApp()
   const client = useQueryClient()
   const query = useQuery({
     queryKey: LOCAL_BROWSER_KEY,
-    queryFn: getLocalBrowserStatus,
-    refetchInterval: ({ state }) => (state.data?.operation?.state === 'running' ? 750 : false)
+    queryFn: getLocalBrowserStatus
   })
   const install = useMutation({
     mutationFn: installLocalBrowser,

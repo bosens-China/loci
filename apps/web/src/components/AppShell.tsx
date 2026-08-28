@@ -21,6 +21,8 @@ import { isCloudRoute, resolveActiveMenuKey } from '@/components/shell/navigatio
 import { ShellLayoutContext } from '@/components/shell/ShellLayoutContext'
 import { UserAvatarDropdown } from '@/components/shell/UserAvatarDropdown'
 import { WorkspaceSwitcher } from '@/components/shell/WorkspaceSwitcher'
+import { useJobNotifications } from '@/hooks/use-job-notifications'
+import { useResourceEvents } from '@/hooks/use-resource-events'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -28,6 +30,8 @@ interface AppShellProps {
 
 /** 经典中后台主布局：左侧可折叠分组侧边栏 + 顶部全局 Header + 独立工作区控制。 */
 export function AppShell({ children }: AppShellProps): React.JSX.Element {
+  useResourceEvents()
+  useJobNotifications()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [rawLayout, setRawLayout] = useState(false)

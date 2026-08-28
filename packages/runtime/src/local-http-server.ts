@@ -4,6 +4,7 @@ import { extname, join, resolve, sep } from 'node:path'
 import { localhostHostValidation, localhostOriginValidation } from '@modelcontextprotocol/node'
 import type { LocalRuntime } from './local-runtime.js'
 import { handleLocalApi, type LocalApiOptions } from './local-http-api.js'
+import { createLocalHttpEvents } from './local-http-events.js'
 import { json } from './local-http-response.js'
 
 export interface LocalHttpServer {
@@ -15,6 +16,8 @@ export interface LocalHttpServer {
 export interface LocalHttpServerOptions extends LocalApiOptions {
   port?: number
   assetsDir?: string
+  /** 仅供集成测试缩短 SSE revision 的持久化检查间隔。 */
+  revisionEventIntervalMs?: number
 }
 
 /** 本机 Web transport：只绑定回环地址，写请求额外校验 Origin。 */
@@ -24,6 +27,7 @@ export async function startLocalHttpServer(
 ): Promise<LocalHttpServer> {
   const validateHost = localhostHostValidation()
   const validateOrigin = localhostOriginValidation()
+  const events = createLocalHttpEvents(runtime, options.revisionEventIntervalMs)
   const server = createServer((request, response) => {
     void handleRequest(request, response).catch((error: unknown) => {
       console.error('本地 Web 请求处理失败', error)
@@ -50,6 +54,7 @@ export async function startLocalHttpServer(
     }
     if (url.pathname.startsWith('/api/')) {
       if (request.method !== 'GET' && !validateOrigin(request, response)) return
+      if (events.handle(request, response, url)) return
       await handleLocalApi(runtime, request, response, url, options)
       return
     }
@@ -66,7 +71,10 @@ export async function startLocalHttpServer(
   return {
     port,
     endpoint: `http://127.0.0.1:${port}`,
-    close: () => close(server)
+    close: async () => {
+      events.close()
+      await close(server)
+    }
   }
 }
 

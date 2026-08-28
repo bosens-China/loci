@@ -15,6 +15,7 @@ import type {
   ServerBrowserStatus
 } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
+import { streamServerResourceRevisions } from './cloud-admin-event-stream.js'
 
 const loginResponseSchema = z.object({ token: z.string().min(1), expiresIn: z.number().positive() })
 const errorResponseSchema = z.object({ error: z.string() })
@@ -115,16 +116,13 @@ const serverAdminAuditLogPageSchema = z.object({
   offset: z.number().int().nonnegative(),
   limit: z.number().int().positive()
 })
-
 interface PrivateSession extends CloudAdminSession {
   token: string
 }
-
 export interface CloudAdminMutation {
   method: string
   path: string
 }
-
 /** 云端令牌只保存在 Runtime 内存中，CLI 与 Web 只能读取脱敏会话。 */
 export class CloudAdminClient {
   private session: PrivateSession | null = null
@@ -333,6 +331,17 @@ export class CloudAdminClient {
         signal: AbortSignal.timeout(120_000)
       })
     )
+  }
+
+  /** 只在 Runtime 内存中持有 Bearer Token，向本机 SSE 代理提供 Server revision 流。 */
+  async streamResourceRevisions(
+    signal: AbortSignal,
+    onRevisions: Parameters<typeof streamServerResourceRevisions>[3]
+  ): Promise<void> {
+    const session = this.validSession()
+    if (!session) return
+    const result = await streamServerResourceRevisions(this.fetcher, session, signal, onRevisions)
+    if (result === 'unauthorized') this.session = null
   }
 
   private async authRequest(path: string, init: RequestInit = {}): Promise<unknown> {
