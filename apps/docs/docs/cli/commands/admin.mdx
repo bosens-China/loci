@@ -63,9 +63,17 @@ loci doctor
 loci ui
 ```
 
-点击顶栏“管理”，使用 Server 管理员账号登录；登录后顶栏右侧会持续显示管理员用户名。Web 与本地文档库共用名称、起始 URL、收录范围、页面上限和更新计划等基础字段，只在发布状态、批量同步和远程任务等 Server 特有位置保留差异。输入 URL 后可以自动生成名称；自定义 Cron 会预览最近两次运行时间；更换已有文档库的起始 URL 会立即清空现有内容，收窄范围会立即删除范围外正文，Web 会在保存前展示危险确认。Web 支持查看、创建、编辑和删除 Server 文档库，单个、所选或全部同步，以及查看和取消同步任务；任务按 hostname 卡片分组并提供独立滚动区域、错误悬停详情和二次确认。活动任务每秒刷新，空闲列表每五秒刷新，因此其他 CLI 或 Server 请求提交的修改也会自动出现；同一文档库的重复请求仍由 Server 复用已有活动任务，同一 hostname 串行而不同 hostname 可并发。
+从顶栏工作区切换器进入“Server 管理”，使用 Server 管理员账号登录；登录后顶栏右侧会持续显示管理员用户名。侧边栏按“概览”“内容管理”“任务与策略”“审计与诊断”分组，提供 Server 概览、文档库、发布本地库、公开目录预览、同步任务、抓取策略、管理操作记录和浏览器诊断。公开目录预览只展示访问者可见的已发布快照，不提供本地拉取或删除动作。
 
-Web 新建 Server 文档库后会立即提交首次发布。抓取失败时，文档库配置仍会保留，并提示管理员修正后重试；首次任务被取消且文档库仍为空时会同时删库。只有成功抓到至少一个页面后，文档库才会出现在公开目录中。
+Web 与本地文档库共用来源类型、名称、起始 URL、收录范围、页面上限和更新计划等基础字段，只在发布状态、批量同步和远程任务等 Server 特有位置保留差异。新建时可以选择普通站点或 GitHub 仓库；输入 URL 后可以自动生成名称；自定义 Cron 会预览最近两次运行时间；更换已有文档库的起始 URL 会立即清空现有内容，收窄范围会立即删除范围外正文，Web 会在保存前展示危险确认。Web 支持查看、创建、编辑和删除 Server 文档库，单个、所选或全部同步，以及查看和取消同步任务；任务按 hostname 卡片分组并提供独立滚动区域、错误悬停详情和二次确认。活动任务每秒刷新，空闲列表每五秒刷新，因此其他 CLI 或 Server 请求提交的修改也会自动出现；同一文档库的重复请求仍由 Server 复用已有活动任务，同一 hostname 串行而不同 hostname 可并发。
+
+“抓取策略”页面分为全局默认和域名覆盖。全局默认控制 Server 最大并行任务数、HTTP/浏览器页面并发和批次间隔；域名覆盖只替换明确填写的字段。配置优先级是“hostname 覆盖 > Server 全局默认 > 产品内置默认”。同一 hostname 任务串行是不可关闭的安全约束。降低最大并行任务数不会中止运行中的任务，页面并发和间隔从下一批次开始生效；发生并发管理员修改冲突时，Web 会刷新最新配置并要求重新提交。
+
+管理员登录后还可以打开“Server 浏览器”页面，查看远端提供方是镜像内 Chromium、Browserless 还是未配置，并执行真实启动或连接检测。页面只展示脱敏后的 Browserless 地址，不返回令牌。Server 侧浏览器由部署配置负责：本地 Chromium 需要重新构建镜像，Browserless 需要修改环境变量并重新部署；Web 不在运行中的容器内安装或卸载浏览器。
+
+Web 新建 Server 文档库后会立即提交首次同步。创建成功但同步任务提交失败时，文档库配置仍会保留并显示警告，管理员可以修正后重试；首次任务被取消且文档库仍为空时会同时删库。只有成功抓到至少一个页面后，文档库才会出现在公开目录中。
+
+Server 会持久记录认证后成功的管理写请求，Web 的“管理操作记录”可以分页查看管理员、请求方法、管理路径、响应状态和时间。请求正文、密码和 Token 不进入审计记录；查看页面等 GET 请求也不会产生新记录。
 
 登录密码只用于一次本机请求。Server 返回的 Admin Token 由 `loci ui` 所在 Runtime 保存在内存中，不返回浏览器、不写入 SQLite；关闭该命令后需要重新登录。Web 与 CLI 复用同一个远程 Admin 客户端和 Server API，CLI 更适合终端交互与自动化。
 
@@ -117,13 +125,15 @@ loci admin stop <任务 ID> --yes
 loci admin cancel <任务 ID> --yes
 loci admin priority <任务 ID> 50 --yes
 loci admin pause-all --hostname docs.example.com --yes
+loci admin settings
+loci admin settings-set --max-jobs 4 --http 8 --browser 4 --interval 100-300
 loci admin domain-set docs.example.com --http 2 --interval 1-3
 loci admin publish <本地文档库> --yes
 ```
 
 `--schedule off` 关闭 Server 自动更新计划；旧脚本中的 `manual` 仍可作为兼容别名。`admin libraries` 显示发布状态、最近同步和错误；`admin jobs` 显示 hostname、页面进度、正文大小、耗时和失败原因。任务引用可以是完整 ID 或列表中的唯一短 ID；暂停与恢复复用原任务，结束保留部分正文和剩余检查点，取消丢弃本次内容。`admin sync` 可以接收多个名称、完整 ID 或唯一短 ID；使用 `--all` 提交全部文档库，使用 `--wait` 在当前终端等待聚合结果。同一文档库重复提交时，Loci 会复用已有任务并显示当前进度。
 
-`admin domain-list`、`domain-set` 和 `domain-delete` 管理 Server hostname 抓取限制；`--interval` 接受固定秒数或 `min-max`。`admin publish` 将所选本地文档库打包为经过校验的压缩二进制归档；省略 `--target` 创建新 Server 文档库，提供 `--target` 时只在明确确认后覆盖目标。归档只包含该库的公开元数据和正文，不上传本机设置、凭据或任务历史。
+`admin settings` 查看 Server 全局抓取策略，`admin settings-set` 修改明确提供的字段；全局 `--interval` 接受 `0`、固定秒数或 `min-max`。`admin domain-list`、`domain-set` 和 `domain-delete` 管理 Server hostname 抓取覆盖；域名规则使用 `default` 恢复继承。`admin publish` 将所选本地文档库打包为经过校验的压缩二进制归档；省略 `--target` 创建新 Server 文档库，提供 `--target` 时只在明确确认后覆盖目标。归档只包含该库的公开元数据和正文，不上传本机设置、凭据或任务历史。
 `admin update` 更换 URL 或收窄范围时，Server 会在保存事务中立即清空或裁剪正文；显式脚本参数表示调用方已确认影响。CLI 的 Server 地址遵循 `LOCI_SERVER_URL` 高于持久 `server-url` 的优先级。
 
 删除命令在非交互环境中必须显式提供 `--yes`。

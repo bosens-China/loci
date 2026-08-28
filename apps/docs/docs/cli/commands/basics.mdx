@@ -62,7 +62,7 @@ loci doctor
 
 ## 无头浏览器
 
-当文档站需要 JavaScript 渲染时，CLI 会在 `auto` 检测或 `browser` 抓取前检查 Chromium headless shell。交互终端中可以确认并自动安装；非交互环境需要提前运行安装命令。
+`auto` 模式只在 Chromium headless shell 已安装时比较 HTTP 与浏览器结果；未安装时直接使用 HTTP，不触发安装提示。显式选择 `browser` 时，交互终端可以确认并自动安装，非交互环境需要提前运行安装命令。CLI 不在选择 `auto` 时额外执行浏览器状态命令。`loci ui` 的“无头浏览器”页面复用同一 Runtime 和缓存目录，可以查看真实版本、启动能力和安装路径，并在操作期间持续显示下载或卸载进度。
 
 ### `loci browser status`
 
@@ -76,7 +76,7 @@ loci browser status
 
 ### `loci browser install`
 
-安装与当前 CLI 版本匹配的 Chromium headless shell。
+安装与当前 CLI 版本匹配的 Chromium headless shell。CLI 和 Web 对同一个缓存目录执行 single-flight；重复安装会复用当前操作，另一个进程正在安装或卸载时会拒绝并发修改。
 
 示例：
 
@@ -86,7 +86,7 @@ loci browser install
 
 ### `loci browser uninstall`
 
-删除由 CLI 管理的无头浏览器。默认会要求确认；`--yes` 可跳过确认。
+删除由 Loci 管理的无头浏览器。默认会要求确认；`--yes` 可跳过确认。存在活动抓取任务或其他安装、卸载操作时不会删除运行文件。
 
 示例：
 

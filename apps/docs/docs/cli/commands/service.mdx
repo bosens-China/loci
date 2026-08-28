@@ -20,7 +20,7 @@ loci ui
 loci ui --no-open
 ```
 
-Web UI 覆盖文档工作区、后台任务、公开云端目录、Server 管理、Agent 全局接入、运行设置和备份恢复。“Agent”页面可以检查、配置和移除当前用户的 MCP、全局 Skill 与 Rules；项目级 Skill、服务治理和浏览器运行时安装继续使用 CLI。
+Web UI 覆盖文档工作区、后台任务、公开云端目录、本机无头浏览器、Server 管理、Agent 全局接入、运行设置和备份恢复。“无头浏览器”页面可以查询、安装和卸载与 CLI 共用的本机 Chromium，并在运行期间显示进度；“Agent”页面可以检查、配置和移除当前用户的 MCP、全局 Skill 与 Rules。项目级 Skill 和服务治理继续使用 CLI。
 
 ## 管理常驻 worker
 
@@ -63,6 +63,6 @@ loci service run
 - 按需 worker 通过跨进程锁 single-flight：并发启动只会有一个进程认领队列，空闲后自动退出。
 - 常驻 worker 与 Web 可以同时运行；同一数据目录只允许一个 worker 认领任务。
 - 机器休眠、关机或常驻 worker 停用期间不能按时执行。恢复后，同一计划错过的多个时间点合并为一次补跑。
-- 后台 `auto` 或 `browser` 抓取需要 Chromium；缺少时先运行 `loci browser install`。
+- 后台 `auto` 在缺少 Chromium 时直接使用 HTTP；显式 `browser` 抓取需要先运行 `loci browser install`。
 
 Web UI 不要求浏览器会话认证。包括 Agent 文件写入在内的业务 API 只绑定 `127.0.0.1` 并校验本机 Host；写请求额外校验 Origin。Server Admin 密码只随一次登录请求进入本机 Runtime，换取的远程 Token 只保存在该 Runtime 的内存中，不会返回浏览器或写入 SQLite；结束 `loci ui` 后该管理会话随之失效。

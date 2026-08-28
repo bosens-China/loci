@@ -1,6 +1,6 @@
 # 配置 Agent 全局规则
 
-MCP 让 Agent 调用 Loci 工具，全局规则则规定什么时候优先使用这些工具。Loci 可以为拥有官方用户级文件的客户端一键写入规则；Cursor 使用官方设置页手动维护 User Rules。
+MCP 让 Agent 调用 Loci 工具，全局规则则规定什么时候优先使用这些工具。Loci 为支持本机用户级文件的客户端一键写入规则；Cursor 使用 `~/.cursor/rules/loci.mdc`，不读取、修改或同步云端 User Rules。
 
 ## 职责边界
 
@@ -13,7 +13,7 @@ Loci 不是通用网页搜索的前置步骤。新闻与时效事件、价格、
 | 客户端             | MCP 配置                            | 用户级全局规则                                 | 项目级规则                                     |
 | ------------------ | ----------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
 | Codex              | `loci agent setup codex`            | `~/.codex/AGENTS.md`                           | 项目根目录或子目录的 `AGENTS.md`               |
-| Cursor             | `loci agent setup cursor`           | `Customize → Rules → User Rules`               | 项目根目录或子目录的 `AGENTS.md`               |
+| Cursor             | `loci agent setup cursor`           | `~/.cursor/rules/loci.mdc`                     | 项目根目录或子目录的 `AGENTS.md`               |
 | VS Code            | `loci agent setup vscode`           | `~/.copilot/instructions/loci.instructions.md` | `AGENTS.md`、`.github/copilot-instructions.md` |
 | Claude Code        | `loci agent setup claude-code`      | `~/.claude/CLAUDE.md`                          | `CLAUDE.md` 或 `.claude/CLAUDE.md`             |
 | Google Antigravity | `loci agent setup antigravity`      | `~/.gemini/GEMINI.md`                          | `.agents/rules/`                               |
@@ -28,6 +28,7 @@ Loci 不是通用网页搜索的前置步骤。新闻与时效事件、价格、
 
 ```bash
 loci agent rules codex
+loci agent rules cursor
 loci agent rules vscode
 loci agent rules claude-code
 loci agent rules antigravity
@@ -39,13 +40,7 @@ loci agent rules antigravity
 loci agent rules codex --yes
 ```
 
-Cursor 没有官方公开的用户级规则文件。下面的命令不会修改 Cursor 内部存储，而是输出可以粘贴到 User Rules 的内容：
-
-```bash
-loci agent rules cursor
-```
-
-Kimi Code 或其他需要手动编辑规则的客户端，也可以复制该命令输出的客户端中立规则，再粘贴到对应的用户级入口。
+Cursor 命令创建带 MDC frontmatter 的本机规则文件。该文件不会同步到 Cursor 账号，也不会修改 `Customize → Rules → User Rules` 中的云端内容。Kimi Code 或其他没有纳入一键接入的客户端，仍可复制客户端中立规则并粘贴到自己的用户级入口。
 
 ## 受管区块
 
@@ -58,7 +53,7 @@ Loci 写入的内容使用固定标记。中间内容由 Loci 自动生成，不
 <!-- loci:end -->
 ```
 
-首次配置会创建文件或追加区块。再次配置只更新标记之间的内容，并保留区块之外的个人设置。标记缺失、重复或顺序错误时，Loci 会停止写入，请先手动修复文件。
+首次配置会创建文件或追加区块。再次配置只更新标记之间的内容，并保留区块之外的个人设置。标记缺失、重复或顺序错误时，Loci 会停止写入，请先手动修复文件。Cursor 的专用文件还必须包含合法 MDC frontmatter 和 `alwaysApply: true`。
 
 重复运行同一命令是安全的。Codex 已经使用 Context7 时，Loci 也会按下文说明整理规则优先级。
 
@@ -70,11 +65,11 @@ Loci 写入的内容使用固定标记。中间内容由 Loci 自动生成，不
 请说明技术文档的查询顺序，以及什么情况下切换到其他来源。
 ```
 
-预期回答会先查询 Loci 本地文档库，再查询云端公开目录，并在获得授权后拉取或抓取官方文档。如果回答没有采用该顺序，请检查目标文件或 Cursor User Rules 中是否存在一组完整的 Loci 标记。
+预期回答会先查询 Loci 本地文档库，再查询云端公开目录，并在获得授权后拉取或抓取官方文档。如果回答没有采用该顺序，请检查目标文件中是否存在一组完整的 Loci 标记；Cursor 还应检查 `~/.cursor/rules/loci.mdc` 的 frontmatter。
 
 还可以询问“搜索今天的行业新闻是否需要先查询 Loci”。预期回答应直接使用网页新闻来源，不查询或抓取 Loci。
 
-需要同时移除 MCP、全局 Skill 和规则时，运行 `loci agent remove <client>`。命令只删除包括 `<!-- loci:start -->` 和 `<!-- loci:end -->` 在内的 Loci 受管区块，保留文件中的其他内容；标记异常时拒绝修改。Cursor 用户仍应从 `Customize → Rules → User Rules` 中删除此前手动粘贴的规则。
+需要同时移除 MCP、全局 Skill 和规则时，运行 `loci agent remove <client>`。命令只删除包括 `<!-- loci:start -->` 和 `<!-- loci:end -->` 在内的 Loci 受管区块，保留文件中的其他内容；标记异常时拒绝修改。Cursor 专用文件只剩 Loci 创建的标准 frontmatter 时会删除整文件，云端 User Rules 不会被修改。
 
 ## 各客户端注意事项
 
@@ -103,9 +98,11 @@ codex --ask-for-approval never "说明技术文档的查询流程，以及什么
 
 ### Cursor
 
-项目根目录和任意子目录都可以放置 `AGENTS.md`。子目录规则处理该目录及其子目录文件时生效，父子内容会合并，更具体的规则优先。这里的项目根规则只覆盖当前项目；跨项目规则仍应放在 User Rules。
+Cursor 2.1 及以上版本会把用户主目录下的 `.cursor/rules` 纳入 Agent 上下文。Loci 创建 `~/.cursor/rules/loci.mdc`，写入 `alwaysApply: true` 和受管区块；重复配置保持幂等。如果已有专用文件缺少合法 frontmatter 或没有启用 `alwaysApply: true`，Loci 会报告冲突而不是猜测修改。
 
-Cursor 官方目前没有声明 `~/AGENTS.md`、`~/.cursor/AGENTS.md` 或 `~/.cursor/rules` 是稳定的用户级规则入口。Loci 不修改未公开的内部设置文件。
+该入口只面向本机 Cursor Agent，不同步账号，也不覆盖云端 User Rules。Cursor 当前从工作区向父目录发现主目录规则，项目位于用户主目录之外时可能无法加载；Cloud Agent、Tab、Inline Edit 和 Bugbot 也不在本机规则承诺范围内。项目根目录和任意子目录仍可放置 `AGENTS.md`，用于项目级或目录级约束。
+
+检测到 `~/.cursor/rules/context7.mdc` 或 Cursor Context7 Skill 时，Loci 会在自己的规则中加入“Loci 优先、Context7 兜底”的协调说明，但不会修改第三方文件。
 
 ### VS Code
 
@@ -118,7 +115,8 @@ Claude Code 的 `~/.claude/CLAUDE.md` 和 Antigravity 的 `~/.gemini/GEMINI.md` 
 ## 官方资料
 
 - [Codex：Custom instructions with AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md.md)
-- [Cursor：Rules](https://cursor.com/docs/rules.md)
+- [Cursor：Rules](https://cursor.com/docs/rules)
+- [Cursor 2.1：主目录 Rules](https://cursor.com/changelog/2-1)
 - [VS Code：Custom instructions](https://code.visualstudio.com/docs/agent-customization/custom-instructions)
 - [Claude Code：Memory](https://code.claude.com/docs/en/memory)
 - [Google Antigravity：Rules](https://www.antigravity.google/docs/ide/rules)

@@ -35,7 +35,7 @@ loci mcp call loci_list_libraries
 
 `loci ui` 会先输出本机 Web 地址，再尝试打开浏览器，并在当前终端运行仅服务本次会话的回环 HTTP；按 `Ctrl+C` 会关闭 HTTP，但已经提交的后台任务继续由独立 worker 执行。浏览器无法自动打开时，复制终端中的地址手动访问即可。Web 的“管理”入口可以登录目标 Server，维护公开文档库和同步任务；远程 Admin Token 只保存在当前 Runtime 内存。在默认数据目录中开启定时抓取或云端每日同步后，Loci 会立即确保无 HTTP 的登录自启动 worker 可用；设置 `LOCI_DATA_DIR` 时只启动当前登录会话的 detached worker，长期运行需要由外部进程管理器托管 `loci service run`。`loci service start` 保留为默认用户级服务的手动恢复和治理入口。仓库的 `pnpm dev` 使用 `.loci-dev` 隔离数据、缓存和模拟用户目录来联调本机 Web 会话与 worker；需要复现正式数据问题时显式运行 `pnpm dev:user`，其 Web 写操作会直接修改正式 Loci 数据和真实 Agent 文件。`pnpm build` 构建包含 Web UI 的 CLI 发布包。
 
-需要抓取依赖客户端渲染的网站时，再安装浏览器运行时：
+需要抓取依赖客户端渲染的网站时，再安装浏览器运行时。可以在本机 Web 的“无头浏览器”页面查看真实状态、安装或卸载，也可以使用 CLI：
 
 ```bash
 loci browser install

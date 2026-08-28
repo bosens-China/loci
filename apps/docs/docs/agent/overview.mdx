@@ -42,11 +42,11 @@ loci agent status codex --json
 loci agent remove codex --yes
 ```
 
-Codex、VS Code、Claude Code 和 Google Antigravity 可以完整自动接入。Cursor 会自动配置 MCP 和 Skill，并返回需要粘贴到 `Customize → Rules → User Rules` 的规则；状态保持“部分完成”，不会误报完整成功。
+Codex、Cursor、VS Code、Claude Code 和 Google Antigravity 都可以完整自动接入。Cursor 的规则写入本机 `~/.cursor/rules/loci.mdc`，不会读取、修改或同步云端 User Rules。
 
 需要只执行其中一项或管理项目级 Skill 时，继续使用 `configure`、`print-config`、`rules` 或 `skills` 子命令。其他客户端的 MCP 写入方式请查看[通过 MCP 接入](/agent/mcp)，Skill 的安装目录和管理命令请查看[使用 use-loci Skill](/agent/skill)，全局规则的客户端差异请查看[配置全局规则](/agent/global-rules)。
 
-一键移除只删除能确认由 Loci 管理的 `loci` MCP、Skill 目录和规则区块；配置被修改或所有权不明时会保留文件并报告冲突。Cursor 中手动粘贴的 User Rules 仍需用户自行移除。
+一键移除只删除能确认由 Loci 管理的 `loci` MCP、Skill 目录和规则区块；配置被修改或所有权不明时会保留文件并报告冲突。Cursor 专用规则文件只剩 Loci 标准 frontmatter 时会一并删除，云端 User Rules 始终不在 Loci 管理范围内。
 
 ## 一次典型查询
 

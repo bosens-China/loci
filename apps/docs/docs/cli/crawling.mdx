@@ -64,7 +64,7 @@ GitHub 仓库直接进入仓库快照流程，不参与普通站点的 `llms.txt
 
 `auto`、`http` 和 `browser` 只控制普通网页如何读取，不代表来源类型或页面发现方式。有效 `llms.txt` 和 OpenAPI 都直接使用 HTTP；GitHub 仓库使用仓库 ZIP 流程。
 
-默认的 `auto` 模式会根据普通页面是否需要 JavaScript 渲染，选择 HTTP 或浏览器。普通文档站通常不需要额外安装浏览器；遇到渲染不完整的页面时，运行：
+默认的 `auto` 模式只在本地浏览器已安装时比较第一个普通页面的 HTTP 与浏览器结果；未安装时直接使用 HTTP，不触发安装提示或浏览器页面探测。遇到 HTTP 渲染不完整的页面时，先运行：
 
 ```bash
 loci browser install

@@ -128,7 +128,7 @@ description: 使用 Loci 发现、获取、同步、搜索和阅读开发者技�
 
 把云端拉取、新增抓取、指定页面插入或刷新、修改文档库配置、主动同步和跨库移动视为会修改本地状态的操作。调用 `loci_pull_cloud_library`、`loci_add_library`、`loci_fetch_pages`、`loci_update_library`、`loci_sync_libraries`、`loci_start_url_review` 或 `loci_move_documents_to_new_library` 前，说明目标并取得用户确认；跨库移动还要说明移动后是否删除空的原文档库。用户当前请求已经明确要求对应操作时，无需再次确认。一次审查式抓取的授权覆盖其后必要的读取与提交批次，不需要逐批重复确认。不同写操作的授权不能相互沿用。`loci_update_library` 不会自动同步；收窄范围或新增、修改排除规则会在保存事务中立即删除不再匹配的正文与搜索索引，命中排除规则的显式页面目标也会被移除、后续整库同步不再刷新；应在确认中明确说明“保存即删除”，不能写成下次同步时才删除。
 
-`loci_*_server_*`、Server hostname 策略和发布工具只用于用户明确要求的服务器管理，不属于普通文档发现、获取或阅读流程。不要仅为回答技术问题而创建、修改、同步、控制、发布或删除 Server 文档库；独立 MCP 进程所需的管理员凭据只能从 `LOCI_ADMIN_USERNAME` 与 `LOCI_ADMIN_PASSWORD` 环境变量读取，不能作为工具参数传递。
+`loci_*_server_*`、Server hostname 策略、Server 抓取策略和发布工具只用于用户明确要求的服务器管理，不属于普通文档发现、获取或阅读流程。不要仅为回答技术问题而创建、修改、同步、控制、发布、删除 Server 文档库或调整 Server 抓取策略。保存 Server 抓取策略前先读取当前配置并提交其 `revision`；冲突时重新读取并向用户说明变化，不静默覆盖。独立 MCP 进程所需的管理员凭据只能从 `LOCI_ADMIN_USERNAME` 与 `LOCI_ADMIN_PASSWORD` 环境变量读取，不能作为工具参数传递。
 
 `loci_sync_libraries` 只用于已经存在的网页文档库；不存在的文档库必须通过云端拉取或添加官方入口获取。不要为每个问题同步文档库，仅在用户要求最新信息、文档库长期没有成功更新、本地结果明显缺失或可能与官网不一致时建议同步。
 

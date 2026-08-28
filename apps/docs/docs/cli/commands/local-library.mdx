@@ -59,7 +59,7 @@ Loci 会保留仓库 Markdown 的目录结构，并保持相对文档和图片�
 loci source sync rspress
 ```
 
-`auto` 模式发现页面需要 JavaScript 渲染时，会提示安装浏览器运行时。脚本环境请先执行：
+`auto` 模式在浏览器已安装时比较 HTTP 与浏览器结果；未安装时直接使用 HTTP，不执行浏览器页面探测，也不会提示安装。明确需要 JavaScript 渲染时可选择 `browser`，脚本环境请先执行：
 
 ```bash
 loci browser install
