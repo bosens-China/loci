@@ -1,11 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
-import {
-  DEFAULT_APP_SETTINGS,
-  DEVELOPMENT_SERVER_URL,
-  normalizeServerUrl,
-  PRODUCTION_SERVER_URL,
-  type AppSettings
-} from '@loci/shared'
+import { DEFAULT_APP_SETTINGS, normalizeServerUrl, type AppSettings } from '@loci/shared'
 import { eq, sql } from 'drizzle-orm'
 import { validateSettings } from './database-values.js'
 import type { LociDrizzleDatabase } from './drizzle-database.js'
@@ -21,7 +15,7 @@ export interface SettingsInitializationOptions {
   overrideServerUrl?: boolean
 }
 
-/** 初始化新设置，并将旧正式版的本地默认地址迁移到生产域名。 */
+/** 初始化设置；未自定义的 Server 地址跟随当前运行环境默认值。 */
 export function initializeSettings(
   database: DatabaseSync,
   options: SettingsInitializationOptions = {}
@@ -46,13 +40,13 @@ export function initializeSettings(
       DEFAULT_APP_SETTINGS.githubArchiveLimitMb,
       DEFAULT_APP_SETTINGS.githubMarkdownLimitMb
     )
-  if (!options.overrideServerUrl && serverUrl === PRODUCTION_SERVER_URL) {
+  if (!options.overrideServerUrl) {
     database
       .prepare(
         `UPDATE app_settings SET server_url = ?
-         WHERE id = 1 AND server_url = ? AND server_url_customized = 0`
+         WHERE id = 1 AND server_url_customized = 0 AND server_url <> ?`
       )
-      .run(PRODUCTION_SERVER_URL, DEVELOPMENT_SERVER_URL)
+      .run(serverUrl, serverUrl)
   }
 }
 

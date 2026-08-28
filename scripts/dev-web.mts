@@ -3,6 +3,7 @@ import { once } from 'node:events'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { CLI_VERSION } from '../apps/cli/src/update.js'
+import { DEVELOPMENT_SERVER_URL } from '../packages/shared/src/index.js'
 import {
   checkLocalWebService,
   readLocalWebServiceState,
@@ -13,6 +14,11 @@ import {
   type LocalWebServiceState,
   type LocalWorker
 } from '../packages/runtime/src/index.js'
+import {
+  DEV_CLOUD_SERVER_URL,
+  ensureDevCloudServer,
+  releaseDevCloudServer
+} from './dev-cloud-server.mts'
 import { parseDevDataMode, resolveDevRuntimePaths } from './dev-web-paths.mts'
 
 /** 本地 Web / API 开发端口（固定，与 apps/web/vite.config.ts 默认值一致） */
@@ -27,8 +33,15 @@ mkdirSync(rootDir, { recursive: true })
 let worker: LocalWorker | null = null
 let keepWorker = false
 
-const { service, state, owned } = await ensureDevService()
+const { service, state, owned, serverUrl } = await ensureDevService()
+const cloudServer = await ensureDevCloudServer({
+  root,
+  serverUrl,
+  sessionId: process.pid,
+  environment: process.env
+})
 const webUrl = `http://127.0.0.1:${WEB_PORT}/`
+const adminUrl = new URL('/admin', webUrl).toString()
 const webArgs = [
   '--filter',
   '@loci/web',
@@ -43,34 +56,46 @@ const webCommand = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.e
 const webCommandArgs =
   process.platform === 'win32' ? ['/d', '/s', '/c', `pnpm ${webArgs.join(' ')}`] : webArgs
 
-const web = spawn(
-  webCommand,
-  webCommandArgs,
-  {
-    cwd: root,
-    stdio: 'inherit',
-    detached: process.platform !== 'win32',
-    env: { ...process.env, LOCI_DEV_API_PORT: String(state.port) }
-  }
-)
+const web = spawn(webCommand, webCommandArgs, {
+  cwd: root,
+  stdio: 'inherit',
+  detached: process.platform !== 'win32',
+  env: { ...process.env, LOCI_DEV_API_PORT: String(state.port) }
+})
 
 let closing = false
 const close = async (): Promise<void> => {
   if (closing) return
   closing = true
-  if (web.exitCode === null) {
-    if (process.platform !== 'win32' && web.pid) process.kill(-web.pid, 'SIGTERM')
-    else web.kill('SIGTERM')
-  }
+  await stopWeb()
+  if (cloudServer.managed) await releaseDevCloudServer(root, process.pid)
   if (owned) await service?.close()
   await worker?.close()
 }
 
 process.once('SIGINT', () => void close())
 process.once('SIGTERM', () => void close())
+cloudServer.child?.once('exit', (code, signal) => {
+  if (closing) return
+  process.stderr.write(
+    `云端开发后端已退出（${signal ?? `退出码 ${code ?? 1}`}），正在关闭开发会话。\n`
+  )
+  process.exitCode = code ?? 1
+  void close()
+})
 web.once('spawn', () => {
-  process.stdout.write(`\nLoci Web 开发地址：${webUrl}\n`)
-  process.stdout.write(`本地 API：http://127.0.0.1:${state.port}\n`)
+  process.stdout.write(`\nWeb 开发地址：${webUrl}\n`)
+  process.stdout.write(`Admin 登录地址：${adminUrl}\n`)
+  process.stdout.write(`本地 Runtime API：http://127.0.0.1:${state.port}\n`)
+  process.stdout.write(
+    `云服务地址：${serverUrl}${process.env.LOCI_SERVER_URL?.trim() ? '（LOCI_SERVER_URL 覆盖）' : serverUrl === DEVELOPMENT_SERVER_URL ? '（开发默认，可在设置中修改）' : '（设置中已自定义）'}\n`
+  )
+  if (cloudServer.managed) {
+    process.stdout.write(
+      `云端开发后端：${DEV_CLOUD_SERVER_URL}（${cloudServer.owned ? '本次启动' : '复用已有服务'}）\n`
+    )
+  }
+  process.stdout.write(`数据模式：${dataMode === 'user' ? '真实用户数据' : '隔离开发数据'}\n`)
   process.stdout.write(`数据目录：${dataDir}\n`)
   if (dataMode === 'user') {
     process.stdout.write(
@@ -91,16 +116,23 @@ async function ensureDevService(): Promise<{
   service: LocalService | null
   state: LocalWebServiceState
   owned: boolean
+  serverUrl: string
 }> {
   const existing = readLocalWebServiceState(dataDir)
   if (existing && (await checkLocalWebService(existing))) {
-    return { service: null, state: existing, owned: false }
+    return {
+      service: null,
+      state: existing,
+      owned: false,
+      serverUrl: await readRunningServerUrl(existing)
+    }
   }
 
   try {
     const started = await startLocalService({
       dataDir,
       cacheDir,
+      defaultServerUrl: DEVELOPMENT_SERVER_URL,
       port: API_PORT,
       agentIntegration: {
         packageVersion: CLI_VERSION,
@@ -110,13 +142,23 @@ async function ensureDevService(): Promise<{
       startJobWorker: () => ensureDevWorker(false),
       ensurePersistentBackground: () => ensureDevWorker(true)
     })
-    return { service: started, state: started.state, owned: true }
+    return {
+      service: started,
+      state: started.state,
+      owned: true,
+      serverUrl: started.runtime.database.getSettings().serverUrl
+    }
   } catch (error) {
     if (!(error instanceof RuntimeLockedError)) throw error
 
     const locked = readLocalWebServiceState(dataDir)
     if (locked && (await checkLocalWebService(locked))) {
-      return { service: null, state: locked, owned: false }
+      return {
+        service: null,
+        state: locked,
+        owned: false,
+        serverUrl: await readRunningServerUrl(locked)
+      }
     }
 
     const pid = error.record?.pid
@@ -131,13 +173,44 @@ async function ensureDevService(): Promise<{
   }
 }
 
+/** 复用已运行的 Runtime 时读取实际生效的云服务地址。 */
+async function readRunningServerUrl(state: LocalWebServiceState): Promise<string> {
+  const response = await fetch(`http://127.0.0.1:${state.port}/api/settings`)
+  if (!response.ok) throw new Error(`无法读取开发服务设置：HTTP ${response.status}`)
+  const settings: unknown = await response.json()
+  if (
+    typeof settings !== 'object' ||
+    settings === null ||
+    !('serverUrl' in settings) ||
+    typeof settings.serverUrl !== 'string'
+  ) {
+    throw new Error('开发服务返回了无效的 Server 地址')
+  }
+  return settings.serverUrl
+}
+
+async function stopWeb(): Promise<void> {
+  if (web.exitCode !== null) return
+  if (process.platform !== 'win32' && web.pid) process.kill(-web.pid, 'SIGTERM')
+  else web.kill('SIGTERM')
+  await Promise.race([
+    once(web, 'exit'),
+    new Promise<void>((resolve) => setTimeout(resolve, 3_000))
+  ])
+}
+
 async function ensureDevWorker(persistent: boolean): Promise<void> {
   if (persistent) keepWorker = true
   if (worker) {
     if (persistent) worker.start()
     return
   }
-  worker = startLocalWorker({ dataDir, cacheDir, mode: persistent ? 'persistent' : 'on-demand' })
+  worker = startLocalWorker({
+    dataDir,
+    cacheDir,
+    defaultServerUrl: DEVELOPMENT_SERVER_URL,
+    mode: persistent ? 'persistent' : 'on-demand'
+  })
   if (persistent) {
     worker.start()
     return

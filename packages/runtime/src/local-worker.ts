@@ -1,5 +1,5 @@
 import { createLocalJobRunner, type LocalJobRunner } from './local-job-runner.js'
-import { createLocalRuntime, type LocalRuntime } from './local-runtime.js'
+import { createLocalRuntime, type LocalRuntime, type LocalRuntimeOptions } from './local-runtime.js'
 import { resolveLociDataDir } from './data-path.js'
 import {
   removeLocalServiceState,
@@ -20,6 +20,7 @@ export interface LocalWorker {
 export interface LocalWorkerOptions {
   dataDir?: string
   cacheDir?: string
+  defaultServerUrl?: LocalRuntimeOptions['defaultServerUrl']
   idleMs?: number
   heartbeatMs?: number
   mode?: LocalServiceState['mode']
@@ -38,6 +39,7 @@ export function startLocalWorker(options: LocalWorkerOptions = {}): LocalWorker 
     const createdRuntime = createLocalRuntime({
       dataDir,
       cacheDir: options.cacheDir,
+      defaultServerUrl: options.defaultServerUrl,
       owner: '后台 worker'
     })
     runtime = createdRuntime

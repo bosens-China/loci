@@ -23,23 +23,28 @@ describe('database lifecycle', () => {
     rmSync(directory, { recursive: true, force: true })
   })
 
-  it('区分生产默认地址、开发覆盖与用户自定义地址', () => {
+  it('区分可编辑的环境默认、强制覆盖与用户自定义地址', () => {
     const directory = mkdtempSync(join(tmpdir(), 'loci-server-url-'))
     const filename = join(directory, 'loci.sqlite')
     const development = createDatabase(filename, {
-      serverUrl: 'http://localhost:7001',
-      overrideServerUrl: true
+      serverUrl: 'http://localhost:7001'
     })
     expect(development.getSettings().serverUrl).toBe('http://localhost:7001')
     development.close()
 
     const production = createDatabase(filename)
     expect(production.getSettings().serverUrl).toBe('https://loci.xiaowo.live')
-    production.saveSettings({
-      ...production.getSettings(),
+    production.close()
+
+    const developmentAgain = createDatabase(filename, {
+      serverUrl: 'http://localhost:7001'
+    })
+    expect(developmentAgain.getSettings().serverUrl).toBe('http://localhost:7001')
+    developmentAgain.saveSettings({
+      ...developmentAgain.getSettings(),
       serverUrl: 'https://custom.example.com'
     })
-    production.close()
+    developmentAgain.close()
 
     const overridden = createDatabase(filename, {
       serverUrl: 'http://localhost:7001',

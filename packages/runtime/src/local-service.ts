@@ -18,6 +18,7 @@ export interface LocalService {
 export interface LocalServiceOptions {
   dataDir?: string
   cacheDir?: string
+  defaultServerUrl?: LocalRuntimeOptions['defaultServerUrl']
   port?: number
   assetsDir?: string
   startJobWorker?: () => Promise<void>
@@ -39,6 +40,7 @@ export async function startLocalService(options: LocalServiceOptions = {}): Prom
     const createdRuntime = createLocalRuntime({
       dataDir,
       cacheDir: options.cacheDir,
+      defaultServerUrl: options.defaultServerUrl,
       owner: 'Web UI',
       agentIntegration: options.agentIntegration
     })

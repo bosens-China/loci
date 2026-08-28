@@ -18,9 +18,18 @@ docker compose -f compose.local.yaml up --build -d
 - 管理员账号：`admin`
 - 本地默认密码：`loci-local-admin-password`
 
-本地开发环境的全新数据默认连接该地址。复用已有数据或使用 CLI 联调时，可设置
-`LOCI_SERVER_URL=http://localhost:7001`；该覆盖只用于开发启动，正式版默认地址仍为
-`https://loci.xiaowo.live`。
+## 仓库开发（无需 Docker）
+
+仓库根目录的 `pnpm dev` 和 `pnpm dev:user` 会在云服务地址为本机回环 7001 时，自动以
+`tsx watch` 启动或复用当前源码的 Hono Server。它使用 `.loci-dev/server-data`，并在启动
+命令退出时由最后一个开发会话关闭自动启动的进程；两个开发命令可并行复用同一个健康服务。
+
+- 开发服务地址：`http://127.0.0.1:7001`
+- 管理员账号：`admin`
+- 默认密码：`loci-local-admin-password`，可用 `LOCI_LOCAL_ADMIN_PASSWORD` 覆盖
+
+设置页保存的外部云服务地址或 `LOCI_SERVER_URL` 覆盖会保留，开发脚本不会为此启动本机
+Server。Docker Compose 仍适合验证容器镜像、卷和部署环境；它已在 7001 运行时，开发脚本会复用它。
 
 可以通过 `LOCI_LOCAL_SERVER_PORT` 和 `LOCI_LOCAL_ADMIN_PASSWORD` 覆盖本地默认值。
 默认凭据只用于本机开发，不得用于部署。

@@ -55,6 +55,8 @@ export interface LocalRuntimeOptions {
   dataDir?: string
   cacheDir?: string
   owner?: string
+  /** 新数据库及未自定义设置使用的 Server 默认值，仍允许用户修改。 */
+  defaultServerUrl?: string
   browser?: LocalBrowserCrawler
   agentIntegration?: Omit<AgentIntegrationOptions, 'database' | 'dataDir'>
 }

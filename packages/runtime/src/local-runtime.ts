@@ -38,8 +38,15 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     : undefined
   let database: LociDatabase
   try {
-    const serverUrl = process.env.LOCI_SERVER_URL?.trim()
-    database = createDatabase(databasePath, serverUrl ? { serverUrl, overrideServerUrl: true } : {})
+    const serverUrlOverride = process.env.LOCI_SERVER_URL?.trim()
+    database = createDatabase(
+      databasePath,
+      serverUrlOverride
+        ? { serverUrl: serverUrlOverride, overrideServerUrl: true }
+        : options.defaultServerUrl
+          ? { serverUrl: options.defaultServerUrl }
+          : {}
+    )
   } finally {
     migrationLock?.release()
   }
