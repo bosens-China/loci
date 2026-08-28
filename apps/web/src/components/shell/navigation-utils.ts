@@ -14,7 +14,6 @@ export const ROUTE_TITLE_MAP: Record<string, string> = {
   '/admin/hostname-policies': '抓取策略',
   '/admin/audit-logs': '管理操作记录',
   '/admin/browser': '无头浏览器',
-  '/admin/publish': '发布本地库',
   '/login': '管理员登录'
 }
 
@@ -51,11 +50,12 @@ export function resolveActiveMenuKey(pathname: string): string {
   if (pathname in ROUTE_TITLE_MAP) {
     return pathname
   }
-  // 匹配前缀路由（如 /admin/* 匹配到具体子菜单，/documents/* 匹配到 /documents）
+  // 选择最长前缀，避免 /admin 抢先匹配 /admin/libraries/publish 等子路由。
+  let matched = ''
   for (const route of Object.keys(ROUTE_TITLE_MAP)) {
-    if (route !== '/' && pathname.startsWith(route)) {
-      return route
+    if (route !== '/' && pathname.startsWith(route) && route.length > matched.length) {
+      matched = route
     }
   }
-  return '/'
+  return matched || '/'
 }

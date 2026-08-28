@@ -20,7 +20,6 @@ import {
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
-  ReloadOutlined,
   SearchOutlined
 } from '@ant-design/icons'
 import { getSchedulePreset, type CloudLibrary, type CloudSyncJob } from '@loci/shared'
@@ -87,18 +86,18 @@ export function AdminLibrariesPanel(props: AdminLibrariesPanelProps): React.JSX.
     <div className="space-y-4">
       {/* 顶部指标看板 */}
       <Card size="small" className="shadow-xs border-[var(--ant-color-border-secondary)]">
-        <Row gutter={16} className="text-center">
-          <Col span={6}>
+        <Row gutter={[16, 16]} className="text-center">
+          <Col xs={12} sm={6}>
             <Statistic title="文档库总数" value={total} />
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={6}>
             <Statistic
               title="已发布"
               value={publishedCount}
               styles={{ content: { color: 'var(--ant-color-success)' } }}
             />
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={6}>
             <Statistic
               title="活动任务"
               value={activeCount}
@@ -107,7 +106,7 @@ export function AdminLibrariesPanel(props: AdminLibrariesPanelProps): React.JSX.
               }
             />
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={6}>
             <Statistic
               title="需检查"
               value={attentionCount}
@@ -119,9 +118,9 @@ export function AdminLibrariesPanel(props: AdminLibrariesPanelProps): React.JSX.
         </Row>
       </Card>
 
-      {/* 标准尺寸筛选与操作工具栏 */}
+      {/* 筛选与批量操作工具栏 */}
       <Card size="small" className="shadow-xs border-[var(--ant-color-border-secondary)]">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           {/* 左侧状态过滤分段器 */}
           <div className="overflow-x-auto">
             <Segmented<LibraryStatusFilter>
@@ -136,8 +135,8 @@ export function AdminLibrariesPanel(props: AdminLibrariesPanelProps): React.JSX.
             />
           </div>
 
-          {/* 右侧搜索框与主操作按钮 */}
-          <div className="flex flex-wrap items-center gap-3 flex-1 md:justify-end">
+          {/* 右侧搜索框与批量同步 */}
+          <div className="flex items-center gap-3">
             <Input
               allowClear
               prefix={<SearchOutlined className="text-[var(--ant-color-text-secondary)]" />}
@@ -146,26 +145,15 @@ export function AdminLibrariesPanel(props: AdminLibrariesPanelProps): React.JSX.
               onChange={(e) => setKeyword(e.target.value)}
               className="w-full sm:w-64"
             />
-            <Space size={8} className="shrink-0">
-              <Button
-                icon={<CloudSyncOutlined />}
-                disabled={!props.availableIds.length}
-                loading={props.syncPending}
-                onClick={props.onBatchSync}
-              >
-                {props.selected.length ? `同步所选 (${props.selectedAvailable})` : '同步全部'}
-              </Button>
-              <Button
-                icon={<ReloadOutlined />}
-                loading={props.isFetching}
-                onClick={props.onRefresh}
-              >
-                刷新
-              </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={props.onAdd}>
-                添加文档库
-              </Button>
-            </Space>
+            <Button
+              icon={<CloudSyncOutlined />}
+              disabled={!props.availableIds.length}
+              loading={props.syncPending}
+              onClick={props.onBatchSync}
+              className="shrink-0"
+            >
+              {props.selected.length ? `同步所选 (${props.selectedAvailable})` : '同步全部'}
+            </Button>
           </div>
         </div>
       </Card>

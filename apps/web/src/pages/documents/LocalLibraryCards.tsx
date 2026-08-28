@@ -37,6 +37,8 @@ import { SourceFormModal } from '@/pages/documents/SourceFormModal'
 export function LocalLibraryCards(props: {
   sources: DocumentSource[]
   onSelect: (id: string) => void
+  onPublish: (source: DocumentSource) => void
+  canPublish: boolean
 }): React.JSX.Element {
   const { message, modal } = App.useApp()
   const client = useQueryClient()
@@ -268,6 +270,8 @@ export function LocalLibraryCards(props: {
                   onSelectCard={() => props.onSelect(source.id)}
                   onToggleSelect={() => toggleSelect(source.id)}
                   onEdit={() => setEditingSource(source)}
+                  onPublish={props.onPublish}
+                  canPublish={props.canPublish}
                   onDelete={() => singleDelete.mutate(source.id)}
                   isDeleting={singleDelete.isPending}
                 />

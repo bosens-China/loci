@@ -3,7 +3,6 @@ import {
   AuditOutlined,
   BookOutlined,
   CloudDownloadOutlined,
-  CloudUploadOutlined,
   ControlOutlined,
   DashboardOutlined,
   DesktopOutlined,
@@ -205,11 +204,6 @@ const cloudMenuItems: MenuProps['items'] = [
         key: '/admin/libraries',
         icon: <BookOutlined />,
         label: <Link to="/admin/libraries">Server 文档库</Link>
-      },
-      {
-        key: '/admin/publish',
-        icon: <CloudUploadOutlined />,
-        label: <Link to="/admin/publish">发布本地库</Link>
       },
       {
         key: '/admin/catalog',

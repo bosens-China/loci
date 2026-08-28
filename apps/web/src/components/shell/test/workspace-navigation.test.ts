@@ -27,7 +27,7 @@ describe('工作区与导航辅助函数', () => {
     expect(resolveActiveMenuKey('/admin/jobs')).toBe('/admin/jobs')
     expect(resolveActiveMenuKey('/admin/hostname-policies')).toBe('/admin/hostname-policies')
     expect(resolveActiveMenuKey('/admin/browser')).toBe('/admin/browser')
-    expect(resolveActiveMenuKey('/admin/publish')).toBe('/admin/publish')
+    expect(resolveActiveMenuKey('/admin/libraries/publish')).toBe('/admin/libraries')
     expect(resolveActiveMenuKey('/unknown')).toBe('/')
   })
 })

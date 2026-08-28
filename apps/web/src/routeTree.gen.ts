@@ -29,7 +29,8 @@ import { Route as AdminCatalogRouteImport } from './routes/admin.catalog'
 import { Route as AdminHostnamePoliciesRouteImport } from './routes/admin.hostname-policies'
 import { Route as AdminJobsRouteImport } from './routes/admin.jobs'
 import { Route as AdminLibrariesRouteImport } from './routes/admin.libraries'
-import { Route as AdminPublishRouteImport } from './routes/admin.publish'
+import { Route as AdminLibrariesIndexRouteImport } from './routes/admin.libraries.index'
+import { Route as AdminLibrariesPublishRouteImport } from './routes/admin.libraries.publish'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -131,10 +132,15 @@ const AdminLibrariesRoute = AdminLibrariesRouteImport.update({
   path: '/libraries',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminPublishRoute = AdminPublishRouteImport.update({
+const AdminLibrariesIndexRoute = AdminLibrariesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminLibrariesRoute,
+} as any)
+const AdminLibrariesPublishRoute = AdminLibrariesPublishRouteImport.update({
   id: '/publish',
   path: '/publish',
-  getParentRoute: () => AdminRoute,
+  getParentRoute: () => AdminLibrariesRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -156,9 +162,10 @@ export interface FileRoutesByFullPath {
   '/admin/catalog': typeof AdminCatalogRoute
   '/admin/hostname-policies': typeof AdminHostnamePoliciesRoute
   '/admin/jobs': typeof AdminJobsRoute
-  '/admin/libraries': typeof AdminLibrariesRoute
-  '/admin/publish': typeof AdminPublishRoute
+  '/admin/libraries': typeof AdminLibrariesRouteWithChildren
   '/admin/': typeof AdminIndexRoute
+  '/admin/libraries/publish': typeof AdminLibrariesPublishRoute
+  '/admin/libraries/': typeof AdminLibrariesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -178,9 +185,9 @@ export interface FileRoutesByTo {
   '/admin/catalog': typeof AdminCatalogRoute
   '/admin/hostname-policies': typeof AdminHostnamePoliciesRoute
   '/admin/jobs': typeof AdminJobsRoute
-  '/admin/libraries': typeof AdminLibrariesRoute
-  '/admin/publish': typeof AdminPublishRoute
   '/admin': typeof AdminIndexRoute
+  '/admin/libraries/publish': typeof AdminLibrariesPublishRoute
+  '/admin/libraries': typeof AdminLibrariesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -202,9 +209,10 @@ export interface FileRoutesById {
   '/admin/catalog': typeof AdminCatalogRoute
   '/admin/hostname-policies': typeof AdminHostnamePoliciesRoute
   '/admin/jobs': typeof AdminJobsRoute
-  '/admin/libraries': typeof AdminLibrariesRoute
-  '/admin/publish': typeof AdminPublishRoute
+  '/admin/libraries': typeof AdminLibrariesRouteWithChildren
   '/admin/': typeof AdminIndexRoute
+  '/admin/libraries/publish': typeof AdminLibrariesPublishRoute
+  '/admin/libraries/': typeof AdminLibrariesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -228,8 +236,9 @@ export interface FileRouteTypes {
     | '/admin/hostname-policies'
     | '/admin/jobs'
     | '/admin/libraries'
-    | '/admin/publish'
     | '/admin/'
+    | '/admin/libraries/publish'
+    | '/admin/libraries/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -249,9 +258,9 @@ export interface FileRouteTypes {
     | '/admin/catalog'
     | '/admin/hostname-policies'
     | '/admin/jobs'
-    | '/admin/libraries'
-    | '/admin/publish'
     | '/admin'
+    | '/admin/libraries/publish'
+    | '/admin/libraries'
   id:
     | '__root__'
     | '/'
@@ -273,8 +282,9 @@ export interface FileRouteTypes {
     | '/admin/hostname-policies'
     | '/admin/jobs'
     | '/admin/libraries'
-    | '/admin/publish'
     | '/admin/'
+    | '/admin/libraries/publish'
+    | '/admin/libraries/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -435,15 +445,36 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLibrariesRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/publish': {
-      id: '/admin/publish'
+    '/admin/libraries/': {
+      id: '/admin/libraries/'
+      path: '/'
+      fullPath: '/admin/libraries/'
+      preLoaderRoute: typeof AdminLibrariesIndexRouteImport
+      parentRoute: typeof AdminLibrariesRoute
+    }
+    '/admin/libraries/publish': {
+      id: '/admin/libraries/publish'
       path: '/publish'
-      fullPath: '/admin/publish'
-      preLoaderRoute: typeof AdminPublishRouteImport
-      parentRoute: typeof AdminRoute
+      fullPath: '/admin/libraries/publish'
+      preLoaderRoute: typeof AdminLibrariesPublishRouteImport
+      parentRoute: typeof AdminLibrariesRoute
     }
   }
 }
+
+interface AdminLibrariesRouteChildren {
+  AdminLibrariesPublishRoute: typeof AdminLibrariesPublishRoute
+  AdminLibrariesIndexRoute: typeof AdminLibrariesIndexRoute
+}
+
+const AdminLibrariesRouteChildren: AdminLibrariesRouteChildren = {
+  AdminLibrariesPublishRoute: AdminLibrariesPublishRoute,
+  AdminLibrariesIndexRoute: AdminLibrariesIndexRoute,
+}
+
+const AdminLibrariesRouteWithChildren = AdminLibrariesRoute._addFileChildren(
+  AdminLibrariesRouteChildren,
+)
 
 interface AdminRouteChildren {
   AdminAuditLogsRoute: typeof AdminAuditLogsRoute
@@ -451,8 +482,7 @@ interface AdminRouteChildren {
   AdminCatalogRoute: typeof AdminCatalogRoute
   AdminHostnamePoliciesRoute: typeof AdminHostnamePoliciesRoute
   AdminJobsRoute: typeof AdminJobsRoute
-  AdminLibrariesRoute: typeof AdminLibrariesRoute
-  AdminPublishRoute: typeof AdminPublishRoute
+  AdminLibrariesRoute: typeof AdminLibrariesRouteWithChildren
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
@@ -462,8 +492,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCatalogRoute: AdminCatalogRoute,
   AdminHostnamePoliciesRoute: AdminHostnamePoliciesRoute,
   AdminJobsRoute: AdminJobsRoute,
-  AdminLibrariesRoute: AdminLibrariesRoute,
-  AdminPublishRoute: AdminPublishRoute,
+  AdminLibrariesRoute: AdminLibrariesRouteWithChildren,
   AdminIndexRoute: AdminIndexRoute,
 }
 

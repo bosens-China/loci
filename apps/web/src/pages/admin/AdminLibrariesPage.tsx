@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App } from 'antd'
+import { useNavigate } from '@tanstack/react-router'
+import { App, Button, Space } from 'antd'
+import { CloudUploadOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { CloudLibrary, CloudLibraryInput } from '@loci/shared'
 import {
   createAdminLibrary,
@@ -30,6 +32,7 @@ import {
 /** Server 文档库管理页面 */
 export function AdminLibrariesPage(): React.JSX.Element {
   const client = useQueryClient()
+  const navigate = useNavigate()
   const { message, modal } = App.useApp()
 
   const [editing, setEditing] = useState<CloudLibrary | 'new' | null>(null)
@@ -168,6 +171,26 @@ export function AdminLibrariesPage(): React.JSX.Element {
       <PageHeader
         title="Server 文档库"
         description="管理远端 Loci Server 上的公开文档库、同步计划与发布状态。"
+        action={
+          <Space size={8}>
+            <Button
+              icon={<ReloadOutlined />}
+              loading={libraries.isFetching || jobs.isFetching}
+              onClick={() => void Promise.all([libraries.refetch(), jobs.refetch()])}
+            >
+              刷新
+            </Button>
+            <Button
+              icon={<CloudUploadOutlined />}
+              onClick={() => void navigate({ to: '/documents' })}
+            >
+              从本地发布
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing('new')}>
+              添加文档库
+            </Button>
+          </Space>
+        }
       />
 
       <AdminLibrariesPanel

@@ -1,6 +1,7 @@
 import {
   ClockCircleOutlined,
   CloudOutlined,
+  CloudUploadOutlined,
   DeleteOutlined,
   EditOutlined,
   FolderOpenOutlined,
@@ -10,7 +11,18 @@ import {
   SyncOutlined
 } from '@ant-design/icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { App, Avatar, Button, Card, Checkbox, Popconfirm, Space, Tag, Typography } from 'antd'
+import {
+  App,
+  Avatar,
+  Button,
+  Card,
+  Checkbox,
+  Popconfirm,
+  Space,
+  Tag,
+  Tooltip,
+  Typography
+} from 'antd'
 import type { DocumentSource } from '@loci/shared'
 import { enqueueSourceSync } from '@/api/jobs'
 import { formatBytes } from '@/utils/format'
@@ -22,6 +34,8 @@ export interface LocalLibraryCardItemProps {
   onSelectCard: () => void
   onToggleSelect: () => void
   onEdit: () => void
+  onPublish: (source: DocumentSource) => void
+  canPublish: boolean
   onDelete: () => void
   isDeleting: boolean
 }
@@ -92,6 +106,9 @@ export function LocalLibraryCardItem(props: LocalLibraryCardItemProps): React.JS
             <Avatar
               shape="square"
               size={40}
+              src={source.iconUrl ?? undefined}
+              alt=""
+              draggable={false}
               icon={
                 isGithub ? (
                   <GithubOutlined className="text-lg text-[var(--ant-color-text)]" />
@@ -215,6 +232,23 @@ export function LocalLibraryCardItem(props: LocalLibraryCardItemProps): React.JS
 
         {!isCloud && !selectMode && (
           <Space size={2} className="items-center">
+            {props.canPublish && (
+              <Tooltip
+                title={source.pages > 0 ? '发布为 Server 公开库' : '请先同步，获取正文后才能发布'}
+              >
+                <span>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<CloudUploadOutlined />}
+                    disabled={source.pages === 0}
+                    onClick={() => props.onPublish(source)}
+                  >
+                    发布
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
             <Button
               type="text"
               size="small"
