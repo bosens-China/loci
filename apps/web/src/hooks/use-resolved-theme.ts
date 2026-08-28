@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ThemeMode } from '@loci/shared'
-import { getStoredThemeMode, resolveThemeMode, setStoredThemeMode } from '@/utils/theme'
+import { resolveThemeMode, setStoredThemeMode } from '@/utils/theme'
 
 const QUERY = '(prefers-color-scheme: dark)'
 
