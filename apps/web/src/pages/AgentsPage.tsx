@@ -12,7 +12,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Avatar, Button, Card, Col, Row, Space, Tag, Tooltip, Typography } from 'antd'
 import type {
-  AgentClient,
+  McpClient,
   AgentIntegrationComponentState,
   AgentIntegrationStatus
 } from '@loci/shared'
@@ -29,7 +29,7 @@ const QUERY_KEY = ['agent-integrations'] as const
 
 interface MutationInput {
   action: AgentIntegrationActionIntent
-  client: AgentClient
+  client: McpClient
 }
 
 /** Agent 接入管理页：展示并管理各个 Agent 客户端的 MCP、Skill 和 Rules 接入状态。 */

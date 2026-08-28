@@ -6,6 +6,7 @@ import {
 } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { printTable } from '../ui.js'
+import { formatCrawlRunStatus } from './source-history.js'
 
 export function registerStatusCommand(program: Command): void {
   program
@@ -32,7 +33,7 @@ export function registerStatusCommand(program: Command): void {
             [
               '最近同步',
               runs[0]
-                ? `${statusLabel(runs[0].status)}，${runs[0].sourceName}，${runs[0].startedAt ? new Date(runs[0].startedAt).toLocaleString('zh-CN') : '—'}`
+                ? `${formatCrawlRunStatus(runs[0].status)}，${runs[0].sourceName}，${runs[0].startedAt ? new Date(runs[0].startedAt).toLocaleString('zh-CN') : '—'}`
                 : '暂无记录'
             ],
             [
@@ -51,8 +52,4 @@ export function registerStatusCommand(program: Command): void {
         return '状态检查完成'
       })
     )
-}
-
-function statusLabel(status: string): string {
-  return { queued: '等待', running: '进行中', completed: '成功', failed: '失败' }[status] ?? status
 }

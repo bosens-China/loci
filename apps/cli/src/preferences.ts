@@ -3,7 +3,7 @@ import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
 import {
   getSourceScopeOptions,
   normalizeServerUrl,
-  type AgentClient,
+  type McpClient,
   type FetchMode
 } from '@loci/shared'
 import type { LociDatabase } from '@loci/runtime'
@@ -47,7 +47,7 @@ export interface AdminCreatePreference {
 }
 
 export interface McpConfigurePreference {
-  client: AgentClient
+  client: McpClient
 }
 
 const CLI_SCOPE = 'cli'

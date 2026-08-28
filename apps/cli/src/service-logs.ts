@@ -1,6 +1,6 @@
 import { open, type FileHandle } from 'node:fs/promises'
 import { watchFile, unwatchFile } from 'node:fs'
-import { CliError } from './errors.js'
+import { CliError, errorMessage } from './errors.js'
 import { waitForTermination } from './process-lifecycle.js'
 
 interface LogSnapshot {
@@ -134,8 +134,4 @@ function renderLogBlock(path: string, content: string): string {
 
 function isMissingFile(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT'
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : '未知错误'
 }

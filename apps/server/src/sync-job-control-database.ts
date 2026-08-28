@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { CrawlProgress } from '@loci/core'
-import { getSyncJob, type PersistedSyncJob } from './sync-job-database.js'
+import { getSyncJob, requireSyncJob, type PersistedSyncJob } from './sync-job-database.js'
 
 export function requestSyncJobPause(
   database: DatabaseSync,
@@ -143,10 +143,4 @@ export function readSyncJobResumeUrls(database: DatabaseSync, id: string): strin
   } catch {
     return []
   }
-}
-
-function requireSyncJob(database: DatabaseSync, id: string): PersistedSyncJob {
-  const job = getSyncJob(database, id)
-  if (!job) throw new Error('同步任务不存在')
-  return job
 }

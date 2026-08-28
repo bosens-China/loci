@@ -5,7 +5,7 @@ import { applyEdits, modify, parse, type ParseError } from 'jsonc-parser/lib/esm
 import {
   createMcpClientConfig,
   getMcpClientDefinition,
-  type AgentClient,
+  type McpClient,
   type McpAgentConnection
 } from '@loci/shared'
 import { writeFileAtomically } from './atomic-file.js'
@@ -32,7 +32,7 @@ type JsonObject = Record<string, unknown>
 
 /** 解析客户端真实的用户级配置路径，供 CLI 和文件回退共同使用。 */
 export function resolveAgentMcpConfigPath(
-  client: AgentClient,
+  client: McpClient,
   options: AgentMcpConfigPathOptions = {}
 ): string {
   const home = options.homeDir ?? homedir()
@@ -70,7 +70,7 @@ export function resolveAgentMcpConfigPath(
 
 /** 调用方需持有客户端配置锁；这里只负责读取、合并和原子写入。 */
 export function writeAgentMcpConfigFile(
-  client: AgentClient,
+  client: McpClient,
   connection: McpAgentConnection,
   options: AgentMcpConfigPathOptions = {}
 ): AgentMcpConfigWriteResult {
@@ -88,7 +88,7 @@ export function writeAgentMcpConfigFile(
 
 /** 只读检查名为 loci 的 MCP 配置，不把用户自定义连接当作 Loci 所有。 */
 export function inspectAgentMcpConfigFile(
-  client: AgentClient,
+  client: McpClient,
   connection: McpAgentConnection,
   options: AgentMcpConfigPathOptions = {}
 ): AgentMcpConfigState {
@@ -110,7 +110,7 @@ export function inspectAgentMcpConfigFile(
 
 /** 调用方需持有客户端操作锁；只删除可确认的标准 Loci MCP 配置。 */
 export function removeAgentMcpConfigFile(
-  client: AgentClient,
+  client: McpClient,
   connection: McpAgentConnection,
   options: AgentMcpConfigPathOptions = {}
 ): AgentMcpConfigWriteResult {
@@ -126,7 +126,7 @@ export function removeAgentMcpConfigFile(
 
 function mergeJsonConfig(
   current: string,
-  client: Exclude<AgentClient, 'codex'>,
+  client: Exclude<McpClient, 'codex'>,
   connection: McpAgentConnection,
   path: string
 ): string {
@@ -158,7 +158,7 @@ function mergeJsonConfig(
 
 function inspectJsonConfig(
   current: string,
-  client: Exclude<AgentClient, 'codex'>,
+  client: Exclude<McpClient, 'codex'>,
   connection: McpAgentConnection,
   path: string
 ): AgentMcpConfigState {
@@ -176,7 +176,7 @@ function inspectJsonConfig(
   return { path, status: 'current', message: null }
 }
 
-function removeJsonConfig(current: string, client: Exclude<AgentClient, 'codex'>): string {
+function removeJsonConfig(current: string, client: Exclude<McpClient, 'codex'>): string {
   const source = current.trim() ? current : '{}\n'
   const indent = detectJsonIndent(current)
   const key = client === 'vscode' ? 'servers' : 'mcpServers'

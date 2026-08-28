@@ -192,10 +192,6 @@ export function printTable(
   process.stdout.write(`${table.toString()}\n`)
 }
 
-export function printList(lines: readonly string[]): void {
-  process.stdout.write(lines.map((line) => `• ${line}`).join('\n') + '\n')
-}
-
 export function printTree(nodes: readonly UrlTreeNode[], indent = '  '): void {
   for (const node of nodes) {
     process.stdout.write(`${indent}└─ ${node.title}${node.readable ? `  [${node.id}]` : ''}\n`)

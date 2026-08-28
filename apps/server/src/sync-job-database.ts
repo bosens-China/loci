@@ -210,7 +210,7 @@ function findActive(database: DatabaseSync, libraryId: string): SyncJobRow | und
     .get(libraryId) as unknown as SyncJobRow | undefined
 }
 
-function requireSyncJob(database: DatabaseSync, id: string): PersistedSyncJob {
+export function requireSyncJob(database: DatabaseSync, id: string): PersistedSyncJob {
   const job = getSyncJob(database, id)
   if (!job) throw new Error('同步任务不存在')
   return job

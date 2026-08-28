@@ -3,8 +3,8 @@ import { stripVTControlCharacters } from 'node:util'
 import which from 'which'
 import {
   getMcpClientDefinition,
-  isAgentClient,
-  type AgentClient,
+  isMcpClient,
+  type McpClient,
   type AgentImportResult,
   type McpAgentConnection,
   type McpImportStrategy
@@ -50,7 +50,7 @@ export async function importAgentClient(
   connection: McpAgentConnection,
   options: ImportAgentClientOptions = {}
 ): Promise<AgentImportResult> {
-  const selected = requireAgentClient(client)
+  const selected = requireMcpClient(client)
   validateClientConnection(selected, connection)
   const path = resolveAgentMcpConfigPath(selected, options)
   const active = activeImports.get(path)
@@ -66,7 +66,7 @@ export async function importAgentClient(
 }
 
 async function performAgentImport(
-  client: AgentClient,
+  client: McpClient,
   connection: McpAgentConnection,
   path: string,
   options: ImportAgentClientOptions
@@ -123,7 +123,7 @@ export function createAgentImportCommand(
   client: unknown,
   connection: McpAgentConnection
 ): AgentImportCommand {
-  const selected = requireAgentClient(client)
+  const selected = requireMcpClient(client)
   validateClientConnection(selected, connection)
   const definition = getMcpClientDefinition(selected)
   if (!definition.executable || !definition.quickImport) {
@@ -136,8 +136,8 @@ export function createAgentImportCommand(
   }
 }
 
-function requireAgentClient(client: unknown): AgentClient {
-  if (!isAgentClient(client)) throw new Error('不支持这个 Agent 客户端')
+function requireMcpClient(client: unknown): McpClient {
+  if (!isMcpClient(client)) throw new Error('不支持这个 Agent 客户端')
   return client
 }
 
@@ -179,7 +179,7 @@ function validateConnection(connection: McpAgentConnection): void {
   if (!connection.command.trim()) throw new Error('MCP stdio 命令不能为空')
 }
 
-function validateClientConnection(client: AgentClient, connection: McpAgentConnection): void {
+function validateClientConnection(client: McpClient, connection: McpAgentConnection): void {
   validateConnection(connection)
   getMcpClientDefinition(client)
 }

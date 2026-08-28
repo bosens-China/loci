@@ -2,7 +2,7 @@ import type { Command } from 'commander'
 import { SCHEDULE_PRESETS, getSchedulePreset, normalizeCronSchedule } from '@loci/shared'
 import { applyPersistentBackgroundSetting } from '../background-host.js'
 import { runWithRuntime } from '../command-runtime.js'
-import { CliError } from '../errors.js'
+import { CliError, errorMessage } from '../errors.js'
 import { resolveSource } from '../resources.js'
 import { parseScheduleInput } from '../schedule-input.js'
 import { askSelect, askText, printTable } from '../ui.js'
@@ -103,8 +103,4 @@ function scheduleValue(value: string): string | null {
   } catch (error) {
     throw new CliError(errorMessage(error), 2)
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : '未知错误'
 }

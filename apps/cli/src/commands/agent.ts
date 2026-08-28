@@ -9,12 +9,9 @@ import {
   LOCI_AGENT_INSTRUCTIONS,
   createMcpClientConfig,
   getMcpClientDefinition,
-  isAgentClient,
   isAgentGlobalRulesClient,
   isMcpClient,
-  listImportableAgentClients,
   listMcpClients,
-  type AgentClient,
   type McpClient,
   type McpConfigTarget
 } from '@loci/shared'
@@ -26,10 +23,10 @@ import { askConfirm, askSelect, note } from '../ui.js'
 import { registerAgentIntegrationCommands, runAgentSetupWizard } from './agent-integration.js'
 import { registerSkillsCommands } from './skills.js'
 
-type AgentSelection = AgentClient | 'manual'
+type AgentSelection = McpClient | 'manual'
 
 const clients: ReadonlyArray<{ value: AgentSelection; label: string }> = [
-  ...listImportableAgentClients().map((client) => ({ value: client.id, label: client.label })),
+  ...listMcpClients().map((client) => ({ value: client.id, label: client.label })),
   { value: 'manual', label: '其他客户端（复制通用配置）' }
 ]
 
@@ -63,7 +60,7 @@ async function configureAgentClient(
   client: string | undefined,
   options: { yes?: boolean }
 ): Promise<void> {
-  let remembered = { client: 'codex' as AgentClient }
+  let remembered = { client: 'codex' as McpClient }
   if (process.stdin.isTTY && !client) {
     const preferenceRuntime = createCliRuntime()
     try {
@@ -82,7 +79,7 @@ async function configureAgentClient(
     printManualMcpConfig(GENERIC_MCP_CONFIG_TARGET.id)
     return
   }
-  if (!isAgentClient(selected)) {
+  if (!isMcpClient(selected)) {
     throw new CliError(
       `不支持的 Agent 客户端：${selected}；请运行 loci agent print-config 复制配置`,
       2

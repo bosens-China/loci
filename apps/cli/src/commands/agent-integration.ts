@@ -1,6 +1,6 @@
 import type { Command } from 'commander'
-import type { AgentIntegrationStatus, AgentClient } from '@loci/shared'
-import { isAgentClient, listImportableAgentClients } from '@loci/shared'
+import type { AgentIntegrationStatus, McpClient } from '@loci/shared'
+import { isMcpClient, listMcpClients } from '@loci/shared'
 import type { AgentIntegrationService } from '@loci/runtime'
 import { runWithRuntime } from '../command-runtime.js'
 import { CliError } from '../errors.js'
@@ -15,7 +15,7 @@ interface StatusOptions {
   json?: boolean
 }
 
-const choices = listImportableAgentClients().map((client) => ({
+const choices = listMcpClients().map((client) => ({
   value: client.id,
   label: client.label
 }))
@@ -80,7 +80,7 @@ async function runAgentRemove(client: string | undefined, options: WriteOptions)
 }
 
 async function runAgentStatus(client: string | undefined, options: StatusOptions): Promise<void> {
-  if (client !== undefined && !isAgentClient(client)) {
+  if (client !== undefined && !isMcpClient(client)) {
     throw new CliError(`不支持的 Agent 客户端：${client}`, 2)
   }
   await runWithRuntime('Agent 接入状态', async (runtime) => {
@@ -104,14 +104,14 @@ async function runAgentStatus(client: string | undefined, options: StatusOptions
   })
 }
 
-async function selectClient(client: string | undefined): Promise<AgentClient> {
+async function selectClient(client: string | undefined): Promise<McpClient> {
   const selected =
     client ??
     (process.stdin.isTTY
-      ? await askSelect<AgentClient>('请选择需要管理的 Agent', choices, 'codex')
+      ? await askSelect<McpClient>('请选择需要管理的 Agent', choices, 'codex')
       : undefined)
   if (!selected) throw new CliError('非交互终端必须指定 Agent 客户端', 2)
-  if (!isAgentClient(selected)) throw new CliError(`不支持的 Agent 客户端：${selected}`, 2)
+  if (!isMcpClient(selected)) throw new CliError(`不支持的 Agent 客户端：${selected}`, 2)
   return selected
 }
 

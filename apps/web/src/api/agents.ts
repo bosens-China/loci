@@ -1,8 +1,4 @@
-import type {
-  AgentClient,
-  AgentIntegrationActionResult,
-  AgentIntegrationStatus
-} from '@loci/shared'
+import type { McpClient, AgentIntegrationActionResult, AgentIntegrationStatus } from '@loci/shared'
 import { request } from './client'
 
 export const getAgentIntegrations = async (): Promise<AgentIntegrationStatus[]> => {
@@ -11,7 +7,7 @@ export const getAgentIntegrations = async (): Promise<AgentIntegrationStatus[]> 
 }
 
 export const setupAgentIntegration = async (
-  client: AgentClient
+  client: McpClient
 ): Promise<AgentIntegrationActionResult> => {
   const { data } = await request.post<AgentIntegrationActionResult>(
     `/api/agents/${encodeURIComponent(client)}/setup`
@@ -20,7 +16,7 @@ export const setupAgentIntegration = async (
 }
 
 export const removeAgentIntegration = async (
-  client: AgentClient
+  client: McpClient
 ): Promise<AgentIntegrationActionResult> => {
   const { data } = await request.post<AgentIntegrationActionResult>(
     `/api/agents/${encodeURIComponent(client)}/remove`

@@ -40,7 +40,7 @@ export function registerSourceHistoryCommands(source: Command): void {
         note(
           [
             `文档源：${run.sourceName}`,
-            `状态：${statusLabel(run.status)}`,
+            `状态：${formatCrawlRunStatus(run.status)}`,
             `开始：${formatTime(run.startedAt)}`,
             `完成：${formatTime(run.finishedAt)}`,
             `发现：${run.discovered}，成功：${run.succeeded}，失败：${run.failed}`,
@@ -80,7 +80,7 @@ async function selectRun(
     '请选择一次抓取记录',
     runs.map((run) => ({
       value: run.id,
-      label: `${formatTime(run.startedAt)} · ${statusLabel(run.status)}`,
+      label: `${formatTime(run.startedAt)} · ${formatCrawlRunStatus(run.status)}`,
       hint: `成功 ${run.succeeded}，失败 ${run.failed}`
     }))
   )
@@ -99,7 +99,7 @@ function printRuns(runs: CrawlHistoryRecord[]): void {
     ['文档源', '状态', '开始时间', '发现', '成功', '失败', '短 ID', '错误'],
     runs.map((run) => [
       run.sourceName,
-      statusLabel(run.status),
+      formatCrawlRunStatus(run.status),
       formatTime(run.startedAt),
       run.discovered,
       run.succeeded,
@@ -114,7 +114,7 @@ function formatTime(value: string | null): string {
   return value ? new Date(value).toLocaleString('zh-CN') : '—'
 }
 
-function statusLabel(status: string): string {
+export function formatCrawlRunStatus(status: string): string {
   return { queued: '等待', running: '进行中', completed: '成功', failed: '失败' }[status] ?? status
 }
 

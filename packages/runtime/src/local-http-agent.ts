@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { isAgentClient } from '@loci/shared'
+import { isMcpClient } from '@loci/shared'
 import type { LocalRuntime } from './local-runtime.js'
 import { json, mutationJson } from './local-http-response.js'
 
@@ -23,7 +23,7 @@ export async function handleAgentIntegrations(
   const match = /^\/api\/agents\/([^/]+)(?:\/(setup|remove))?$/u.exec(url.pathname)
   if (!match) return false
   const client = decodeURIComponent(match[1]!)
-  if (!isAgentClient(client)) {
+  if (!isMcpClient(client)) {
     json(response, 404, { error: `不支持的 Agent 客户端：${client}` })
     return true
   }

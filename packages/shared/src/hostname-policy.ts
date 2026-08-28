@@ -24,10 +24,6 @@ export function normalizeHostnamePolicyInput(
   return { ...input, hostname }
 }
 
-export function normalizePolicyHostname(value: string): string {
-  return normalizeHostname(value)
-}
-
 export function randomIntervalSeconds(
   minimum: number,
   maximum: number,
@@ -39,7 +35,7 @@ export function randomIntervalSeconds(
   return minimum + Math.floor(random() * (maximum - minimum + 1))
 }
 
-function normalizeHostname(value: string): string {
+export function normalizeHostname(value: string): string {
   const hostname = value.trim().toLowerCase()
   if (!hostname || hostname.includes('/') || hostname.includes(':')) {
     throw new Error('域名格式不正确')

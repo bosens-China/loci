@@ -1,6 +1,6 @@
 import {
   normalizeHostnamePolicyInput,
-  normalizePolicyHostname,
+  normalizeHostname,
   type HostnameCrawlPolicy,
   type SaveHostnameCrawlPolicyInput
 } from '@loci/shared'
@@ -22,7 +22,7 @@ export function createHostnameCrawlPolicyDatabase(
     database
       .select()
       .from(hostnameCrawlPolicies)
-      .where(eq(hostnameCrawlPolicies.hostname, normalizePolicyHostname(hostname)))
+      .where(eq(hostnameCrawlPolicies.hostname, normalizeHostname(hostname)))
       .get()
 
   return {
@@ -47,7 +47,7 @@ export function createHostnameCrawlPolicyDatabase(
     deleteHostnameCrawlPolicy: (hostname) =>
       database
         .delete(hostnameCrawlPolicies)
-        .where(eq(hostnameCrawlPolicies.hostname, normalizePolicyHostname(hostname)))
+        .where(eq(hostnameCrawlPolicies.hostname, normalizeHostname(hostname)))
         .run().changes > 0
   }
 }

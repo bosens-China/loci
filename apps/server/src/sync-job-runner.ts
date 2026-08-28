@@ -206,7 +206,7 @@ function assertNotCanceled(signal: AbortSignal): void {
   if (signal.aborted) throw signal.reason ?? new Error('同步已取消')
 }
 
-function leaseExpiresAt(): string {
+export function leaseExpiresAt(): string {
   return new Date(Date.now() + 30_000).toISOString()
 }
 

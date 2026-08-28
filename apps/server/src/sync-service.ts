@@ -13,7 +13,7 @@ import { checkServerBrowserStatus } from './browser-status.js'
 import type { ServerBrowserStatus } from '@loci/shared'
 import type { SaveServerCrawlSettingsInput, ServerCrawlSettings } from '@loci/shared'
 import { ServerDatabase } from './database.js'
-import { runServerSyncJob } from './sync-job-runner.js'
+import { leaseExpiresAt, runServerSyncJob } from './sync-job-runner.js'
 import type { SyncJob } from './types.js'
 
 class SyncCanceledError extends Error {}
@@ -320,10 +320,6 @@ function trySetQueuePriority(queue: PQueue | undefined, id: string, priority: nu
 
 function isActive(job: SyncJob): boolean {
   return job.status === 'queued' || job.status === 'running' || job.status === 'canceling'
-}
-
-function leaseExpiresAt(): string {
-  return new Date(Date.now() + 30_000).toISOString()
 }
 
 function publicJob(job: SyncJob): SyncJob {

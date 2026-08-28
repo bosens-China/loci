@@ -28,7 +28,7 @@ import {
 import { askScope } from './source.js'
 import { registerAdminSubcommands } from './admin-script.js'
 import { selectLibraries, syncLibraries } from './admin-sync.js'
-import { createAdminLibraryTable } from './admin-output.js'
+import { createAdminLibraryTable, formatAdminSchedule } from './admin-output.js'
 import { cancelAdminJobInteractive, showAdminJobs } from './admin-tasks.js'
 import {
   askConfirm,
@@ -165,7 +165,7 @@ async function adminLoop(
           continue
         }
         note(
-          `原计划：${formatScheduleLabel(current.schedule)}\n新计划：${formatSchedulePreview(schedule)}`,
+          `原计划：${formatAdminSchedule(current.schedule)}\n新计划：${formatSchedulePreview(schedule)}`,
           '请确认计划变更'
         )
         if (!(await askConfirm('确认更新自动更新计划吗？', true))) {
@@ -286,7 +286,7 @@ async function selectLibrary(libraries: CloudLibrary[]): Promise<CloudLibrary> {
     libraries.map((library) => ({
       value: library.id,
       label: library.name,
-      hint: `${library.hostname} · ${library.pages} 页 · ${formatScheduleLabel(library.schedule)}`
+      hint: `${library.hostname} · ${library.pages} 页 · ${formatAdminSchedule(library.schedule)}`
     }))
   )
   return libraries.find((library) => library.id === id)!
@@ -321,11 +321,6 @@ function validateSchedule(value: string | undefined): string | undefined {
   } catch (error) {
     return errorMessage(error)
   }
-}
-
-function formatScheduleLabel(schedule: string | null): string {
-  if (!schedule) return '仅手动'
-  return getSchedulePreset(schedule)?.label ?? schedule
 }
 
 function formatSchedulePreview(schedule: string | null): string {

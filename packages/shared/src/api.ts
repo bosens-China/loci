@@ -1,4 +1,4 @@
-import type { AgentClient, AgentGlobalRulesClient } from './mcp-clients.js'
+import type { AgentGlobalRulesClient, McpClient } from './mcp-clients.js'
 
 export type FetchMode = 'auto' | 'http' | 'browser'
 
@@ -36,7 +36,7 @@ export type ServerResourceRevisionKey = (typeof SERVER_RESOURCE_REVISION_KEYS)[n
 export type ServerResourceRevisions = Record<ServerResourceRevisionKey, number>
 
 export interface AgentImportResult {
-  client: AgentClient
+  client: McpClient
   message: string
 }
 
@@ -61,7 +61,7 @@ export interface AgentIntegrationComponentState {
 }
 
 export interface AgentIntegrationStatus {
-  client: AgentClient
+  client: McpClient
   label: string
   overall: AgentIntegrationOverallStatus
   components: AgentIntegrationComponentState[]

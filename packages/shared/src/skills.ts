@@ -58,11 +58,6 @@ export interface SkillClearResult {
   failures: Array<{ targetPath: string; message: string }>
 }
 
-export interface SkillProjectSelection {
-  canceled: boolean
-  path: string | null
-}
-
 export function isSkillAgent(value: unknown): value is SkillAgent {
   return typeof value === 'string' && (SKILL_AGENTS as readonly string[]).includes(value)
 }
