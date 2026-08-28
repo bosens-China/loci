@@ -66,10 +66,6 @@ export async function listAdminAuditLogs(offset = 0, limit = 50): Promise<Server
   ).data
 }
 
-export async function cancelAdminJob(id: string): Promise<CloudSyncJob> {
-  return controlAdminJob(id, 'cancel')
-}
-
 export async function controlAdminJob(
   id: string,
   action: 'pause' | 'resume' | 'stop' | 'cancel'

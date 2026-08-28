@@ -2,8 +2,6 @@ import { CheckOutlined, CloudServerOutlined, DownOutlined, HomeOutlined } from '
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { Button, Dropdown, type MenuProps } from 'antd'
 
-export type WorkspaceMode = 'local' | 'cloud'
-
 /** 顶部工作区切换器：pill 样式，强调当前工作区状态，下拉菜单快速切换。 */
 export function WorkspaceSwitcher(): React.JSX.Element {
   const location = useLocation()
