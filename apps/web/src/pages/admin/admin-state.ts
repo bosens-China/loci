@@ -1,9 +1,31 @@
 import {
   getCloudLibraryContentRemovalRisk,
+  type CloudAdminSession,
   type CloudLibrary,
   type CloudLibraryInput,
   type CloudSyncJob
 } from '@loci/shared'
+
+/** 登录页只允许返回 Server 管理路由，避免把 Admin 登录变成任意地址跳板。 */
+export function resolveAdminLoginTarget(redirect: string | undefined): string {
+  if (!redirect?.startsWith('/admin')) return '/admin'
+  const boundary = redirect.charAt('/admin'.length)
+  return boundary === '' || boundary === '/' || boundary === '?' || boundary === '#'
+    ? redirect
+    : '/admin'
+}
+
+export function isAdminSessionExpired(session: CloudAdminSession, now = Date.now()): boolean {
+  const expiresAt = Date.parse(session.expiresAt)
+  return !Number.isFinite(expiresAt) || expiresAt <= now
+}
+
+export function isAdminSessionValid(
+  session: CloudAdminSession | null,
+  now = Date.now()
+): session is CloudAdminSession {
+  return session !== null && !isAdminSessionExpired(session, now)
+}
 
 export function isAdminJobActive(job: CloudSyncJob): boolean {
   return ['queued', 'running', 'canceling'].includes(job.status)

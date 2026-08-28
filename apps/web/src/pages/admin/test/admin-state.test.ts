@@ -3,12 +3,38 @@ import type { CloudLibrary, CloudSyncJob } from '@loci/shared'
 import {
   availableAdminLibraryIds,
   getAdminSyncPercent,
+  isAdminSessionExpired,
+  isAdminSessionValid,
   isAdminJobActive,
   latestAdminJobsByLibrary,
-  mergeAdminJobs
+  mergeAdminJobs,
+  resolveAdminLoginTarget
 } from '../admin-state'
 
 describe('Admin 任务状态', () => {
+  it('登录后只返回原 Server 管理路由', () => {
+    expect(resolveAdminLoginTarget('/admin/jobs?status=running#latest')).toBe(
+      '/admin/jobs?status=running#latest'
+    )
+    expect(resolveAdminLoginTarget('/administer')).toBe('/admin')
+    expect(resolveAdminLoginTarget('/documents')).toBe('/admin')
+    expect(resolveAdminLoginTarget('https://example.com/admin')).toBe('/admin')
+  })
+
+  it('按服务端会话时间判断是否过期', () => {
+    const session = {
+      serverUrl: 'http://localhost:7001',
+      username: 'admin',
+      expiresAt: '2026-08-28T08:00:00.000Z'
+    }
+    expect(isAdminSessionExpired(session, Date.parse('2026-08-28T07:59:59.999Z'))).toBe(false)
+    expect(isAdminSessionExpired(session, Date.parse(session.expiresAt))).toBe(true)
+    expect(isAdminSessionExpired({ ...session, expiresAt: 'invalid' })).toBe(true)
+    expect(isAdminSessionValid(session, Date.parse('2026-08-28T07:59:59.999Z'))).toBe(true)
+    expect(isAdminSessionValid(session, Date.parse(session.expiresAt))).toBe(false)
+    expect(isAdminSessionValid(null)).toBe(false)
+  })
+
   it('按文档库选择最新任务并识别活动状态', () => {
     const older = job('old', 'library-1', 'queued', '2026-08-20T00:00:00.000Z')
     const newer = job('new', 'library-1', 'completed', '2026-08-21T00:00:00.000Z')

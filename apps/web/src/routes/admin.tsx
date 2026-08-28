@@ -1,49 +1,41 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, Outlet } from '@tanstack/react-router'
-import { App } from 'antd'
-import { getAdminSession, loginAdmin } from '@/api/admin'
-import { getSettings } from '@/api/settings'
-import { AsyncState } from '@/components/AsyncState'
-import { AdminLoginPanel } from '@/pages/admin/AdminLoginPanel'
-import { ADMIN_SESSION_KEY } from '@/pages/admin/admin-query-keys'
+import { useEffect } from 'react'
+import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-router'
+import { getAdminSession } from '@/api/admin'
+import { isAdminSessionValid } from '@/pages/admin/admin-state'
 
 export const Route = createFileRoute('/admin')({
+  beforeLoad: async ({ location }) => {
+    const session = await getAdminSession()
+    if (!isAdminSessionValid(session)) {
+      throw redirect({
+        to: '/login',
+        search: { redirect: location.href },
+        replace: true
+      })
+    }
+    return { session }
+  },
   component: AdminLayout
 })
 
 /** 云端 Server 控制台父路由 Layout：统一鉴权校验与登录守卫。 */
 function AdminLayout(): React.JSX.Element {
-  const client = useQueryClient()
-  const { message } = App.useApp()
-  const session = useQuery({ queryKey: ADMIN_SESSION_KEY, queryFn: getAdminSession })
-  const settings = useQuery({ queryKey: ['settings'], queryFn: getSettings })
+  const router = useRouter()
+  const { session } = Route.useRouteContext()
 
-  const login = useMutation({
-    mutationFn: loginAdmin,
-    onSuccess: (value) => {
-      client.setQueryData(ADMIN_SESSION_KEY, value)
-      void message.success('管理员已登录')
-    },
-    onError: (error: Error) => void message.error(error.message)
-  })
+  useEffect(() => {
+    const delay = Date.parse(session.expiresAt) - Date.now()
+    if (delay <= 0) {
+      void router.invalidate()
+      return
+    }
+    const timer = window.setTimeout(() => void router.invalidate(), delay)
+    return () => window.clearTimeout(timer)
+  }, [router, session.expiresAt])
 
   return (
     <div className="px-6 py-6 sm:px-8 sm:py-8">
-      <AsyncState
-        loading={session.isLoading || settings.isLoading}
-        error={session.error ?? settings.error}
-        onRetry={() => void Promise.all([session.refetch(), settings.refetch()])}
-      >
-        {session.data ? (
-          <Outlet />
-        ) : (
-          <AdminLoginPanel
-            serverUrl={settings.data?.serverUrl ?? ''}
-            submitting={login.isPending}
-            onSubmit={(value) => login.mutate(value)}
-          />
-        )}
-      </AsyncState>
+      <Outlet />
     </div>
   )
 }

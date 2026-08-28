@@ -7,6 +7,7 @@ import { loginAdmin } from '@/api/admin'
 import { getSettings } from '@/api/settings'
 import { ThemeSwitcher } from '@/components/shell/ThemeSwitcher'
 import { ADMIN_SESSION_KEY } from '@/pages/admin/admin-query-keys'
+import { resolveAdminLoginTarget } from '@/pages/admin/admin-state'
 
 interface LoginSearch {
   redirect?: string
@@ -25,11 +26,7 @@ export function LoginPage(): React.JSX.Element {
     onSuccess: (session) => {
       client.setQueryData(ADMIN_SESSION_KEY, session)
       void message.success('管理员已登录')
-      const target =
-        search.redirect && search.redirect !== '/' && search.redirect !== '/login'
-          ? search.redirect
-          : '/admin'
-      void navigate({ to: target })
+      void navigate({ to: resolveAdminLoginTarget(search.redirect) })
     },
     onError: (error: Error) => void message.error(error.message)
   })
@@ -37,7 +34,7 @@ export function LoginPage(): React.JSX.Element {
   return (
     <div className="relative flex h-full w-full items-center justify-center bg-[var(--ant-color-bg-layout)] p-4 overflow-hidden">
       {/* 顶部右上角快捷主题切换 */}
-      <div className="absolute top-4 right-4 z-10">
+      <div className="absolute top-6 right-8 md:top-8 md:right-12 z-20">
         <ThemeSwitcher />
       </div>
 
