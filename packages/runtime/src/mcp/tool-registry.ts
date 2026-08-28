@@ -21,6 +21,7 @@ import { registerSyncTools } from './sync-tools.js'
 import { registerTaskTools } from './task-tools.js'
 import { registerServerTaskTools } from './server-task-tools.js'
 import { registerServerLibraryTools } from './server-library-tools.js'
+import { registerServerCrawlSettingsTools } from './server-crawl-settings-tools.js'
 import { registerUrlReviewTools } from './url-review-tools.js'
 
 export interface LociToolContext {
@@ -115,6 +116,7 @@ export function registerLociTools(register: LociToolRegistrar, services: LociMcp
   registerTaskTools(register, services)
   registerServerTaskTools(register, services)
   registerServerLibraryTools(register, services)
+  registerServerCrawlSettingsTools(register, services)
   registerLogTools(register, services)
   registerUrlReviewTools(register, services)
   registerPageTools(register, services)

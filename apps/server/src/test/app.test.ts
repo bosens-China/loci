@@ -3,6 +3,7 @@ import { AdminAuth } from '../auth.js'
 import { createApp } from '../app.js'
 import { ServerDatabase } from '../database.js'
 import { SyncService } from '../sync-service.js'
+import { DEFAULT_SERVER_CRAWL_SETTINGS } from '@loci/shared'
 
 interface LoginResponse {
   token: string
@@ -48,6 +49,14 @@ describe('Loci Server API', () => {
     })
     const { token } = (await login.json()) as LoginResponse
     const authorization = `Bearer ${token}`
+
+    const browser = await app.request('/api/v1/admin/browser', {
+      headers: { Authorization: authorization }
+    })
+    expect(browser.status).toBe(200)
+    expect(await browser.json()).toMatchObject({
+      browser: { provider: 'disabled', available: false }
+    })
 
     const created = await app.request('/api/v1/admin/libraries', {
       method: 'POST',
@@ -110,6 +119,60 @@ describe('Loci Server API', () => {
         })
       ).status
     ).toBe(304)
+  })
+
+  it('管理员使用修订号读取和更新 Server 抓取策略', async () => {
+    const database = new ServerDatabase(':memory:')
+    const sync = new SyncService(database)
+    const auth = new AdminAuth('admin', 'secret')
+    const app = createApp({ database, sync, auth })
+    cleanup.push(() => {
+      void sync.close()
+      database.close()
+    })
+    const token = auth.login('admin', 'secret')!
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+
+    expect((await app.request('/api/v1/admin/crawl-settings')).status).toBe(401)
+    const initialResponse = await app.request('/api/v1/admin/crawl-settings', { headers })
+    const initial = (await initialResponse.json()) as {
+      settings: typeof DEFAULT_SERVER_CRAWL_SETTINGS & { revision: number }
+    }
+    expect(initial.settings).toMatchObject(DEFAULT_SERVER_CRAWL_SETTINGS)
+
+    const update = { ...initial.settings, maxConcurrentJobs: 4 }
+    const savedResponse = await app.request('/api/v1/admin/crawl-settings', {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(update)
+    })
+    expect(savedResponse.status).toBe(200)
+    expect(await savedResponse.json()).toMatchObject({
+      settings: { maxConcurrentJobs: 4, revision: initial.settings.revision + 1 }
+    })
+
+    const conflict = await app.request('/api/v1/admin/crawl-settings', {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ ...initial.settings, httpConcurrency: 8 })
+    })
+    expect(conflict.status).toBe(409)
+
+    const auditResponse = await app.request('/api/v1/admin/audit-logs', { headers })
+    expect(auditResponse.status).toBe(200)
+    expect(await auditResponse.json()).toMatchObject({
+      logs: {
+        total: 1,
+        items: [
+          {
+            actor: 'admin',
+            method: 'PUT',
+            path: '/api/v1/admin/crawl-settings',
+            statusCode: 200
+          }
+        ]
+      }
+    })
   })
 
   it('请求正文解析期间启动同步时拒绝修改文档库', async () => {

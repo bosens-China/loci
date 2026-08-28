@@ -67,6 +67,9 @@ export function createLocalMcpServices(
       withMcpAdmin(runtime, () => runtime.admin.saveHostnamePolicy(input)),
     deleteServerHostnamePolicy: (hostname) =>
       withMcpAdmin(runtime, () => runtime.admin.deleteHostnamePolicy(hostname)),
+    getServerCrawlSettings: () => withMcpAdmin(runtime, () => runtime.admin.getCrawlSettings()),
+    saveServerCrawlSettings: (input) =>
+      withMcpAdmin(runtime, () => runtime.admin.saveCrawlSettings(input)),
     listCloudLibraries: () => runtime.cloud.listCatalog(runtime.database.getSettings().serverUrl),
     getCloudLibraryTree: async (libraryId, parent, depth) =>
       (

@@ -10,11 +10,13 @@ import { createDatabase, databaseNeedsMigration, type LociDatabase } from './dat
 import { crawlRunState } from './external-crawl.js'
 import { runExplicitPageFetch } from './explicit-page-service.js'
 import { LocalBrowserCrawler, type BrowserInstallPrompt } from './browser-crawler.js'
+import { BrowserManager } from './browser-manager.js'
 import { resolveLociCacheDir, resolveLociDataDir } from './data-path.js'
 import {
   acquireCrawlRuntimeLock,
   acquireDatabaseWriteRuntimeLock,
   acquireMaintenanceRuntimeLock,
+  hasActiveCrawlLocks,
   readRuntimeLock
 } from './runtime-lock.js'
 import { createLocalSourceCrawlRunner } from './local-source-crawl-runner.js'
@@ -41,7 +43,24 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
   } finally {
     migrationLock?.release()
   }
-  const browser = options.browser ?? new LocalBrowserCrawler(join(cacheDir, 'playwright'))
+  const browsersPath = join(cacheDir, 'playwright')
+  const browserManager = new BrowserManager({
+    browsersPath,
+    lockRoot: cacheDir,
+    usageLockRoot: dataDir,
+    owner,
+    beforeUninstall: () => browser.close(),
+    assertCanUninstall: () => {
+      if (hasActiveCrawlLocks(dataDir)) {
+        throw new Error('仍有文档抓取任务正在使用浏览器，请等待完成后重试')
+      }
+    }
+  })
+  const browser =
+    options.browser ??
+    new LocalBrowserCrawler(browsersPath, async () => {
+      await browserManager.run('install')
+    })
   const agentIntegration = options.agentIntegration
     ? new AgentIntegrationService({
         ...options.agentIntegration,
@@ -84,6 +103,7 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     cacheDir,
     database,
     cloud: new CloudLibraryService(database, fetch, dataDir),
+    browserManager,
     admin: new CloudAdminClient(fetch, ({ method, path }) => {
       database.recordOperationLog({
         category: 'cloud',

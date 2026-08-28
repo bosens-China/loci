@@ -2,7 +2,12 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { browserStatus, ensureBrowserInstalled, LocalBrowserCrawler } from '../browser-crawler.js'
+import {
+  browserStatus,
+  ensureBrowserInstalled,
+  LocalBrowserCrawler,
+  parseBrowserCommandProgress
+} from '../browser-crawler.js'
 
 const { closeBrowser, launchBrowser } = vi.hoisted(() => ({
   closeBrowser: vi.fn(),
@@ -22,7 +27,7 @@ describe('browserStatus', () => {
     rmSync(directory, { recursive: true, force: true })
     mkdirSync(directory, { recursive: true })
     closeBrowser.mockReset().mockResolvedValue(undefined)
-    launchBrowser.mockReset().mockResolvedValue({ close: closeBrowser })
+    launchBrowser.mockReset().mockResolvedValue({ close: closeBrowser, version: () => '133.0' })
   })
 
   afterAll(() => {
@@ -64,10 +69,11 @@ describe('browserStatus', () => {
 
     const status = await browserStatus(directory)
 
-    expect(status).toEqual({
+    expect(status).toMatchObject({
       installed: true,
       executable: missing.executable,
       launchable: true,
+      chromiumVersion: '133.0',
       error: null
     })
     expect(launchBrowser).toHaveBeenCalledWith({
@@ -78,6 +84,15 @@ describe('browserStatus', () => {
   })
 })
 
+describe('parseBrowserCommandProgress', () => {
+  it('从 Playwright 非 TTY 输出中读取下载百分比', () => {
+    expect(parseBrowserCommandProgress('|■■■■      |  45% of 184.6 MiB')).toEqual({
+      progress: 45,
+      message: '正在下载 Chromium headless shell（184.6 MiB）'
+    })
+  })
+})
+
 describe('LocalBrowserCrawler', () => {
   beforeEach(() => {
     closeBrowser.mockReset().mockResolvedValue(undefined)
@@ -85,7 +100,7 @@ describe('LocalBrowserCrawler', () => {
   })
 
   it('并发首次使用时只启动一个浏览器实例', async () => {
-    const browser = { close: closeBrowser }
+    const browser = { close: closeBrowser, version: () => '133.0' }
     let finishLaunch: ((value: unknown) => void) | undefined
     launchBrowser.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -106,7 +121,7 @@ describe('LocalBrowserCrawler', () => {
   })
 
   it('首次启动失败后允许下一次调用重新启动', async () => {
-    const browser = { close: closeBrowser }
+    const browser = { close: closeBrowser, version: () => '133.0' }
     launchBrowser.mockRejectedValueOnce(new Error('launch failed')).mockResolvedValueOnce(browser)
     const crawler = new LocalBrowserCrawler('/tmp/loci-browser-retry')
 
@@ -118,7 +133,7 @@ describe('LocalBrowserCrawler', () => {
   })
 
   it('启动过程中关闭时会关闭刚创建的实例', async () => {
-    const browser = { close: closeBrowser }
+    const browser = { close: closeBrowser, version: () => '133.0' }
     let finishLaunch: ((value: unknown) => void) | undefined
     launchBrowser.mockReturnValueOnce(
       new Promise((resolve) => {

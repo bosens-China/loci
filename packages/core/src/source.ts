@@ -46,7 +46,8 @@ export interface SourceCrawlOptions extends Omit<HttpCrawlOptions, 'concurrency'
   httpConcurrency?: number
   browserConcurrency?: number
   crawler?: RenderedCrawler
-  beforeBrowserCrawl?: () => Promise<void>
+  /** 返回 false 表示当前环境没有浏览器能力，auto 将直接降级为 HTTP。 */
+  beforeBrowserCrawl?: () => Promise<boolean | void>
   onResolved?: (resolution: SourceResolution) => Promise<void> | void
   onSnapshot?: (documents: CrawledDocument[]) => Promise<void> | void
   githubArchiveLimitBytes?: number
@@ -182,12 +183,7 @@ export async function probeSourcePage(options: SourceCrawlOptions): Promise<{
     if (options.fetchMode === 'browser') throw new Error('当前环境没有可用的浏览器抓取器')
     return {
       fetchMode: 'http',
-      firstPage: await fetchHttpPage(options.firstUrl, {
-        fetchImpl: options.fetch,
-        maxRetries: options.maxRetries,
-        sleep: options.sleep,
-        signal: options.signal
-      })
+      firstPage: await fetchHttpEntry(options)
     }
   }
   if (options.fetchMode === 'browser') {
@@ -197,18 +193,25 @@ export async function probeSourcePage(options: SourceCrawlOptions): Promise<{
     }
   }
 
-  await options.beforeBrowserCrawl?.()
+  const browserReady = await options.beforeBrowserCrawl?.()
+  if (browserReady === false) {
+    return { fetchMode: 'http', firstPage: await fetchHttpEntry(options) }
+  }
   const [httpResult, browserResult] = await Promise.allSettled([
-    fetchHttpPage(options.firstUrl, {
-      fetchImpl: options.fetch,
-      maxRetries: options.maxRetries,
-      sleep: options.sleep,
-      signal: options.signal
-    }),
+    fetchHttpEntry(options),
     fetchBrowserEntry(options)
   ])
   throwIfAborted(options.signal)
   return selectAutoResult(httpResult, browserResult)
+}
+
+function fetchHttpEntry(options: SourceCrawlOptions): Promise<CrawledPage> {
+  return fetchHttpPage(options.firstUrl, {
+    fetchImpl: options.fetch,
+    maxRetries: options.maxRetries,
+    sleep: options.sleep,
+    signal: options.signal
+  })
 }
 
 function selectAutoResult(

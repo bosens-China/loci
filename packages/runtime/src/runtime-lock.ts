@@ -81,11 +81,25 @@ export function acquireCrawlRuntimeLock(
 ): RuntimeLock {
   const maintenance = readRuntimeLock(dataDir, 'maintenance')
   if (maintenance) throw new RuntimeLockedError(`数据库正在由${maintenance.owner}维护`, maintenance)
+  const browserUninstall = readRuntimeLock(dataDir, 'browser-uninstall')
+  if (browserUninstall) {
+    throw new RuntimeLockedError(`操作正在由${browserUninstall.owner}执行`, browserUninstall)
+  }
   const lock = acquireRuntimeLock(dataDir, `crawl-${sourceId}`, owner)
   const currentMaintenance = readRuntimeLock(dataDir, 'maintenance')
-  if (!currentMaintenance) return lock
-  lock.release()
-  throw new RuntimeLockedError(`数据库正在由${currentMaintenance.owner}维护`, currentMaintenance)
+  if (currentMaintenance) {
+    lock.release()
+    throw new RuntimeLockedError(`数据库正在由${currentMaintenance.owner}维护`, currentMaintenance)
+  }
+  const currentBrowserUninstall = readRuntimeLock(dataDir, 'browser-uninstall')
+  if (currentBrowserUninstall) {
+    lock.release()
+    throw new RuntimeLockedError(
+      `操作正在由${currentBrowserUninstall.owner}执行`,
+      currentBrowserUninstall
+    )
+  }
+  return lock
 }
 
 /** 获取会修改主数据库的资源锁，并与全库维护锁双向仲裁。 */

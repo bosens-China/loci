@@ -54,6 +54,14 @@ import {
   type CrawlCommit
 } from './server-document-database.js'
 import { withImmediateTransaction as transaction } from './sqlite.js'
+import {
+  createServerCrawlSettingsDatabase,
+  type ServerCrawlSettingsDatabase
+} from './server-crawl-settings-database.js'
+import {
+  createServerAdminAuditDatabase,
+  type ServerAdminAuditDatabase
+} from './admin-audit-database.js'
 
 export { ConflictError, NotFoundError } from './database-errors.js'
 
@@ -62,6 +70,8 @@ export class ServerDatabase {
   readonly #database: DatabaseSync
   readonly #drizzle: ServerDrizzleDatabase
   readonly hostnamePolicies: ServerHostnamePolicyDatabase
+  readonly crawlSettings: ServerCrawlSettingsDatabase
+  readonly adminAudit: ServerAdminAuditDatabase
 
   constructor(filename: string) {
     this.#database = new DatabaseSync(filename, {
@@ -71,6 +81,8 @@ export class ServerDatabase {
     initializeServerDatabase(this.#database)
     this.#drizzle = createServerDrizzleDatabase(this.#database)
     this.hostnamePolicies = createServerHostnamePolicyDatabase(this.#drizzle)
+    this.crawlSettings = createServerCrawlSettingsDatabase(this.#drizzle)
+    this.adminAudit = createServerAdminAuditDatabase(this.#drizzle)
   }
 
   listLibraries(): Library[] {

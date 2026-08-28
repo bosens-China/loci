@@ -8,7 +8,11 @@ import type {
   CloudLibraryPublishResult,
   CloudSyncJob,
   HostnameCrawlPolicy,
-  SaveHostnameCrawlPolicyInput
+  SaveHostnameCrawlPolicyInput,
+  SaveServerCrawlSettingsInput,
+  ServerAdminAuditLogPage,
+  ServerCrawlSettings,
+  ServerBrowserStatus
 } from '@loci/shared'
 import { normalizeServerUrl } from '@loci/shared'
 
@@ -79,6 +83,38 @@ const publishResultSchema = z.object({
   contentSize: z.number().int().nonnegative(),
   reused: z.boolean()
 })
+const serverBrowserStatusSchema = z.object({
+  provider: z.enum(['disabled', 'local', 'browserless']),
+  available: z.boolean(),
+  chromiumVersion: z.string().nullable(),
+  playwrightVersion: z.string(),
+  endpoint: z.string().nullable(),
+  checkedAt: z.string(),
+  error: z.string().nullable()
+})
+const serverCrawlSettingsSchema = z.object({
+  maxConcurrentJobs: z.number().int(),
+  httpConcurrency: z.number().int(),
+  browserConcurrency: z.number().int(),
+  batchIntervalMinSeconds: z.number().int(),
+  batchIntervalMaxSeconds: z.number().int(),
+  revision: z.number().int().positive(),
+  updatedAt: z.string()
+})
+const serverAdminAuditLogSchema = z.object({
+  id: z.string(),
+  actor: z.string(),
+  method: z.enum(['POST', 'PUT', 'DELETE']),
+  path: z.string(),
+  statusCode: z.number().int(),
+  createdAt: z.string()
+})
+const serverAdminAuditLogPageSchema = z.object({
+  items: z.array(serverAdminAuditLogSchema),
+  total: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive()
+})
 
 interface PrivateSession extends CloudAdminSession {
   token: string
@@ -136,6 +172,13 @@ export class CloudAdminClient {
     return result.libraries
   }
 
+  async getBrowserStatus(): Promise<ServerBrowserStatus> {
+    const result = z
+      .object({ browser: serverBrowserStatusSchema })
+      .parse(await this.authRequest('/api/v1/admin/browser'))
+    return result.browser
+  }
+
   async createLibrary(input: CloudLibraryInput): Promise<CloudLibrary> {
     const result = z.object({ library: librarySchema }).parse(
       await this.authRequest('/api/v1/admin/libraries', {
@@ -188,6 +231,14 @@ export class CloudAdminClient {
     return result.jobs as CloudSyncJob[]
   }
 
+  async listAuditLogs(offset = 0, limit = 50): Promise<ServerAdminAuditLogPage> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+    const result = z
+      .object({ logs: serverAdminAuditLogPageSchema })
+      .parse(await this.authRequest(`/api/v1/admin/audit-logs?${query}`))
+    return result.logs
+  }
+
   async getSyncJob(id: string): Promise<CloudSyncJob> {
     const result = z
       .object({ job: syncJobSchema })
@@ -236,6 +287,23 @@ export class CloudAdminClient {
       .object({ policies: z.array(hostnamePolicySchema) })
       .parse(await this.authRequest('/api/v1/admin/hostname-policies'))
     return result.policies
+  }
+
+  async getCrawlSettings(): Promise<ServerCrawlSettings> {
+    const result = z
+      .object({ settings: serverCrawlSettingsSchema })
+      .parse(await this.authRequest('/api/v1/admin/crawl-settings'))
+    return result.settings
+  }
+
+  async saveCrawlSettings(input: SaveServerCrawlSettingsInput): Promise<ServerCrawlSettings> {
+    const result = z.object({ settings: serverCrawlSettingsSchema }).parse(
+      await this.authRequest('/api/v1/admin/crawl-settings', {
+        method: 'PUT',
+        body: JSON.stringify(input)
+      })
+    )
+    return result.settings
   }
 
   async saveHostnamePolicy(input: SaveHostnameCrawlPolicyInput): Promise<HostnameCrawlPolicy> {

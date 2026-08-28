@@ -19,6 +19,7 @@ import {
   parseDomainConcurrency,
   parseDomainInterval
 } from './domain-policy-options.js'
+import { registerAdminCrawlSettings } from './admin-crawl-settings.js'
 
 interface LibraryOptions {
   name?: string
@@ -132,6 +133,7 @@ export function registerAdminSubcommands(admin: Command, waitForSync: WaitForSyn
     )
 
   registerAdminJobControls(admin)
+  registerAdminCrawlSettings(admin, withAdmin)
   registerAdminDomainPolicies(admin)
 
   admin

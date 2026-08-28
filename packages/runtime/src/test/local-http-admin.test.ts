@@ -2,7 +2,14 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { CloudAdminSession, CloudLibrary, CloudSyncJob } from '@loci/shared'
+import type {
+  CloudAdminSession,
+  CloudLibrary,
+  CloudSyncJob,
+  ServerCrawlSettings,
+  ServerAdminAuditLogPage,
+  ServerBrowserStatus
+} from '@loci/shared'
 import { startLocalHttpServer } from '../local-http-server.js'
 import { createLocalRuntime } from '../local-runtime.js'
 
@@ -32,6 +39,39 @@ describe('本机 Admin API', () => {
     }
     const library = cloudLibrary()
     const job = cloudJob()
+    const browser: ServerBrowserStatus = {
+      provider: 'local',
+      available: true,
+      chromiumVersion: '133.0.0.0',
+      playwrightVersion: '1.62.0',
+      endpoint: null,
+      checkedAt: '2026-08-28T00:00:00.000Z',
+      error: null
+    }
+    const crawlSettings: ServerCrawlSettings = {
+      maxConcurrentJobs: 3,
+      httpConcurrency: 9,
+      browserConcurrency: 5,
+      batchIntervalMinSeconds: 0,
+      batchIntervalMaxSeconds: 0,
+      revision: 1,
+      updatedAt: '2026-08-28T00:00:00.000Z'
+    }
+    const auditLogs: ServerAdminAuditLogPage = {
+      items: [
+        {
+          id: 'audit-1',
+          actor: 'admin',
+          method: 'POST',
+          path: '/api/v1/admin/libraries',
+          statusCode: 201,
+          createdAt: '2026-08-28T00:00:00.000Z'
+        }
+      ],
+      total: 1,
+      offset: 0,
+      limit: 20
+    }
     vi.spyOn(runtime.admin, 'login').mockResolvedValue(session)
     vi.spyOn(runtime.admin, 'getSession').mockReturnValue(session)
     vi.spyOn(runtime.admin, 'listLibraries').mockResolvedValue([library])
@@ -40,7 +80,14 @@ describe('本机 Admin API', () => {
     vi.spyOn(runtime.admin, 'deleteLibrary').mockResolvedValue()
     vi.spyOn(runtime.admin, 'syncLibraries').mockResolvedValue([job])
     vi.spyOn(runtime.admin, 'listSyncJobs').mockResolvedValue([job])
+    vi.spyOn(runtime.admin, 'listAuditLogs').mockResolvedValue(auditLogs)
     vi.spyOn(runtime.admin, 'controlSyncJob').mockResolvedValue({ ...job, status: 'canceling' })
+    vi.spyOn(runtime.admin, 'getBrowserStatus').mockResolvedValue(browser)
+    vi.spyOn(runtime.admin, 'getCrawlSettings').mockResolvedValue(crawlSettings)
+    vi.spyOn(runtime.admin, 'saveCrawlSettings').mockResolvedValue({
+      ...crawlSettings,
+      revision: 2
+    })
     vi.spyOn(runtime.admin, 'logout').mockResolvedValue()
 
     const headers = { origin: server.endpoint, 'content-type': 'application/json' }
@@ -77,6 +124,16 @@ describe('本机 Admin API', () => {
     expect(sync.status).toBe(202)
     expect(await sync.json()).toEqual([job])
     expect(await (await fetch(`${server.endpoint}/api/admin/jobs`)).json()).toEqual([job])
+    expect(
+      await (await fetch(`${server.endpoint}/api/admin/audit-logs?offset=0&limit=20`)).json()
+    ).toEqual(auditLogs)
+    expect(await (await fetch(`${server.endpoint}/api/admin/browser`)).json()).toEqual(browser)
+    expect(await (await fetch(`${server.endpoint}/api/admin/crawl-settings`)).json()).toEqual(
+      crawlSettings
+    )
+    expect(
+      await requestJson(server.endpoint, '/api/admin/crawl-settings', 'PUT', crawlSettings)
+    ).toEqual({ ...crawlSettings, revision: 2 })
     expect(await requestJson(server.endpoint, `/api/admin/jobs/${job.id}/cancel`, 'POST')).toEqual({
       ...job,
       status: 'canceling'

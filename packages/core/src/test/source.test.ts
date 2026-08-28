@@ -268,6 +268,37 @@ describe('crawlSource', () => {
     expect(documents[0]).toMatchObject({ markdown: '# Browser docs', fetchMode: 'browser' })
   })
 
+  it('自动模式在运行环境没有浏览器能力时直接使用 HTTP', async () => {
+    const documents: CrawledDocument[] = []
+    const fetchPage = vi.fn(async () => renderedPage('# Browser docs'))
+    const beforeBrowserCrawl = vi.fn(async () => false)
+    const fetchImpl = createFetchMock(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/llms.txt') || url.endsWith('/sitemap.xml')) {
+        return new Response('', { status: 404 })
+      }
+      return new Response('<html><title>Docs</title><main><h1>HTTP docs</h1></main></html>')
+    })
+
+    const result = await crawlSource({
+      firstUrl: 'https://docs.example.com/guide',
+      hostname: 'docs.example.com',
+      pageLimit: 1,
+      fetchMode: 'auto',
+      fetch: fetchImpl,
+      crawler: { fetchPage },
+      beforeBrowserCrawl,
+      onDocument: (document) => {
+        documents.push(document)
+      }
+    })
+
+    expect(result.resolution.fetchMode).toBe('http')
+    expect(beforeBrowserCrawl).toHaveBeenCalledOnce()
+    expect(fetchPage).not.toHaveBeenCalled()
+    expect(documents[0]).toMatchObject({ markdown: '# HTTP docs', fetchMode: 'http' })
+  })
+
   it('浏览器模式在发起网络请求前检查浏览器运行时', async () => {
     const fetchImpl = createFetchMock()
     const beforeBrowserCrawl = vi.fn(async () => {

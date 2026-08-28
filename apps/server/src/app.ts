@@ -11,10 +11,13 @@ import {
 import { z } from 'zod'
 import {
   APP_SETTINGS_LIMITS,
+  SERVER_CRAWL_SETTINGS_LIMITS,
   buildUrlTree,
   getUrlTreeSlice,
+  isValidBatchIntervalRange,
   isValidBatchIntervalSeconds
 } from '@loci/shared'
+import type { ServerAdminAuditMethod } from '@loci/shared'
 import { AdminAuth, readBearerToken } from './auth.js'
 import { ConflictError, NotFoundError, ServerDatabase } from './database.js'
 import { SyncService } from './sync-service.js'
@@ -70,6 +73,33 @@ const hostnamePolicySchema = z.object({
     .refine(isValidBatchIntervalSeconds, '批次间隔超出允许范围')
     .nullable()
 })
+
+const serverCrawlSettingsSchema = z
+  .object({
+    maxConcurrentJobs: z
+      .number()
+      .int()
+      .min(SERVER_CRAWL_SETTINGS_LIMITS.maxConcurrentJobs.min)
+      .max(SERVER_CRAWL_SETTINGS_LIMITS.maxConcurrentJobs.max),
+    httpConcurrency: z
+      .number()
+      .int()
+      .min(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.min)
+      .max(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.max),
+    browserConcurrency: z
+      .number()
+      .int()
+      .min(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.min)
+      .max(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.max),
+    batchIntervalMinSeconds: z.number().refine(isValidBatchIntervalSeconds),
+    batchIntervalMaxSeconds: z.number().refine(isValidBatchIntervalSeconds),
+    revision: z.number().int().positive()
+  })
+  .refine(
+    (input) =>
+      isValidBatchIntervalRange(input.batchIntervalMinSeconds, input.batchIntervalMaxSeconds),
+    { message: '批次间隔最小值不能大于最大值' }
+  )
 
 class InputError extends Error {}
 
@@ -144,6 +174,24 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
     })(c, next)
   })
 
+  app.use('/api/v1/admin/*', async (c, next) => {
+    const method = c.req.method.toUpperCase()
+    if (c.req.path === '/api/v1/admin/login' || !isAdminAuditMethod(method)) return next()
+    await next()
+    if (c.res.status >= 400) return
+    try {
+      database.adminAudit.record({
+        actor: auth.username,
+        method,
+        path: c.req.path,
+        statusCode: c.res.status
+      })
+    } catch (error) {
+      // 业务写入已经成功时，审计故障不得把响应改成可重试失败。
+      console.error('记录 Server 管理操作失败', error)
+    }
+  })
+
   app.post('/api/v1/admin/login', async (c) => {
     const credentials = await parseJson(c, credentialsSchema)
     const token = auth.login(credentials.username, credentials.password)
@@ -158,6 +206,8 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
   })
 
   app.get('/api/v1/admin/libraries', (c) => c.json({ libraries: database.listLibraries() }))
+
+  app.get('/api/v1/admin/browser', async (c) => c.json({ browser: await sync.getBrowserStatus() }))
 
   app.post('/api/v1/admin/publish', async (c) => {
     const length = Number(c.req.header('Content-Length') ?? 0)
@@ -217,6 +267,19 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
 
   app.get('/api/v1/admin/jobs', (c) => c.json({ jobs: sync.listJobs() }))
 
+  app.get('/api/v1/admin/audit-logs', (c) => {
+    const offset = queryInteger(c.req.query('offset'), 0, 0, 1_000_000)
+    const limit = queryInteger(c.req.query('limit'), 50, 1, 200)
+    return c.json({ logs: database.adminAudit.list(offset, limit) })
+  })
+
+  app.get('/api/v1/admin/crawl-settings', (c) => c.json({ settings: sync.getCrawlSettings() }))
+
+  app.put('/api/v1/admin/crawl-settings', async (c) => {
+    const settings = sync.saveCrawlSettings(await parseJson(c, serverCrawlSettingsSchema))
+    return c.json({ settings })
+  })
+
   app.get('/api/v1/admin/hostname-policies', (c) =>
     c.json({ policies: database.hostnamePolicies.list() })
   )
@@ -273,6 +336,10 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
   })
 
   return app
+}
+
+function isAdminAuditMethod(method: string): method is ServerAdminAuditMethod {
+  return method === 'POST' || method === 'PUT' || method === 'DELETE'
 }
 
 async function readLibraryInput(c: Parameters<typeof parseJson>[0]): Promise<LibraryInput> {

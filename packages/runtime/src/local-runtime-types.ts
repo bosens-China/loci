@@ -7,6 +7,7 @@ import type {
 } from '@loci/shared'
 import type { AgentIntegrationOptions, AgentIntegrationService } from './agent-integration.js'
 import type { BrowserInstallPrompt, LocalBrowserCrawler } from './browser-crawler.js'
+import type { BrowserManager } from './browser-manager.js'
 import type { CloudAdminClient } from './cloud-admin-client.js'
 import type { CloudLibraryService } from './cloud-library-service.js'
 import type { LociDatabase } from './database.js'
@@ -19,6 +20,7 @@ export interface LocalRuntime {
   database: LociDatabase
   cloud: CloudLibraryService
   admin: CloudAdminClient
+  browserManager: BrowserManager
   agentIntegration?: AgentIntegrationService
   urlReviews: UrlReviewService
   crawlSource: (

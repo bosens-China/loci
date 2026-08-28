@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createDatabase, type LociDatabase } from '../database.js'
 
 describe('本地任务域名调度与控制', () => {
@@ -23,9 +23,11 @@ describe('本地任务域名调度与控制', () => {
 
   it('暂停后保留同一任务，恢复后重新允许领取', () => {
     const database = createDatabase(':memory:')
+    const now = new Date('2026-08-27T00:00:00.000Z')
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
     try {
       const sourceId = createSource(database, 'Docs', 'https://docs.example.com', '/')
-      const now = new Date('2026-08-27T00:00:00.000Z')
       const job = database.enqueueSourceSync(sourceId, 'ui', now).job
       expect(database.claimNextLocalJob('worker-a', 30_000, now)?.id).toBe(job.id)
 
@@ -35,10 +37,9 @@ describe('本地任务域名调度与控制', () => {
       expect(database.claimNextLocalJob('worker-b', 30_000, now)).toBeUndefined()
 
       expect(database.resumeLocalJob(job.id)).toMatchObject({ paused: false })
-      expect(database.claimNextLocalJob('worker-b', 30_000, new Date('2026-08-28'))?.id).toBe(
-        job.id
-      )
+      expect(database.claimNextLocalJob('worker-b', 30_000, now)?.id).toBe(job.id)
     } finally {
+      vi.useRealTimers()
       database.close()
     }
   })

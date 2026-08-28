@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { ServerCrawlSettings } from '@loci/shared'
 import { CloudAdminClient } from '../cloud-admin-client.js'
 
 describe('CloudAdminClient', () => {
@@ -62,6 +63,81 @@ describe('CloudAdminClient', () => {
     )
   })
 
+  it('读取 Server 浏览器诊断状态', async () => {
+    const browser = {
+      provider: 'browserless',
+      available: true,
+      chromiumVersion: '133.0.0.0',
+      playwrightVersion: '1.62.0',
+      endpoint: 'wss://browser.example/playwright',
+      checkedAt: '2026-08-28T00:00:00.000Z',
+      error: null
+    } as const
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: 'secret-token', expiresIn: 3600 }))
+      .mockResolvedValueOnce(jsonResponse({ browser }))
+    const client = new CloudAdminClient(fetcher)
+    await client.login('https://docs.example.com', {
+      username: 'admin',
+      password: 'password'
+    })
+
+    await expect(client.getBrowserStatus()).resolves.toEqual(browser)
+    expect(fetcher.mock.calls[1]?.[0]).toBe('https://docs.example.com/api/v1/admin/browser')
+  })
+
+  it('读取并按修订号保存 Server 抓取策略', async () => {
+    const settings = serverCrawlSettings()
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: 'secret-token', expiresIn: 3600 }))
+      .mockResolvedValueOnce(jsonResponse({ settings }))
+      .mockResolvedValueOnce(jsonResponse({ settings: { ...settings, revision: 2 } }))
+    const client = new CloudAdminClient(fetcher)
+    await client.login('https://docs.example.com', {
+      username: 'admin',
+      password: 'password'
+    })
+
+    await expect(client.getCrawlSettings()).resolves.toEqual(settings)
+    await expect(client.saveCrawlSettings(settings)).resolves.toMatchObject({ revision: 2 })
+    expect(fetcher.mock.calls[2]?.[0]).toBe('https://docs.example.com/api/v1/admin/crawl-settings')
+    expect(fetcher.mock.calls[2]?.[1]?.method).toBe('PUT')
+  })
+
+  it('分页读取 Server 管理操作记录', async () => {
+    const logs = {
+      items: [
+        {
+          id: 'audit-1',
+          actor: 'admin',
+          method: 'PUT',
+          path: '/api/v1/admin/crawl-settings',
+          statusCode: 200,
+          createdAt: '2026-08-28T00:00:00.000Z'
+        }
+      ],
+      total: 1,
+      offset: 20,
+      limit: 10
+    }
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ token: 'secret-token', expiresIn: 3600 }))
+      .mockResolvedValueOnce(jsonResponse({ logs }))
+    const client = new CloudAdminClient(fetcher)
+    await client.login('https://docs.example.com', {
+      username: 'admin',
+      password: 'password'
+    })
+
+    await expect(client.listAuditLogs(20, 10)).resolves.toEqual(logs)
+    expect(fetcher.mock.calls[1]?.[0]).toBe(
+      'https://docs.example.com/api/v1/admin/audit-logs?offset=20&limit=10'
+    )
+  })
+
   it('拒绝非 HTTP 服务器地址', async () => {
     const client = new CloudAdminClient(vi.fn<typeof fetch>())
     await expect(
@@ -96,5 +172,17 @@ function syncJob(): Record<string, unknown> {
     progress: null,
     failures: [],
     error: null
+  }
+}
+
+function serverCrawlSettings(): ServerCrawlSettings {
+  return {
+    maxConcurrentJobs: 3,
+    httpConcurrency: 9,
+    browserConcurrency: 5,
+    batchIntervalMinSeconds: 0,
+    batchIntervalMaxSeconds: 0,
+    revision: 1,
+    updatedAt: '2026-08-28T00:00:00.000Z'
   }
 }

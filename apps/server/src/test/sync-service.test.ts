@@ -5,6 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ServerDatabase } from '../database.js'
 import { SyncService } from '../sync-service.js'
 
+function configureMaxConcurrentJobs(database: ServerDatabase, maxConcurrentJobs: number) {
+  return database.crawlSettings.save({
+    ...database.crawlSettings.get(),
+    maxConcurrentJobs
+  })
+}
+
 describe('SyncService 队列', () => {
   const cleanup: Array<() => void> = []
 
@@ -20,7 +27,8 @@ describe('SyncService 队列', () => {
       return new Response('', { status: 404 })
     })
     const database = new ServerDatabase(':memory:')
-    const sync = new SyncService(database, fetcher, undefined, 2)
+    configureMaxConcurrentJobs(database, 2)
+    const sync = new SyncService(database, fetcher)
     cleanup.push(() => {
       sync.close()
       database.close()
@@ -50,15 +58,11 @@ describe('SyncService 队列', () => {
       release = resolve
     })
     const database = new ServerDatabase(':memory:')
-    const sync = new SyncService(
-      database,
-      async () => {
-        await gate
-        return new Response('', { status: 404 })
-      },
-      undefined,
-      3
-    )
+    configureMaxConcurrentJobs(database, 3)
+    const sync = new SyncService(database, async () => {
+      await gate
+      return new Response('', { status: 404 })
+    })
     cleanup.push(() => {
       void sync.close()
       database.close()
@@ -82,6 +86,42 @@ describe('SyncService 队列', () => {
     expect(jobs[0]?.status).toBe('running')
     expect(jobs[1]?.status).toBe('queued')
     expect(jobs[2]?.status).toBe('running')
+    release()
+    await Promise.all(jobs.map((job) => sync.wait(job.id)))
+  })
+
+  it('降低全局任务并发时保留运行任务并限制后续调度', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const database = new ServerDatabase(':memory:')
+    const configured = configureMaxConcurrentJobs(database, 2)
+    const sync = new SyncService(database, async () => {
+      await gate
+      return new Response('', { status: 404 })
+    })
+    cleanup.push(() => {
+      void sync.close()
+      database.close()
+    })
+    const libraries = ['one.example.com', 'two.example.com', 'three.example.com'].map((hostname) =>
+      database.createLibrary({
+        name: hostname,
+        url: `https://${hostname}/docs`,
+        scopePath: '/docs',
+        pageLimit: 10,
+        schedule: null
+      })
+    )
+
+    const jobs = sync.startMany(libraries.map((library) => library.id))
+    await vi.waitFor(() => expect(jobs.filter((job) => job.status === 'running')).toHaveLength(2))
+    sync.saveCrawlSettings({ ...configured, maxConcurrentJobs: 1 })
+
+    expect(jobs[0]?.status).toBe('running')
+    expect(jobs[1]?.status).toBe('running')
+    expect(jobs[2]?.status).toBe('queued')
     release()
     await Promise.all(jobs.map((job) => sync.wait(job.id)))
   })
@@ -132,15 +172,11 @@ describe('SyncService 队列', () => {
       release = resolve
     })
     const database = new ServerDatabase(':memory:')
-    const sync = new SyncService(
-      database,
-      async () => {
-        await gate
-        return new Response('', { status: 404 })
-      },
-      undefined,
-      1
-    )
+    configureMaxConcurrentJobs(database, 1)
+    const sync = new SyncService(database, async () => {
+      await gate
+      return new Response('', { status: 404 })
+    })
     cleanup.push(() => {
       sync.close()
       database.close()

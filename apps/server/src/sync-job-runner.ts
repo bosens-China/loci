@@ -26,6 +26,7 @@ interface RunSyncJobOptions {
 export async function runServerSyncJob(options: RunSyncJobOptions): Promise<void> {
   const { database, ownerId, job, signal } = options
   const library = database.getLibrary(job.libraryId)
+  const initialSettings = database.crawlSettings.get()
   const documents: CrawledDocument[] = []
   const deletedUrls: string[] = []
   let replaceAll = false
@@ -42,20 +43,9 @@ export async function runServerSyncJob(options: RunSyncJobOptions): Promise<void
       pageLimit: library.pageLimit,
       initialUrls: pendingUrls.length ? pendingUrls : database.listDocumentUrls(library.id),
       fetchMode: 'auto',
-      httpConcurrency: 9,
-      browserConcurrency: 5,
-      getBatchPolicy: () => {
-        const policy = database.hostnamePolicies.get(library.hostname)
-        const minimum = policy?.batchIntervalMinSeconds ?? 0
-        const maximum = policy?.batchIntervalMaxSeconds ?? minimum
-        return {
-          concurrency:
-            fetchMode === 'browser'
-              ? (policy?.browserConcurrency ?? 5)
-              : (policy?.httpConcurrency ?? 9),
-          batchIntervalMs: randomIntervalSeconds(minimum, maximum) * 1000
-        }
-      },
+      httpConcurrency: initialSettings.httpConcurrency,
+      browserConcurrency: initialSettings.browserConcurrency,
+      getBatchPolicy: () => getServerBatchPolicy(database, library.hostname, fetchMode),
       onResolved: (resolution) => {
         fetchMode = resolution.fetchMode
       },
@@ -154,6 +144,25 @@ export async function runServerSyncJob(options: RunSyncJobOptions): Promise<void
         job.error
       )
     )
+  }
+}
+
+/** 每批次实时合并全局默认与 hostname 覆盖，避免运行任务持有过期策略。 */
+export function getServerBatchPolicy(
+  database: ServerDatabase,
+  hostname: string,
+  fetchMode: 'http' | 'browser'
+): { concurrency: number; batchIntervalMs: number } {
+  const policy = database.hostnamePolicies.get(hostname)
+  const settings = database.crawlSettings.get()
+  const minimum = policy?.batchIntervalMinSeconds ?? settings.batchIntervalMinSeconds
+  const maximum = policy?.batchIntervalMaxSeconds ?? settings.batchIntervalMaxSeconds
+  return {
+    concurrency:
+      fetchMode === 'browser'
+        ? (policy?.browserConcurrency ?? settings.browserConcurrency)
+        : (policy?.httpConcurrency ?? settings.httpConcurrency),
+    batchIntervalMs: randomIntervalSeconds(minimum, maximum) * 1000
   }
 }
 

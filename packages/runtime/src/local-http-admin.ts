@@ -1,5 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { CloudAdminLoginInput, CloudLibraryInput } from '@loci/shared'
+import type {
+  CloudAdminLoginInput,
+  CloudLibraryInput,
+  SaveServerCrawlSettingsInput
+} from '@loci/shared'
 import type { LocalRuntime } from './local-runtime.js'
 import { json, mutationJson, readJson } from './local-http-response.js'
 
@@ -55,6 +59,10 @@ export async function handleLocalAdmin(
     await mutationJson(response, 200, () => runtime.admin.listLibraries())
     return true
   }
+  if (request.method === 'GET' && url.pathname === '/api/admin/browser') {
+    await mutationJson(response, 200, () => runtime.admin.getBrowserStatus())
+    return true
+  }
   if (request.method === 'POST' && url.pathname === '/api/admin/libraries') {
     await mutationJson(response, 201, async () =>
       runtime.admin.createLibrary((await readJson(request)) as CloudLibraryInput)
@@ -95,6 +103,22 @@ export async function handleLocalAdmin(
   }
   if (request.method === 'GET' && url.pathname === '/api/admin/jobs') {
     await mutationJson(response, 200, () => runtime.admin.listSyncJobs())
+    return true
+  }
+  if (request.method === 'GET' && url.pathname === '/api/admin/audit-logs') {
+    const offset = parseInteger(url.searchParams.get('offset'), 0, 0, 1_000_000)
+    const limit = parseInteger(url.searchParams.get('limit'), 50, 1, 200)
+    await mutationJson(response, 200, () => runtime.admin.listAuditLogs(offset, limit))
+    return true
+  }
+  if (request.method === 'GET' && url.pathname === '/api/admin/crawl-settings') {
+    await mutationJson(response, 200, () => runtime.admin.getCrawlSettings())
+    return true
+  }
+  if (request.method === 'PUT' && url.pathname === '/api/admin/crawl-settings') {
+    await mutationJson(response, 200, async () =>
+      runtime.admin.saveCrawlSettings((await readJson(request)) as SaveServerCrawlSettingsInput)
+    )
     return true
   }
   if (request.method === 'GET' && url.pathname === '/api/admin/hostname-policies') {
@@ -155,4 +179,10 @@ export async function handleLocalAdmin(
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
+}
+
+function parseInteger(value: string | null, fallback: number, min: number, max: number): number {
+  if (value === null) return fallback
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : fallback
 }

@@ -183,7 +183,10 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
                 resolution = resolved
               },
               crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
-              beforeBrowserCrawl: () => browser.ensureInstalled(onBrowserMissing),
+              beforeBrowserCrawl: async () => {
+                if (source.fetchMode === 'auto') return browser.isInstalled()
+                await browser.ensureInstalled(onBrowserMissing)
+              },
               onDocument: (document) => {
                 documents.push({ ...document, sourceId })
                 contentBytes += Buffer.byteLength(document.markdown, 'utf8')

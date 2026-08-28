@@ -80,6 +80,17 @@ export const hostnameCrawlPolicies = sqliteTable('hostname_crawl_policies', {
   updatedAt: text('updated_at').notNull()
 })
 
+export const serverCrawlSettings = sqliteTable('server_crawl_settings', {
+  id: integer('id').primaryKey(),
+  maxConcurrentJobs: integer('max_concurrent_jobs').notNull(),
+  httpConcurrency: integer('http_concurrency').notNull(),
+  browserConcurrency: integer('browser_concurrency').notNull(),
+  batchIntervalMinSeconds: integer('batch_interval_min_seconds').notNull(),
+  batchIntervalMaxSeconds: integer('batch_interval_max_seconds').notNull(),
+  revision: integer('revision').notNull(),
+  updatedAt: text('updated_at').notNull()
+})
+
 export const publishRequests = sqliteTable('publish_requests', {
   publishId: text('publish_id').primaryKey(),
   checksum: text('checksum').notNull(),
@@ -87,5 +98,14 @@ export const publishRequests = sqliteTable('publish_requests', {
     .notNull()
     .references(() => libraries.id, { onDelete: 'cascade' }),
   revision: text('revision').notNull(),
+  createdAt: text('created_at').notNull()
+})
+
+export const adminAuditLogs = sqliteTable('admin_audit_logs', {
+  id: text('id').primaryKey(),
+  actor: text('actor').notNull(),
+  method: text('method').$type<'POST' | 'PUT' | 'DELETE'>().notNull(),
+  path: text('path').notNull(),
+  statusCode: integer('status_code').notNull(),
   createdAt: text('created_at').notNull()
 })

@@ -15,6 +15,8 @@ import type {
   LibraryFileRecord,
   HostnameCrawlPolicy,
   OperationLog,
+  SaveServerCrawlSettingsInput,
+  ServerCrawlSettings,
   UrlTreeNode,
   UpdateSourceInput
 } from '@loci/shared'
@@ -80,6 +82,8 @@ export interface LociMcpServices {
   listServerHostnamePolicies: () => Promise<HostnameCrawlPolicy[]>
   saveServerHostnamePolicy: (input: SaveHostnameCrawlPolicyInput) => Promise<HostnameCrawlPolicy>
   deleteServerHostnamePolicy: (hostname: string) => Promise<void>
+  getServerCrawlSettings: () => Promise<ServerCrawlSettings>
+  saveServerCrawlSettings: (input: SaveServerCrawlSettingsInput) => Promise<ServerCrawlSettings>
   listCloudLibraries: () => Promise<CloudCatalogItem[]>
   getCloudLibraryTree: (
     libraryId: string,

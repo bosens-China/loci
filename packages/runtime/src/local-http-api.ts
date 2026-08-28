@@ -11,6 +11,7 @@ import { handleLocalAdmin } from './local-http-admin.js'
 import { handleAgentIntegrations } from './local-http-agent.js'
 import { handleOperationLogs } from './local-http-logs.js'
 import { handleLibraryBrowser } from './local-http-library-browser.js'
+import { handleLocalBrowser } from './local-http-browser.js'
 import { handleDataTransfer } from './local-http-data-transfer.js'
 import { json, mutationJson, readJson, safeClientError } from './local-http-response.js'
 
@@ -28,6 +29,7 @@ export async function handleLocalApi(
   options: LocalApiOptions
 ): Promise<void> {
   if (await handleLocalAdmin(runtime, request, response, url)) return
+  if (await handleLocalBrowser(runtime, request, response, url)) return
   if (await handleAgentIntegrations(runtime, request, response, url)) return
   if (handleOperationLogs(runtime, request, response, url)) return
   if (handleLibraryBrowser(runtime, request, response, url)) return

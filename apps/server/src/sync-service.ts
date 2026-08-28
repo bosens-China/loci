@@ -4,6 +4,9 @@ import { Cron } from 'croner'
 import PQueue from 'p-queue'
 import { normalizeCronSchedule } from '@loci/core'
 import type { BrowserConfig } from './browser-config.js'
+import { checkServerBrowserStatus } from './browser-status.js'
+import type { ServerBrowserStatus } from '@loci/shared'
+import type { SaveServerCrawlSettingsInput, ServerCrawlSettings } from '@loci/shared'
 import { ServerDatabase } from './database.js'
 import { runServerSyncJob } from './sync-job-runner.js'
 import type { SyncJob } from './types.js'
@@ -23,10 +26,11 @@ export class SyncService {
   constructor(
     private readonly database: ServerDatabase,
     private readonly fetchImpl: typeof fetch = fetch,
-    private readonly browserConfig?: BrowserConfig,
-    maxConcurrentJobs = 3
+    private readonly browserConfig?: BrowserConfig
   ) {
-    this.#queue = new PQueue({ concurrency: maxConcurrentJobs })
+    this.#queue = new PQueue({
+      concurrency: database.crawlSettings.get().maxConcurrentJobs
+    })
   }
 
   restoreSchedules(): void {
@@ -93,6 +97,20 @@ export class SyncService {
     return this.database.syncJobs.list().map(publicJob)
   }
 
+  getBrowserStatus(): Promise<ServerBrowserStatus> {
+    return checkServerBrowserStatus(this.browserConfig)
+  }
+
+  getCrawlSettings(): ServerCrawlSettings {
+    return this.database.crawlSettings.get()
+  }
+
+  saveCrawlSettings(input: SaveServerCrawlSettingsInput): ServerCrawlSettings {
+    const saved = this.database.crawlSettings.save(input)
+    this.#queue.concurrency = saved.maxConcurrentJobs
+    return saved
+  }
+
   cancel(id: string): SyncJob | undefined {
     const persisted = this.database.syncJobs.cancel(id)
     if (!persisted) return undefined
@@ -145,6 +163,7 @@ export class SyncService {
   }
 
   #enqueue(job: SyncJob): SyncJob {
+    this.#queue.concurrency = this.database.crawlSettings.get().maxConcurrentJobs
     this.#jobs.set(job.id, job)
     this.#activeJobsByLibrary.set(job.libraryId, job)
     const controller = new AbortController()

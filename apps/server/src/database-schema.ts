@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { DEFAULT_SERVER_CRAWL_SETTINGS } from '@loci/shared'
 
 const schema = `
   PRAGMA foreign_keys = ON;
@@ -80,6 +81,37 @@ const schema = `
     updated_at TEXT NOT NULL
   ) STRICT;
 
+  CREATE TABLE IF NOT EXISTS server_crawl_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    max_concurrent_jobs INTEGER NOT NULL CHECK (max_concurrent_jobs BETWEEN 1 AND 32),
+    http_concurrency INTEGER NOT NULL CHECK (http_concurrency BETWEEN 1 AND 32),
+    browser_concurrency INTEGER NOT NULL CHECK (browser_concurrency BETWEEN 1 AND 32),
+    batch_interval_min_seconds INTEGER NOT NULL,
+    batch_interval_max_seconds INTEGER NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    updated_at TEXT NOT NULL
+  ) STRICT;
+
+  INSERT OR IGNORE INTO server_crawl_settings (
+    id,
+    max_concurrent_jobs,
+    http_concurrency,
+    browser_concurrency,
+    batch_interval_min_seconds,
+    batch_interval_max_seconds,
+    revision,
+    updated_at
+  ) VALUES (
+    1,
+    ${DEFAULT_SERVER_CRAWL_SETTINGS.maxConcurrentJobs},
+    ${DEFAULT_SERVER_CRAWL_SETTINGS.httpConcurrency},
+    ${DEFAULT_SERVER_CRAWL_SETTINGS.browserConcurrency},
+    ${DEFAULT_SERVER_CRAWL_SETTINGS.batchIntervalMinSeconds},
+    ${DEFAULT_SERVER_CRAWL_SETTINGS.batchIntervalMaxSeconds},
+    1,
+    '1970-01-01T00:00:00.000Z'
+  );
+
   CREATE TABLE IF NOT EXISTS publish_requests (
     publish_id TEXT PRIMARY KEY,
     checksum TEXT NOT NULL,
@@ -87,6 +119,18 @@ const schema = `
     revision TEXT NOT NULL,
     created_at TEXT NOT NULL
   ) STRICT;
+
+  CREATE TABLE IF NOT EXISTS admin_audit_logs (
+    id TEXT PRIMARY KEY,
+    actor TEXT NOT NULL,
+    method TEXT NOT NULL CHECK (method IN ('POST', 'PUT', 'DELETE')),
+    path TEXT NOT NULL,
+    status_code INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  ) STRICT;
+
+  CREATE INDEX IF NOT EXISTS admin_audit_logs_created_at
+    ON admin_audit_logs(created_at DESC);
 `
 
 /** 初始化当前结构，并兼容迁移只有 hostname 唯一约束的旧版数据库。 */

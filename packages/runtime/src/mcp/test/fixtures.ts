@@ -216,6 +216,20 @@ export function createServices(): LociMcpServices {
       updatedAt: '2026-08-27T00:00:00.000Z'
     }),
     deleteServerHostnamePolicy: async () => undefined,
+    getServerCrawlSettings: async () => ({
+      maxConcurrentJobs: 3,
+      httpConcurrency: 9,
+      browserConcurrency: 5,
+      batchIntervalMinSeconds: 0,
+      batchIntervalMaxSeconds: 0,
+      revision: 1,
+      updatedAt: '2026-08-27T00:00:00.000Z'
+    }),
+    saveServerCrawlSettings: async (input) => ({
+      ...input,
+      revision: input.revision + 1,
+      updatedAt: '2026-08-27T00:00:00.000Z'
+    }),
     listCloudLibraries: async () => [cloudLibrary],
     getCloudLibraryTree: async () => [{ id: document.id, title: document.title, readable: true }],
     readCloudLibraryFile: async () => ({

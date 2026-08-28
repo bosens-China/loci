@@ -4,12 +4,14 @@ const SESSION_TTL_MS = 24 * 60 * 60 * 1000
 
 /** 单管理员会话只保存在内存中，服务重启后自动失效。 */
 export class AdminAuth {
+  readonly username: string
   readonly #usernameHash: Buffer
   readonly #passwordHash: Buffer
   readonly #sessions = new Map<string, number>()
 
   constructor(username: string, password: string) {
     if (!username || !password) throw new Error('管理员用户名和密码不能为空')
+    this.username = username
     this.#usernameHash = hash(username)
     this.#passwordHash = hash(password)
   }
