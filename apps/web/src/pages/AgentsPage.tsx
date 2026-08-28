@@ -19,12 +19,16 @@ import type {
 import { getAgentIntegrations, removeAgentIntegration, setupAgentIntegration } from '@/api/agents'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
-import { canRemoveAgentIntegration } from '@/pages/agent-integration-state'
+import {
+  canRemoveAgentIntegration,
+  resolveAgentIntegrationFeedback,
+  type AgentIntegrationActionIntent
+} from '@/pages/agent-integration-state'
 
 const QUERY_KEY = ['agent-integrations'] as const
 
 interface MutationInput {
-  action: 'setup' | 'remove'
+  action: AgentIntegrationActionIntent
   client: AgentClient
 }
 
@@ -35,22 +39,14 @@ export function AgentsPage(): React.JSX.Element {
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: getAgentIntegrations })
   const mutation = useMutation({
     mutationFn: ({ action, client }: MutationInput) =>
-      action === 'setup' ? setupAgentIntegration(client) : removeAgentIntegration(client),
-    onSuccess: (result) => {
+      action === 'remove' ? removeAgentIntegration(client) : setupAgentIntegration(client),
+    onSuccess: (result, variables) => {
       queryClient.setQueryData<AgentIntegrationStatus[]>(QUERY_KEY, (current) =>
         current?.map((item) => (item.client === result.status.client ? result.status : item))
       )
-      if (result.status.overall === 'attention') {
-        void message.warning('操作未完全完成，请处理标记为冲突的配置')
-        return
-      }
-      const manual = result.status.components.some((item) => item.status === 'manual')
-      void message.success(
-        result.action === 'remove'
-          ? 'Loci 自动配置已移除'
-          : manual
-            ? '自动配置已完成，请继续处理手动项'
-            : 'Agent 全局接入已完成'
+      showAgentIntegrationFeedback(
+        resolveAgentIntegrationFeedback(result, variables.action),
+        message
       )
     },
     onError: (error: Error) => void message.error(error.message)
@@ -131,10 +127,17 @@ export function AgentsPage(): React.JSX.Element {
               status={status}
               pending={
                 mutation.isPending && mutation.variables?.client === status.client
-                  ? mutation.variables.action
+                  ? mutation.variables.action === 'remove'
+                    ? 'remove'
+                    : 'setup'
                   : null
               }
-              onSetup={() => mutation.mutate({ action: 'setup', client: status.client })}
+              onSetup={() =>
+                mutation.mutate({
+                  action: status.overall === 'ready' ? 'update' : 'setup',
+                  client: status.client
+                })
+              }
               onRemove={() => confirmRemove(status)}
               onCopy={async (content) => {
                 try {
@@ -150,6 +153,29 @@ export function AgentsPage(): React.JSX.Element {
       </AsyncState>
     </div>
   )
+}
+
+function showAgentIntegrationFeedback(
+  feedback: ReturnType<typeof resolveAgentIntegrationFeedback>,
+  message: ReturnType<typeof App.useApp>['message']
+): void {
+  if (feedback === 'attention') {
+    void message.warning('操作未完全完成，请处理标记为冲突的配置')
+  } else if (feedback === 'unchanged') {
+    void message.info('当前接入已是最新')
+  } else if (feedback === 'update-completed') {
+    void message.success('Agent 全局接入已更新')
+  } else if (feedback === 'setup-completed') {
+    void message.success('Agent 全局接入已完成')
+  } else if (feedback === 'manual-completed') {
+    void message.success('自动配置已完成，请继续处理手动项')
+  } else if (feedback === 'manual-unchanged') {
+    void message.info('自动配置已是最新，请继续处理手动项')
+  } else if (feedback === 'removed') {
+    void message.success('Loci 自动配置已移除')
+  } else {
+    void message.info('当前没有可移除的 Loci 自动配置')
+  }
 }
 
 interface AgentCardProps {

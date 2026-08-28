@@ -10,6 +10,7 @@ import {
   type McpImportStrategy
 } from '@loci/shared'
 import {
+  inspectAgentMcpConfigFile,
   resolveAgentMcpConfigPath,
   writeAgentMcpConfigFile,
   type AgentMcpConfigPathOptions
@@ -77,19 +78,25 @@ async function performAgentImport(
     options.owner ?? 'Agent MCP 配置写入'
   )
   try {
-    let commandError: Error | undefined
+    let commandIssue: Error | undefined
     const usesCustomHome = options.homeDir !== undefined
     if (definition.quickImport && !usesCustomHome) {
       const command = createAgentImportCommand(client, connection)
       try {
         const executable = await resolveExecutable(command)
         await runCommand(executable, command.args, command.label)
-        return {
-          client,
-          message: `已通过 ${command.label} 命令写入 CLI stdio MCP`
+        const state = inspectAgentMcpConfigFile(client, connection, options)
+        if (state.status === 'current') {
+          return {
+            client,
+            message: `已通过 ${command.label} 命令写入 CLI stdio MCP`
+          }
         }
+        commandIssue = new Error(
+          state.message ?? `${command.label} 命令执行后未检测到 loci MCP 配置`
+        )
       } catch (error) {
-        commandError = toError(error)
+        commandIssue = toError(error)
       }
     }
 
@@ -101,8 +108,8 @@ async function performAgentImport(
       : `用户配置已是最新版本：${path}`
     return {
       client,
-      message: commandError
-        ? `${definition.label} 配置命令失败（${commandError.message}），${status}`
+      message: commandIssue
+        ? `${definition.label} 配置命令未生效（${commandIssue.message}），${status}`
         : usesCustomHome && definition.quickImport
           ? `已使用指定用户目录，${status}`
           : `${definition.label} 不支持配置命令，${status}`

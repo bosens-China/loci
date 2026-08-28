@@ -32,7 +32,9 @@ loci agent setup codex
 loci agent status codex
 ```
 
-`loci agent setup` 会交互选择 Agent，统一预览后配置用户级 MCP、安装全局 `use-loci` 并写入全局规则；不带子命令的 `loci agent` 进入同一个向导。本机 `loci ui` 的“Agent”页面提供相同的状态、接入和移除能力。
+`loci agent setup` 会交互选择 Agent，统一预览后配置用户级 MCP、安装全局 `use-loci` 并写入全局规则；不带子命令的 `loci agent` 进入同一个向导。本机 `loci ui` 的“Agent”页面提供相同的状态、接入和移除能力。已接入卡片的“检查更新”会复用幂等接入流程：没有变化时提示已是最新，发现旧配置并实际写入时才提示更新完成。
+
+一键接入优先使用客户端自己的配置命令，但命令正常退出不等于配置已经生效。Loci 会继续检查用户级 MCP 配置；没有检测到标准 `loci` 连接时，自动回退到安全合并配置文件，最终状态以重新读取后的 MCP、Skill 和 Rules 为准。
 
 Agent、CI 和其他非交互调用应使用完整命令，不依赖交互偏好或隐式默认：
 
