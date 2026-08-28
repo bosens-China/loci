@@ -10,7 +10,11 @@ describe('MCP 客户端共享目录', () => {
       globalRulesWrite: true,
       importStrategy: 'codex-cli'
     })
-    expect(isAgentGlobalRulesClient('cursor')).toBe(false)
+    expect(getMcpClientDefinition('cursor')).toMatchObject({
+      globalRulesPath: '~/.cursor/rules/loci.mdc',
+      globalRulesWrite: true
+    })
+    expect(isAgentGlobalRulesClient('cursor')).toBe(true)
     expect(isAgentGlobalRulesClient('codex')).toBe(true)
   })
 })

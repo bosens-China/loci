@@ -125,7 +125,7 @@ async function configureAgentClient(
 function registerRulesCommand(agent: Command): void {
   agent
     .command('rules [client]')
-    .description('写入 Loci 全局规则；Cursor 输出可复制内容')
+    .description('写入 Loci 用户级全局规则')
     .option('--yes', '跳过写入前确认')
     .action(configureAgentRules)
 }

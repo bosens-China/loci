@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import {
@@ -34,6 +34,14 @@ applyTo: "**"
 
 `
 
+const CURSOR_RULES_HEADER = `---
+description: 优先使用 Loci 查询技术文档
+globs:
+alwaysApply: true
+---
+
+`
+
 /** 写入用户级规则；同步文件操作让同一进程天然串行，文件锁负责跨进程仲裁。 */
 export function installAgentGlobalRules(
   client: unknown,
@@ -45,15 +53,12 @@ export function installAgentGlobalRules(
   try {
     const homeDir = options.homeDir ?? homedir()
     const path = resolveAgentGlobalRulesPath(client, homeDir)
-    const current = existsSync(path)
-      ? readFileSync(path, 'utf8')
-      : client === 'vscode'
-        ? VSCODE_INSTRUCTIONS_HEADER
-        : ''
+    const current = existsSync(path) ? readFileSync(path, 'utf8') : initialRulesContent(client)
+    if (client === 'cursor') assertCursorRulesFile(current)
     const hadContext7Compatibility = hasContext7Compatibility(current)
     const next = mergeLociAgentInstructions(current, {
       migrateContext7: client === 'codex',
-      context7Available: client === 'codex' && isContext7SkillInstalled(homeDir)
+      context7Available: isContext7Available(client, homeDir)
     })
     const hasContext7 = hasContext7Compatibility(next)
     const changed = current !== next
@@ -65,7 +70,9 @@ export function installAgentGlobalRules(
       changed,
       message:
         changed && hasContext7 && !hadContext7Compatibility
-          ? `检测到 Context7，已替换为 Loci 优先、Context7 兜底的组合规则：${path}`
+          ? client === 'codex'
+            ? `检测到 Context7，已替换为 Loci 优先、Context7 兜底的组合规则：${path}`
+            : `检测到 Context7，已写入 Loci 优先、Context7 兜底的组合规则：${path}`
           : changed
             ? `已将 Loci 全局规则写入 ${label}：${path}`
             : hasContext7
@@ -87,10 +94,11 @@ export function inspectAgentGlobalRules(
   if (!existsSync(path)) return { path, status: 'missing', message: null }
   const current = readFileSync(path, 'utf8')
   try {
+    if (client === 'cursor') assertCursorRulesFile(current)
     if (!hasLociAgentInstructions(current)) return { path, status: 'missing', message: null }
     const expected = mergeLociAgentInstructions(current, {
       migrateContext7: client === 'codex',
-      context7Available: client === 'codex' && isContext7SkillInstalled(homeDir)
+      context7Available: isContext7Available(client, homeDir)
     })
     return {
       path,
@@ -119,8 +127,12 @@ export function removeAgentGlobalRules(
       return { client, path, changed: false, message: `Loci 全局规则不存在：${path}` }
     }
     const current = readFileSync(path, 'utf8')
+    if (client === 'cursor') assertCursorRulesFile(current)
     const next = removeLociAgentInstructions(current)
-    if (next.removed) writeFileAtomically(path, next.content)
+    if (next.removed) {
+      if (client === 'cursor' && isEmptyCursorRulesFile(next.content)) unlinkSync(path)
+      else writeFileAtomically(path, next.content)
+    }
     return {
       client,
       path,
@@ -132,11 +144,41 @@ export function removeAgentGlobalRules(
   }
 }
 
+function initialRulesContent(client: AgentGlobalRulesClient): string {
+  if (client === 'vscode') return VSCODE_INSTRUCTIONS_HEADER
+  if (client === 'cursor') return CURSOR_RULES_HEADER
+  return ''
+}
+
+/** Cursor 仅加载带 MDC frontmatter 的规则，异常文件必须交给用户处理。 */
+function assertCursorRulesFile(content: string): void {
+  const normalized = content.replaceAll('\r\n', '\n')
+  const frontmatter = normalized.match(/^---\n([\s\S]*?)\n---(?:\n|$)/)?.[1]
+  if (!frontmatter) throw new Error('Cursor 全局规则缺少有效的 MDC frontmatter，请先手动修复')
+  if (!/^alwaysApply:\s*true\s*$/m.test(frontmatter)) {
+    throw new Error('Cursor 全局规则必须设置 alwaysApply: true，请先手动修复')
+  }
+}
+
+function isEmptyCursorRulesFile(content: string): boolean {
+  return content.trim() === CURSOR_RULES_HEADER.trim()
+}
+
 /** Context7 可能晚于规则安装；每次重写都重新检查两个 Codex 用户级 Skill 入口。 */
 function isContext7SkillInstalled(homeDir: string): boolean {
   return ['.agents/skills/context7-mcp/SKILL.md', '.codex/skills/context7-mcp/SKILL.md'].some(
     (path) => existsSync(resolve(homeDir, path))
   )
+}
+
+function isContext7Available(client: AgentGlobalRulesClient, homeDir: string): boolean {
+  if (client === 'codex') return isContext7SkillInstalled(homeDir)
+  if (client !== 'cursor') return false
+  return [
+    '.cursor/rules/context7.mdc',
+    '.cursor/skills/context7-mcp/SKILL.md',
+    '.cursor/skills/context7/SKILL.md'
+  ].some((path) => existsSync(resolve(homeDir, path)))
 }
 
 export function resolveAgentGlobalRulesPath(

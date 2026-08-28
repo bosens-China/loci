@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -57,6 +57,58 @@ describe('Agent 全局规则写入', () => {
     expect(
       readFileSync(join(homeDir, '.copilot', 'instructions', 'loci.instructions.md'), 'utf8')
     ).toMatch(/^---\n[\s\S]*applyTo: "\*\*"[\s\S]*<!-- loci:start -->/)
+  })
+
+  it('创建、检查并安全移除 Cursor 本机 MDC 规则', () => {
+    const first = installAgentGlobalRules('cursor', { dataDir, homeDir, owner: '测试' })
+    const path = join(homeDir, '.cursor', 'rules', 'loci.mdc')
+    const content = readFileSync(path, 'utf8')
+    const second = installAgentGlobalRules('cursor', { dataDir, homeDir, owner: '测试' })
+
+    expect(first).toMatchObject({ path, changed: true })
+    expect(content).toMatch(
+      /^---\ndescription: [^\n]+\nglobs:\nalwaysApply: true\n---\n\n<!-- loci:start -->/
+    )
+    expect(second.changed).toBe(false)
+    expect(inspectAgentGlobalRules('cursor', { homeDir }).status).toBe('current')
+    expect(removeAgentGlobalRules('cursor', { dataDir, homeDir, owner: '测试' }).changed).toBe(true)
+    expect(existsSync(path)).toBe(false)
+  })
+
+  it('Cursor 规则保留用户附加内容并拒绝无效 frontmatter', () => {
+    const rulesDir = join(homeDir, '.cursor', 'rules')
+    const path = join(rulesDir, 'loci.mdc')
+    mkdirSync(rulesDir, { recursive: true })
+    writeFileSync(
+      path,
+      '---\ndescription: 自定义\nalwaysApply: true\n---\n\n# 我的附加规则\n',
+      'utf8'
+    )
+
+    installAgentGlobalRules('cursor', { dataDir, homeDir, owner: '测试' })
+    removeAgentGlobalRules('cursor', { dataDir, homeDir, owner: '测试' })
+    expect(readFileSync(path, 'utf8')).toContain('# 我的附加规则')
+
+    const invalid = '---\nalwaysApply: false\n---\n\n# 不应修改\n'
+    writeFileSync(path, invalid, 'utf8')
+    expect(inspectAgentGlobalRules('cursor', { homeDir }).status).toBe('conflict')
+    expect(() => installAgentGlobalRules('cursor', { dataDir, homeDir, owner: '测试' })).toThrow(
+      'alwaysApply: true'
+    )
+    expect(readFileSync(path, 'utf8')).toBe(invalid)
+  })
+
+  it('检测到 Cursor Context7 本机规则时写入协调说明但不修改原文件', () => {
+    const context7Path = join(homeDir, '.cursor', 'rules', 'context7.mdc')
+    mkdirSync(join(homeDir, '.cursor', 'rules'), { recursive: true })
+    writeFileSync(context7Path, '---\nalwaysApply: true\n---\n\nContext7\n', 'utf8')
+
+    installAgentGlobalRules('cursor', { dataDir, homeDir, owner: '测试' })
+
+    expect(readFileSync(join(homeDir, '.cursor', 'rules', 'loci.mdc'), 'utf8')).toContain(
+      LOCI_CONTEXT7_COMPATIBILITY
+    )
+    expect(readFileSync(context7Path, 'utf8')).toBe('---\nalwaysApply: true\n---\n\nContext7\n')
   })
 
   it('迁移 Codex 中有边界的 Context7 规则并保留个人规则', () => {

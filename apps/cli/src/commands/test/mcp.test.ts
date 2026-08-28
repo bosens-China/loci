@@ -83,18 +83,10 @@ describe('Agent MCP 配置', () => {
     expect(JSON.parse(output)).toHaveProperty('mcpServers.loci.command', 'loci')
   })
 
-  it('Cursor 全局规则输出受管区块', async () => {
-    let output = ''
-    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
-      output += String(chunk)
-      return true
-    })
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-
-    await createProgram().parseAsync(['agent', 'rules', 'cursor'], { from: 'user' })
-
-    expect(output).toContain('<!-- loci:start -->')
-    expect(output).toContain('<!-- loci:end -->')
+  it('Cursor 全局规则使用本机写入并要求非交互确认', async () => {
+    await expect(
+      createProgram().parseAsync(['agent', 'rules', 'cursor'], { from: 'user' })
+    ).rejects.toThrow('非交互写入 Agent 全局规则必须传入 --yes')
   })
 
   it('全局规则命令拒绝未知客户端和非交互省略值', async () => {

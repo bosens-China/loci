@@ -29,8 +29,8 @@ export const MCP_CLIENTS = [
     id: 'cursor',
     label: 'Cursor',
     configPath: '~/.cursor/mcp.json',
-    globalRulesPath: 'Customize → Rules → User Rules',
-    globalRulesWrite: false,
+    globalRulesPath: '~/.cursor/rules/loci.mdc',
+    globalRulesWrite: true,
     quickImport: true,
     executable: 'cursor',
     importStrategy: 'cursor-cli'

@@ -63,16 +63,21 @@ describe('Agent 全局接入服务', () => {
     close()
   })
 
-  it('Cursor 自动完成 MCP 与 Skill，并保留 Rules 手动状态', async () => {
+  it('Cursor 自动完成 MCP、Skill 与本机 Rules', async () => {
     const { service, close } = setup()
     const result = await service.setup('cursor')
 
-    expect(result.status.overall).toBe('partial')
+    expect(result.status.overall).toBe('ready')
     expect(result.status.components).toMatchObject([
       { component: 'mcp', status: 'current' },
       { component: 'skill', status: 'current' },
-      { component: 'rules', status: 'manual' }
+      {
+        component: 'rules',
+        status: 'current',
+        path: expect.stringContaining('.cursor/rules/loci.mdc')
+      }
     ])
+    expect((await service.remove('cursor')).status.overall).toBe('missing')
     close()
   })
 
