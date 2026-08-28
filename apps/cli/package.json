@@ -1,6 +1,6 @@
 {
   "name": "@boses/cli",
-  "version": "1.19.0",
+  "version": "1.19.1",
   "description": "CLI and MCP server for Loci, a local-first documentation knowledge base for AI agents.",
   "author": "yliu",
   "license": "MIT",
