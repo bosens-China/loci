@@ -1,15 +1,36 @@
 /* 全局基础重置 */
 html,
-body {
+body,
+#root {
   height: 100%;
+  width: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+}
+
+body {
+  background-color: var(--ant-color-bg-layout, #f4f6f9);
+  color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
+}
+
+html.dark body {
+  background-color: var(--ant-color-bg-layout, #0d0e11);
 }
 
 #root {
-  height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.ant-app {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
 }
 
 /* =========================================================

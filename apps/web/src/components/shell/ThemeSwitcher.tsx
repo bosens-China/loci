@@ -1,9 +1,10 @@
 import { CheckOutlined, DesktopOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Dropdown, type MenuProps } from 'antd'
-import type { ThemeMode } from '@loci/shared'
+import type { AppSettings, ThemeMode } from '@loci/shared'
 import { getSettings, saveSettings } from '@/api/settings'
 import { useResolvedTheme } from '@/hooks/use-resolved-theme'
+import { getStoredThemeMode, setStoredThemeMode } from '@/utils/theme'
 
 const THEME_OPTIONS = [
   { value: 'light', label: '浅色模式', icon: <SunOutlined /> },
@@ -11,25 +12,30 @@ const THEME_OPTIONS = [
   { value: 'auto', label: '跟随系统', icon: <DesktopOutlined /> }
 ] as const
 
-/** 顶栏主题切换按钮：支持图标展示当前模式，下拉菜单快速切换 浅色 / 深色 / 跟随系统。 */
+/** 快捷主题切换按钮：支持图标展示当前模式，下拉菜单快速切换 浅色 / 深色 / 跟随系统。 */
 export function ThemeSwitcher(): React.JSX.Element {
   const { message } = App.useApp()
   const client = useQueryClient()
   const settings = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const currentMode: ThemeMode = settings.data?.theme ?? 'auto'
+  const currentMode: ThemeMode = settings.data?.theme ?? getStoredThemeMode()
   const resolvedTheme = useResolvedTheme(currentMode)
 
   const mutation = useMutation({
     mutationFn: async (theme: ThemeMode) => {
-      const current = settings.data ?? (await getSettings())
-      return saveSettings({ ...current, theme })
+      setStoredThemeMode(theme)
+      const current = settings.data ?? (await getSettings().catch(() => null))
+      if (current) {
+        return saveSettings({ ...current, theme })
+      }
+      return undefined
     },
     onMutate: async (newTheme) => {
+      setStoredThemeMode(newTheme)
       await client.cancelQueries({ queryKey: ['settings'] })
-      const previous = client.getQueryData<typeof settings.data>(['settings'])
-      client.setQueryData(['settings'], (old: typeof settings.data) =>
-        old ? { ...old, theme: newTheme } : old
-      )
+      const previous = client.getQueryData<AppSettings>(['settings'])
+      if (previous) {
+        client.setQueryData<AppSettings>(['settings'], { ...previous, theme: newTheme })
+      }
       return { previous }
     },
     onSuccess: (_, newTheme) => {
@@ -45,13 +51,13 @@ export function ThemeSwitcher(): React.JSX.Element {
 
   const currentIcon =
     currentMode === 'light' ? (
-      <SunOutlined />
+      <SunOutlined className="text-base" />
     ) : currentMode === 'dark' ? (
-      <MoonOutlined />
+      <MoonOutlined className="text-base" />
     ) : resolvedTheme === 'dark' ? (
-      <MoonOutlined />
+      <MoonOutlined className="text-base" />
     ) : (
-      <DesktopOutlined />
+      <DesktopOutlined className="text-base" />
     )
 
   const items: MenuProps['items'] = THEME_OPTIONS.map((option) => ({
@@ -71,9 +77,10 @@ export function ThemeSwitcher(): React.JSX.Element {
   return (
     <Dropdown menu={{ items }} placement="bottomRight" arrow trigger={['hover', 'click']}>
       <Button
+        shape="circle"
         type="text"
         icon={currentIcon}
-        className="flex h-8 w-8 items-center justify-center p-0 text-sm text-[var(--ant-color-text-secondary)] hover:text-[var(--ant-color-text)]"
+        className="flex h-9 w-9 items-center justify-center border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] shadow-xs hover:border-[var(--ant-color-primary)] text-[var(--ant-color-text-secondary)] hover:text-[var(--ant-color-text)] transition-colors cursor-pointer"
         aria-label="切换界面主题"
         title={`当前主题：${currentMode === 'light' ? '浅色' : currentMode === 'dark' ? '深色' : '跟随系统'}`}
       />

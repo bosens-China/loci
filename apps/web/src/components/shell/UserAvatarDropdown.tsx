@@ -9,10 +9,11 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { App, Avatar, Button, Dropdown, Segmented, Tag } from 'antd'
-import type { ThemeMode } from '@loci/shared'
+import type { AppSettings, ThemeMode } from '@loci/shared'
 import { getAdminSession, logoutAdmin } from '@/api/admin'
 import { getSettings, saveSettings } from '@/api/settings'
 import { useResolvedTheme } from '@/hooks/use-resolved-theme'
+import { setStoredThemeMode } from '@/utils/theme'
 import {
   ADMIN_JOBS_KEY,
   ADMIN_LIBRARIES_KEY,
@@ -40,15 +41,20 @@ export function UserAvatarDropdown(): React.JSX.Element {
 
   const themeMutation = useMutation({
     mutationFn: async (theme: ThemeMode) => {
-      const current = settings.data ?? (await getSettings())
-      return saveSettings({ ...current, theme })
+      setStoredThemeMode(theme)
+      const current = settings.data ?? (await getSettings().catch(() => null))
+      if (current) {
+        return saveSettings({ ...current, theme })
+      }
+      return undefined
     },
     onMutate: async (newTheme) => {
+      setStoredThemeMode(newTheme)
       await client.cancelQueries({ queryKey: ['settings'] })
-      const previous = client.getQueryData<typeof settings.data>(['settings'])
-      client.setQueryData(['settings'], (old: typeof settings.data) =>
-        old ? { ...old, theme: newTheme } : old
-      )
+      const previous = client.getQueryData<AppSettings>(['settings'])
+      if (previous) {
+        client.setQueryData<AppSettings>(['settings'], { ...previous, theme: newTheme })
+      }
       return { previous }
     },
     onSuccess: () => void client.invalidateQueries({ queryKey: ['settings'] }),

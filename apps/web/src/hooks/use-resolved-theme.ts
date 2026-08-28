@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ThemeMode } from '@loci/shared'
-import { resolveThemeMode } from '@/utils/theme'
+import { getStoredThemeMode, resolveThemeMode, setStoredThemeMode } from '@/utils/theme'
 
 const QUERY = '(prefers-color-scheme: dark)'
 
@@ -28,7 +28,8 @@ export function useResolvedTheme(mode: ThemeMode): 'light' | 'dark' {
     const isDark = resolved === 'dark'
     document.documentElement.classList.toggle('dark', isDark)
     document.documentElement.setAttribute('data-theme', resolved)
-  }, [resolved])
+    setStoredThemeMode(mode)
+  }, [mode, resolved])
 
   return resolved
 }

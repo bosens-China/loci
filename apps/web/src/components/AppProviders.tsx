@@ -6,14 +6,19 @@ import { useQuery } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { getSettings } from '@/api/settings'
 import { useResolvedTheme } from '@/hooks/use-resolved-theme'
+import { getStoredThemeMode } from '@/utils/theme'
 import { router } from '@/router'
 
 dayjs.locale('zh-cn')
 
 /** 将持久化主题设置映射为 Ant Design 默认主题与中文语言包。 */
 export function AppProviders(): React.JSX.Element {
-  const settings = useQuery({ queryKey: ['settings'], queryFn: getSettings })
-  const resolvedTheme = useResolvedTheme(settings.data?.theme ?? 'auto')
+  const settings = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings
+  })
+  const currentMode = settings.data?.theme ?? getStoredThemeMode()
+  const resolvedTheme = useResolvedTheme(currentMode)
 
   return (
     <ConfigProvider
@@ -28,7 +33,7 @@ export function AppProviders(): React.JSX.Element {
         cssVar: {}
       }}
     >
-      <AntApp>
+      <AntApp className="h-full flex flex-col flex-1 min-h-0">
         <RouterProvider router={router} />
       </AntApp>
     </ConfigProvider>
