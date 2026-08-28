@@ -31,17 +31,17 @@ export function DocumentListPanel(props: DocumentListPanelProps): React.JSX.Elem
   )
 
   return (
-    <div className="flex flex-col overflow-hidden border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] h-full w-full border-r">
+    <div className="flex h-full w-full flex-col overflow-hidden border-r border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)]">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase truncate">
+          <span className="truncate text-xs font-semibold text-[var(--ant-color-text-secondary)]">
             {props.source?.name || '选择来源'}
           </span>
           {props.source?.cloud && (
             <LibraryOriginTag origin="cloud" autoSync={props.source.cloud.autoSync} />
           )}
         </div>
-        <span className="font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
+        <span className="font-mono text-xs text-[var(--ant-color-text-secondary)]">
           {props.documents?.length ?? 0}
         </span>
       </div>

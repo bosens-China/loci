@@ -8,7 +8,7 @@ function getSystemPrefersDark(): boolean {
   return typeof window !== 'undefined' && window.matchMedia(QUERY).matches
 }
 
-/** 仅在自动模式下订阅系统配色变化，避免页面持有两套主题状态。 */
+/** 订阅系统配色变化并同步至 document.documentElement 的 .dark 类与 data-theme 属性。 */
 export function useResolvedTheme(mode: ThemeMode): 'light' | 'dark' {
   const [systemPrefersDark, setSystemPrefersDark] = useState(getSystemPrefersDark)
 
@@ -21,5 +21,14 @@ export function useResolvedTheme(mode: ThemeMode): 'light' | 'dark' {
     return () => media.removeEventListener('change', update)
   }, [mode])
 
-  return resolveThemeMode(mode, systemPrefersDark)
+  const resolved = resolveThemeMode(mode, systemPrefersDark)
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const isDark = resolved === 'dark'
+    document.documentElement.classList.toggle('dark', isDark)
+    document.documentElement.setAttribute('data-theme', resolved)
+  }, [resolved])
+
+  return resolved
 }

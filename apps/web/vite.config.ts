@@ -11,7 +11,9 @@ export default defineConfig({
   plugins: [
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     react({ babel: { plugins: ['babel-plugin-react-compiler'] } }),
-    UnoCSS()
+    UnoCSS({
+      configFile: fileURLToPath(new URL('./uno.config.ts', import.meta.url))
+    })
   ],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) }

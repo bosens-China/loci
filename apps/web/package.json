@@ -16,6 +16,7 @@
     "@tanstack/react-router": "^1.170.32",
     "antd": "^6.5.2",
     "axios": "^1.12.2",
+    "dayjs": "^1.11.13",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-markdown": "^10.1.0",

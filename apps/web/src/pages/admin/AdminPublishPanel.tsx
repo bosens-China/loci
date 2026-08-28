@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import type { CloudLibrary, DocumentSource } from '@loci/shared'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { App, Button, Empty, Radio, Select } from 'antd'
-import { CloudUploadOutlined } from '@ant-design/icons'
+import { App, Button, Card, Empty, Radio, Select, Tag, Typography } from 'antd'
+import { CloudUploadOutlined, GithubOutlined, GlobalOutlined } from '@ant-design/icons'
 import { publishAdminLibrary } from '@/api/admin'
 import { listSources } from '@/api/sources'
 import { formatBytes } from '@/utils/format'
 
+/** 发布面板：将本地收录的文档库发布为 Server 上的公开文档库。 */
 export function AdminPublishPanel({ libraries }: { libraries: CloudLibrary[] }): React.JSX.Element {
   const { message, modal } = App.useApp()
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
@@ -54,31 +55,28 @@ export function AdminPublishPanel({ libraries }: { libraries: CloudLibrary[] }):
   }
 
   return (
-    <section className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
-        <div>
-          <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
-            发布本地文档库
-          </span>
-          <p className="mb-0 mt-1 text-xs text-[var(--ant-color-text-secondary)]">
-            使用带校验的压缩二进制归档上传；创建与覆盖必须显式选择。
-          </p>
-        </div>
-      </div>
-      <div className="p-5">
-        {localSources.length ? (
-          <>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {localSources.map((source) => (
-                <SourceCard
-                  key={source.id}
-                  source={source}
-                  selected={selected === source.id}
-                  onSelect={() => setSelected(source.id)}
-                />
-              ))}
-            </div>
-            <div className="mt-5 flex flex-col gap-3 rounded-xl bg-[var(--ant-color-fill-quaternary)] p-4 md:flex-row md:items-center">
+    <Card
+      title="发布本地文档库"
+      extra={
+        <Typography.Text type="secondary" className="text-xs">
+          使用带校验的压缩归档上传；创建与覆盖必须显式确认
+        </Typography.Text>
+      }
+    >
+      {localSources.length ? (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {localSources.map((source) => (
+              <SourceCard
+                key={source.id}
+                source={source}
+                selected={selected === source.id}
+                onSelect={() => setSelected(source.id)}
+              />
+            ))}
+          </div>
+          <Card size="small" className="mt-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
               <Radio.Group
                 value={mode}
                 onChange={(event) => setMode(event.target.value as 'create' | 'replace')}
@@ -110,12 +108,12 @@ export function AdminPublishPanel({ libraries }: { libraries: CloudLibrary[] }):
                 发布到 Server
               </Button>
             </div>
-          </>
-        ) : (
-          <Empty description="暂无包含正文的本地文档库" />
-        )}
-      </div>
-    </section>
+          </Card>
+        </>
+      ) : (
+        <Empty className="py-12" description="暂无包含正文的本地文档库" />
+      )}
+    </Card>
   )
 }
 
@@ -124,25 +122,38 @@ function SourceCard(props: {
   selected: boolean
   onSelect: () => void
 }): React.JSX.Element {
+  const isGithub = props.source.kind === 'github'
   return (
-    <button
-      type="button"
-      className={`rounded-xl border p-4 text-left transition ${
+    <Card
+      hoverable
+      size="small"
+      className={`cursor-pointer transition-all duration-200 ${
         props.selected
-          ? 'border-[var(--ant-color-primary)] bg-[var(--ant-color-fill-quaternary)]'
-          : 'border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] hover:border-[var(--ant-color-primary)]'
+          ? 'border-[var(--ant-color-primary)]! bg-[var(--ant-color-primary-bg-hover)]!'
+          : 'hover:border-[var(--ant-color-primary)]'
       }`}
       onClick={props.onSelect}
     >
-      <strong className="block truncate text-sm text-[var(--ant-color-text)]">
-        {props.source.name}
-      </strong>
-      <span className="mt-2 block text-xs text-[var(--ant-color-text-secondary)]">
-        {props.source.pages} 页 · {formatBytes(props.source.contentSize)}
-      </span>
-      <span className="mt-1 block truncate font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
-        {new URL(props.source.url).hostname}
-      </span>
-    </button>
+      <div className="flex items-start justify-between gap-2">
+        <Typography.Text strong className="block truncate text-sm flex-1">
+          {props.source.name}
+        </Typography.Text>
+        <Tag
+          className="m-0! text-[10px]"
+          icon={isGithub ? <GithubOutlined /> : <GlobalOutlined />}
+          color={isGithub ? undefined : 'blue'}
+        >
+          {isGithub ? 'GitHub' : '站点'}
+        </Tag>
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-xs text-[var(--ant-color-text-secondary)]">
+        <span>📄 {props.source.pages} 篇</span>
+        <span>·</span>
+        <span>💾 {formatBytes(props.source.contentSize)}</span>
+      </div>
+      <Typography.Text type="secondary" className="mt-1 block truncate font-mono text-[11px]">
+        {props.source.url}
+      </Typography.Text>
+    </Card>
   )
 }

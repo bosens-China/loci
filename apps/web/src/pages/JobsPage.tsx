@@ -1,8 +1,14 @@
 import { useMemo, useState } from 'react'
-import { CaretRightOutlined, PauseOutlined, SearchOutlined } from '@ant-design/icons'
+import {
+  CaretRightOutlined,
+  CheckCircleOutlined,
+  PauseOutlined,
+  SearchOutlined
+} from '@ant-design/icons'
 import type { LocalJob } from '@loci/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Empty, Input, Select } from 'antd'
+import { App, Button, Card, DatePicker, Empty, Input, Progress, Select, Tabs, Tag } from 'antd'
+import dayjs from 'dayjs'
 import {
   cancelJob,
   controlAllJobs,
@@ -83,35 +89,104 @@ export function JobsPage(): React.JSX.Element {
   })
   const pendingAction = pendingActionKey(itemControl, bulkControl, priority)
 
+  const totalCount = jobs.data?.length ?? 0
+  const activeCount =
+    jobs.data?.filter((j) => ['pending', 'running'].includes(j.status)).length ?? 0
+  const runningCount = jobs.data?.filter((j) => j.status === 'running').length ?? 0
+  const pausedCount =
+    jobs.data?.filter((j) => j.status === 'pending' && Boolean(j.paused)).length ?? 0
+  const completedCount = jobs.data?.filter((j) => j.status === 'completed').length ?? 0
+  const failedCount = jobs.data?.filter((j) => j.status === 'failed').length ?? 0
+  const overallPercent = totalCount ? Math.round((completedCount / totalCount) * 100) : 0
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="px-6 py-6 sm:px-8 sm:py-8">
       <PageHeader
-        title="后台任务"
-        description="域名共享抓取队列与限速；不同域名保持并发，关闭 UI 不会中断任务。"
-        action={
-          <div className="flex gap-2">
-            <ConfirmedActionButton
-              title="暂停全部活动任务？"
-              description="已经发出的页面请求会完成，所有域名将在下一批次暂停。"
-              label="全部暂停"
-              icon={<PauseOutlined />}
-              type="default"
-              size="middle"
-              loading={bulkControl.isPending && bulkControl.variables.action === 'pause-all'}
-              onConfirm={() => bulkControl.mutate({ action: 'pause-all' })}
+        title="任务中心"
+        description="按域名共享抓取队列与限速；不同域名并发执行，关闭浏览器后台仍持续推进。"
+      />
+
+      <Card size="small" className="mb-4 shadow-xs border-[var(--ant-color-border-secondary)]">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Progress
+              type="circle"
+              size={52}
+              percent={overallPercent}
+              format={(p) => <span className="text-xs font-semibold">{p}%</span>}
+              status={
+                overallPercent === 100 && failedCount === 0
+                  ? 'success'
+                  : failedCount > 0 && activeCount === 0
+                    ? 'exception'
+                    : runningCount > 0
+                      ? 'active'
+                      : 'normal'
+              }
+              strokeWidth={6}
             />
-            <ConfirmedActionButton
-              title="恢复全部暂停任务？"
-              description="任务会继续使用原任务 ID 和已保存的检查点。"
-              label="全部恢复"
-              icon={<CaretRightOutlined />}
-              type="default"
-              size="middle"
-              loading={bulkControl.isPending && bulkControl.variables.action === 'resume-all'}
-              onConfirm={() => bulkControl.mutate({ action: 'resume-all' })}
-            />
+            <div>
+              <div className="text-sm font-semibold">任务整体完成度 {overallPercent}%</div>
+              <div className="mt-0.5 text-xs text-[var(--ant-color-text-secondary)]">
+                共 {totalCount} 个任务 · {runningCount} 运行中 · {pausedCount} 已暂停 ·{' '}
+                {completedCount} 已完成 · {failedCount} 失败
+              </div>
+            </div>
           </div>
+
+          {/* 右侧操作栏：仅在有可操作任务时按需显示对应按钮，全部完成时展示完成徽标 */}
+          <div className="flex items-center gap-2">
+            {activeCount > 0 && (
+              <ConfirmedActionButton
+                title="暂停全部活动任务？"
+                description="已经发出的页面请求会完成，所有域名将在下一批次暂停。"
+                label="全部暂停"
+                icon={<PauseOutlined />}
+                type="default"
+                size="middle"
+                loading={bulkControl.isPending && bulkControl.variables.action === 'pause-all'}
+                onConfirm={() => bulkControl.mutate({ action: 'pause-all' })}
+              />
+            )}
+            {pausedCount > 0 && (
+              <ConfirmedActionButton
+                title="恢复全部暂停任务？"
+                description="任务会继续使用原任务 ID 和已保存的检查点。"
+                label="全部恢复"
+                icon={<CaretRightOutlined />}
+                type="default"
+                size="middle"
+                loading={bulkControl.isPending && bulkControl.variables.action === 'resume-all'}
+                onConfirm={() => bulkControl.mutate({ action: 'resume-all' })}
+              />
+            )}
+            {totalCount > 0 && activeCount === 0 && pausedCount === 0 && (
+              <Tag
+                color="success"
+                icon={<CheckCircleOutlined />}
+                className="m-0! px-2.5 py-1 text-xs"
+              >
+                全部任务已就绪
+              </Tag>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      <Tabs
+        activeKey={filters.status}
+        onChange={(status) =>
+          setFilters((current) => ({ ...current, status: status as JobViewStatus | 'all' }))
         }
+        items={[
+          { key: 'all', label: `全部 (${totalCount})` },
+          { key: 'running', label: `运行中 (${runningCount})` },
+          { key: 'pending', label: '等待中' },
+          { key: 'paused', label: `已暂停 (${pausedCount})` },
+          { key: 'completed', label: `已完成 (${completedCount})` },
+          { key: 'failed', label: `失败 (${failedCount})` }
+        ]}
+        className="mb-3"
       />
       <JobFiltersBar value={filters} onChange={setFilters} />
       <AsyncState
@@ -144,11 +219,11 @@ export function JobsPage(): React.JSX.Element {
             ))}
           </div>
         ) : (
-          <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] py-16">
+          <Card className="py-16">
             <Empty
               description={jobs.data?.length ? '没有符合筛选条件的任务' : '任务队列还是空的'}
             />
-          </div>
+          </Card>
         )}
       </AsyncState>
     </div>
@@ -161,31 +236,31 @@ function JobFiltersBar(props: {
 }): React.JSX.Element {
   const update = (patch: Partial<JobFilters>): void => props.onChange({ ...props.value, ...patch })
   return (
-    <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] mb-4 grid gap-3 p-3 sm:grid-cols-[minmax(12rem,1fr)_11rem_10rem_auto]">
-      <Input
-        allowClear
-        prefix={<SearchOutlined className="text-[var(--ant-color-text-secondary)]" />}
-        placeholder="筛选域名、文档或任务 ID"
-        value={props.value.query}
-        onChange={(event) => update({ query: event.target.value })}
-      />
-      <input
-        aria-label="批次日期"
-        type="date"
-        value={props.value.date}
-        onChange={(event) => update({ date: event.target.value })}
-        className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] h-8 rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] px-3 text-sm text-[var(--ant-color-text)]"
-      />
-      <Select<JobViewStatus | 'all'>
-        aria-label="任务状态"
-        value={props.value.status}
-        options={statusOptions}
-        onChange={(status) => update({ status })}
-      />
-      <Button onClick={() => props.onChange({ query: '', date: '', status: 'all' })}>
-        清除筛选
-      </Button>
-    </div>
+    <Card size="small" className="mb-4">
+      <div className="grid gap-3 sm:grid-cols-[minmax(12rem,1fr)_12rem_10rem_auto]">
+        <Input
+          allowClear
+          prefix={<SearchOutlined className="text-[var(--ant-color-text-secondary)]" />}
+          placeholder="筛选域名、文档或任务 ID"
+          value={props.value.query}
+          onChange={(event) => update({ query: event.target.value })}
+        />
+        <DatePicker
+          placeholder="按日期筛选"
+          value={props.value.date ? dayjs(props.value.date) : null}
+          onChange={(_, dateStr) => update({ date: typeof dateStr === 'string' ? dateStr : '' })}
+        />
+        <Select<JobViewStatus | 'all'>
+          aria-label="任务状态"
+          value={props.value.status}
+          options={statusOptions}
+          onChange={(status) => update({ status })}
+        />
+        <Button onClick={() => props.onChange({ query: '', date: '', status: 'all' })}>
+          清除筛选
+        </Button>
+      </div>
+    </Card>
   )
 }
 

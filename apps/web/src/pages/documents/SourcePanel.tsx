@@ -30,9 +30,9 @@ export function SourcePanel(props: SourcePanelProps): React.JSX.Element {
 
   return (
     <>
-      <div className="flex flex-col overflow-hidden border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] h-full border-r">
+      <div className="flex h-full flex-col overflow-hidden border-r border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)]">
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
-          <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
+          <span className="text-xs font-semibold text-[var(--ant-color-text-secondary)]">
             文档来源
           </span>
           <Button
@@ -87,7 +87,7 @@ function SourceGroup(props: {
 }): React.JSX.Element {
   return (
     <section className="mb-4">
-      <div className="mb-1 px-2 text-[11px] font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
+      <div className="mb-1 px-2 text-xs font-semibold text-[var(--ant-color-text-secondary)]">
         {props.label}
       </div>
       {props.sources.map((source) => {

@@ -1,9 +1,9 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Form, Input, InputNumber, Modal, Popconfirm, Segmented, Select } from 'antd'
-import { SyncOutlined } from '@ant-design/icons'
+import { useEffect, useState } from 'react'
+import { GithubOutlined, GlobalOutlined, SyncOutlined } from '@ant-design/icons'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { App, Badge, Button, Form, Modal, Popconfirm, Segmented, Tabs } from 'antd'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
-  DOCUMENT_SOURCE_LIMITS,
   normalizeCronSchedule,
   type CreateSourceInput,
   type CreateSourceResult,
@@ -12,13 +12,19 @@ import {
   type SourceKind,
   type UpdateSourceInput
 } from '@loci/shared'
+import { getLocalBrowserStatus } from '@/api/browser'
 import { enqueueSourceSync } from '@/api/jobs'
 import { createSource, deleteSource, updateSource } from '@/api/sources'
+import { LibraryAdvancedFields } from '@/components/library/LibraryAdvancedFields'
 import {
-  LibraryCoreFields,
+  LibraryBasicFields,
   type LibraryCoreFormValue
 } from '@/components/library/LibraryCoreFields'
-import { getLocalLibraryRemovalWarning } from '@/components/library/library-form'
+import {
+  getAdvancedSettingsSummary,
+  getLocalLibraryRemovalWarning,
+  getNewSourceFetchMode
+} from '@/components/library/library-form'
 
 interface SourceFormValue extends LibraryCoreFormValue {
   kind: SourceKind
@@ -36,15 +42,49 @@ interface SourceFormModalProps {
   onSaved: () => void
 }
 
+const ADVANCED_FIELD_NAMES = [
+  'pageLimit',
+  'schedule',
+  'mode',
+  'excludePathPattern',
+  'httpConcurrency',
+  'browserConcurrency',
+  'githubArchiveLimitMb',
+  'githubMarkdownLimitMb'
+]
+
 export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element {
   const { message, modal } = App.useApp()
   const client = useQueryClient()
   const [form] = Form.useForm<SourceFormValue>()
+  const [activeTab, setActiveTab] = useState<string>('basic')
   const kind = Form.useWatch('kind', form) ?? 'web'
+  const formValues = Form.useWatch([], form)
+  const browserStatus = useQuery({
+    queryKey: ['local-browser'],
+    queryFn: getLocalBrowserStatus,
+    enabled: props.editing === 'new',
+    staleTime: 30_000
+  })
+
+  const isEditing = props.editing !== null && props.editing !== 'new'
+  const customSettingsCount = getAdvancedSettingsSummary(
+    formValues ?? (isEditing ? props.editing : null)
+  )
+
+  useEffect(() => {
+    if (props.editing !== 'new' || browserStatus.data?.installed !== false) return
+    if (form.isFieldTouched('mode')) return
+    if (form.getFieldValue('mode') === DOCUMENT_SOURCE_DEFAULTS.mode) {
+      form.setFieldValue('mode', getNewSourceFetchMode(false))
+    }
+  }, [browserStatus.data?.installed, form, props.editing])
+
   const refresh = (): void => {
     void client.invalidateQueries({ queryKey: ['sources'] })
     void client.invalidateQueries({ queryKey: ['jobs'] })
   }
+
   const save = useMutation({
     mutationFn: async (value: SourceFormValue) => {
       const input = toInput(value)
@@ -70,8 +110,22 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
     },
     onError: (error: Error) => void message.error(error.message)
   })
+
   const submit = async (): Promise<void> => {
-    const value = await form.validateFields()
+    let value: SourceFormValue
+    try {
+      value = await form.validateFields()
+    } catch (err: unknown) {
+      const errorInfo = err as { errorFields?: Array<{ name: (string | number)[] }> }
+      if (errorInfo.errorFields?.length) {
+        const hasAdvancedError = errorInfo.errorFields.some((f) =>
+          ADVANCED_FIELD_NAMES.includes(String(f.name[0]))
+        )
+        setActiveTab(hasAdvancedError ? 'advanced' : 'basic')
+      }
+      return
+    }
+
     const current = props.editing
     if (current !== 'new' && current) {
       const input = toInput(value)
@@ -98,9 +152,10 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
 
   return (
     <Modal
-      title={props.editing === 'new' ? '添加文档来源' : '编辑文档来源'}
+      title={props.editing === 'new' ? '添加文档库' : '编辑文档库'}
       open={props.editing !== null}
-      okText="保存"
+      width={600}
+      okText={props.editing === 'new' ? '添加并同步' : '保存修改'}
       cancelText="取消"
       confirmLoading={save.isPending}
       onCancel={props.onClose}
@@ -108,65 +163,80 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
       destroyOnHidden
       afterOpenChange={(open) => {
         if (!open) return
+        setActiveTab('basic')
         form.setFieldsValue(
-          props.editing === 'new' || !props.editing ? emptyForm : fromSource(props.editing)
+          props.editing === 'new' || !props.editing
+            ? createEmptyForm(browserStatus.data?.installed)
+            : fromSource(props.editing)
         )
       }}
     >
       <Form form={form} layout="vertical" className="pt-2" requiredMark="optional">
-        <Form.Item name="kind" label="来源类型">
+        <Form.Item name="kind" label="来源类型" className="mb-4">
           <Segmented
             block
             options={[
-              { value: 'web', label: '普通站点' },
-              { value: 'github', label: 'GitHub 仓库' }
+              {
+                value: 'web',
+                label: (
+                  <span className="flex items-center justify-center gap-1.5 py-1">
+                    <GlobalOutlined />
+                    普通站点
+                  </span>
+                )
+              },
+              {
+                value: 'github',
+                label: (
+                  <span className="flex items-center justify-center gap-1.5 py-1">
+                    <GithubOutlined />
+                    GitHub 仓库
+                  </span>
+                )
+              }
             ]}
           />
         </Form.Item>
-        <LibraryCoreFields autoFocusUrl suggestName={props.editing === 'new'} kind={kind} />
-        {kind === 'web' ? (
-          <>
-            <Form.Item
-              name="mode"
-              label="页面获取方式"
-              extra="普通站点会先自动检查 llms.txt 和 OpenAPI；这里只控制网页使用 HTTP 还是浏览器读取。"
-            >
-              <Select
-                options={[
-                  { value: 'auto', label: '自动检测' },
-                  { value: 'http', label: 'HTTP' },
-                  { value: 'browser', label: '浏览器' }
-                ]}
-              />
-            </Form.Item>
-            <Form.Item
-              name="excludePathPattern"
-              label="排除路径正则（可选）"
-              extra="新增或修改后，保存会立即删除匹配页面的正文和搜索索引。"
-              rules={[
-                {
-                  max: DOCUMENT_SOURCE_LIMITS.excludePathPatternLength.max,
-                  message: '正则过长'
-                }
-              ]}
-            >
-              <Input placeholder="^/(zh|de|fr)(?:/|$)" />
-            </Form.Item>
-            <div className="grid grid-cols-2 gap-3">
-              <OptionalNumberField name="httpConcurrency" label="HTTP 并发覆盖" />
-              <OptionalNumberField name="browserConcurrency" label="浏览器并发覆盖" />
-            </div>
-          </>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            <OptionalNumberField name="githubArchiveLimitMb" label="GitHub ZIP 上限（MB）" size />
-            <OptionalNumberField
-              name="githubMarkdownLimitMb"
-              label="GitHub Markdown 上限（MB）"
-              size
-            />
-          </div>
-        )}
+
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'basic',
+              label: '基础设置',
+              children: (
+                <div className="pt-1">
+                  <LibraryBasicFields
+                    autoFocusUrl
+                    suggestName={props.editing === 'new'}
+                    kind={kind}
+                  />
+                </div>
+              )
+            },
+            {
+              key: 'advanced',
+              label: (
+                <span className="flex items-center gap-1.5">
+                  高级设置
+                  {customSettingsCount > 0 && (
+                    <Badge
+                      count={customSettingsCount}
+                      size="small"
+                      color="var(--ant-color-primary)"
+                    />
+                  )}
+                </span>
+              ),
+              children: (
+                <div className="pt-1">
+                  <LibraryAdvancedFields kind={kind} />
+                </div>
+              )
+            }
+          ]}
+        />
       </Form>
     </Modal>
   )
@@ -253,13 +323,15 @@ export function SourceActions(props: SourceActionsProps): React.JSX.Element {
   )
 }
 
-const emptyForm: SourceFormValue = {
-  name: '',
-  url: '',
-  kind: 'web',
-  mode: DOCUMENT_SOURCE_DEFAULTS.mode,
-  pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
-  scopePath: DOCUMENT_SOURCE_DEFAULTS.scopePath
+function createEmptyForm(browserInstalled?: boolean): SourceFormValue {
+  return {
+    name: '',
+    url: '',
+    kind: 'web',
+    mode: getNewSourceFetchMode(browserInstalled),
+    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
+    scopePath: DOCUMENT_SOURCE_DEFAULTS.scopePath
+  }
 }
 
 function fromSource(source: DocumentSource): SourceFormValue {
@@ -286,8 +358,8 @@ function toInput(value: SourceFormValue): CreateSourceInput | UpdateSourceInput 
     url: value.url.trim(),
     kind: value.kind,
     mode: github ? DOCUMENT_SOURCE_DEFAULTS.mode : value.mode,
-    pageLimit: value.pageLimit,
-    scopePath: github ? DOCUMENT_SOURCE_DEFAULTS.scopePath : value.scopePath.trim() || '/',
+    pageLimit: value.pageLimit ?? DOCUMENT_SOURCE_DEFAULTS.pageLimit,
+    scopePath: github ? DOCUMENT_SOURCE_DEFAULTS.scopePath : value.scopePath?.trim() || '/',
     excludePathPattern: github ? null : value.excludePathPattern?.trim() || null,
     schedule: normalizeCronSchedule(value.schedule),
     httpConcurrency: github ? null : (value.httpConcurrency ?? null),
@@ -295,19 +367,4 @@ function toInput(value: SourceFormValue): CreateSourceInput | UpdateSourceInput 
     githubArchiveLimitMb: github ? (value.githubArchiveLimitMb ?? null) : null,
     githubMarkdownLimitMb: github ? (value.githubMarkdownLimitMb ?? null) : null
   }
-}
-
-function OptionalNumberField(props: {
-  name: keyof SourceFormValue
-  label: string
-  size?: boolean
-}): React.JSX.Element {
-  const limits = props.size
-    ? DOCUMENT_SOURCE_LIMITS.githubSizeMb
-    : DOCUMENT_SOURCE_LIMITS.concurrency
-  return (
-    <Form.Item name={props.name} label={props.label}>
-      <InputNumber {...limits} placeholder="继承全局设置" className="w-full" />
-    </Form.Item>
-  )
 }

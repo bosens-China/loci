@@ -1,59 +1,73 @@
-import { CloudServerOutlined, LockOutlined } from '@ant-design/icons'
-import { Button, Form, Input } from 'antd'
+import { CloudServerOutlined, LockOutlined, UserOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Form, Input, Typography } from 'antd'
 import type { CloudAdminLoginInput } from '@loci/shared'
 
+/** 管理员登录面板：远程 Server 鉴权与登录表单。 */
 export function AdminLoginPanel(props: {
   serverUrl: string
   submitting: boolean
   onSubmit: (input: CloudAdminLoginInput) => void
 }): React.JSX.Element {
   return (
-    <div className="mx-auto grid min-h-[560px] max-w-5xl grid-cols-[1.1fr_.9fr] overflow-hidden rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] shadow-sm">
-      <section className="flex flex-col justify-between bg-[var(--ant-color-fill-quaternary)] p-10">
-        <div>
-          <div className="mb-12 flex items-center gap-3 text-[var(--ant-color-text-secondary)]">
-            <CloudServerOutlined className="text-xl text-[var(--ant-color-primary)]" />
-            <span className="text-xs font-700 tracking-[.14em] uppercase">Loci control plane</span>
-          </div>
-          <h1 className="m-0 max-w-md text-4xl leading-tight">管理公开文档的发布边界</h1>
-          <p className="mt-5 max-w-md text-sm leading-7 text-[var(--ant-color-text-secondary)]">
-            本地文档不会上传。这里仅维护目标 Server 上的公开文档库、同步计划与发布任务。
-          </p>
+    <div className="mx-auto max-w-lg py-8">
+      <Card>
+        <div className="text-center">
+          <CloudServerOutlined className="text-3xl text-[var(--ant-color-primary)]" />
+          <Typography.Title level={3} className="mt-3! mb-1!">
+            Server 管理员登录
+          </Typography.Title>
+          <Typography.Paragraph type="secondary" className="mb-4! text-xs">
+            本地文档不会上传。登录仅用于维护目标 Server 上的公开文档库与发布任务。
+          </Typography.Paragraph>
         </div>
-        <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] p-4">
-          <div className="text-[10px] font-700 tracking-[.16em] text-[var(--ant-color-text-secondary)] uppercase">
-            目标 Server
-          </div>
-          <div className="mt-2 break-all font-mono text-sm">{props.serverUrl}</div>
-        </div>
-      </section>
-      <section className="flex items-center p-10">
-        <div className="w-full">
-          <h2 className="m-0 text-2xl">管理员登录</h2>
-          <p className="mb-7 mt-2 text-sm text-[var(--ant-color-text-secondary)]">
-            密码只用于本次登录，远程 Token 仅保存在本机 Runtime 内存。
-          </p>
-          <Form<CloudAdminLoginInput>
-            layout="vertical"
-            initialValues={{ username: 'admin' }}
-            onFinish={props.onSubmit}
+
+        <Alert
+          type="info"
+          showIcon
+          className="mb-6 text-xs"
+          title={
+            <div className="flex items-center justify-between gap-2">
+              <span>目标 Server</span>
+              <span className="font-mono">{props.serverUrl}</span>
+            </div>
+          }
+        />
+
+        <Form<CloudAdminLoginInput>
+          layout="vertical"
+          initialValues={{ username: 'admin' }}
+          onFinish={props.onSubmit}
+        >
+          <Form.Item
+            name="username"
+            label="管理员账号"
+            rules={[{ required: true, message: '请输入账号' }]}
           >
-            <Form.Item name="username" label="管理员账号" rules={[{ required: true }]}>
-              <Input size="large" autoComplete="username" />
-            </Form.Item>
-            <Form.Item name="password" label="密码" rules={[{ required: true }]}>
-              <Input.Password
-                size="large"
-                prefix={<LockOutlined />}
-                autoComplete="current-password"
-              />
-            </Form.Item>
-            <Button type="primary" htmlType="submit" size="large" block loading={props.submitting}>
-              登录并进入管理界面
-            </Button>
-          </Form>
-        </div>
-      </section>
+            <Input size="large" prefix={<UserOutlined />} autoComplete="username" />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="密码"
+            rules={[{ required: true, message: '请输入密码' }]}
+          >
+            <Input.Password
+              size="large"
+              prefix={<LockOutlined />}
+              autoComplete="current-password"
+            />
+          </Form.Item>
+          <Button
+            type="primary"
+            htmlType="submit"
+            size="large"
+            block
+            loading={props.submitting}
+            className="mt-2"
+          >
+            登录并进入管理界面
+          </Button>
+        </Form>
+      </Card>
     </div>
   )
 }

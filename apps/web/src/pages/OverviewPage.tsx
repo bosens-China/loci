@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { Button, Card, Empty, Statistic, Typography } from 'antd'
 import { listJobs } from '@/api/jobs'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusPill } from '@/components/StatusPill'
 
+/** 概览页：核心指标统计、近期任务记录与定时同步计划。 */
 export function OverviewPage(): React.JSX.Element {
   const navigate = useNavigate()
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
@@ -17,104 +19,120 @@ export function OverviewPage(): React.JSX.Element {
   const scheduled =
     sources.data?.filter((source) => source.schedule || source.cloud?.autoSync) ?? []
   const documentCount = sources.data?.reduce((count, source) => count + source.pages, 0) ?? 0
+  const recentJobs = (jobs.data ?? []).slice(0, 8)
+  const recentSchedules = scheduled.slice(0, 8)
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="px-6 py-6 sm:px-8 sm:py-8">
       <PageHeader title="概览" />
       <AsyncState loading={sources.isLoading || jobs.isLoading} error={error}>
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
-            label="文档来源"
+            title="文档来源"
             value={sources.data?.length ?? 0}
             note={`${scheduled.length} 个定时计划`}
             onClick={() => void navigate({ to: '/documents' })}
           />
           <MetricCard
-            label="已收录页面"
+            title="已收录页面"
             value={documentCount}
             note="本机 SQLite 索引"
             onClick={() => void navigate({ to: '/documents' })}
           />
           <MetricCard
-            label="活动任务"
+            title="活动任务"
             value={active.length}
             note="支持重启后恢复"
-            accent={active.length > 0}
+            contentStyle={active.length > 0 ? { color: 'var(--ant-color-primary)' } : undefined}
             onClick={() => void navigate({ to: '/jobs' })}
           />
           <MetricCard
-            label="需要处理"
+            title="需要处理"
             value={attention}
             note="失败或需关注"
-            warn={attention > 0}
+            contentStyle={attention > 0 ? { color: 'var(--ant-color-error)' } : undefined}
             onClick={() => void navigate({ to: '/documents' })}
           />
         </section>
 
         <section className="mt-6 grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-          <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] overflow-hidden">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
-              <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
-                最近任务
-              </span>
-              <button
-                type="button"
-                className="text-xs text-[var(--ant-color-primary)] hover:underline"
-                onClick={() => void navigate({ to: '/jobs' })}
-              >
+          <Card
+            title="最近任务"
+            extra={
+              <Button type="link" size="small" onClick={() => void navigate({ to: '/jobs' })}>
                 查看全部
-              </button>
-            </div>
-            <div className="max-h-96 divide-y divide-[var(--ant-color-border-secondary)] overflow-y-auto px-4">
-              {(jobs.data ?? []).slice(0, 8).map((job) => {
-                const source = sources.data?.find((item) => item.id === job.sourceId)
-                return (
-                  <div key={job.id} className="flex items-center justify-between gap-4 py-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-650">{source?.name ?? '来源同步'}</div>
-                      <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
-                        {job.sourceId}
-                      </div>
-                    </div>
-                    <StatusPill status={job.status} />
-                  </div>
-                )
-              })}
-              {jobs.data?.length === 0 && (
-                <p className="py-10 text-center text-sm text-[var(--ant-color-text-secondary)]">
-                  还没有执行过任务
-                </p>
+              </Button>
+            }
+            styles={{ body: { padding: '8px 0' } }}
+          >
+            <div className="max-h-96 overflow-y-auto px-4">
+              {recentJobs.length ? (
+                <ul className="m-0 list-none p-0">
+                  {recentJobs.map((job) => {
+                    const source = sources.data?.find((item) => item.id === job.sourceId)
+                    return (
+                      <li
+                        key={job.id}
+                        className="flex items-center gap-3 border-b border-[var(--ant-color-split)] py-3 last:border-b-0"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <Typography.Text strong className="block truncate">
+                            {source?.name ?? '来源同步'}
+                          </Typography.Text>
+                          <Typography.Text
+                            type="secondary"
+                            className="block truncate font-mono text-xs"
+                          >
+                            {job.sourceId}
+                          </Typography.Text>
+                        </div>
+                        <StatusPill status={job.status} />
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <Empty className="py-8" description="还没有执行过任务" />
               )}
             </div>
-          </div>
+          </Card>
 
-          <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] overflow-hidden">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
-              <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
-                定时计划
-              </span>
-            </div>
-            <div className="max-h-96 overflow-y-auto p-4">
-              {scheduled.slice(0, 8).map((source) => (
-                <button
-                  key={source.id}
-                  type="button"
-                  className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] mb-2 block w-full rounded-lg px-3 py-2.5 text-left hover:bg-[var(--ant-color-fill-quaternary)]"
-                  onClick={() => void navigate({ to: '/documents', search: { source: source.id } })}
-                >
-                  <div className="text-sm font-650">{source.name}</div>
-                  <div className="mt-0.5 font-mono text-[11px] text-[var(--ant-color-text-secondary)]">
-                    {source.cloud?.autoSync ? '每日检查' : source.schedule}
-                  </div>
-                </button>
-              ))}
-              {scheduled.length === 0 && (
-                <p className="py-10 text-center text-sm text-[var(--ant-color-text-secondary)]">
-                  尚未设置定时同步
-                </p>
+          <Card title="定时计划" styles={{ body: { padding: '8px 0' } }}>
+            <div className="max-h-96 overflow-y-auto px-4">
+              {recentSchedules.length ? (
+                <ul className="m-0 list-none p-0">
+                  {recentSchedules.map((source) => (
+                    <li
+                      key={source.id}
+                      className="border-b border-[var(--ant-color-split)] last:border-b-0"
+                    >
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-center py-3 text-left transition-colors hover:bg-[var(--ant-color-fill-quaternary)]"
+                        onClick={() =>
+                          void navigate({ to: '/documents', search: { source: source.id } })
+                        }
+                      >
+                        <div className="min-w-0 flex-1">
+                          <Typography.Text strong className="block truncate">
+                            {source.name}
+                          </Typography.Text>
+                          <Typography.Text
+                            type="secondary"
+                            className="block truncate font-mono text-xs"
+                          >
+                            {source.cloud?.autoSync ? '每日检查' : source.schedule}
+                          </Typography.Text>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Empty className="py-8" description="尚未设置定时同步" />
               )}
             </div>
-          </div>
+          </Card>
         </section>
       </AsyncState>
     </div>
@@ -122,40 +140,22 @@ export function OverviewPage(): React.JSX.Element {
 }
 
 function MetricCard(props: {
-  label: string
+  title: string
   value: number
   note: string
-  accent?: boolean
-  warn?: boolean
+  contentStyle?: React.CSSProperties
   onClick: () => void
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      className={`focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ant-color-primary)] rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] p-5 text-left transition-transform hover:-translate-y-0.5 ${
-        props.accent
-          ? 'bg-[var(--ant-color-primary)] text-[var(--ant-color-text-light-solid)]'
-          : props.warn
-            ? 'ring-1 ring-[var(--ant-color-warning)]'
-            : ''
-      }`}
-    >
-      <div
-        className={`text-xs font-650 tracking-wide uppercase ${
-          props.accent
-            ? 'text-[var(--ant-color-text-light-solid)]'
-            : 'text-[var(--ant-color-text-secondary)]'
-        }`}
-      >
-        {props.label}
-      </div>
-      <div className="mt-2 text-4xl font-600">{props.value}</div>
-      <div
-        className={`mt-1.5 text-xs ${props.accent ? 'text-[var(--ant-color-text-light-solid)]' : 'text-[var(--ant-color-text-secondary)]'}`}
-      >
+    <Card hoverable className="cursor-pointer" onClick={props.onClick}>
+      <Statistic
+        title={<Typography.Text type="secondary">{props.title}</Typography.Text>}
+        value={props.value}
+        styles={props.contentStyle ? { content: props.contentStyle } : undefined}
+      />
+      <Typography.Text type="secondary" className="mt-1 block text-xs">
         {props.note}
-      </div>
-    </button>
+      </Typography.Text>
+    </Card>
   )
 }

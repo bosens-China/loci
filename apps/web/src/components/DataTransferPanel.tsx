@@ -1,10 +1,13 @@
 import { useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Popconfirm } from 'antd'
+import { App, Button, Card, Popconfirm, Typography } from 'antd'
 import { DownloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { exportBackup, importBackup, readBackupFile } from '@/api/data-transfer'
 
-export function DataTransferPanel(): React.JSX.Element {
+/** 备份与恢复面板：提供全量数据 ZIP 导出与导入能力。 */
+export function DataTransferPanel({
+  className = ''
+}: { className?: string } = {}): React.JSX.Element {
   const { message } = App.useApp()
   const queryClient = useQueryClient()
   const input = useRef<HTMLInputElement>(null)
@@ -38,17 +41,12 @@ export function DataTransferPanel(): React.JSX.Element {
   }
 
   return (
-    <section className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] mt-5 overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-4 py-2.5">
-        <span className="text-xs font-650 tracking-wide text-[var(--ant-color-text-secondary)] uppercase">
-          备份与恢复
-        </span>
-      </div>
-      <div className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2">
-        <TransferAction
-          title="下载完整备份"
-          description="ZIP 内含 index.json 校验清单及按数据域拆分的 JSON，只保存到你选择的浏览器下载位置。"
-        >
+    <Card title="备份与恢复" className={className}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card type="inner" title="下载完整备份">
+          <Typography.Paragraph type="secondary" className="text-xs leading-5">
+            ZIP 内含 index.json 校验清单及按数据域拆分的 JSON，只保存到你选择的浏览器下载位置。
+          </Typography.Paragraph>
           <Button
             icon={<DownloadOutlined />}
             loading={exporting.isPending}
@@ -56,12 +54,12 @@ export function DataTransferPanel(): React.JSX.Element {
           >
             导出 ZIP
           </Button>
-        </TransferAction>
-        <TransferAction
-          title="从备份恢复"
-          description="恢复会替换当前本地库。正在同步时会拒绝操作；需要持久后台能力时会立即确保无 HTTP 的常驻 worker 可用。"
-          danger
-        >
+        </Card>
+        <Card type="inner" title="从备份恢复">
+          <Typography.Paragraph type="secondary" className="text-xs leading-5">
+            恢复会替换当前本地库。正在同步时会拒绝操作；需要持久后台能力时会立即确保无 HTTP 的常驻
+            worker 可用。
+          </Typography.Paragraph>
           <Popconfirm
             title="替换当前本地库？"
             description="建议先下载一份当前备份。此操作无法在界面中撤销。"
@@ -76,33 +74,14 @@ export function DataTransferPanel(): React.JSX.Element {
           </Popconfirm>
           <input
             ref={input}
-            className="hidden"
             type="file"
             accept="application/zip,.zip"
             onChange={onFile}
+            style={{ display: 'none' }}
           />
-        </TransferAction>
+        </Card>
       </div>
-    </section>
-  )
-}
-
-function TransferAction(props: {
-  title: string
-  description: string
-  danger?: boolean
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <div
-      className={`rounded-xl border-l-3 bg-[var(--ant-color-fill-quaternary)] p-4 ${props.danger ? 'border-[var(--ant-color-error)]' : 'border-[var(--ant-color-primary)]'}`}
-    >
-      <h3 className="m-0 text-sm font-700">{props.title}</h3>
-      <p className="mb-4 mt-2 text-xs leading-5 text-[var(--ant-color-text-secondary)]">
-        {props.description}
-      </p>
-      {props.children}
-    </div>
+    </Card>
   )
 }
 

@@ -18,6 +18,7 @@ export function ConfirmedActionButton(props: {
       description={props.description}
       okText={props.label}
       cancelText="返回"
+      disabled={props.disabled}
       okButtonProps={props.danger ? { danger: true } : undefined}
       onConfirm={props.onConfirm}
     >

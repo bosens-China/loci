@@ -1,13 +1,31 @@
 import { useMemo } from 'react'
-import type { HostnameCrawlPolicy, SaveHostnameCrawlPolicyInput } from '@loci/shared'
+import {
+  APP_SETTINGS_LIMITS,
+  isValidBatchIntervalRange,
+  isValidBatchIntervalSeconds,
+  type HostnameCrawlPolicy,
+  type SaveHostnameCrawlPolicyInput
+} from '@loci/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, AutoComplete, Button, Empty, Form, InputNumber, Popconfirm } from 'antd'
+import {
+  App,
+  AutoComplete,
+  Button,
+  Card,
+  Empty,
+  Form,
+  InputNumber,
+  Popconfirm,
+  Tag,
+  Typography
+} from 'antd'
 import {
   deleteHostnameCrawlPolicy,
   listHostnameCrawlPolicies,
   saveHostnameCrawlPolicy
 } from '@/api/settings'
 import { listSources } from '@/api/sources'
+import { AsyncState } from '@/components/AsyncState'
 
 const POLICY_KEY = ['settings', 'hostname-policies'] as const
 type PolicyForm = Omit<SaveHostnameCrawlPolicyInput, 'hostname'> & { hostname?: string }
@@ -19,6 +37,7 @@ interface HostnamePolicyPanelProps {
   deletePolicy?: (hostname: string) => Promise<unknown>
   hostnames?: string[]
   title?: string
+  className?: string
 }
 
 export function HostnamePolicyPanel({
@@ -27,7 +46,8 @@ export function HostnamePolicyPanel({
   savePolicy = saveHostnameCrawlPolicy,
   deletePolicy = deleteHostnameCrawlPolicy,
   hostnames,
-  title = '域名抓取限制'
+  title = '域名抓取限制',
+  className = 'mt-5'
 }: HostnamePolicyPanelProps = {}): React.JSX.Element {
   const { message, modal } = App.useApp()
   const client = useQueryClient()
@@ -68,6 +88,15 @@ export function HostnamePolicyPanel({
   const submit = (value: PolicyForm): void => {
     if (!value.hostname) return
     const input = normalizePolicy(value.hostname, value)
+    if (
+      !isValidBatchIntervalRange(
+        input.batchIntervalMinSeconds ?? 0,
+        input.batchIntervalMaxSeconds ?? 0
+      )
+    ) {
+      form.setFields([{ name: 'batchIntervalMaxSeconds', errors: ['最大值不能小于最小值'] }])
+      return
+    }
     modal.confirm({
       title: `保存 ${input.hostname} 的抓取策略？`,
       content: '修改会由运行中的任务在下一批次读取，无需重启后台 worker。',
@@ -78,64 +107,73 @@ export function HostnamePolicyPanel({
   }
 
   return (
-    <section className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] mt-5 p-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="m-0 text-base font-700">{title}</h2>
-          <p className="mb-0 mt-1 text-xs text-[var(--ant-color-text-secondary)]">
-            同一域名共享队列与策略；留空表示继承全局设置，只填一个间隔时按固定值执行。
-          </p>
-        </div>
-        <span className="rounded-full bg-[var(--ant-color-info-bg)] px-2.5 py-1 text-[11px] font-650 text-[var(--ant-color-primary)]">
-          实时生效
-        </span>
-      </div>
-      <Form<PolicyForm> form={form} layout="vertical" className="mt-4" onFinish={submit}>
+    <Card className={className} title={title} extra={<Tag color="processing">实时生效</Tag>}>
+      <Typography.Paragraph type="secondary" className="mb-4! text-xs">
+        同一域名共享队列与策略；留空表示继承全局设置，只填一个间隔时按固定值执行。
+      </Typography.Paragraph>
+      <Form<PolicyForm> form={form} layout="vertical" onFinish={submit}>
         <div className="grid gap-3 md:grid-cols-[minmax(12rem,1.4fr)_repeat(4,minmax(7rem,1fr))_auto] md:items-end">
           <Form.Item
             name="hostname"
             label="域名"
             rules={[{ required: true, message: '请选择或输入域名' }]}
+            className="mb-0"
           >
             <AutoComplete options={hostnameOptions} placeholder="docs.example.com" />
           </Form.Item>
-          <OptionalNumber name="httpConcurrency" label="HTTP 并发" min={1} max={20} />
-          <OptionalNumber name="browserConcurrency" label="浏览器并发" min={1} max={20} />
+          <OptionalNumber
+            name="httpConcurrency"
+            label="HTTP 并发"
+            {...APP_SETTINGS_LIMITS.concurrency}
+          />
+          <OptionalNumber
+            name="browserConcurrency"
+            label="浏览器并发"
+            {...APP_SETTINGS_LIMITS.concurrency}
+          />
           <OptionalNumber
             name="batchIntervalMinSeconds"
             label="间隔最小（秒）"
             min={0}
-            max={3000}
+            max={APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
+            batchInterval
           />
           <OptionalNumber
             name="batchIntervalMaxSeconds"
             label="间隔最大（秒）"
             min={0}
-            max={3000}
+            max={APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
+            batchInterval
           />
-          <Form.Item label=" ">
+          <Form.Item label=" " className="mb-0">
             <Button type="primary" htmlType="submit" loading={save.isPending}>
               保存策略
             </Button>
           </Form.Item>
         </div>
       </Form>
-      <div className="max-h-64 space-y-2 overflow-y-auto">
-        {policies.data?.length ? (
-          policies.data.map((policy) => (
-            <PolicyRow
-              key={policy.hostname}
-              policy={policy}
-              deleting={remove.isPending && remove.variables === policy.hostname}
-              onEdit={() => form.setFieldsValue(policy)}
-              onDelete={() => remove.mutate(policy.hostname)}
-            />
-          ))
-        ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无域名自定义策略" />
-        )}
-      </div>
-    </section>
+      <AsyncState
+        loading={policies.isLoading}
+        error={policies.error instanceof Error ? policies.error : null}
+        onRetry={() => void policies.refetch()}
+      >
+        <div className="max-h-64 space-y-2 overflow-y-auto pt-2">
+          {policies.data?.length ? (
+            policies.data.map((policy) => (
+              <PolicyRow
+                key={policy.hostname}
+                policy={policy}
+                deleting={remove.isPending && remove.variables === policy.hostname}
+                onEdit={() => form.setFieldsValue(policy)}
+                onDelete={() => remove.mutate(policy.hostname)}
+              />
+            ))
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无域名自定义策略" />
+          )}
+        </div>
+      </AsyncState>
+    </Card>
   )
 }
 
@@ -147,32 +185,34 @@ function PolicyRow(props: {
 }): React.JSX.Element {
   const policy = props.policy
   return (
-    <div className="grid gap-3 rounded-xl border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] px-3 py-3 sm:grid-cols-[minmax(12rem,1fr)_2fr_auto] sm:items-center">
-      <span className="truncate font-mono text-xs font-650 text-[var(--ant-color-text)]">
-        {policy.hostname}
-      </span>
-      <span className="text-xs text-[var(--ant-color-text-secondary)]">
-        HTTP {value(policy.httpConcurrency)} · 浏览器 {value(policy.browserConcurrency)} · 间隔{' '}
-        {intervalLabel(policy)}
-      </span>
-      <div className="flex justify-end gap-1">
-        <Button size="small" type="text" onClick={props.onEdit}>
-          编辑
-        </Button>
-        <Popconfirm
-          title="删除这个域名策略？"
-          description="后续批次将恢复使用文档库或全局设置。"
-          okText="删除"
-          cancelText="返回"
-          okButtonProps={{ danger: true }}
-          onConfirm={props.onDelete}
-        >
-          <Button size="small" type="text" danger loading={props.deleting}>
-            删除
+    <Card size="small" className="transition-colors hover:bg-[var(--ant-color-fill-quaternary)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Typography.Text strong className="font-mono text-xs">
+          {policy.hostname}
+        </Typography.Text>
+        <Typography.Text type="secondary" className="text-xs">
+          HTTP {value(policy.httpConcurrency)} · 浏览器 {value(policy.browserConcurrency)} · 间隔{' '}
+          {intervalLabel(policy)}
+        </Typography.Text>
+        <div className="flex justify-end gap-1">
+          <Button size="small" type="text" onClick={props.onEdit}>
+            编辑
           </Button>
-        </Popconfirm>
+          <Popconfirm
+            title="删除这个域名策略？"
+            description="后续批次将恢复使用文档库或全局设置。"
+            okText="删除"
+            cancelText="返回"
+            okButtonProps={{ danger: true }}
+            onConfirm={props.onDelete}
+          >
+            <Button size="small" type="text" danger loading={props.deleting}>
+              删除
+            </Button>
+          </Popconfirm>
+        </div>
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -181,9 +221,26 @@ function OptionalNumber(props: {
   label: string
   min: number
   max: number
+  batchInterval?: boolean
 }): React.JSX.Element {
   return (
-    <Form.Item name={props.name} label={props.label}>
+    <Form.Item
+      name={props.name}
+      label={props.label}
+      rules={
+        props.batchInterval
+          ? [
+              {
+                validator: (_: unknown, input: unknown) =>
+                  input === undefined || input === null || isValidBatchIntervalSeconds(input)
+                    ? Promise.resolve()
+                    : Promise.reject(new Error('请输入 0 或允许范围内的整数'))
+              }
+            ]
+          : undefined
+      }
+      className="mb-0"
+    >
       <InputNumber min={props.min} max={props.max} className="w-full" placeholder="继承" />
     </Form.Item>
   )

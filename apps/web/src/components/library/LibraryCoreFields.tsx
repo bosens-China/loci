@@ -1,18 +1,12 @@
-import { ClockCircleOutlined, LinkOutlined } from '@ant-design/icons'
-import { AutoComplete, Form, Input, InputNumber, Select, Typography } from 'antd'
+import { GithubOutlined, GlobalOutlined } from '@ant-design/icons'
+import { Form, Input, Select } from 'antd'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
   DOCUMENT_SOURCE_LIMITS,
   getSourceScopeOptions,
-  normalizeCronSchedule,
-  SCHEDULE_PRESETS,
   type SourceKind
 } from '@loci/shared'
-import {
-  getLibrarySchedulePreview,
-  getLibraryUrlDefaults,
-  validateLibrarySourceKind
-} from './library-form'
+import { getLibraryUrlDefaults, validateLibrarySourceKind } from './library-form'
 
 export interface LibraryCoreFormValue {
   name: string
@@ -22,24 +16,18 @@ export interface LibraryCoreFormValue {
   schedule?: string | null
 }
 
-/** 本地来源与 Server 文档库共用的基础抓取配置。 */
-export function LibraryCoreFields(props: {
+export interface LibraryBasicFieldsProps {
   autoFocusUrl?: boolean
   suggestName?: boolean
   kind?: SourceKind
-}): React.JSX.Element {
+}
+
+/** 本地来源与 Server 文档库共用的核心基础字段（URL、名称、收录范围）。 */
+export function LibraryBasicFields(props: LibraryBasicFieldsProps): React.JSX.Element {
   const form = Form.useFormInstance<LibraryCoreFormValue>()
   const url = Form.useWatch('url', form) ?? ''
-  const schedule = Form.useWatch('schedule', form)
   const scopeOptions = getSourceScopeOptions(url)
-  const scheduleRuns = getLibrarySchedulePreview(schedule)
-  const dateTime = new Intl.DateTimeFormat('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  const isGithub = props.kind === 'github'
 
   const applyUrlDefaults = (inputUrl: string): void => {
     form.setFieldsValue(
@@ -57,110 +45,83 @@ export function LibraryCoreFields(props: {
     <>
       <Form.Item
         name="url"
-        label={props.kind === 'github' ? 'GitHub 仓库 URL' : '起始页面 URL'}
+        label={isGithub ? 'GitHub 仓库 URL' : '起始页面 URL'}
+        extra={
+          isGithub
+            ? '支持任意公开 GitHub 仓库，自动读取默认分支 Markdown 文档。'
+            : '输入文档首页或任意子页面，自动探测 llms.txt、OpenAPI 或站点网页。'
+        }
         rules={[
-          { required: true, type: 'url', message: '请输入完整 URL' },
+          { required: true, whitespace: true, message: '请输入完整的 URL' },
           {
             validator: (_rule, value: string | undefined) => {
-              if (!value || !props.kind) return Promise.resolve()
-              const message = validateLibrarySourceKind(props.kind, value)
-              return message ? Promise.reject(new Error(message)) : Promise.resolve()
+              if (!value || !value.trim()) return Promise.resolve()
+              const trimmed = value.trim()
+              try {
+                const parsed = new URL(trimmed)
+                if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                  return Promise.reject(new Error('只支持 http:// 或 https:// 协议'))
+                }
+              } catch {
+                return Promise.reject(new Error('请输入合法的 URL（包含 http:// 或 https://）'))
+              }
+              if (props.kind) {
+                const message = validateLibrarySourceKind(props.kind, trimmed)
+                if (message) return Promise.reject(new Error(message))
+              }
+              return Promise.resolve()
             }
           }
         ]}
       >
         <Input
           autoFocus={props.autoFocusUrl}
-          prefix={<LinkOutlined />}
+          prefix={
+            isGithub ? (
+              <GithubOutlined className="text-[var(--ant-color-text-secondary)]" />
+            ) : (
+              <GlobalOutlined className="text-[var(--ant-color-text-secondary)]" />
+            )
+          }
           placeholder={
-            props.kind === 'github'
-              ? 'https://github.com/owner/repository'
-              : 'https://example.com/docs'
+            isGithub ? 'https://github.com/owner/repository' : 'https://example.com/docs'
           }
           onChange={(event) => applyUrlDefaults(event.currentTarget.value)}
           onBlur={(event) => applyUrlDefaults(event.currentTarget.value)}
         />
       </Form.Item>
+
       <Form.Item
         name="name"
-        label="名称"
+        label="文档库名称"
         rules={[
-          { required: true, message: '请输入名称' },
-          { max: DOCUMENT_SOURCE_LIMITS.nameLength.max, message: '名称过长' }
+          { required: true, whitespace: true, message: '请输入文档库名称' },
+          {
+            max: DOCUMENT_SOURCE_LIMITS.nameLength.max,
+            message: `名称长度不能超过 ${DOCUMENT_SOURCE_LIMITS.nameLength.max} 个字符`
+          }
         ]}
       >
         <Input
           maxLength={DOCUMENT_SOURCE_LIMITS.nameLength.max}
-          placeholder="例如：Hono 官方文档"
+          placeholder={isGithub ? '例如：hono' : '例如：Hono 官方文档'}
         />
       </Form.Item>
-      {props.kind === 'web' ? (
-        <div className="grid grid-cols-2 gap-3">
-          <Form.Item
-            name="scopePath"
-            label="收录范围"
-            extra="只收录所选路径及其子路径；编辑时收窄范围会立即删除范围外正文。"
-            rules={[{ required: true, message: '请选择收录范围' }]}
-          >
-            <Select
-              options={scopeOptions}
-              placeholder={url ? '选择路径范围' : '先填写起始页面 URL'}
-              disabled={!scopeOptions.length}
-            />
-          </Form.Item>
-          <PageLimitField />
-        </div>
-      ) : (
-        <PageLimitField />
-      )}
-      <Form.Item
-        name="schedule"
-        label="自动更新计划"
-        extra={
-          scheduleRuns.length === 2 ? (
-            <Typography.Text type="secondary" className="text-xs">
-              预计下次：{dateTime.format(scheduleRuns[0])}；再下次：
-              {dateTime.format(scheduleRuns[1])}
-            </Typography.Text>
-          ) : (
-            '留空表示仅手动同步；也可以填写五段 Linux Cron。'
-          )
-        }
-        rules={[
-          {
-            validator: (_rule, value: string | null | undefined) => {
-              try {
-                normalizeCronSchedule(value)
-                return Promise.resolve()
-              } catch (error) {
-                return Promise.reject(error)
-              }
-            }
-          }
-        ]}
-      >
-        <AutoComplete
-          allowClear
-          options={SCHEDULE_PRESETS.map((preset) => ({
-            value: preset.expression,
-            label: `${preset.label} · ${preset.description}`
-          }))}
-        >
-          <Input prefix={<ClockCircleOutlined />} placeholder="例如：0 2 * * *" />
-        </AutoComplete>
-      </Form.Item>
-    </>
-  )
-}
 
-function PageLimitField(): React.JSX.Element {
-  return (
-    <Form.Item
-      name="pageLimit"
-      label="页面上限（页）"
-      rules={[{ required: true, message: '请输入页面上限' }]}
-    >
-      <InputNumber {...DOCUMENT_SOURCE_LIMITS.pageLimit} className="w-full" />
-    </Form.Item>
+      {!isGithub && (
+        <Form.Item
+          name="scopePath"
+          label="收录范围"
+          extra="只收录所选路径及其子路径；编辑时收窄范围会立即删除范围外正文。"
+          rules={[{ required: true, message: '请选择收录范围' }]}
+        >
+          <Select
+            options={scopeOptions}
+            placeholder={url ? '选择路径范围' : '先填写起始页面 URL'}
+            disabled={!scopeOptions.length}
+          />
+        </Form.Item>
+      )}
+    </>
   )
 }

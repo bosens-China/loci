@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import 'uno.css'
+import '@/index.css'
 import { AppProviders } from '@/components/AppProviders'
 
 const queryClient = new QueryClient({

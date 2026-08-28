@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getAdvancedSettingsSummary,
   getLocalLibraryRemovalWarning,
   getLibraryUrlDefaults,
+  getNewSourceFetchMode,
   validateLibrarySourceKind
 } from '../library-form'
 
 describe('文档库共享表单默认值', () => {
+  it('浏览器明确未安装时新建来源默认使用 HTTP', () => {
+    expect(getNewSourceFetchMode(false)).toBe('http')
+    expect(getNewSourceFetchMode(true)).toBe('auto')
+    expect(getNewSourceFetchMode()).toBe('auto')
+  })
+
   it('从 URL 推导名称并修复失效的收录范围', () => {
     expect(
       getLibraryUrlDefaults({
@@ -99,5 +107,45 @@ describe('文档库共享表单默认值', () => {
         }
       )
     ).toBeTypeOf('string')
+  })
+
+  it('准确统计并识别高级配置自定义项', () => {
+    // 默认空/基础配置
+    expect(getAdvancedSettingsSummary(null)).toBe(0)
+    expect(
+      getAdvancedSettingsSummary({
+        kind: 'web',
+        pageLimit: 1000,
+        mode: 'auto',
+        schedule: null,
+        excludePathPattern: null,
+        httpConcurrency: null,
+        browserConcurrency: null
+      })
+    ).toBe(0)
+
+    // Web 自定义项
+    expect(
+      getAdvancedSettingsSummary({
+        kind: 'web',
+        pageLimit: 500,
+        mode: 'browser',
+        schedule: '0 2 * * *',
+        excludePathPattern: '^/legacy',
+        httpConcurrency: 12,
+        browserConcurrency: 8
+      })
+    ).toBe(6)
+
+    // GitHub 自定义项
+    expect(
+      getAdvancedSettingsSummary({
+        kind: 'github',
+        pageLimit: 2000,
+        githubArchiveLimitMb: 500,
+        githubMarkdownLimitMb: 250,
+        schedule: '0 3 * * *'
+      })
+    ).toBe(4)
   })
 })

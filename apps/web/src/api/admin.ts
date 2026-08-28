@@ -6,7 +6,11 @@ import type {
   CloudLibraryPublishResult,
   CloudSyncJob,
   HostnameCrawlPolicy,
-  SaveHostnameCrawlPolicyInput
+  SaveHostnameCrawlPolicyInput,
+  SaveServerCrawlSettingsInput,
+  ServerAdminAuditLogPage,
+  ServerCrawlSettings,
+  ServerBrowserStatus
 } from '@loci/shared'
 import { request } from '@/api/client'
 
@@ -24,6 +28,10 @@ export async function logoutAdmin(): Promise<void> {
 
 export async function listAdminLibraries(): Promise<CloudLibrary[]> {
   return (await request.get<CloudLibrary[]>('/api/admin/libraries')).data
+}
+
+export async function getAdminBrowserStatus(): Promise<ServerBrowserStatus> {
+  return (await request.get<ServerBrowserStatus>('/api/admin/browser')).data
 }
 
 export async function createAdminLibrary(input: CloudLibraryInput): Promise<CloudLibrary> {
@@ -48,6 +56,14 @@ export async function syncAdminLibraries(ids: readonly string[]): Promise<CloudS
 
 export async function listAdminJobs(): Promise<CloudSyncJob[]> {
   return (await request.get<CloudSyncJob[]>('/api/admin/jobs')).data
+}
+
+export async function listAdminAuditLogs(offset = 0, limit = 50): Promise<ServerAdminAuditLogPage> {
+  return (
+    await request.get<ServerAdminAuditLogPage>('/api/admin/audit-logs', {
+      params: { offset, limit }
+    })
+  ).data
 }
 
 export async function cancelAdminJob(id: string): Promise<CloudSyncJob> {
@@ -82,6 +98,16 @@ export async function controlAllAdminJobs(
 
 export async function listAdminHostnamePolicies(): Promise<HostnameCrawlPolicy[]> {
   return (await request.get<HostnameCrawlPolicy[]>('/api/admin/hostname-policies')).data
+}
+
+export async function getAdminCrawlSettings(): Promise<ServerCrawlSettings> {
+  return (await request.get<ServerCrawlSettings>('/api/admin/crawl-settings')).data
+}
+
+export async function saveAdminCrawlSettings(
+  input: SaveServerCrawlSettingsInput
+): Promise<ServerCrawlSettings> {
+  return (await request.put<ServerCrawlSettings>('/api/admin/crawl-settings', input)).data
 }
 
 export async function saveAdminHostnamePolicy(

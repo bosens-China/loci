@@ -1,0 +1,96 @@
+/* 全局基础重置 */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* =========================================================
+   全局精细化滚动条样式（完美适配 Light 与 Dark 模式）
+   ========================================================= */
+
+/* Firefox 标准属性 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
+}
+
+html.dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+/* WebKit (Chrome, Edge, Safari) 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.38);
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.38);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* =========================================================
+   Ant Design Tree 目录树单行对齐与截断保护（防止换行）
+   ========================================================= */
+
+.ant-tree .ant-tree-treenode {
+  display: flex !important;
+  align-items: center !important;
+  width: 100%;
+  padding: 2px 0 !important;
+}
+
+.ant-tree .ant-tree-node-content-wrapper {
+  display: flex !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  padding: 0 4px !important;
+}
+
+.ant-tree .ant-tree-iconEle {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  margin-right: 6px !important;
+}
+
+.ant-tree .ant-tree-title {
+  flex: 1 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}

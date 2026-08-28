@@ -13,13 +13,23 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AgentsRouteImport } from './routes/agents'
+import { Route as BrowserRouteImport } from './routes/browser'
 import { Route as CloudRouteImport } from './routes/cloud'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as LibraryRouteImport } from './routes/library'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SourcesRouteImport } from './routes/sources'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminAuditLogsRouteImport } from './routes/admin.audit-logs'
+import { Route as AdminBrowserRouteImport } from './routes/admin.browser'
+import { Route as AdminCatalogRouteImport } from './routes/admin.catalog'
+import { Route as AdminHostnamePoliciesRouteImport } from './routes/admin.hostname-policies'
+import { Route as AdminJobsRouteImport } from './routes/admin.jobs'
+import { Route as AdminLibrariesRouteImport } from './routes/admin.libraries'
+import { Route as AdminPublishRouteImport } from './routes/admin.publish'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -39,6 +49,11 @@ const AdminRoute = AdminRouteImport.update({
 const AgentsRoute = AgentsRouteImport.update({
   id: '/agents',
   path: '/agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrowserRoute = BrowserRouteImport.update({
+  id: '/browser',
+  path: '/browser',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CloudRoute = CloudRouteImport.update({
@@ -61,6 +76,11 @@ const LibraryRoute = LibraryRouteImport.update({
   path: '/library',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LogsRoute = LogsRouteImport.update({
   id: '/logs',
   path: '/logs',
@@ -76,46 +96,115 @@ const SourcesRoute = SourcesRouteImport.update({
   path: '/sources',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditLogsRoute = AdminAuditLogsRouteImport.update({
+  id: '/audit-logs',
+  path: '/audit-logs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBrowserRoute = AdminBrowserRouteImport.update({
+  id: '/browser',
+  path: '/browser',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCatalogRoute = AdminCatalogRouteImport.update({
+  id: '/catalog',
+  path: '/catalog',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminHostnamePoliciesRoute = AdminHostnamePoliciesRouteImport.update({
+  id: '/hostname-policies',
+  path: '/hostname-policies',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminJobsRoute = AdminJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminLibrariesRoute = AdminLibrariesRouteImport.update({
+  id: '/libraries',
+  path: '/libraries',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPublishRoute = AdminPublishRouteImport.update({
+  id: '/publish',
+  path: '/publish',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/agents': typeof AgentsRoute
+  '/browser': typeof BrowserRoute
   '/cloud': typeof CloudRoute
   '/documents': typeof DocumentsRoute
   '/jobs': typeof JobsRoute
   '/library': typeof LibraryRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
+  '/admin/audit-logs': typeof AdminAuditLogsRoute
+  '/admin/browser': typeof AdminBrowserRoute
+  '/admin/catalog': typeof AdminCatalogRoute
+  '/admin/hostname-policies': typeof AdminHostnamePoliciesRoute
+  '/admin/jobs': typeof AdminJobsRoute
+  '/admin/libraries': typeof AdminLibrariesRoute
+  '/admin/publish': typeof AdminPublishRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
-  '/admin': typeof AdminRoute
   '/agents': typeof AgentsRoute
+  '/browser': typeof BrowserRoute
   '/cloud': typeof CloudRoute
   '/documents': typeof DocumentsRoute
   '/jobs': typeof JobsRoute
   '/library': typeof LibraryRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
+  '/admin/audit-logs': typeof AdminAuditLogsRoute
+  '/admin/browser': typeof AdminBrowserRoute
+  '/admin/catalog': typeof AdminCatalogRoute
+  '/admin/hostname-policies': typeof AdminHostnamePoliciesRoute
+  '/admin/jobs': typeof AdminJobsRoute
+  '/admin/libraries': typeof AdminLibrariesRoute
+  '/admin/publish': typeof AdminPublishRoute
+  '/admin': typeof AdminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/agents': typeof AgentsRoute
+  '/browser': typeof BrowserRoute
   '/cloud': typeof CloudRoute
   '/documents': typeof DocumentsRoute
   '/jobs': typeof JobsRoute
   '/library': typeof LibraryRoute
+  '/login': typeof LoginRoute
   '/logs': typeof LogsRoute
   '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
+  '/admin/audit-logs': typeof AdminAuditLogsRoute
+  '/admin/browser': typeof AdminBrowserRoute
+  '/admin/catalog': typeof AdminCatalogRoute
+  '/admin/hostname-policies': typeof AdminHostnamePoliciesRoute
+  '/admin/jobs': typeof AdminJobsRoute
+  '/admin/libraries': typeof AdminLibrariesRoute
+  '/admin/publish': typeof AdminPublishRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -124,50 +213,81 @@ export interface FileRouteTypes {
     | '/$'
     | '/admin'
     | '/agents'
+    | '/browser'
     | '/cloud'
     | '/documents'
     | '/jobs'
     | '/library'
+    | '/login'
     | '/logs'
     | '/settings'
     | '/sources'
+    | '/admin/audit-logs'
+    | '/admin/browser'
+    | '/admin/catalog'
+    | '/admin/hostname-policies'
+    | '/admin/jobs'
+    | '/admin/libraries'
+    | '/admin/publish'
+    | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/$'
-    | '/admin'
     | '/agents'
+    | '/browser'
     | '/cloud'
     | '/documents'
     | '/jobs'
     | '/library'
+    | '/login'
     | '/logs'
     | '/settings'
     | '/sources'
+    | '/admin/audit-logs'
+    | '/admin/browser'
+    | '/admin/catalog'
+    | '/admin/hostname-policies'
+    | '/admin/jobs'
+    | '/admin/libraries'
+    | '/admin/publish'
+    | '/admin'
   id:
     | '__root__'
     | '/'
     | '/$'
     | '/admin'
     | '/agents'
+    | '/browser'
     | '/cloud'
     | '/documents'
     | '/jobs'
     | '/library'
+    | '/login'
     | '/logs'
     | '/settings'
     | '/sources'
+    | '/admin/audit-logs'
+    | '/admin/browser'
+    | '/admin/catalog'
+    | '/admin/hostname-policies'
+    | '/admin/jobs'
+    | '/admin/libraries'
+    | '/admin/publish'
+    | '/admin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AgentsRoute: typeof AgentsRoute
+  BrowserRoute: typeof BrowserRoute
   CloudRoute: typeof CloudRoute
   DocumentsRoute: typeof DocumentsRoute
   JobsRoute: typeof JobsRoute
   LibraryRoute: typeof LibraryRoute
+  LoginRoute: typeof LoginRoute
   LogsRoute: typeof LogsRoute
   SettingsRoute: typeof SettingsRoute
   SourcesRoute: typeof SourcesRoute
@@ -203,6 +323,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/browser': {
+      id: '/browser'
+      path: '/browser'
+      fullPath: '/browser'
+      preLoaderRoute: typeof BrowserRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cloud': {
       id: '/cloud'
       path: '/cloud'
@@ -231,6 +358,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LibraryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/logs': {
       id: '/logs'
       path: '/logs'
@@ -252,18 +386,100 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SourcesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/audit-logs': {
+      id: '/admin/audit-logs'
+      path: '/audit-logs'
+      fullPath: '/admin/audit-logs'
+      preLoaderRoute: typeof AdminAuditLogsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/browser': {
+      id: '/admin/browser'
+      path: '/browser'
+      fullPath: '/admin/browser'
+      preLoaderRoute: typeof AdminBrowserRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/catalog': {
+      id: '/admin/catalog'
+      path: '/catalog'
+      fullPath: '/admin/catalog'
+      preLoaderRoute: typeof AdminCatalogRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/hostname-policies': {
+      id: '/admin/hostname-policies'
+      path: '/hostname-policies'
+      fullPath: '/admin/hostname-policies'
+      preLoaderRoute: typeof AdminHostnamePoliciesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/jobs': {
+      id: '/admin/jobs'
+      path: '/jobs'
+      fullPath: '/admin/jobs'
+      preLoaderRoute: typeof AdminJobsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/libraries': {
+      id: '/admin/libraries'
+      path: '/libraries'
+      fullPath: '/admin/libraries'
+      preLoaderRoute: typeof AdminLibrariesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/publish': {
+      id: '/admin/publish'
+      path: '/publish'
+      fullPath: '/admin/publish'
+      preLoaderRoute: typeof AdminPublishRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
+
+interface AdminRouteChildren {
+  AdminAuditLogsRoute: typeof AdminAuditLogsRoute
+  AdminBrowserRoute: typeof AdminBrowserRoute
+  AdminCatalogRoute: typeof AdminCatalogRoute
+  AdminHostnamePoliciesRoute: typeof AdminHostnamePoliciesRoute
+  AdminJobsRoute: typeof AdminJobsRoute
+  AdminLibrariesRoute: typeof AdminLibrariesRoute
+  AdminPublishRoute: typeof AdminPublishRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAuditLogsRoute: AdminAuditLogsRoute,
+  AdminBrowserRoute: AdminBrowserRoute,
+  AdminCatalogRoute: AdminCatalogRoute,
+  AdminHostnamePoliciesRoute: AdminHostnamePoliciesRoute,
+  AdminJobsRoute: AdminJobsRoute,
+  AdminLibrariesRoute: AdminLibrariesRoute,
+  AdminPublishRoute: AdminPublishRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   AgentsRoute: AgentsRoute,
+  BrowserRoute: BrowserRoute,
   CloudRoute: CloudRoute,
   DocumentsRoute: DocumentsRoute,
   JobsRoute: JobsRoute,
   LibraryRoute: LibraryRoute,
+  LoginRoute: LoginRoute,
   LogsRoute: LogsRoute,
   SettingsRoute: SettingsRoute,
   SourcesRoute: SourcesRoute,
