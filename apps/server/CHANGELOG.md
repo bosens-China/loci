@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.11.0](https://github.com/bosens-China/loci/compare/server-v1.10.0...server-v1.11.0) (2026-08-28)
+
+
+### Features
+
+* 使用 SSE 推送 Web 状态 ([ac92a25](https://github.com/bosens-China/loci/commit/ac92a25504d3932ee68e559960ae2cd2f601571e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.15.1
+    * @loci/shared bumped to 1.24.0
+
 ## [1.10.0](https://github.com/bosens-China/loci/compare/server-v1.9.0...server-v1.10.0) (2026-08-28)
 
 
