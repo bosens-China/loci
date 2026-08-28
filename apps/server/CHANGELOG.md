@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.10.0](https://github.com/bosens-China/loci/compare/server-v1.9.0...server-v1.10.0) (2026-08-28)
+
+
+### Features
+
+* 完善域名任务编排与文档管理 ([62e3e05](https://github.com/bosens-China/loci/commit/62e3e05fb06b4364908f8006ed6d0b56333752ec))
+* 完善浏览器与 Server 抓取管理 ([4089e37](https://github.com/bosens-China/loci/commit/4089e37f2e60fdca5f08c03d8d622c179a04ffcd))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.15.0
+    * @loci/shared bumped to 1.23.0
+
 ## [1.9.0](https://github.com/bosens-China/loci/compare/server-v1.8.4...server-v1.9.0) (2026-08-26)
 
 
