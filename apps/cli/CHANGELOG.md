@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.20.0](https://github.com/bosens-China/loci/compare/cli-v1.19.1...cli-v1.20.0) (2026-08-31)
+
+
+### Features
+
+* 优化任务中心与文档浏览体验 ([96b55c4](https://github.com/bosens-China/loci/commit/96b55c4811b0a80b525f9d50e37af9c17f31f2df))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 1.16.0
+    * @loci/runtime bumped to 1.19.0
+    * @loci/shared bumped to 1.25.0
+
 ## [1.19.1](https://github.com/bosens-China/loci/compare/cli-v1.19.0...cli-v1.19.1) (2026-08-28)
 
 
