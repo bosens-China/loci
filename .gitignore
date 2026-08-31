@@ -6,3 +6,5 @@ out
 .DS_Store
 .eslintcache
 *.log*
+# TanStack Router 的 pathless 路由文件，不是日志产物
+!apps/web/src/routes/_app.logs.tsx
