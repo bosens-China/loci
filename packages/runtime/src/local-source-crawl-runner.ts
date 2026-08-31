@@ -188,15 +188,29 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
                 await browser.ensureInstalled(onBrowserMissing)
               },
               onDocument: (document) => {
-                documents.push({ ...document, sourceId })
+                const doc = { ...document, sourceId }
+                documents.push(doc)
                 contentBytes += Buffer.byteLength(document.markdown, 'utf8')
+                try {
+                  // 本地任务逐页成功后立即可见，但不预删旧文档；完整成功时再统一清理过期页面。
+                  database.saveDocument(doc)
+                } catch {
+                  // 忽略并发写入重试，任务完成阶段有完整 commit 兜底
+                }
               },
               onSnapshot: (snapshot) => {
                 replaceAll = true
                 contentBytes = 0
-                documents.push(...snapshot.map((document) => ({ ...document, sourceId })))
+                const docs = snapshot.map((document) => ({ ...document, sourceId }))
+                documents.push(...docs)
                 for (const document of snapshot) {
                   contentBytes += Buffer.byteLength(document.markdown, 'utf8')
+                }
+                try {
+                  // 快照同样只做实时 upsert，避免抓取失败时先清空已有知识库。
+                  for (const doc of docs) database.saveDocument(doc)
+                } catch {
+                  // 忽略
                 }
               },
               onError: ({ url, missing }) => {

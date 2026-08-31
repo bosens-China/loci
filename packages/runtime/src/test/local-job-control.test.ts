@@ -65,6 +65,38 @@ describe('本地任务域名调度与控制', () => {
     }
   })
 
+  it('同源任务完整成功后清除旧失败提示，取消竞争时不清除', () => {
+    const database = createDatabase(':memory:')
+    const now = new Date('2026-08-27T00:00:00.000Z')
+    const progress = {
+      queued: 1,
+      processed: 1,
+      succeeded: 1,
+      failed: 0,
+      limitReached: false
+    }
+    try {
+      const sourceId = createSource(database, 'Docs', 'https://docs.example.com', '/')
+      const failed = database.enqueueSourceSync(sourceId, 'mcp', now).job
+      expect(database.claimNextLocalJob('worker-a', 30_000, now)?.id).toBe(failed.id)
+      expect(database.failLocalJob(failed.id, 'worker-a', '抓取失败')).toBe(true)
+
+      const cancelled = database.enqueueSourceSync(sourceId, 'ui', now).job
+      expect(database.claimNextLocalJob('worker-b', 30_000, now)?.id).toBe(cancelled.id)
+      database.requestLocalJobCancellation(cancelled.id)
+      expect(database.completeLocalJob(cancelled.id, 'worker-b', progress)).toBe(true)
+      expect(database.getLocalJob(failed.id)?.status).toBe('failed')
+
+      const completed = database.enqueueSourceSync(sourceId, 'ui', now).job
+      expect(database.claimNextLocalJob('worker-c', 30_000, now)?.id).toBe(completed.id)
+      expect(database.completeLocalJob(completed.id, 'worker-c', progress)).toBe(true)
+      expect(database.getLocalJob(failed.id)).toMatchObject({ status: 'completed', error: null })
+      expect(database.getLocalJob(cancelled.id)).toMatchObject({ status: 'completed', error: null })
+    } finally {
+      database.close()
+    }
+  })
+
   it('用户手动开始只请求暂停同 hostname 任务并提升目标优先级', () => {
     const database = createDatabase(':memory:')
     try {
@@ -114,6 +146,16 @@ describe('本地任务域名调度与控制', () => {
       const resumed = database.enqueueSourceSync(sourceId, 'ui', now).job
       expect(resumed.id).not.toBe(job.id)
       expect(database.getLocalJobResumeUrls(resumed.id)).toEqual(remaining)
+      expect(database.claimNextLocalJob('worker-b', 30_000, now)?.id).toBe(resumed.id)
+      expect(
+        database.completeLocalJob(resumed.id, 'worker-b', {
+          ...progress,
+          processed: 3,
+          succeeded: 3
+        })
+      ).toBe(true)
+      expect(database.getLocalJob(job.id)).toMatchObject({ status: 'completed', partial: false })
+      expect(database.getLocalJob(job.id)?.remainingCount).toBe(0)
     } finally {
       database.close()
     }

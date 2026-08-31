@@ -270,7 +270,7 @@ export function completePartialLocalJob(
   contentBytes: number
 ): boolean {
   const now = new Date().toISOString()
-  return (
+  const changed =
     database
       .prepare(
         `UPDATE local_jobs SET status = 'completed', partial = 1, stop_requested = 0,
@@ -281,7 +281,8 @@ export function completePartialLocalJob(
       )
       .run(now, JSON.stringify(result), Math.max(0, Math.trunc(contentBytes)), now, id, owner)
       .changes === 1
-  )
+  if (changed) resolvePriorFailedJobsForSource(database, id, now)
+  return changed
 }
 
 export function readLocalJobResumeUrls(database: DatabaseSync, id: string): string[] {
@@ -349,8 +350,35 @@ export function finishLocalJob(
          WHERE id = ? AND status = 'running' AND lease_owner = ?`
       )
       .run(status, now, error, result ? JSON.stringify(result) : null, now, id, owner).changes === 1
-  if (changed) cleanupCancelledSources(database)
+  if (changed) {
+    cleanupCancelledSources(database)
+    if (status === 'completed') {
+      resolvePriorFailedJobsForSource(database, id, now)
+    }
+  }
   return changed
+}
+
+function resolvePriorFailedJobsForSource(
+  database: DatabaseSync,
+  currentJobId: string,
+  now: string
+): void {
+  const current = database
+    .prepare(
+      "SELECT source_id FROM local_jobs WHERE id = ? AND status = 'completed' AND partial = 0"
+    )
+    .get(currentJobId) as unknown as { source_id: string } | undefined
+  if (!current) return
+  database
+    .prepare(
+      `UPDATE local_jobs
+       SET status = 'completed', partial = 0, resume_urls_json = NULL,
+           error_message = NULL, updated_at = ?
+       WHERE source_id = ? AND id <> ?
+         AND (status IN ('failed', 'cancelled') OR (status = 'completed' AND partial = 1))`
+    )
+    .run(now, current.source_id, currentJobId)
 }
 
 export function toLocalJob(row: LocalJobRow): LocalJob {
