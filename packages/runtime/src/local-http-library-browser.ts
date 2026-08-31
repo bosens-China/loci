@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { Buffer } from 'node:buffer'
 import { buildUrlTree, getUrlTreeSlice } from '@loci/shared'
 import type { LocalRuntime } from './local-runtime.js'
 import { json } from './local-http-response.js'
@@ -53,6 +54,7 @@ export function handleLibraryBrowser(
           language: document.language,
           updatedAt: document.updatedAt,
           content: document.content.slice(offset, end),
+          contentBytes: Buffer.byteLength(document.content, 'utf8'),
           offset,
           ...(end < document.content.length ? { nextOffset: end } : {}),
           totalChars: document.content.length,

@@ -98,7 +98,7 @@ export function registerLibraryContentTools(
     {
       title: '读取文档文件',
       description:
-        '批量读取 Markdown 文件；offset + next_offset 可续读。传 section_id 时仅允许一个 file_id，并读取搜索命中的完整小节。',
+        '批量读取 Markdown/MDX 文档；offset + next_offset 可续读。传 section_id 时仅允许一个 file_id，并读取搜索命中的完整小节。',
       inputSchema: z.object({
         file_ids: z.array(z.string().min(1)).min(1).max(20),
         section_id: z.string().min(1).optional(),

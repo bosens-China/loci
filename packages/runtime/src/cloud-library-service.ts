@@ -76,6 +76,7 @@ const cloudFileSchema = z.object({
     language: z.string(),
     updatedAt: z.string(),
     content: z.string(),
+    contentBytes: z.number().int().nonnegative().optional(),
     offset: z.number().int(),
     nextOffset: z.number().int().optional(),
     totalChars: z.number().int(),

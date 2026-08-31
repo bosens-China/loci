@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, type Mock } from 'vitest'
 import { crawlSource } from '../source.js'
-import type { CrawledDocument, CrawledPage } from '../types.js'
+import type { CrawledDocument, CrawledPage, CrawlProgress } from '../types.js'
 
 type FetchMock = Mock<typeof fetch> & typeof fetch
 
@@ -50,6 +50,9 @@ describe('crawlSource', () => {
       beforeBrowserCrawl,
       onDocument: (document) => {
         documents.push(document)
+      },
+      onSnapshot: (snapshot) => {
+        documents.push(...snapshot)
       }
     })
 
@@ -94,6 +97,7 @@ describe('crawlSource', () => {
 
   it('在 llms.txt 之后命中 OpenAPI，并跳过浏览器和网页发现', async () => {
     const documents: CrawledDocument[] = []
+    const progressEvents: CrawlProgress[] = []
     const fetchPage = vi.fn(async () => renderedPage('browser'))
     const beforeBrowserCrawl = vi.fn(async () => undefined)
     const fetchImpl = createFetchMock(async (input) => {
@@ -125,7 +129,8 @@ describe('crawlSource', () => {
       beforeBrowserCrawl,
       onDocument: (document) => {
         documents.push(document)
-      }
+      },
+      onProgress: (progress) => progressEvents.push(progress)
     })
 
     expect(result.resolution.discovery).toBe('openapi')
@@ -135,12 +140,21 @@ describe('crawlSource', () => {
     expect(fetchImpl.mock.calls.some(([input]) => String(input).endsWith('/sitemap.xml'))).toBe(
       false
     )
-    expect(documents).toHaveLength(1)
+    expect(documents).toHaveLength(2)
     expect(documents[0]).toMatchObject({
-      url: 'https://api.example.com/openapi.json',
       title: 'Ops API',
+      relativePath: 'index.md',
       fetchMode: 'http'
     })
+    expect(documents[1]).toMatchObject({
+      title: '健康检查',
+      relativePath: '未分组/GET-health.md',
+      fetchMode: 'http'
+    })
+    expect(progressEvents[0]).toMatchObject({ queued: 0, processed: 0 })
+    expect(progressEvents.some((progress) => progress.queued === 2 && progress.processed > 0)).toBe(
+      true
+    )
   })
 
   it('OpenAPI 候选未命中时继续普通网页流程', async () => {

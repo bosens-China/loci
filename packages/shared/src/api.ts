@@ -368,6 +368,7 @@ export interface DocumentSummary {
   sourceName: string
   title: string
   url: string
+  relativePath?: string
   folder: string
   language: string
   updatedAt: string
@@ -390,6 +391,8 @@ export interface LibraryFileSummary {
 
 export interface LibraryFileRecord extends LibraryFileSummary {
   content: string
+  /** 完整 Markdown 正文的 UTF-8 字节数；旧版远端 Server 可能不返回。 */
+  contentBytes?: number
   offset: number
   nextOffset?: number
   totalChars: number

@@ -44,6 +44,27 @@ describe('本地任务域名调度与控制', () => {
     }
   })
 
+  it('历史失败任务重试时复用同源活动任务', () => {
+    const database = createDatabase(':memory:')
+    const now = new Date('2026-08-27T00:00:00.000Z')
+    try {
+      const sourceId = createSource(database, 'Docs', 'https://docs.example.com', '/')
+      const failed = database.enqueueSourceSync(sourceId, 'mcp', now).job
+      expect(database.claimNextLocalJob('worker-a', 30_000, now)?.id).toBe(failed.id)
+      expect(database.failLocalJob(failed.id, 'worker-a', '抓取失败')).toBe(true)
+      const active = database.enqueueSourceSync(sourceId, 'ui', now).job
+
+      expect(database.resumeLocalJob(failed.id)?.id).toBe(active.id)
+      expect(database.getLocalJob(failed.id)).toMatchObject({
+        status: 'failed',
+        error: '抓取失败'
+      })
+      expect(database.listLocalJobs().filter((job) => job.status === 'pending')).toHaveLength(1)
+    } finally {
+      database.close()
+    }
+  })
+
   it('用户手动开始只请求暂停同 hostname 任务并提升目标优先级', () => {
     const database = createDatabase(':memory:')
     try {

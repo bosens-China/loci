@@ -2,6 +2,118 @@ import { describe, expect, it } from 'vitest'
 import { createDatabase } from '../database.js'
 
 describe('createDatabase', () => {
+  it('OpenAPI 完整快照会删除本次未生成的旧文档', () => {
+    const database = createDatabase(':memory:')
+    try {
+      const source = database.createSource({
+        name: '接口文档',
+        url: 'https://api.example.com/doc.html',
+        mode: 'auto',
+        pageLimit: 10,
+        schedule: null,
+        httpConcurrency: null,
+        browserConcurrency: null
+      })
+      database.saveDocument({
+        sourceId: source.id,
+        url: 'https://api.example.com/v3/api-docs/all#old',
+        title: 'a.md',
+        markdown: '# 已删除接口',
+        language: 'und',
+        fetchMode: 'http',
+        relativePath: 'all/a.md',
+        crawledAt: '2026-08-30T00:00:00.000Z'
+      })
+
+      expect(
+        database.commitSourceCrawl(source.id, {
+          documents: [
+            {
+              sourceId: source.id,
+              url: 'https://api.example.com/v3/api-docs/all#current',
+              title: '当前接口',
+              markdown: '# 当前接口',
+              language: 'und',
+              fetchMode: 'http',
+              relativePath: 'all/当前接口.md',
+              crawledAt: '2026-08-31T00:00:00.000Z'
+            }
+          ],
+          deletedUrls: [],
+          replaceAll: true,
+          resolution: {
+            firstUrl: source.url,
+            mode: 'http',
+            iconUrl: null,
+            discovery: 'openapi'
+          }
+        })
+      ).toBe(true)
+
+      expect(database.listDocuments()).toMatchObject([
+        { title: '当前接口', relativePath: 'all/当前接口.md' }
+      ])
+      expect(database.searchDocuments('已删除接口')).toEqual([])
+      expect(database.listSources()[0]?.pages).toBe(1)
+    } finally {
+      database.close()
+    }
+  })
+
+  it('OpenAPI 新快照写入失败时回滚并保留旧文档', () => {
+    const database = createDatabase(':memory:')
+    try {
+      const source = database.createSource({
+        name: '接口文档',
+        url: 'https://api.example.com/doc.html',
+        mode: 'auto',
+        pageLimit: 10,
+        schedule: null,
+        httpConcurrency: null,
+        browserConcurrency: null
+      })
+      database.saveDocument({
+        sourceId: source.id,
+        url: 'https://api.example.com/v3/api-docs/all#old',
+        title: '旧接口',
+        markdown: '# 旧接口',
+        language: 'und',
+        fetchMode: 'http',
+        relativePath: 'all/旧接口.md',
+        crawledAt: '2026-08-30T00:00:00.000Z'
+      })
+      const duplicatePathDocuments = ['first', 'second'].map((name) => ({
+        sourceId: source.id,
+        url: `https://api.example.com/v3/api-docs/all#${name}`,
+        title: name,
+        markdown: `# ${name}`,
+        language: 'und',
+        fetchMode: 'http' as const,
+        relativePath: 'all/重复.md',
+        crawledAt: '2026-08-31T00:00:00.000Z'
+      }))
+
+      expect(() =>
+        database.commitSourceCrawl(source.id, {
+          documents: duplicatePathDocuments,
+          deletedUrls: [],
+          replaceAll: true,
+          resolution: {
+            firstUrl: source.url,
+            mode: 'http',
+            iconUrl: null,
+            discovery: 'openapi'
+          }
+        })
+      ).toThrow()
+      expect(database.listDocuments()).toMatchObject([
+        { title: '旧接口', relativePath: 'all/旧接口.md' }
+      ])
+    } finally {
+      database.close()
+    }
+  })
+
   it('模糊搜索多个关键词时始终限制在指定来源', () => {
     const database = createDatabase(':memory:')
     try {

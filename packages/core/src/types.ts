@@ -83,6 +83,7 @@ export interface HttpCrawlOptions {
   getBatchPolicy?: () => CrawlBatchPolicy | Promise<CrawlBatchPolicy>
   onCheckpoint?: (checkpoint: CrawlCheckpoint) => Promise<void> | void
   onDocument: (document: CrawledDocument) => Promise<void> | void
+  onSnapshot?: (documents: CrawledDocument[]) => Promise<void> | void
   onDuplicate?: (duplicate: CrawlDuplicate) => Promise<void> | void
   onError?: (error: CrawlFailure & { missing?: boolean }) => Promise<void> | void
   onProgress?: (progress: CrawlProgress) => void

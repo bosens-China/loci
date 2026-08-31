@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import type { LibraryFileRecord, LibraryFileSummary } from '@loci/shared'
 import { and, asc, count, eq } from 'drizzle-orm'
 import type { ServerDrizzleDatabase } from './drizzle-database.js'
@@ -55,6 +56,7 @@ export function readServerLibraryFile(
   return {
     ...toSummary(row),
     content: row.markdown.slice(safeOffset, end),
+    contentBytes: Buffer.byteLength(row.markdown, 'utf8'),
     offset: safeOffset,
     ...(end < row.markdown.length ? { nextOffset: end } : {}),
     totalChars: row.markdown.length,

@@ -78,7 +78,7 @@ describe('本机 HTTP 服务', () => {
       sourceId: firstSource.id,
       url: 'https://first.example.com/guide',
       title: 'First guide',
-      markdown: '# First body',
+      markdown: '# 第一篇正文',
       language: 'en',
       fetchMode: 'http',
       crawledAt: '2026-08-22T00:00:00.000Z'
@@ -115,7 +115,17 @@ describe('本机 HTTP 服务', () => {
     const document = await fetch(`${server.endpoint}/api/documents/${documentId}`)
     expect(await document.json()).toMatchObject({
       sourceId: firstSource.id,
-      content: '# First body'
+      content: '# 第一篇正文'
+    })
+    const file = await fetch(
+      `${server.endpoint}/api/libraries/${encodeURIComponent(firstSource.id)}/files/${encodeURIComponent(documentId)}`
+    )
+    expect(await file.json()).toMatchObject({
+      file: {
+        updatedAt: '2026-08-22T00:00:00.000Z',
+        content: '# 第一篇正文',
+        contentBytes: Buffer.byteLength('# 第一篇正文', 'utf8')
+      }
     })
     expect((await fetch(`${server.endpoint}/api/documents/missing`)).status).toBe(404)
   })

@@ -93,6 +93,22 @@ export function resumeLocalJob(
   id: string,
   getLocalJob: GetLocalJob
 ): LocalJob | undefined {
+  const target = getLocalJob(id)
+  if (!target) return undefined
+  const resumable =
+    target.status === 'pending' ||
+    target.status === 'failed' ||
+    (target.status === 'completed' && target.partial)
+  if (!resumable) return target
+
+  const active = database
+    .prepare(
+      `${LOCAL_JOB_QUERY} WHERE job.kind = ? AND job.resource_key = ?
+       AND job.status IN ('pending', 'running') AND job.id <> ? LIMIT 1`
+    )
+    .get(target.kind, target.resourceKey, id) as unknown as LocalJobRow | undefined
+  if (active) return toLocalJob(active)
+
   const now = new Date().toISOString()
   database
     .prepare(

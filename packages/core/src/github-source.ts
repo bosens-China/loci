@@ -37,7 +37,7 @@ export interface GithubSourceResult {
   unchanged: boolean
 }
 
-/** 下载公开仓库默认分支快照，并只提取受限数量的 Markdown。 */
+/** 下载公开仓库默认分支快照，并只提取受限数量的 Markdown 与 MDX 文档。 */
 export async function crawlGithubSource(options: GithubSourceOptions): Promise<GithubSourceResult> {
   const fetchImpl = options.fetch ?? fetch
   const metadata = await readGithubRepositoryMetadata(options.repository, fetchImpl, options.signal)
@@ -98,21 +98,21 @@ async function readArchive(options: ArchiveReadOptions): Promise<GithubSourceRes
       if (entries > githubEntryLimit)
         throw new Error(`GitHub ZIP 条目超过安全上限 ${githubEntryLimit}`)
       const relativePath = normalizeArchivePath(entry.fileName)
-      if (!relativePath || !/\.md$/i.test(relativePath)) continue
+      if (!relativePath || !isMarkdownDocumentPath(relativePath)) continue
       if (isSymlink(entry))
-        throw new Error(`GitHub ZIP 包含不支持的 Markdown 软链接：${relativePath}`)
+        throw new Error(`GitHub ZIP 包含不支持的 Markdown/MDX 软链接：${relativePath}`)
       markdownSeen += 1
       if (markdownSeen > options.pageLimit) {
         limitReached = true
         continue
       }
       if (entry.uncompressedSize > GITHUB_SINGLE_MARKDOWN_LIMIT_BYTES) {
-        throw new Error(`Markdown 文件超过 5 MB 安全上限：${relativePath}`)
+        throw new Error(`Markdown/MDX 文件超过 5 MB 安全上限：${relativePath}`)
       }
       markdownBytes += entry.uncompressedSize
       if (markdownBytes > options.markdownLimit) {
         throw new GithubLimitError(
-          `Markdown 总大小超过 ${formatGithubBytes(options.markdownLimit)} 上限`,
+          `Markdown/MDX 总大小超过 ${formatGithubBytes(options.markdownLimit)} 上限`,
           options.revision,
           'markdown',
           options.markdownLimit
@@ -126,7 +126,7 @@ async function readArchive(options: ArchiveReadOptions): Promise<GithubSourceRes
         failures.push({
           url,
           reason: 'git_lfs_unsupported',
-          message: `Git LFS Markdown 不受支持：${relativePath}`,
+          message: `Git LFS Markdown/MDX 不受支持：${relativePath}`,
           retryable: false
         })
         report(options, documents.length, failures, markdownSeen, limitReached, {
@@ -141,11 +141,13 @@ async function readArchive(options: ArchiveReadOptions): Promise<GithubSourceRes
         url,
         title: basename(relativePath),
         language: 'und',
-        markdown: rewriteGithubMarkdown(markdown, {
-          repository: options.repository,
-          revision: options.revision,
-          relativePath
-        }),
+        markdown: isMarkdownPath(relativePath)
+          ? rewriteGithubMarkdown(markdown, {
+              repository: options.repository,
+              revision: options.revision,
+              relativePath
+            })
+          : markdown,
         crawledAt: new Date().toISOString(),
         fetchMode: 'http',
         relativePath
@@ -257,6 +259,14 @@ function isSymlink(entry: yauzl.Entry): boolean {
 
 function isGitLfsPointer(markdown: string): boolean {
   return markdown.startsWith('version https://git-lfs.github.com/spec/v1\n')
+}
+
+function isMarkdownDocumentPath(relativePath: string): boolean {
+  return /\.mdx?$/iu.test(relativePath)
+}
+
+function isMarkdownPath(relativePath: string): boolean {
+  return /\.md$/iu.test(relativePath)
 }
 
 function githubBlobUrl(

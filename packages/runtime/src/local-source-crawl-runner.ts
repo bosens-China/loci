@@ -10,6 +10,7 @@ import { LocalBrowserCrawler, type BrowserInstallPrompt } from './browser-crawle
 import { resolveCrawlBatchPolicy } from './crawl-batch-policy.js'
 import type { LociDatabase } from './database.js'
 import { assertLocalJobCanContinue, LocalJobControlError } from './local-job-control.js'
+import { createLocalJobProgressWriter } from './local-job-progress-writer.js'
 import { waitForCrawlLockRelease, waitForExternalCrawl } from './external-crawl.js'
 import {
   fetchSourceExplicitPages,
@@ -79,16 +80,17 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
         title: source.fetchMode === 'auto' ? '正在检测抓取方式' : '正在读取第一个页面',
         status: 'running'
       }
+      const initialProgress: CrawlProgress = {
+        queued: 0,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        limitReached: false,
+        node: initialNode
+      }
       states.set(sourceId, {
         sourceId,
-        progress: {
-          queued: 1,
-          processed: 0,
-          succeeded: 0,
-          failed: 0,
-          limitReached: false,
-          node: initialNode
-        },
+        progress: initialProgress,
         nodes: [initialNode],
         error: null,
         running: true,
@@ -101,12 +103,16 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
       let contentBytes = 0
       let pendingUrls = localJob ? database.getLocalJobResumeUrls(localJob.id) : []
       let resolution: SourceResolution | undefined
+      const localJobProgress = createLocalJobProgressWriter(database, localJob)
       try {
         const reportProgress = (progress: CrawlProgress): void => {
           updateState(states, sourceId, progress, null, true)
           database.updateCrawlRunProgress(runId, progress)
+          localJobProgress.report(progress, pendingUrls, contentBytes)
           onProgress?.(progress)
         }
+        // 先持久化未知总量的准备状态，避免 worker 探测期间任务卡一直显示空进度。
+        reportProgress(initialProgress)
         const reviewed =
           source.discoveryMode === 'agent_review'
             ? await refreshReviewedSource(
@@ -170,13 +176,7 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
                 if (!localJob) return
                 const progress = states.get(sourceId)?.progress
                 if (progress) {
-                  database.checkpointLocalJob(
-                    localJob.id,
-                    localJob.owner,
-                    progress,
-                    pendingUrls,
-                    contentBytes
-                  )
+                  localJobProgress.checkpoint(progress, pendingUrls, contentBytes)
                 }
               },
               onResolved: (resolved) => {
@@ -238,7 +238,7 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
         }
         signal?.throwIfAborted()
         if (localJob) {
-          database.checkpointLocalJob(localJob.id, localJob.owner, progress, [], contentBytes)
+          localJobProgress.checkpoint(progress, [], contentBytes)
         }
         const committed = database.commitSourceCrawl(sourceId, {
           documents,

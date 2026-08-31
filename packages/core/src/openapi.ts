@@ -1,11 +1,12 @@
 import { throwIfAborted } from './abort.js'
 import { isImmediateStaticHostname } from './crawl.js'
-import { renderOpenApiMarkdown } from './openapi-markdown.js'
+import { createOpenApiDocumentProjection } from './openapi-documents.js'
 import { objectValue, stringValue } from './openapi-values.js'
 import type {
   CrawlFailure,
   CrawlNode,
   CrawlProgress,
+  CrawledDocument,
   FetchOptions,
   HttpCrawlOptions
 } from './types.js'
@@ -16,6 +17,7 @@ export interface OpenApiEntry {
   url: string
   title: string
   document: OpenApiDocument
+  groupName?: string
 }
 
 interface OpenApiFetchOptions {
@@ -24,6 +26,7 @@ interface OpenApiFetchOptions {
 }
 
 interface FetchedJson {
+  requestedUrl: string
   url: string
   value: unknown
 }
@@ -71,18 +74,28 @@ export async function discoverOpenApiEntries(
   }
   throwIfAborted(options.signal)
 
+  const entryUrl = withoutHash(firstUrl)
   const candidates = uniqueUrls([
-    withoutHash(firstUrl),
+    entryUrl,
     ...candidatePaths.map((path) => new URL(path, firstUrl).toString())
   ])
   const firstBatch = await fetchJsonBatch(candidates, hostname, options)
-  const entries = new Map<string, OpenApiEntry>()
+  const direct = firstBatch.find(
+    (candidate) => candidate.requestedUrl === entryUrl && isOpenApiDocument(candidate.value)
+  )
+  if (direct) {
+    const entries = new Map<string, OpenApiEntry>()
+    addEntry(entries, direct)
+    return [...entries.values()]
+  }
+
+  const fallbackEntries = new Map<string, OpenApiEntry>()
   const targets: ConfigTarget[] = []
 
   for (const candidate of firstBatch) {
     throwIfAborted(options.signal)
     if (isOpenApiDocument(candidate.value)) {
-      addEntry(entries, candidate)
+      addEntry(fallbackEntries, candidate)
       continue
     }
     targets.push(...extractConfigTargets(candidate.value, candidate.url, hostname))
@@ -94,14 +107,15 @@ export async function discoverOpenApiEntries(
     hostname,
     options
   )
+  const configuredEntries = new Map<string, OpenApiEntry>()
   for (const candidate of configBatch) {
     throwIfAborted(options.signal)
     if (isOpenApiDocument(candidate.value)) {
-      addEntry(entries, candidate, configNames.get(candidate.url))
+      addEntry(configuredEntries, candidate, configNames.get(candidate.url))
     }
   }
 
-  return [...entries.values()]
+  return [...(configuredEntries.size ? configuredEntries : fallbackEntries).values()]
 }
 
 /** OpenAPI 规范是权威来源；转换后不再递归发现网页。 */
@@ -112,8 +126,12 @@ export async function crawlOpenApiSource(
   const selected = entries.slice(0, options.pageLimit)
   if (!selected.length) throw new Error('没有可收录的 OpenAPI 文档')
 
+  const projection = createOpenApiDocumentProjection(selected)
+  const crawledAt = new Date().toISOString()
+  const documents: CrawledDocument[] = []
+
   const progress: CrawlProgress = {
-    queued: selected.length,
+    queued: projection.total,
     processed: 0,
     succeeded: 0,
     failed: 0,
@@ -122,34 +140,35 @@ export async function crawlOpenApiSource(
   const failures: CrawlFailure[] = []
   const rootId = options.firstNodeId ?? options.firstUrl
 
-  for (const [index, entry] of selected.entries()) {
+  let index = 0
+  for (const projected of projection.documents) {
+    const document: CrawledDocument = {
+      ...projected,
+      language: 'und',
+      crawledAt,
+      fetchMode: 'http'
+    }
+    documents.push(document)
     throwIfAborted(options.signal)
     await options.waitIfPaused?.()
     throwIfAborted(options.signal)
     const node: CrawlNode = {
-      id: index === 0 ? rootId : entry.url,
-      url: entry.url,
-      title: entry.title,
+      id: index === 0 ? rootId : document.url,
+      url: document.url,
+      title: document.title,
       status: 'running',
       ...(index > 0 ? { parentId: rootId } : {})
     }
     options.onProgress?.({ ...progress, node: { ...node } })
     try {
       throwIfAborted(options.signal)
-      await options.onDocument({
-        url: entry.url,
-        title: entry.title,
-        language: 'und',
-        markdown: renderOpenApiMarkdown(entry.document),
-        crawledAt: new Date().toISOString(),
-        fetchMode: 'http'
-      })
+      if (!options.onSnapshot) await options.onDocument(document)
       progress.succeeded += 1
       node.status = 'success'
     } catch (error) {
       throwIfAborted(options.signal)
       const failure: CrawlFailure = {
-        url: entry.url,
+        url: document.url,
         reason: 'request_error',
         message: error instanceof Error ? error.message : 'OpenAPI 文档保存失败',
         retryable: false
@@ -161,6 +180,15 @@ export async function crawlOpenApiSource(
     }
     progress.processed += 1
     options.onProgress?.({ ...progress, node: { ...node } })
+    index += 1
+    if (progress.processed % 10 === 0 || progress.processed === progress.queued) {
+      await options.onCheckpoint?.({ pendingUrls: [] })
+    }
+  }
+
+  if (options.onSnapshot) {
+    throwIfAborted(options.signal)
+    await options.onSnapshot(documents)
   }
 
   const completed = failures.length ? { ...progress, failures } : progress
@@ -184,7 +212,12 @@ function addEntry(
   const productTitle = stringValue(info?.title) || new URL(candidate.url).hostname
   const title =
     groupName && groupName !== productTitle ? `${productTitle} · ${groupName}` : productTitle
-  entries.set(candidate.url, { url: candidate.url, title, document: candidate.value })
+  entries.set(candidate.url, {
+    url: candidate.url,
+    title,
+    document: candidate.value,
+    ...(groupName ? { groupName } : {})
+  })
 }
 
 function extractConfigTargets(input: unknown, baseUrl: string, hostname: string): ConfigTarget[] {
@@ -251,7 +284,7 @@ async function fetchJson(
     })
     if (!response.ok) return undefined
     const value: unknown = JSON.parse(await response.text())
-    return { url: withoutHash(response.url || url), value }
+    return { requestedUrl: url, url: withoutHash(response.url || url), value }
   } catch {
     throwIfAborted(options.signal)
     return undefined

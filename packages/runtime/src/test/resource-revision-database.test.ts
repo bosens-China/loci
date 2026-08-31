@@ -55,8 +55,25 @@ describe('资源 revision', () => {
       expect(afterDocument.sources).toBeGreaterThan(afterSource.sources)
       expect(afterDocument.documents).toBeGreaterThan(afterSource.documents)
 
-      writer.enqueueSourceSync(source.id, 'mcp')
+      const { job } = writer.enqueueSourceSync(source.id, 'mcp')
       expect(reader.getResourceRevisions().jobs).toBeGreaterThan(initial.jobs)
+      expect(writer.claimNextLocalJob('revision-test', 30_000)?.id).toBe(job.id)
+      const afterClaim = reader.getResourceRevisions()
+      writer.recordLocalJobProgress(job.id, 'revision-test', {
+        queued: 0,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        limitReached: false,
+        node: {
+          id: source.url,
+          url: source.url,
+          title: '准备同步',
+          status: 'running'
+        }
+      })
+      expect(reader.getResourceRevisions().jobs).toBeGreaterThan(afterClaim.jobs)
+      expect(reader.getLocalJob(job.id)?.result).toMatchObject({ queued: 0, processed: 0 })
 
       writer.saveSettings({ ...writer.getSettings(), theme: 'dark' })
       expect(reader.getResourceRevisions().settings).toBeGreaterThan(initial.settings)

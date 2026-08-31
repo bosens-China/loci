@@ -63,6 +63,23 @@ describe('crawlGithubSource', () => {
     expect(blockedFetch).toHaveBeenCalledTimes(2)
   })
 
+  it('includes MDX files without applying Markdown link rewriting', async () => {
+    const mdx = '<Guide href="./next.mdx" />\n\n[Start](./start.mdx)\n'
+    const archive = await createZip({
+      'docs-abc123/README.MD': '# Home',
+      'docs-abc123/guides/intro.MDX': mdx,
+      'docs-abc123/src/component.tsx': 'export const Component = () => null'
+    })
+
+    const result = await crawlGithubSource(baseOptions(fetchSequence(archive)))
+
+    expect(result.documents.map((document) => document.relativePath)).toEqual([
+      'README.MD',
+      'guides/intro.MDX'
+    ])
+    expect(result.documents[1]?.markdown).toBe(mdx)
+  })
+
   it('rejects an archive from its declared download size before reading the body', async () => {
     const fetchImpl = fetchSequence(Buffer.from('large'), { 'content-length': '100' })
     await expect(

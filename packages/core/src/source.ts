@@ -19,7 +19,7 @@ import type { GithubBlockedState } from './github-limits.js'
 import { selectFetchMode } from './mode.js'
 import { crawlOpenApiSource, discoverOpenApiEntries } from './openapi.js'
 import { crawlRenderedSource, fetchCrawledPageWithRetry, type RenderedCrawler } from './rendered.js'
-import type { CrawledDocument, CrawledPage, CrawlProgress, HttpCrawlOptions } from './types.js'
+import type { CrawledPage, CrawlProgress, HttpCrawlOptions } from './types.js'
 
 export type SourceFetchMode = 'auto' | 'http' | 'browser'
 
@@ -49,7 +49,6 @@ export interface SourceCrawlOptions extends Omit<HttpCrawlOptions, 'concurrency'
   /** 返回 false 表示当前环境没有浏览器能力，auto 将直接降级为 HTTP。 */
   beforeBrowserCrawl?: () => Promise<boolean | void>
   onResolved?: (resolution: SourceResolution) => Promise<void> | void
-  onSnapshot?: (documents: CrawledDocument[]) => Promise<void> | void
   githubArchiveLimitBytes?: number
   githubMarkdownLimitBytes?: number
   githubPreviousRevision?: string | null
@@ -93,6 +92,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
     return { progress: result.progress, resolution }
   }
   if (options.fetchMode === 'browser') await options.beforeBrowserCrawl?.()
+  reportDiscoveryStage(options, '正在检查 llms.txt 文档清单')
   const llmsEntries = await discoverLlmsEntries(
     options.firstUrl,
     options.hostname,
@@ -120,6 +120,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
   }
 
   if (!isImmediateStaticHostname(options.hostname)) {
+    reportDiscoveryStage(options, '正在查找 OpenAPI 规范')
     const openApiEntries = await discoverOpenApiEntries(options.firstUrl, options.hostname, {
       fetchImpl: options.fetch,
       signal: options.signal
@@ -144,6 +145,7 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
     }
   }
 
+  reportDiscoveryStage(options, '正在检测页面抓取方式')
   const selected = await probeSourcePage(options)
   throwIfAborted(options.signal)
   const firstUrl = normalizeUrl(selected.firstPage.url || options.firstUrl)
@@ -281,6 +283,7 @@ function toCrawlOptions(
     getBatchPolicy: options.getBatchPolicy,
     onCheckpoint: options.onCheckpoint,
     onDocument: options.onDocument,
+    onSnapshot: options.onSnapshot,
     onDuplicate: options.onDuplicate,
     onError: options.onError,
     onProgress: options.onProgress
@@ -293,4 +296,21 @@ function filterExcludedEntries<T extends { url: string }>(
 ): T[] {
   const isExcluded = createPathExclusionMatcher(pattern)
   return isExcluded ? entries.filter((entry) => !isExcluded(entry.url)) : [...entries]
+}
+
+/** 探测阶段尚不知道总文档数，使用 queued=0 表达不确定进度。 */
+function reportDiscoveryStage(options: SourceCrawlOptions, title: string): void {
+  options.onProgress?.({
+    queued: 0,
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    limitReached: false,
+    node: {
+      id: options.firstNodeId ?? options.firstUrl,
+      url: options.firstUrl,
+      title,
+      status: 'running'
+    }
+  })
 }

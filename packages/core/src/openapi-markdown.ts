@@ -3,6 +3,18 @@ import { objectValue, stringValue } from './openapi-values.js'
 
 const httpMethods = new Set(['get', 'put', 'post', 'delete', 'patch', 'options', 'head', 'trace'])
 
+export interface OpenApiOperation {
+  path: string
+  method: string
+  operation: Record<string, unknown>
+  commonParameters: unknown[]
+}
+
+export interface OpenApiSchema {
+  name: string
+  schema: unknown
+}
+
 export function renderOpenApiMarkdown(document: OpenApiDocument): string {
   const info = objectValue(document.info) ?? {}
   const title = stringValue(info.title) ?? 'OpenAPI'
@@ -17,6 +29,71 @@ export function renderOpenApiMarkdown(document: OpenApiDocument): string {
     .join('\n')
     .replace(/\n{3,}/gu, '\n\n')
     .trim()
+}
+
+export function renderOpenApiOverviewMarkdown(document: OpenApiDocument): string {
+  const info = objectValue(document.info) ?? {}
+  const title = stringValue(info.title) ?? 'OpenAPI'
+  const operations = listOpenApiOperations(document)
+  const schemas = listOpenApiSchemas(document)
+  const lines: string[] = [`# ${title}`, '']
+  addMetadata(lines, document, info)
+  addText(lines, info.description)
+  addServers(lines, document)
+  addSecuritySchemes(lines, document)
+  lines.push('## 内容', '', `- 接口：${operations.length}`, `- 数据模型：${schemas.length}`, '')
+  return finish(lines)
+}
+
+export function renderOpenApiOperationMarkdown(
+  document: OpenApiDocument,
+  item: OpenApiOperation
+): string {
+  const info = objectValue(document.info) ?? {}
+  const summary = stringValue(item.operation.summary)
+  const operationId = stringValue(item.operation.operationId)
+  const title = summary ?? operationId ?? `${item.method} ${item.path}`
+  const lines: string[] = [
+    `# ${heading(title)}`,
+    '',
+    `- 接口：${item.method} ${inline(item.path)}`,
+    `- 所属 API：${inline(stringValue(info.title) ?? 'OpenAPI')}`,
+    ''
+  ]
+  addText(lines, item.operation.description)
+  addOperationFacts(lines, item.operation)
+  addParameters(lines, [...item.commonParameters, ...arrayValue(item.operation.parameters)])
+  addRequestBody(lines, item.operation)
+  addResponses(lines, item.operation)
+  return finish(lines)
+}
+
+export function renderOpenApiSchemaMarkdown(name: string, input: unknown): string {
+  const schema = objectValue(input)
+  const lines: string[] = [`# ${heading(name)}`, '']
+  addText(lines, schema?.description)
+  addSchemaBlock(lines, input)
+  return finish(lines)
+}
+
+export function listOpenApiOperations(document: OpenApiDocument): OpenApiOperation[] {
+  const paths = objectValue(document.paths) ?? {}
+  return Object.entries(paths).flatMap(([path, input]) => {
+    const pathItem = objectValue(input)
+    if (!pathItem) return []
+    const commonParameters = arrayValue(pathItem.parameters)
+    return Object.entries(pathItem).flatMap(([method, operationInput]) => {
+      if (!httpMethods.has(method.toLowerCase())) return []
+      const operation = objectValue(operationInput)
+      return operation ? [{ path, method: method.toUpperCase(), operation, commonParameters }] : []
+    })
+  })
+}
+
+export function listOpenApiSchemas(document: OpenApiDocument): OpenApiSchema[] {
+  const components = objectValue(document.components)
+  const schemas = objectValue(components?.schemas) ?? objectValue(document.definitions) ?? {}
+  return Object.entries(schemas).map(([name, schema]) => ({ name, schema }))
 }
 
 function addMetadata(
@@ -75,17 +152,7 @@ function addSecuritySchemes(lines: string[], document: OpenApiDocument): void {
 }
 
 function addOperations(lines: string[], document: OpenApiDocument): void {
-  const paths = objectValue(document.paths) ?? {}
-  const operations = Object.entries(paths).flatMap(([path, input]) => {
-    const pathItem = objectValue(input)
-    if (!pathItem) return []
-    const commonParameters = arrayValue(pathItem.parameters)
-    return Object.entries(pathItem).flatMap(([method, operationInput]) => {
-      if (!httpMethods.has(method.toLowerCase())) return []
-      const operation = objectValue(operationInput)
-      return operation ? [{ path, method: method.toUpperCase(), operation, commonParameters }] : []
-    })
-  })
+  const operations = listOpenApiOperations(document)
   if (!operations.length) return
 
   lines.push('## 接口', '')
@@ -178,12 +245,10 @@ function addMediaContent(lines: string[], input: unknown): void {
 }
 
 function addSchemas(lines: string[], document: OpenApiDocument): void {
-  const components = objectValue(document.components)
-  const schemas = objectValue(components?.schemas) ?? objectValue(document.definitions) ?? {}
-  const entries = Object.entries(schemas)
+  const entries = listOpenApiSchemas(document)
   if (!entries.length) return
   lines.push('## 数据模型', '')
-  for (const [name, input] of entries) {
+  for (const { name, schema: input } of entries) {
     const schema = objectValue(input)
     lines.push(`### ${name}`, '')
     addText(lines, schema?.description)
@@ -257,4 +322,11 @@ function cell(input: string): string {
 
 function arrayValue(input: unknown): unknown[] {
   return Array.isArray(input) ? input : []
+}
+
+function finish(lines: string[]): string {
+  return lines
+    .join('\n')
+    .replace(/\n{3,}/gu, '\n\n')
+    .trim()
 }

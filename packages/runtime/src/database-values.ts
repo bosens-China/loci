@@ -191,9 +191,10 @@ export function toDocumentSummary(row: DocumentSummaryRow): DocumentSummary {
     sourceName: row.source_name,
     title: row.title,
     url: row.url,
+    ...(row.relative_path ? { relativePath: row.relative_path } : {}),
     folder: path.slice(0, -1).join(' / ') || row.source_name,
     language: row.language,
-    updatedAt: formatDate(row.crawled_at)
+    updatedAt: row.crawled_at
   }
 }
 

@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { streamSSE } from 'hono/streaming'
 import { AdminAuth, readBearerToken } from './auth.js'
+import { createSerializedSseWriter } from './sse-writer.js'
 import { SyncService } from './sync-service.js'
 
 /** 管理事件只发送 revision；认证状态和 SSE 生命周期由此路由统一管理。 */
@@ -13,29 +14,31 @@ export function createAdminEventsHandler(
     const token = readBearerToken(context.req.header('Authorization'))
     if (!token) throw new HTTPException(401, { message: '需要管理员登录' })
     return streamSSE(context, async (stream) => {
-      let finish: (() => void) | undefined
+      let release = (): void => undefined
+      let finished = false
+      let finish: () => void = () => undefined
       const completed = new Promise<void>((resolve) => {
-        finish = resolve
+        finish = () => {
+          if (finished) return
+          finished = true
+          release()
+          resolve()
+        }
       })
-      const release = sync.resourceEvents.subscribe((revisions) => {
-        void stream.writeSSE({ event: 'revisions', data: JSON.stringify(revisions) })
+      const writer = createSerializedSseWriter(stream, finish)
+      release = sync.resourceEvents.subscribe((revisions) => {
+        writer.enqueue({ event: 'revisions', data: JSON.stringify(revisions) })
       })
       const heartbeat = setInterval(() => {
         if (auth.verify(token)) {
-          void stream.writeSSE({ event: 'heartbeat', data: '{}' })
+          writer.enqueue({ event: 'heartbeat', data: '{}' })
           return
         }
-        release()
-        finish?.()
-        void stream.close()
+        finish()
       }, 15_000)
-      stream.onAbort(() => {
-        release()
-        finish?.()
-      })
+      stream.onAbort(finish)
       await completed
       clearInterval(heartbeat)
-      release()
     })
   }
 }

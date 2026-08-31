@@ -270,7 +270,8 @@ export function createLocalJobDatabase(database: DatabaseSync): LocalJobDatabase
       releaseCancelledOrPendingJob(database, id, owner, reason),
     requestLocalJobCancellation: (id) => requestLocalJobCancellation(database, id, getLocalJob),
     requestLocalJobPause: (id) => pauseLocalJob(database, id, getLocalJob),
-    resumeLocalJob: (id) => resumeLocalJob(database, id, getLocalJob),
+    resumeLocalJob: (id) =>
+      withImmediateTransaction(database, () => resumeLocalJob(database, id, getLocalJob)),
     pauseLocalJobs: (hostname) =>
       withImmediateTransaction(database, () => pauseLocalJobs(database, hostname)),
     resumeLocalJobs: (hostname) =>

@@ -2,6 +2,8 @@ export interface UrlTreeItem {
   id: string
   title: string
   url: string
+  relativePath?: string
+  path?: string
 }
 
 export interface UrlTreeNode {
@@ -11,11 +13,12 @@ export interface UrlTreeNode {
   children?: UrlTreeNode[]
 }
 
-// URL 路径只是目录来源，真正可读取的节点始终使用数据库中的文件 ID。
+// 派生文档和仓库文档优先使用逻辑相对路径；普通网页继续按 URL 路径展示。
 export function buildUrlTree(items: readonly UrlTreeItem[], namespace: string): UrlTreeNode[] {
   const roots: UrlTreeNode[] = []
   for (const item of items) {
-    const segments = new URL(item.url).pathname.split('/').filter(Boolean)
+    const logicalPath = item.relativePath ?? item.path ?? new URL(item.url).pathname
+    const segments = logicalPath.split(/[\\/]/u).filter(Boolean)
     let children = roots
     const path: string[] = []
     for (const segment of segments.slice(0, -1)) {
