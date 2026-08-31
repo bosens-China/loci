@@ -4,37 +4,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Badge, Button, Form, Modal, Popconfirm, Segmented, Tabs } from 'antd'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
-  normalizeCronSchedule,
-  type CreateSourceInput,
   type CreateSourceResult,
-  type DocumentSource,
-  type FetchMode,
-  type SourceKind,
-  type UpdateSourceInput
+  type DocumentSource
 } from '@loci/shared'
 import { getLocalBrowserStatus } from '@/api/browser'
 import { enqueueSourceSync } from '@/api/jobs'
 import { createSource, deleteSource, updateSource } from '@/api/sources'
 import { LibraryAdvancedFields } from '@/components/library/LibraryAdvancedFields'
-import {
-  LibraryBasicFields,
-  type LibraryCoreFormValue
-} from '@/components/library/LibraryCoreFields'
+import { LibraryBasicFields } from '@/components/library/LibraryCoreFields'
 import {
   getAdvancedSettingsSummary,
   getLocalLibraryRemovalWarning,
   getNewSourceFetchMode
 } from '@/components/library/library-form'
-
-interface SourceFormValue extends LibraryCoreFormValue {
-  kind: SourceKind
-  mode: FetchMode
-  excludePathPattern?: string
-  httpConcurrency?: number
-  browserConcurrency?: number
-  githubArchiveLimitMb?: number
-  githubMarkdownLimitMb?: number
-}
+import { toSourceInput, type SourceFormValue } from './source-form'
 
 interface SourceFormModalProps {
   editing: DocumentSource | 'new' | null
@@ -87,7 +70,7 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
 
   const save = useMutation({
     mutationFn: async (value: SourceFormValue) => {
-      const input = toInput(value)
+      const input = toSourceInput(value)
       if (props.editing === 'new') return createSource(input)
       const source = await updateSource(props.editing!.id, input)
       return { source, sync: null, workerError: null } satisfies CreateSourceResult
@@ -128,7 +111,7 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
 
     const current = props.editing
     if (current !== 'new' && current) {
-      const input = toInput(value)
+      const input = toSourceInput(value)
       const warning = getLocalLibraryRemovalWarning(current, {
         kind: input.kind ?? current.kind,
         url: input.url,
@@ -217,6 +200,7 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
             },
             {
               key: 'advanced',
+              forceRender: true,
               label: (
                 <span className="flex items-center gap-1.5">
                   高级设置
@@ -348,23 +332,5 @@ function fromSource(source: DocumentSource): SourceFormValue {
     browserConcurrency: source.browserConcurrency ?? undefined,
     githubArchiveLimitMb: source.githubArchiveLimitMb ?? undefined,
     githubMarkdownLimitMb: source.githubMarkdownLimitMb ?? undefined
-  }
-}
-
-function toInput(value: SourceFormValue): CreateSourceInput | UpdateSourceInput {
-  const github = value.kind === 'github'
-  return {
-    name: value.name.trim(),
-    url: value.url.trim(),
-    kind: value.kind,
-    mode: github ? DOCUMENT_SOURCE_DEFAULTS.mode : value.mode,
-    pageLimit: value.pageLimit ?? DOCUMENT_SOURCE_DEFAULTS.pageLimit,
-    scopePath: github ? DOCUMENT_SOURCE_DEFAULTS.scopePath : value.scopePath?.trim() || '/',
-    excludePathPattern: github ? null : value.excludePathPattern?.trim() || null,
-    schedule: normalizeCronSchedule(value.schedule),
-    httpConcurrency: github ? null : (value.httpConcurrency ?? null),
-    browserConcurrency: github ? null : (value.browserConcurrency ?? null),
-    githubArchiveLimitMb: github ? (value.githubArchiveLimitMb ?? null) : null,
-    githubMarkdownLimitMb: github ? (value.githubMarkdownLimitMb ?? null) : null
   }
 }
