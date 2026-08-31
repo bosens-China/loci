@@ -3,6 +3,7 @@ import {
   CloudOutlined,
   ControlOutlined,
   DatabaseOutlined,
+  GlobalOutlined,
   SaveOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons'
@@ -32,6 +33,7 @@ import {
 } from '@/pages/admin/admin-query-keys'
 import { HostnamePolicyPanel } from '@/pages/settings/HostnamePolicyPanel'
 
+/** 系统设置页面：包含基础连接、全局抓取、域名限速覆盖与数据备份 4 大一级设置面板 */
 export function SettingsPage(): React.JSX.Element {
   const { message } = App.useApp()
   const client = useQueryClient()
@@ -66,14 +68,14 @@ export function SettingsPage(): React.JSX.Element {
     {
       key: 'basic',
       label: (
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-2">
           <ControlOutlined />
           <span>基础与连接</span>
         </span>
       ),
       children: (
-        <div className="w-full space-y-5">
-          <Card title="界面与外观" size="small">
+        <div className="w-full space-y-6 pt-2">
+          <Card title="界面与外观">
             <Form.Item name="theme" label="界面主题" className="mb-0">
               <Segmented
                 options={[
@@ -87,10 +89,9 @@ export function SettingsPage(): React.JSX.Element {
 
           <Card
             title="云服务连接"
-            size="small"
             extra={
-              <Typography.Text type="secondary" className="text-xs">
-                用于云端目录发现、快照拉取与管理员登录
+              <Typography.Text type="secondary" className="text-sm">
+                用于云端文档库发现、快照拉取与管理员登录
               </Typography.Text>
             }
           >
@@ -108,7 +109,7 @@ export function SettingsPage(): React.JSX.Element {
                 placeholder="https://loci.example.com"
               />
             </Form.Item>
-            <Typography.Text type="secondary" className="text-xs">
+            <Typography.Text type="secondary" className="text-sm">
               修改云服务地址后，当前的管理员登录会话将自动重置。
             </Typography.Text>
           </Card>
@@ -116,8 +117,9 @@ export function SettingsPage(): React.JSX.Element {
           <Alert
             type="info"
             showIcon
-            title="本地服务环境安全说明"
-            description="Loci 仅监听本机的 127.0.0.1 端口，所有文档索引与抓取数据均保存在本地 SQLite 数据库中，保障您的代码与文档隐私。"
+            message="本地服务运行安全说明"
+            description="Loci 默认仅监听本机 127.0.0.1 端口，所有文档索引与抓取数据均保存在本地 SQLite 数据库中，保障代码与知识资产隐私。"
+            className="text-sm"
           />
 
           <div className="flex justify-end pt-2">
@@ -136,19 +138,19 @@ export function SettingsPage(): React.JSX.Element {
     {
       key: 'crawl',
       label: (
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-2">
           <ThunderboltOutlined />
-          <span>抓取与并发策略</span>
+          <span>全局抓取策略</span>
         </span>
       ),
       children: (
-        <div className="w-full space-y-5">
-          <Card title="全局抓取并发与频率" size="small">
-            <div className="space-y-4">
+        <div className="w-full space-y-6 pt-2">
+          <Card title="全局并发与频率策略">
+            <div className="space-y-6">
               <div>
                 <Typography.Text
                   strong
-                  className="block text-xs text-[var(--ant-color-text-secondary)] mb-3"
+                  className="block text-sm text-[var(--ant-color-text)] mb-3 font-medium"
                 >
                   并发与重试控制
                 </Typography.Text>
@@ -161,25 +163,25 @@ export function SettingsPage(): React.JSX.Element {
                   />
                   <NumberField
                     name="browserConcurrency"
-                    label="浏览器无头渲染并发"
+                    label="无头浏览器并发数"
                     unit="个"
                     {...APP_SETTINGS_LIMITS.concurrency}
                   />
                   <NumberField
                     name="maxRetries"
-                    label="单页面失败最大重试"
+                    label="单页面最大重试次数"
                     unit="次"
                     {...APP_SETTINGS_LIMITS.maxRetries}
                   />
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-[var(--ant-color-border-secondary)]">
+              <div className="pt-5 border-t border-[var(--ant-color-border-secondary)]">
                 <Typography.Text
                   strong
-                  className="block text-xs text-[var(--ant-color-text-secondary)] mb-3"
+                  className="block text-sm text-[var(--ant-color-text)] mb-3 font-medium"
                 >
-                  批次请求间隔
+                  批次请求等待间隔（防封禁限速）
                 </Typography.Text>
                 <div className="flex flex-wrap gap-6 items-start">
                   <NumberField
@@ -203,17 +205,17 @@ export function SettingsPage(): React.JSX.Element {
             </div>
           </Card>
 
-          <Card title="GitHub 仓库体积上限" size="small">
+          <Card title="GitHub 仓库抓取上限">
             <div className="flex flex-wrap gap-6 items-start">
               <NumberField
                 name="githubArchiveLimitMb"
-                label="仓库压缩包限制"
+                label="仓库压缩包体积上限"
                 unit="MB"
                 {...APP_SETTINGS_LIMITS.githubSizeMb}
               />
               <NumberField
                 name="githubMarkdownLimitMb"
-                label="Markdown/MDX 提取总量限制"
+                label="Markdown 提取总量上限"
                 unit="MB"
                 {...APP_SETTINGS_LIMITS.githubSizeMb}
               />
@@ -230,7 +232,19 @@ export function SettingsPage(): React.JSX.Element {
               保存全局抓取策略
             </Button>
           </div>
-
+        </div>
+      )
+    },
+    {
+      key: 'hostname',
+      label: (
+        <span className="flex items-center gap-2">
+          <GlobalOutlined />
+          <span>域名限速覆盖</span>
+        </span>
+      ),
+      children: (
+        <div className="w-full pt-2">
           <HostnamePolicyPanel />
         </div>
       )
@@ -238,13 +252,13 @@ export function SettingsPage(): React.JSX.Element {
     {
       key: 'data',
       label: (
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-2">
           <DatabaseOutlined />
           <span>数据备份与迁移</span>
         </span>
       ),
       children: (
-        <div className="w-full">
+        <div className="w-full pt-2">
           <DataTransferPanel />
         </div>
       )
@@ -282,7 +296,7 @@ function NumberField({
   min,
   max,
   unit,
-  className = 'w-60',
+  className = 'w-64',
   batchInterval = false
 }: {
   name: keyof AppSettings
@@ -305,7 +319,7 @@ function NumberField({
       ]
     : [{ required: true }]
   return (
-    <Form.Item label={label} className={`mb-0 ${className}`}>
+    <Form.Item label={<span className="text-sm">{label}</span>} className={`mb-0 ${className}`}>
       <Space.Compact block>
         <Form.Item name={name} rules={rules} noStyle>
           <InputNumber min={min} max={max} className="w-full" />

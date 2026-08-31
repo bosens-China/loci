@@ -1,6 +1,7 @@
 import type { LocalJob } from '@loci/shared'
 import { describe, expect, it } from 'vitest'
 import {
+  calculateDomainConcurrency,
   estimateRemainingMs,
   filterJobs,
   getJobProgressView,
@@ -50,6 +51,19 @@ describe('任务域名视图状态', () => {
     expect(estimateRemainingMs(running, new Date('2026-08-27T00:00:40.000Z').getTime())).toBe(
       60_000
     )
+  })
+
+  it('失败筛选与域名汇总都包含已取消任务', () => {
+    const failed = job({ id: 'failed', status: 'failed' })
+    const cancelled = job({ id: 'cancelled', status: 'cancelled' })
+    const completed = job({ id: 'completed', status: 'completed' })
+    const filters = { query: '', date: '', status: 'failed' as const }
+
+    expect(filterJobs([failed, cancelled, completed], new Map(), filters)).toEqual([
+      failed,
+      cancelled
+    ])
+    expect(groupJobsByHostname([failed, cancelled, completed])[0]?.failed).toBe(2)
   })
 
   it('未知总量时保持准备状态，总量确定后再计算真实百分比', () => {
@@ -107,6 +121,84 @@ describe('任务域名视图状态', () => {
       expect.objectContaining({ id: 'older', status: 'completed' })
     ])
     expect(upsertLocalJob([older], latest).map((item) => item.id)).toEqual(['latest', 'older'])
+  })
+})
+
+describe('域名并发与优先级动态分配算法', () => {
+  it('单任务时独占跑满配置上限', () => {
+    const single = job({
+      id: 'task-1',
+      status: 'running',
+      result: { queued: 100, processed: 10, succeeded: 10, failed: 0, limitReached: false }
+    })
+    const summary = calculateDomainConcurrency([single], 5)
+    expect(summary.totalUsed).toBe(5)
+    expect(summary.utilizationPercent).toBe(100)
+    expect(summary.allocations.get('task-1')).toBe(5)
+  })
+
+  it('高优先级跑满后，剩余并发流入低优先级任务', () => {
+    const highTask = job({
+      id: 'high-1',
+      priority: 100,
+      status: 'running',
+      result: { queued: 10, processed: 6, succeeded: 6, failed: 0, limitReached: false } // 剩余 4 页
+    })
+    const lowTask = job({
+      id: 'low-1',
+      priority: 0,
+      status: 'running',
+      result: { queued: 100, processed: 0, succeeded: 0, failed: 0, limitReached: false } // 剩余 100 页
+    })
+
+    const summary = calculateDomainConcurrency([highTask, lowTask], 5)
+    expect(summary.totalUsed).toBe(5)
+    expect(summary.utilizationPercent).toBe(100)
+    expect(summary.allocations.get('high-1')).toBe(4) // 高优先级吃满 4 个
+    expect(summary.allocations.get('low-1')).toBe(1) // 剩余 1 个分配给低优先级
+  })
+
+  it('同优先级按顺序分配，并循环分配剩余并发配额 (-1 -1 -1)', () => {
+    const taskA = job({
+      id: 'task-a',
+      priority: 100,
+      status: 'running',
+      scheduledAt: '2026-08-31T10:00:00.000Z',
+      result: { queued: 100, processed: 0, succeeded: 0, failed: 0, limitReached: false }
+    })
+    const taskB = job({
+      id: 'task-b',
+      priority: 100,
+      status: 'running',
+      scheduledAt: '2026-08-31T10:01:00.000Z',
+      result: { queued: 100, processed: 0, succeeded: 0, failed: 0, limitReached: false }
+    })
+
+    const summary = calculateDomainConcurrency([taskA, taskB], 5)
+    expect(summary.totalUsed).toBe(5)
+    expect(summary.utilizationPercent).toBe(100)
+    // 5 个并发在两个同优先级任务中按顺序循环分配：taskA 获得 3，taskB 获得 2
+    expect(summary.allocations.get('task-a')).toBe(3)
+    expect(summary.allocations.get('task-b')).toBe(2)
+  })
+
+  it('并发配额被高优先级全部占满时，低优先级任务排队等待 (0 并发)', () => {
+    const highTask = job({
+      id: 'high-1',
+      priority: 100,
+      status: 'running',
+      result: { queued: 100, processed: 0, succeeded: 0, failed: 0, limitReached: false }
+    })
+    const lowTask = job({
+      id: 'low-1',
+      priority: -50,
+      status: 'pending',
+      result: { queued: 50, processed: 0, succeeded: 0, failed: 0, limitReached: false }
+    })
+
+    const summary = calculateDomainConcurrency([highTask, lowTask], 5)
+    expect(summary.allocations.get('high-1')).toBe(5)
+    expect(summary.allocations.get('low-1')).toBe(0) // 排队中
   })
 })
 

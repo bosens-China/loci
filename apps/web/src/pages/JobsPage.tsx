@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   CaretRightOutlined,
   CheckCircleOutlined,
@@ -6,323 +6,286 @@ import {
   SearchOutlined
 } from '@ant-design/icons'
 import type { LocalJob } from '@loci/shared'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, DatePicker, Empty, Input, Progress, Select, Tabs, Tag } from 'antd'
-import dayjs from 'dayjs'
-import {
-  cancelJob,
-  controlAllJobs,
-  controlJob,
-  JOBS_QUERY_KEY,
-  listJobs,
-  setJobPriority,
-  type JobControlAction
-} from '@/api/jobs'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
+import { App, Button, Card, Empty, Input, Progress, Segmented, Tag, Typography } from 'antd'
+import { controlAllJobs, listJobs, JOBS_QUERY_KEY } from '@/api/jobs'
+import { getSettings, listHostnameCrawlPolicies } from '@/api/settings'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
 import { ConfirmedActionButton } from '@/components/ConfirmedActionButton'
 import { PageHeader } from '@/components/PageHeader'
-import { useCurrentTime } from '@/hooks/use-current-time'
-import { JobDomainCard } from '@/pages/jobs/JobDomainCard'
-import {
-  filterJobs,
-  getLatestActiveJobsBySource,
-  groupJobsByHostname,
-  localJobElementId,
-  type JobFilters,
-  type JobViewStatus,
-  upsertLocalJob
-} from '@/pages/jobs/job-state'
+import { formatBytes } from '@/utils/format'
+import { JobDomainCard } from './jobs/JobDomainCard'
+import { groupJobsByHostname } from './jobs/job-state'
 
-type ItemAction = JobControlAction | 'cancel' | 'continue'
+type DomainFilter = 'all' | 'running' | 'failed' | 'completed'
+const EMPTY_JOBS: LocalJob[] = []
 
+/** 一级路由页面：任务中心域名概览大盘（/jobs） */
 export function JobsPage(): React.JSX.Element {
-  const { message, modal } = App.useApp()
-  const client = useQueryClient()
-  const [filters, setFilters] = useState<JobFilters>({ query: '', date: '', status: 'all' })
-  const [pendingFocusJobId, setPendingFocusJobId] = useState<string>()
+  const navigate = useNavigate()
+  const { message } = App.useApp()
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filter, setFilter] = useState<DomainFilter>('all')
+
   const jobs = useQuery({
     queryKey: JOBS_QUERY_KEY,
-    queryFn: listJobs
+    queryFn: listJobs,
+    refetchInterval: 1500
   })
-  const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
-  const hasActiveJobs = (jobs.data ?? []).some(
-    (job) => job.status === 'pending' || job.status === 'running'
-  )
-  const now = useCurrentTime(hasActiveJobs)
-  const sourceNames = useMemo(
-    () => new Map((sources.data ?? []).map((source) => [source.id, source.name])),
-    [sources.data]
-  )
-  const groups = useMemo(
-    () => groupJobsByHostname(filterJobs(jobs.data ?? [], sourceNames, filters)),
-    [filters, jobs.data, sourceNames]
-  )
-  const activeJobsBySource = useMemo(
-    () => getLatestActiveJobsBySource(jobs.data ?? []),
-    [jobs.data]
-  )
 
-  useEffect(() => {
-    if (!pendingFocusJobId) return
-    const frame = requestAnimationFrame(() => {
-      const element = document.getElementById(localJobElementId(pendingFocusJobId))
-      if (!element) return
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      setPendingFocusJobId(undefined)
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [groups, pendingFocusJobId])
-
-  const itemControl = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: ItemAction }) =>
-      action === 'cancel'
-        ? cancelJob(id)
-        : controlJob(id, action === 'continue' ? 'resume' : action),
-    onSuccess: (job, value) => {
-      updateCachedJob(client, job)
-      void message.success(actionSuccess[value.action])
-    },
-    onError: (error: Error) => void message.error(error.message)
+  const sources = useQuery({
+    queryKey: ['sources'],
+    queryFn: listSources
   })
+
+  const settings = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings
+  })
+
+  const policies = useQuery({
+    queryKey: ['settings', 'hostname-policies'],
+    queryFn: listHostnameCrawlPolicies
+  })
+
   const bulkControl = useMutation({
-    mutationFn: ({ action, hostname }: { action: 'pause-all' | 'resume-all'; hostname?: string }) =>
-      controlAllJobs(action, hostname),
-    onSuccess: ({ changed }, value) => {
-      void client.invalidateQueries({ queryKey: JOBS_QUERY_KEY })
+    mutationFn: ({ action }: { action: 'pause-all' | 'resume-all' }) => controlAllJobs(action),
+    onSuccess: (result, { action }) => {
+      void jobs.refetch()
       void message.success(
-        `${value.action === 'pause-all' ? '已暂停' : '已恢复'} ${changed} 个任务`
+        action === 'pause-all'
+          ? `已下发全部暂停指令，影响 ${result.changed} 个任务`
+          : `已下发全部恢复指令，影响 ${result.changed} 个任务`
       )
     },
     onError: (error: Error) => void message.error(error.message)
   })
-  const priority = useMutation({
-    mutationFn: ({ id, value }: { id: string; value: number }) => setJobPriority(id, value),
-    onSuccess: (job) => {
-      updateCachedJob(client, job)
-      void message.success('优先级已调整')
-    },
-    onError: (error: Error) => void message.error(error.message)
-  })
-  const pendingAction = pendingActionKey(itemControl, bulkControl, priority)
 
-  const totalCount = jobs.data?.length ?? 0
-  const activeCount =
-    jobs.data?.filter((j) => ['pending', 'running'].includes(j.status)).length ?? 0
-  const runningCount = jobs.data?.filter((j) => j.status === 'running').length ?? 0
-  const pausedCount =
-    jobs.data?.filter((j) => j.status === 'pending' && Boolean(j.paused)).length ?? 0
-  const completedCount = jobs.data?.filter((j) => j.status === 'completed').length ?? 0
-  const failedCount = jobs.data?.filter((j) => j.status === 'failed').length ?? 0
+  const allJobs = jobs.data ?? EMPTY_JOBS
+  const totalCount = allJobs.length
+  const activeCount = allJobs.filter((j) => ['pending', 'running'].includes(j.status)).length
+  const runningCount = allJobs.filter((j) => j.status === 'running').length
+  const pausedCount = allJobs.filter((j) => j.status === 'pending' && Boolean(j.paused)).length
+  const completedCount = allJobs.filter((j) => j.status === 'completed').length
+  const failedCount = allJobs.filter((j) => j.status === 'failed').length
   const overallPercent = totalCount ? Math.round((completedCount / totalCount) * 100) : 0
+  const totalBytes = allJobs.reduce((acc, j) => acc + (j.contentBytes ?? 0), 0)
+  const totalProcessedPages = allJobs.reduce((acc, j) => acc + (j.result?.processed ?? 0), 0)
+
+  const defaultHttpConcurrency = settings.data?.httpConcurrency ?? 9
+  const defaultBrowserConcurrency = settings.data?.browserConcurrency ?? 5
+
+  const groups = useMemo(() => groupJobsByHostname(allJobs), [allJobs])
+  const sourcesMap = useMemo(
+    () => new Map((sources.data ?? []).map((s) => [s.id, s])),
+    [sources.data]
+  )
+
+  const filteredGroups = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return groups.filter((group) => {
+      if (filter === 'running' && group.active === 0) return false
+      if (filter === 'failed' && group.failed === 0) return false
+      if (filter === 'completed' && (group.active > 0 || group.failed > 0)) return false
+
+      if (!q) return true
+
+      if (group.hostname.toLowerCase().includes(q)) return true
+      return group.jobs.some((job) => sourcesMap.get(job.sourceId)?.name.toLowerCase().includes(q))
+    })
+  }, [filter, groups, searchQuery, sourcesMap])
 
   return (
-    <div className="px-6 py-6 sm:px-8 sm:py-8">
+    <div className="px-6 py-6 sm:px-8 sm:py-8 space-y-4">
       <PageHeader
         title="任务中心"
-        description="按域名共享抓取队列与限速；不同域名并发执行，关闭浏览器后台仍持续推进。"
+        description="按域名划分独立并发队列与限速策略；不同域名并行推进，点击域名卡片可查看任务详情。"
       />
 
-      <Card size="small" className="mb-4 shadow-xs border-[var(--ant-color-border-secondary)]">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Progress
-              type="circle"
-              size={52}
-              percent={overallPercent}
-              format={(p) => <span className="text-xs font-semibold">{p}%</span>}
-              status={
-                overallPercent === 100 && failedCount === 0
-                  ? 'success'
-                  : failedCount > 0 && activeCount === 0
-                    ? 'exception'
-                    : runningCount > 0
-                      ? 'active'
-                      : 'normal'
-              }
-              strokeWidth={6}
-            />
-            <div>
-              <div className="text-sm font-semibold">任务整体完成度 {overallPercent}%</div>
-              <div className="mt-0.5 text-xs text-[var(--ant-color-text-secondary)]">
-                共 {totalCount} 个任务 · {runningCount} 运行中 · {pausedCount} 已暂停 ·{' '}
-                {completedCount} 已完成 · {failedCount} 失败
-              </div>
-            </div>
-          </div>
-
-          {/* 右侧操作栏：仅在有可操作任务时按需显示对应按钮，全部完成时展示完成徽标 */}
-          <div className="flex items-center gap-2">
-            {activeCount > 0 && (
-              <ConfirmedActionButton
-                title="暂停全部活动任务？"
-                description="已经发出的页面请求会完成，所有域名将在下一批次暂停。"
-                label="全部暂停"
-                icon={<PauseOutlined />}
-                type="default"
-                size="middle"
-                loading={bulkControl.isPending && bulkControl.variables.action === 'pause-all'}
-                onConfirm={() => bulkControl.mutate({ action: 'pause-all' })}
-              />
-            )}
-            {pausedCount > 0 && (
-              <ConfirmedActionButton
-                title="恢复全部暂停任务？"
-                description="任务会继续使用原任务 ID 和已保存的检查点。"
-                label="全部恢复"
-                icon={<CaretRightOutlined />}
-                type="default"
-                size="middle"
-                loading={bulkControl.isPending && bulkControl.variables.action === 'resume-all'}
-                onConfirm={() => bulkControl.mutate({ action: 'resume-all' })}
-              />
-            )}
-            {totalCount > 0 && activeCount === 0 && pausedCount === 0 && (
-              <Tag
-                color="success"
-                icon={<CheckCircleOutlined />}
-                className="m-0! px-2.5 py-1 text-xs"
-              >
-                全部任务已就绪
-              </Tag>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      <Tabs
-        activeKey={filters.status}
-        onChange={(status) =>
-          setFilters((current) => ({ ...current, status: status as JobViewStatus | 'all' }))
-        }
-        items={[
-          { key: 'all', label: `全部 (${totalCount})` },
-          { key: 'running', label: `运行中 (${runningCount})` },
-          { key: 'pending', label: '等待中' },
-          { key: 'paused', label: `已暂停 (${pausedCount})` },
-          { key: 'completed', label: `已完成 (${completedCount})` },
-          { key: 'failed', label: `失败 (${failedCount})` }
-        ]}
-        className="mb-3"
-      />
-      <JobFiltersBar value={filters} onChange={setFilters} />
       <AsyncState
         loading={jobs.isLoading || sources.isLoading}
         error={jobs.error ?? sources.error}
         onRetry={() => void Promise.all([jobs.refetch(), sources.refetch()])}
       >
-        {groups.length ? (
-          <div className="space-y-4">
-            {groups.map((group) => (
+        {/* 顶部全局指标监控看板 */}
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Card size="small" className="shadow-xs border-[var(--ant-color-border-secondary)]">
+            <div className="flex items-center justify-between">
+              <Typography.Text type="secondary" className="text-sm">
+                活跃任务
+              </Typography.Text>
+              {runningCount > 0 && (
+                <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+                  <span className="absolute h-2.5 w-2.5 rounded-full bg-emerald-400/40 animate-ping" />
+                  <span className="relative h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_4px_rgba(16,185,129,0.5)]" />
+                </span>
+              )}
+            </div>
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span className="text-2xl font-semibold text-[var(--ant-color-text)]">
+                {runningCount}
+              </span>
+              <span className="text-sm text-[var(--ant-color-text-secondary)]">
+                / {activeCount} 进行中与排队
+              </span>
+            </div>
+            <div className="mt-1 text-xs text-[var(--ant-color-text-tertiary)]">
+              {pausedCount > 0 ? `${pausedCount} 个任务已暂停` : '后台队列正常调度中'}
+            </div>
+          </Card>
+
+          <Card size="small" className="shadow-xs border-[var(--ant-color-border-secondary)]">
+            <Typography.Text type="secondary" className="text-sm">
+              整体进度
+            </Typography.Text>
+            <div className="mt-1.5 flex items-baseline justify-between">
+              <span className="text-2xl font-semibold text-[var(--ant-color-text)]">
+                {overallPercent}%
+              </span>
+              <span className="text-sm text-[var(--ant-color-text-secondary)]">
+                {completedCount} / {totalCount} 已完成
+              </span>
+            </div>
+            <Progress
+              percent={overallPercent}
+              size="small"
+              showInfo={false}
+              status={failedCount > 0 ? 'exception' : runningCount > 0 ? 'active' : 'normal'}
+              className="mt-2! mb-0!"
+            />
+          </Card>
+
+          <Card size="small" className="shadow-xs border-[var(--ant-color-border-secondary)]">
+            <Typography.Text type="secondary" className="text-sm">
+              累计抓取数据量
+            </Typography.Text>
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span className="text-2xl font-semibold text-[var(--ant-color-text)]">
+                {formatBytes(totalBytes)}
+              </span>
+              <span className="text-sm text-[var(--ant-color-text-secondary)]">正文体积</span>
+            </div>
+            <div className="mt-1 text-xs text-[var(--ant-color-text-tertiary)]">
+              累计已处理 {totalProcessedPages} 页面
+            </div>
+          </Card>
+
+          <Card
+            size="small"
+            className="shadow-xs border-[var(--ant-color-border-secondary)] flex flex-col justify-between"
+          >
+            <Typography.Text type="secondary" className="text-sm">
+              全局任务控制
+            </Typography.Text>
+            <div className="mt-2 flex items-center gap-2">
+              {activeCount > 0 && (
+                <ConfirmedActionButton
+                  title="暂停全部活动任务？"
+                  description="已经发出的页面请求会完成，所有域名将在下一批次暂停。"
+                  label="全部暂停"
+                  icon={<PauseOutlined />}
+                  loading={bulkControl.isPending}
+                  onConfirm={() => bulkControl.mutate({ action: 'pause-all' })}
+                />
+              )}
+              {pausedCount > 0 && (
+                <ConfirmedActionButton
+                  title="恢复全部暂停任务？"
+                  description="任务会继续使用原任务 ID 和已保存的检查点。"
+                  label="全部恢复"
+                  icon={<CaretRightOutlined />}
+                  loading={bulkControl.isPending}
+                  onConfirm={() => bulkControl.mutate({ action: 'resume-all' })}
+                />
+              )}
+              {totalCount > 0 && activeCount === 0 && pausedCount === 0 && (
+                <Tag
+                  color="success"
+                  icon={<CheckCircleOutlined />}
+                  className="m-0! px-3 py-1 text-sm"
+                >
+                  全部任务已就绪
+                </Tag>
+              )}
+              {totalCount === 0 && (
+                <span className="text-sm text-[var(--ant-color-text-tertiary)]">暂无活动任务</span>
+              )}
+            </div>
+          </Card>
+        </section>
+
+        {/* 域名筛选与搜索工具栏 */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div className="flex items-center gap-3">
+            <Segmented<DomainFilter>
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { label: `全部域名 (${groups.length})`, value: 'all' },
+                {
+                  label: `运行中 (${groups.filter((g) => g.active > 0).length})`,
+                  value: 'running'
+                },
+                {
+                  label: `存在异常 (${groups.filter((g) => g.failed > 0).length})`,
+                  value: 'failed'
+                },
+                {
+                  label: `全部就绪 (${groups.filter((g) => g.active === 0 && g.failed === 0).length})`,
+                  value: 'completed'
+                }
+              ]}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Input
+              allowClear
+              prefix={<SearchOutlined className="text-[var(--ant-color-text-tertiary)]" />}
+              placeholder="搜索域名或关联文档库"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-64"
+            />
+            {(searchQuery || filter !== 'all') && (
+              <Button
+                onClick={() => {
+                  setSearchQuery('')
+                  setFilter('all')
+                }}
+              >
+                重置
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* 域名卡片矩阵（响应式 Grid 布局） */}
+        {filteredGroups.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredGroups.map((group) => (
               <JobDomainCard
                 key={group.hostname}
                 group={group}
-                now={now}
-                sourceNames={sourceNames}
-                pendingAction={pendingAction}
-                activeJobsBySource={activeJobsBySource}
-                onJobAction={(job, action) => itemControl.mutate({ id: job.id, action })}
-                onDomainAction={(hostname, action) => bulkControl.mutate({ action, hostname })}
-                onPriorityChange={(job, value) => {
-                  modal.confirm({
-                    title: '调整任务优先级？',
-                    content: '同域名任务会按新优先级领取，不会影响其他域名的并发。',
-                    okText: '确认调整',
-                    cancelText: '返回',
-                    onOk: () => priority.mutateAsync({ id: job.id, value })
-                  })
-                }}
-                onContinue={(job) => itemControl.mutate({ id: job.id, action: 'continue' })}
-                onViewActiveJob={(job) => {
-                  setPendingFocusJobId(job.id)
-                  setFilters({ query: '', date: '', status: 'all' })
-                }}
+                sources={sources.data}
+                policies={policies.data}
+                defaultHttpConcurrency={defaultHttpConcurrency}
+                defaultBrowserConcurrency={defaultBrowserConcurrency}
+                onSelect={(hostname) =>
+                  void navigate({ to: '/jobs/$hostname', params: { hostname } })
+                }
               />
             ))}
           </div>
         ) : (
           <Card className="py-16">
-            <Empty
-              description={jobs.data?.length ? '没有符合筛选条件的任务' : '任务队列还是空的'}
-            />
+            <Empty description={groups.length ? '没有符合筛选条件的域名' : '当前暂无抓取任务'} />
           </Card>
         )}
       </AsyncState>
     </div>
   )
 }
-
-function JobFiltersBar(props: {
-  value: JobFilters
-  onChange: (filters: JobFilters) => void
-}): React.JSX.Element {
-  const update = (patch: Partial<JobFilters>): void => props.onChange({ ...props.value, ...patch })
-  return (
-    <Card size="small" className="mb-4">
-      <div className="grid gap-3 sm:grid-cols-[minmax(12rem,1fr)_12rem_10rem_auto]">
-        <Input
-          allowClear
-          prefix={<SearchOutlined className="text-[var(--ant-color-text-secondary)]" />}
-          placeholder="筛选域名、文档或任务 ID"
-          value={props.value.query}
-          onChange={(event) => update({ query: event.target.value })}
-        />
-        <DatePicker
-          placeholder="按日期筛选"
-          value={props.value.date ? dayjs(props.value.date) : null}
-          onChange={(_, dateStr) => update({ date: typeof dateStr === 'string' ? dateStr : '' })}
-        />
-        <Select<JobViewStatus | 'all'>
-          aria-label="任务状态"
-          value={props.value.status}
-          options={statusOptions}
-          onChange={(status) => update({ status })}
-        />
-        <Button onClick={() => props.onChange({ query: '', date: '', status: 'all' })}>
-          清除筛选
-        </Button>
-      </div>
-    </Card>
-  )
-}
-
-function updateCachedJob(client: ReturnType<typeof useQueryClient>, incoming: LocalJob): void {
-  client.setQueryData<LocalJob[]>(JOBS_QUERY_KEY, (current = []) =>
-    upsertLocalJob(current, incoming)
-  )
-}
-
-function pendingActionKey(
-  item: { isPending: boolean; variables?: { id: string; action: ItemAction } },
-  bulk: {
-    isPending: boolean
-    variables?: { action: 'pause-all' | 'resume-all'; hostname?: string }
-  },
-  priority: { isPending: boolean; variables?: { id: string } }
-): string | undefined {
-  if (item.isPending && item.variables) return `${item.variables.action}:${item.variables.id}`
-  if (bulk.isPending && bulk.variables) {
-    return `${bulk.variables.action}:${bulk.variables.hostname ?? '*'}`
-  }
-  if (priority.isPending && priority.variables) return `priority:${priority.variables.id}`
-  return undefined
-}
-
-const actionSuccess: Record<ItemAction, string> = {
-  pause: '任务将在当前批次后暂停',
-  resume: '任务已恢复',
-  stop: '任务将在当前批次后结束并保留内容',
-  cancel: '已提交取消请求',
-  continue: '任务已从保存的检查点恢复'
-}
-
-const statusOptions: Array<{ value: JobViewStatus | 'all'; label: string }> = [
-  { value: 'all', label: '全部状态' },
-  { value: 'running', label: '运行中' },
-  { value: 'pending', label: '等待中' },
-  { value: 'paused', label: '已暂停' },
-  { value: 'stopped', label: '已结束' },
-  { value: 'completed', label: '已完成' },
-  { value: 'failed', label: '失败' },
-  { value: 'cancelled', label: '已取消' }
-]

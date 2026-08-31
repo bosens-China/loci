@@ -42,9 +42,9 @@ export function DataTransferPanel({
 
   return (
     <Card title="备份与恢复" className={className}>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <Card type="inner" title="下载完整备份">
-          <Typography.Paragraph type="secondary" className="text-xs leading-5">
+          <Typography.Paragraph type="secondary" className="text-sm leading-6">
             ZIP 内含 index.json 校验清单及按数据域拆分的 JSON，只保存到你选择的浏览器下载位置。
           </Typography.Paragraph>
           <Button
@@ -56,7 +56,7 @@ export function DataTransferPanel({
           </Button>
         </Card>
         <Card type="inner" title="从备份恢复">
-          <Typography.Paragraph type="secondary" className="text-xs leading-5">
+          <Typography.Paragraph type="secondary" className="text-sm leading-6">
             恢复会替换当前本地库。正在同步时会拒绝操作；需要持久后台能力时会立即确保无 HTTP 的常驻
             worker 可用。
           </Typography.Paragraph>

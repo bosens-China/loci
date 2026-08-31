@@ -3,7 +3,7 @@ import { createFileRoute, Outlet, redirect, useRouter } from '@tanstack/react-ro
 import { getAdminSession } from '@/api/admin'
 import { isAdminSessionValid } from '@/pages/admin/admin-state'
 
-export const Route = createFileRoute('/admin')({
+export const Route = createFileRoute('/_app/admin')({
   beforeLoad: async ({ location }) => {
     const session = await getAdminSession()
     if (!isAdminSessionValid(session)) {
@@ -18,7 +18,7 @@ export const Route = createFileRoute('/admin')({
   component: AdminLayout
 })
 
-/** 云端 Server 控制台父路由 Layout：统一鉴权校验与登录守卫。 */
+/** 云端 Server 控制台父路由 Layout：统一鉴权校验与登录守卫 */
 function AdminLayout(): React.JSX.Element {
   const router = useRouter()
   const { session } = Route.useRouteContext()

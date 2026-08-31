@@ -8,7 +8,7 @@ export interface DocumentRouteState {
   query: string
 }
 
-const documentsRoute = getRouteApi('/documents')
+const documentsRoute = getRouteApi('/_app/documents')
 
 /** 文档工作区的 URL 状态：来源、当前文档、搜索词。 */
 export function useDocumentRoute(): {

@@ -1,34 +1,33 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  APP_SETTINGS_LIMITS,
-  isValidBatchIntervalRange,
-  isValidBatchIntervalSeconds,
-  type HostnameCrawlPolicy,
-  type SaveHostnameCrawlPolicyInput
-} from '@loci/shared'
+  GlobalOutlined,
+  PlusOutlined,
+  RedoOutlined,
+  SearchOutlined,
+  SettingOutlined
+} from '@ant-design/icons'
+import type { HostnameCrawlPolicy, SaveHostnameCrawlPolicyInput } from '@loci/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   App,
-  AutoComplete,
   Button,
-  Card,
   Empty,
-  Form,
-  InputNumber,
+  Input,
   Popconfirm,
+  Segmented,
+  Space,
+  Table,
   Tag,
-  Typography
+  Typography,
+  type TableColumnsType
 } from 'antd'
-import {
-  deleteHostnameCrawlPolicy,
-  listHostnameCrawlPolicies,
-  saveHostnameCrawlPolicy
-} from '@/api/settings'
+import { deleteHostnameCrawlPolicy, getSettings, listHostnameCrawlPolicies } from '@/api/settings'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
+import { JobConcurrencyModal } from '@/pages/jobs/JobConcurrencyModal'
 
 const POLICY_KEY = ['settings', 'hostname-policies'] as const
-type PolicyForm = Omit<SaveHostnameCrawlPolicyInput, 'hostname'> & { hostname?: string }
 
 interface HostnamePolicyPanelProps {
   queryKey?: readonly unknown[]
@@ -40,231 +39,338 @@ interface HostnamePolicyPanelProps {
   className?: string
 }
 
+interface DomainPolicyItem {
+  hostname: string
+  sourceNames: string[]
+  policy?: HostnameCrawlPolicy
+  isCustom: boolean
+  httpConcurrency: number | null
+  browserConcurrency: number | null
+  intervalLabel: string
+}
+
+/** 域名抓取策略面板：结构化展示已知域名、全局继承状态与独立并发限速管理。 */
 export function HostnamePolicyPanel({
   queryKey = POLICY_KEY,
   listPolicies = listHostnameCrawlPolicies,
-  savePolicy = saveHostnameCrawlPolicy,
   deletePolicy = deleteHostnameCrawlPolicy,
   hostnames,
   title = '域名抓取限制',
   className = 'mt-5'
 }: HostnamePolicyPanelProps = {}): React.JSX.Element {
-  const { message, modal } = App.useApp()
+  const { message } = App.useApp()
   const client = useQueryClient()
-  const [form] = Form.useForm<PolicyForm>()
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterType, setFilterType] = useState<'all' | 'custom' | 'inherited'>('all')
+  const [modalState, setModalState] = useState<{ open: boolean; hostname?: string }>({
+    open: false
+  })
+
   const policies = useQuery({ queryKey, queryFn: listPolicies })
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources, enabled: !hostnames })
-  const hostnameOptions = useMemo(
-    () =>
-      [
-        ...new Set(hostnames ?? (sources.data ?? []).map((source) => new URL(source.url).hostname))
-      ].map((hostname) => ({ value: hostname, label: hostname })),
-    [hostnames, sources.data]
-  )
-  const save = useMutation({
-    mutationFn: savePolicy,
-    onSuccess: (policy) => {
-      client.setQueryData<HostnameCrawlPolicy[]>(queryKey, (current = []) =>
-        [...current.filter((item) => item.hostname !== policy.hostname), policy].sort((a, b) =>
-          a.hostname.localeCompare(b.hostname)
-        )
-      )
-      form.resetFields()
-      void message.success('域名策略已保存，将在下一批次生效')
-    },
-    onError: (error: Error) => void message.error(error.message)
-  })
+  const globalSettings = useQuery({ queryKey: ['settings'], queryFn: getSettings })
+
+  const defaultHttp = globalSettings.data?.httpConcurrency ?? 9
+  const defaultBrowser = globalSettings.data?.browserConcurrency ?? 5
+
   const remove = useMutation({
     mutationFn: deletePolicy,
     onSuccess: (_, hostname) => {
       client.setQueryData<HostnameCrawlPolicy[]>(queryKey, (current = []) =>
         current.filter((item) => item.hostname !== hostname)
       )
-      void message.success('域名策略已删除')
+      void message.success(`已重置 ${hostname} 为继承全局策略`)
     },
     onError: (error: Error) => void message.error(error.message)
   })
 
-  const submit = (value: PolicyForm): void => {
-    if (!value.hostname) return
-    const input = normalizePolicy(value.hostname, value)
-    if (
-      !isValidBatchIntervalRange(
-        input.batchIntervalMinSeconds ?? 0,
-        input.batchIntervalMaxSeconds ?? 0
-      )
-    ) {
-      form.setFields([{ name: 'batchIntervalMaxSeconds', errors: ['最大值不能小于最小值'] }])
-      return
+  // 整理所有已知域名及其关联的文档库名称
+  const domainSourceMap = useMemo(() => {
+    const map = new Map<string, string[]>()
+    if (sources.data) {
+      for (const s of sources.data) {
+        try {
+          const host = new URL(s.url).hostname
+          const list = map.get(host) ?? []
+          list.push(s.name)
+          map.set(host, list)
+        } catch {
+          // ignore invalid url
+        }
+      }
     }
-    modal.confirm({
-      title: `保存 ${input.hostname} 的抓取策略？`,
-      content: '修改会由运行中的任务在下一批次读取，无需重启后台 worker。',
-      okText: '保存并生效',
-      cancelText: '返回',
-      onOk: () => save.mutateAsync(input)
-    })
-  }
+    return map
+  }, [sources.data])
 
-  return (
-    <Card className={className} title={title} extra={<Tag color="processing">实时生效</Tag>}>
-      <Typography.Paragraph type="secondary" className="mb-4! text-xs">
-        同一域名共享队列与策略；留空表示继承全局设置，只填一个间隔时按固定值执行。
-      </Typography.Paragraph>
-      <Form<PolicyForm> form={form} layout="vertical" onFinish={submit}>
-        <div className="grid gap-3 md:grid-cols-[minmax(12rem,1.4fr)_repeat(4,minmax(7rem,1fr))_auto] md:items-end">
-          <Form.Item
-            name="hostname"
-            label="域名"
-            rules={[{ required: true, message: '请选择或输入域名' }]}
-            className="mb-0"
-          >
-            <AutoComplete options={hostnameOptions} placeholder="docs.example.com" />
-          </Form.Item>
-          <OptionalNumber
-            name="httpConcurrency"
-            label="HTTP 并发"
-            {...APP_SETTINGS_LIMITS.concurrency}
-          />
-          <OptionalNumber
-            name="browserConcurrency"
-            label="浏览器并发"
-            {...APP_SETTINGS_LIMITS.concurrency}
-          />
-          <OptionalNumber
-            name="batchIntervalMinSeconds"
-            label="间隔最小（秒）"
-            min={0}
-            max={APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
-            batchInterval
-          />
-          <OptionalNumber
-            name="batchIntervalMaxSeconds"
-            label="间隔最大（秒）"
-            min={0}
-            max={APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
-            batchInterval
-          />
-          <Form.Item label=" " className="mb-0">
-            <Button type="primary" htmlType="submit" loading={save.isPending}>
-              保存策略
-            </Button>
-          </Form.Item>
-        </div>
-      </Form>
-      <AsyncState
-        loading={policies.isLoading}
-        error={policies.error instanceof Error ? policies.error : null}
-        onRetry={() => void policies.refetch()}
-      >
-        <div className="max-h-64 space-y-2 overflow-y-auto pt-2">
-          {policies.data?.length ? (
-            policies.data.map((policy) => (
-              <PolicyRow
-                key={policy.hostname}
-                policy={policy}
-                deleting={remove.isPending && remove.variables === policy.hostname}
-                onEdit={() => form.setFieldsValue(policy)}
-                onDelete={() => remove.mutate(policy.hostname)}
-              />
-            ))
-          ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无域名自定义策略" />
+  // 汇聚所有已知域名（已配置策略 + 来自文档库/外部 hostnames）
+  const allKnownHostnames = useMemo(() => {
+    const set = new Set<string>()
+    if (hostnames) {
+      for (const h of hostnames) set.add(h)
+    }
+    for (const h of domainSourceMap.keys()) {
+      set.add(h)
+    }
+    if (policies.data) {
+      for (const p of policies.data) {
+        set.add(p.hostname)
+      }
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [domainSourceMap, hostnames, policies.data])
+
+  // 组织表格行数据
+  const rows: DomainPolicyItem[] = useMemo(() => {
+    const policyMap = new Map((policies.data ?? []).map((p) => [p.hostname, p]))
+
+    return allKnownHostnames.map((hostname) => {
+      const policy = policyMap.get(hostname)
+      const hasCustom = Boolean(
+        policy &&
+        (policy.httpConcurrency !== null ||
+          policy.browserConcurrency !== null ||
+          policy.batchIntervalMinSeconds !== null ||
+          policy.batchIntervalMaxSeconds !== null)
+      )
+
+      return {
+        hostname,
+        sourceNames: domainSourceMap.get(hostname) ?? [],
+        policy,
+        isCustom: hasCustom,
+        httpConcurrency: policy?.httpConcurrency ?? null,
+        browserConcurrency: policy?.browserConcurrency ?? null,
+        intervalLabel: formatIntervalLabel(policy)
+      }
+    })
+  }, [allKnownHostnames, domainSourceMap, policies.data])
+
+  // 过滤后的行
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return rows.filter((item) => {
+      if (filterType === 'custom' && !item.isCustom) return false
+      if (filterType === 'inherited' && item.isCustom) return false
+      if (!q) return true
+      return (
+        item.hostname.toLowerCase().includes(q) ||
+        item.sourceNames.some((name) => name.toLowerCase().includes(q))
+      )
+    })
+  }, [filterType, rows, searchQuery])
+
+  const customCount = rows.filter((r) => r.isCustom).length
+  const inheritedCount = rows.length - customCount
+
+  const columns: TableColumnsType<DomainPolicyItem> = [
+    {
+      title: '域名 / 关联文档来源',
+      key: 'hostname',
+      render: (_, record) => (
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <GlobalOutlined className="text-[var(--ant-color-primary)] text-sm shrink-0" />
+            <Typography.Text strong className="font-mono text-sm">
+              {record.hostname}
+            </Typography.Text>
+          </div>
+          {record.sourceNames.length > 0 && (
+            <div
+              className="mt-1 truncate text-sm text-[var(--ant-color-text-secondary)] max-w-sm"
+              title={record.sourceNames.join('、')}
+            >
+              关联来源: {record.sourceNames.join('、')}
+            </div>
           )}
         </div>
-      </AsyncState>
-    </Card>
-  )
-}
-
-function PolicyRow(props: {
-  policy: HostnameCrawlPolicy
-  deleting: boolean
-  onEdit: () => void
-  onDelete: () => void
-}): React.JSX.Element {
-  const policy = props.policy
-  return (
-    <Card size="small" className="transition-colors hover:bg-[var(--ant-color-fill-quaternary)]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Typography.Text strong className="font-mono text-xs">
-          {policy.hostname}
-        </Typography.Text>
-        <Typography.Text type="secondary" className="text-xs">
-          HTTP {value(policy.httpConcurrency)} · 浏览器 {value(policy.browserConcurrency)} · 间隔{' '}
-          {intervalLabel(policy)}
-        </Typography.Text>
-        <div className="flex justify-end gap-1">
-          <Button size="small" type="text" onClick={props.onEdit}>
-            编辑
-          </Button>
-          <Popconfirm
-            title="删除这个域名策略？"
-            description="后续批次将恢复使用文档库或全局设置。"
-            okText="删除"
-            cancelText="返回"
-            okButtonProps={{ danger: true }}
-            onConfirm={props.onDelete}
+      )
+    },
+    {
+      title: 'HTTP 并发',
+      key: 'httpConcurrency',
+      width: 150,
+      render: (_, record) =>
+        record.httpConcurrency !== null ? (
+          <Tag color="blue" className="m-0! text-sm px-2.5 py-0.5">
+            HTTP {record.httpConcurrency}
+          </Tag>
+        ) : (
+          <span className="text-sm text-[var(--ant-color-text-secondary)]">
+            继承全局 ({defaultHttp})
+          </span>
+        )
+    },
+    {
+      title: '无头浏览器并发',
+      key: 'browserConcurrency',
+      width: 160,
+      render: (_, record) =>
+        record.browserConcurrency !== null ? (
+          <Tag color="purple" className="m-0! text-sm px-2.5 py-0.5">
+            浏览器 {record.browserConcurrency}
+          </Tag>
+        ) : (
+          <span className="text-sm text-[var(--ant-color-text-secondary)]">
+            继承全局 ({defaultBrowser})
+          </span>
+        )
+    },
+    {
+      title: '请求批次间隔',
+      key: 'interval',
+      width: 140,
+      render: (_, record) =>
+        record.isCustom && record.intervalLabel !== '继承全局' ? (
+          <Tag color="orange" className="m-0! text-sm px-2.5 py-0.5">
+            {record.intervalLabel}
+          </Tag>
+        ) : (
+          <span className="text-sm text-[var(--ant-color-text-secondary)]">不限速 (继承)</span>
+        )
+    },
+    {
+      title: '策略状态',
+      key: 'status',
+      width: 130,
+      render: (_, record) =>
+        record.isCustom ? (
+          <Tag color="processing" className="m-0! text-sm px-2.5 py-0.5">
+            已自定义
+          </Tag>
+        ) : (
+          <Tag className="m-0! text-sm px-2.5 py-0.5">继承全局</Tag>
+        )
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 160,
+      align: 'right',
+      render: (_, record) => (
+        <Space size={4}>
+          <Button
+            size="small"
+            type="link"
+            icon={<SettingOutlined />}
+            onClick={() => setModalState({ open: true, hostname: record.hostname })}
           >
-            <Button size="small" type="text" danger loading={props.deleting}>
-              删除
-            </Button>
-          </Popconfirm>
-        </div>
-      </div>
-    </Card>
-  )
-}
+            {record.isCustom ? '修改策略' : '设置限制'}
+          </Button>
 
-function OptionalNumber(props: {
-  name: keyof PolicyForm
-  label: string
-  min: number
-  max: number
-  batchInterval?: boolean
-}): React.JSX.Element {
+          {record.isCustom && (
+            <Popconfirm
+              title={`重置 ${record.hostname} 为继承全局？`}
+              description="删除自定义限制后，该域名将在下一批次恢复使用全局并发与限速设置。"
+              okText="重置为继承"
+              cancelText="取消"
+              onConfirm={() => remove.mutate(record.hostname)}
+            >
+              <Button
+                size="small"
+                type="text"
+                danger
+                icon={<RedoOutlined />}
+                loading={remove.isPending && remove.variables === record.hostname}
+              >
+                重置
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
+      )
+    }
+  ]
+
   return (
-    <Form.Item
-      name={props.name}
-      label={props.label}
-      rules={
-        props.batchInterval
-          ? [
-              {
-                validator: (_: unknown, input: unknown) =>
-                  input === undefined || input === null || isValidBatchIntervalSeconds(input)
-                    ? Promise.resolve()
-                    : Promise.reject(new Error('请输入 0 或允许范围内的整数'))
-              }
-            ]
-          : undefined
-      }
-      className="mb-0"
-    >
-      <InputNumber min={props.min} max={props.max} className="w-full" placeholder="继承" />
-    </Form.Item>
+    <div className={className ?? 'space-y-3.5'}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Typography.Title level={4} className="m-0!">
+          {title}
+        </Typography.Title>
+        <Tag color="processing">下一批次生效</Tag>
+      </div>
+      <Alert
+        type="info"
+        showIcon
+        message="域名独立抓取与并发限速"
+        description="同一域名下的所有文档库共享并发队列；自定义配置将优先于全局策略生效，正在运行的任务将在下一批次实时读取最新配置。"
+        className="mb-4 text-sm"
+      />
+
+      {/* 搜索、过滤与添加操作工具栏 */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Segmented<'all' | 'custom' | 'inherited'>
+            value={filterType}
+            onChange={setFilterType}
+            options={[
+              { label: `全部域名 (${rows.length})`, value: 'all' },
+              { label: `已自定义限制 (${customCount})`, value: 'custom' },
+              { label: `继承全局 (${inheritedCount})`, value: 'inherited' }
+            ]}
+          />
+
+          <Input
+            allowClear
+            prefix={<SearchOutlined className="text-[var(--ant-color-text-tertiary)]" />}
+            placeholder="搜索域名或关联文档名称"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-64"
+          />
+        </div>
+
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setModalState({ open: true })}
+        >
+          添加域名限制
+        </Button>
+      </div>
+
+      <AsyncState
+        loading={policies.isLoading || sources.isLoading}
+        error={policies.error instanceof Error ? policies.error : null}
+        onRetry={() => void Promise.all([policies.refetch(), sources.refetch()])}
+      >
+        <Table<DomainPolicyItem>
+          rowKey="hostname"
+          dataSource={filteredRows}
+          columns={columns}
+          size="middle"
+          pagination={
+            filteredRows.length > 10
+              ? { pageSize: 10, showSizeChanger: true, showTotal: (t) => `共 ${t} 个域名` }
+              : false
+          }
+          locale={{
+            emptyText: <Empty className="py-8" description="暂无符合条件的域名策略" />
+          }}
+        />
+      </AsyncState>
+
+      {/* 域名并发与限速编辑弹窗 */}
+      {modalState.open && (
+        <JobConcurrencyModal
+          key={modalState.hostname ?? 'new-policy'}
+          open
+          hostname={modalState.hostname}
+          availableHostnames={allKnownHostnames}
+          onClose={() => setModalState({ open: false })}
+        />
+      )}
+    </div>
   )
 }
 
-function normalizePolicy(hostname: string, value: PolicyForm): SaveHostnameCrawlPolicyInput {
-  return {
-    hostname,
-    httpConcurrency: value.httpConcurrency ?? null,
-    browserConcurrency: value.browserConcurrency ?? null,
-    batchIntervalMinSeconds: value.batchIntervalMinSeconds ?? null,
-    batchIntervalMaxSeconds: value.batchIntervalMaxSeconds ?? null
-  }
-}
-
-function value(input: number | null): string {
-  return input === null ? '继承' : String(input)
-}
-
-function intervalLabel(policy: HostnameCrawlPolicy): string {
+function formatIntervalLabel(policy?: HostnameCrawlPolicy): string {
+  if (!policy) return '继承全局'
   const min = policy.batchIntervalMinSeconds
   const max = policy.batchIntervalMaxSeconds
-  if (min === null && max === null) return '继承'
-  if (min === null || min === 0) return `${max ?? 0}s`
-  if (max === null || max === 0 || min === max) return `${min}s`
-  return `${min}–${max}s`
+  if (min === null && max === null) return '继承全局'
+  if (min === null || min === 0) return `${max ?? 0}s 间隔`
+  if (max === null || max === 0 || min === max) return `${min}s 间隔`
+  return `${min}s–${max}s 间隔`
 }
