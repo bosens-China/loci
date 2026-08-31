@@ -17,6 +17,7 @@ import { listOperationLogs, type OperationLogQuery } from '@/api/logs'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { formatDateTime } from '@/utils/format'
+import { PAGE_SIZE_OPTIONS } from '@/utils/pagination'
 
 /** 操作日志页：按日期与分类筛选任务、设置、云端和数据维护的结构化记录。 */
 export function LogsPage(): React.JSX.Element {
@@ -76,7 +77,7 @@ export function LogsPage(): React.JSX.Element {
             pagination={{
               defaultPageSize: 20,
               showSizeChanger: true,
-              pageSizeOptions: ['10', '20', '50', '100'],
+              pageSizeOptions: PAGE_SIZE_OPTIONS,
               showQuickJumper: true,
               showTotal: (total) => `共 ${total} 条日志`
             }}

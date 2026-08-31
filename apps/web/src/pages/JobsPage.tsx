@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   CaretRightOutlined,
   CheckCircleOutlined,
@@ -13,6 +13,7 @@ import {
   cancelJob,
   controlAllJobs,
   controlJob,
+  JOBS_QUERY_KEY,
   listJobs,
   setJobPriority,
   type JobControlAction
@@ -25,12 +26,13 @@ import { useCurrentTime } from '@/hooks/use-current-time'
 import { JobDomainCard } from '@/pages/jobs/JobDomainCard'
 import {
   filterJobs,
+  getLatestActiveJobsBySource,
   groupJobsByHostname,
+  localJobElementId,
   type JobFilters,
-  type JobViewStatus
+  type JobViewStatus,
+  upsertLocalJob
 } from '@/pages/jobs/job-state'
-
-const JOBS_KEY = ['jobs'] as const
 
 type ItemAction = JobControlAction | 'cancel' | 'continue'
 
@@ -38,8 +40,9 @@ export function JobsPage(): React.JSX.Element {
   const { message, modal } = App.useApp()
   const client = useQueryClient()
   const [filters, setFilters] = useState<JobFilters>({ query: '', date: '', status: 'all' })
+  const [pendingFocusJobId, setPendingFocusJobId] = useState<string>()
   const jobs = useQuery({
-    queryKey: JOBS_KEY,
+    queryKey: JOBS_QUERY_KEY,
     queryFn: listJobs
   })
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
@@ -55,6 +58,21 @@ export function JobsPage(): React.JSX.Element {
     () => groupJobsByHostname(filterJobs(jobs.data ?? [], sourceNames, filters)),
     [filters, jobs.data, sourceNames]
   )
+  const activeJobsBySource = useMemo(
+    () => getLatestActiveJobsBySource(jobs.data ?? []),
+    [jobs.data]
+  )
+
+  useEffect(() => {
+    if (!pendingFocusJobId) return
+    const frame = requestAnimationFrame(() => {
+      const element = document.getElementById(localJobElementId(pendingFocusJobId))
+      if (!element) return
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setPendingFocusJobId(undefined)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [groups, pendingFocusJobId])
 
   const itemControl = useMutation({
     mutationFn: ({ id, action }: { id: string; action: ItemAction }) =>
@@ -71,7 +89,7 @@ export function JobsPage(): React.JSX.Element {
     mutationFn: ({ action, hostname }: { action: 'pause-all' | 'resume-all'; hostname?: string }) =>
       controlAllJobs(action, hostname),
     onSuccess: ({ changed }, value) => {
-      void client.invalidateQueries({ queryKey: JOBS_KEY })
+      void client.invalidateQueries({ queryKey: JOBS_QUERY_KEY })
       void message.success(
         `${value.action === 'pause-all' ? '已暂停' : '已恢复'} ${changed} 个任务`
       )
@@ -202,6 +220,7 @@ export function JobsPage(): React.JSX.Element {
                 now={now}
                 sourceNames={sourceNames}
                 pendingAction={pendingAction}
+                activeJobsBySource={activeJobsBySource}
                 onJobAction={(job, action) => itemControl.mutate({ id: job.id, action })}
                 onDomainAction={(hostname, action) => bulkControl.mutate({ action, hostname })}
                 onPriorityChange={(job, value) => {
@@ -214,6 +233,10 @@ export function JobsPage(): React.JSX.Element {
                   })
                 }}
                 onContinue={(job) => itemControl.mutate({ id: job.id, action: 'continue' })}
+                onViewActiveJob={(job) => {
+                  setPendingFocusJobId(job.id)
+                  setFilters({ query: '', date: '', status: 'all' })
+                }}
               />
             ))}
           </div>
@@ -264,12 +287,9 @@ function JobFiltersBar(props: {
 }
 
 function updateCachedJob(client: ReturnType<typeof useQueryClient>, incoming: LocalJob): void {
-  client.setQueryData<LocalJob[]>(JOBS_KEY, (current = []) => {
-    const found = current.some((job) => job.id === incoming.id)
-    return found
-      ? current.map((job) => (job.id === incoming.id ? incoming : job))
-      : [incoming, ...current]
-  })
+  client.setQueryData<LocalJob[]>(JOBS_QUERY_KEY, (current = []) =>
+    upsertLocalJob(current, incoming)
+  )
 }
 
 function pendingActionKey(

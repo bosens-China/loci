@@ -6,6 +6,7 @@ import { listCloudCatalog } from '@/api/cloud'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { formatBytes, formatDateTime } from '@/utils/format'
+import { PAGE_SIZE_OPTIONS } from '@/utils/pagination'
 
 /** 公开目录在 Admin 中只读预览，避免混入本地拉取与删除动作。 */
 export function AdminCatalogPage(): React.JSX.Element {
@@ -39,6 +40,7 @@ export function AdminCatalogPage(): React.JSX.Element {
             pagination={{
               defaultPageSize: 20,
               showSizeChanger: true,
+              pageSizeOptions: PAGE_SIZE_OPTIONS,
               showTotal: (total) => `共 ${total} 个公开库`
             }}
             locale={{ emptyText: <Empty className="py-12" description="当前没有已发布公开库" /> }}

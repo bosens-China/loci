@@ -8,14 +8,20 @@ import {
   ClockCircleOutlined,
   CopyOutlined,
   ExportOutlined,
+  FileTextOutlined,
   FolderOutlined,
   ReloadOutlined
 } from '@ant-design/icons'
 import { App, Button, Card, Empty, Skeleton, Space, Tag, Typography } from 'antd'
-import { formatDateTime } from '@/utils/format'
+import { formatBytes, formatDateTime } from '@/utils/format'
+
+export type ReaderDocument = DocumentRecord & {
+  contentBytes: number
+  contentSizeIsPartial?: boolean
+}
 
 interface DocumentReaderPanelProps {
-  document: DocumentRecord | null
+  document: ReaderDocument | null
   libraryTitle?: string
   loading: boolean
   error: Error | null
@@ -88,6 +94,9 @@ export function DocumentReaderPanel(props: DocumentReaderPanelProps): React.JSX.
     )
   }
 
+  const formattedCrawledAt = formatDateTime(props.document.updatedAt)
+  const crawledAt = formattedCrawledAt === '—' ? props.document.updatedAt : formattedCrawledAt
+
   return (
     <Card
       styles={{
@@ -97,7 +106,7 @@ export function DocumentReaderPanel(props: DocumentReaderPanelProps): React.JSX.
     >
       {/* 文档详情头部 */}
       <header className="shrink-0 border-b border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] px-6 py-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <Typography.Title level={3} className="m-0! text-lg font-bold tracking-tight">
               {props.document.title}
@@ -115,24 +124,19 @@ export function DocumentReaderPanel(props: DocumentReaderPanelProps): React.JSX.
               )}
               {props.document.updatedAt && (
                 <Tag icon={<ClockCircleOutlined />} className="m-0! text-xs">
-                  {formatDateTime(props.document.updatedAt)}
+                  抓取于 {crawledAt}
                 </Tag>
               )}
-              <Typography.Link
-                href={props.document.url}
-                target="_blank"
-                rel="noreferrer"
-                className="max-w-xs truncate font-mono text-xs text-[var(--ant-color-text-secondary)] hover:text-[var(--ant-color-primary)]"
-                title={props.document.url}
-              >
-                {props.document.url}
-              </Typography.Link>
+              <Tag icon={<FileTextOutlined />} className="m-0! text-xs">
+                {props.document.contentSizeIsPartial ? '≥ ' : ''}
+                {formatBytes(props.document.contentBytes)}
+              </Tag>
             </div>
           </div>
 
-          <Space size={8} className="shrink-0">
+          <Space size={10} className="shrink-0">
             <Button
-              size="small"
+              size="middle"
               icon={
                 copied ? (
                   <CheckOutlined className="text-[var(--ant-color-success)]" />
@@ -146,7 +150,7 @@ export function DocumentReaderPanel(props: DocumentReaderPanelProps): React.JSX.
             </Button>
             <Button
               type="primary"
-              size="small"
+              size="middle"
               icon={<ExportOutlined />}
               href={props.document.url}
               target="_blank"

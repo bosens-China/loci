@@ -6,6 +6,7 @@ import { listAdminAuditLogs } from '@/api/admin'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { formatDateTime } from '@/utils/format'
+import { PAGE_SIZE_OPTIONS } from '@/utils/pagination'
 
 const DEFAULT_PAGE_SIZE = 20
 
@@ -36,7 +37,7 @@ export function AdminAuditLogsPage(): React.JSX.Element {
               pageSize,
               total: logs.data?.total ?? 0,
               showSizeChanger: true,
-              pageSizeOptions: ['10', '20', '50', '100'],
+              pageSizeOptions: PAGE_SIZE_OPTIONS,
               showTotal: (total) => `共 ${total} 条记录`,
               onChange: (nextPage, nextPageSize) => {
                 setPage(nextPageSize === pageSize ? nextPage : 1)

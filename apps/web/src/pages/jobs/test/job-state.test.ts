@@ -1,6 +1,14 @@
 import type { LocalJob } from '@loci/shared'
 import { describe, expect, it } from 'vitest'
-import { estimateRemainingMs, filterJobs, groupJobsByHostname, jobViewStatus } from '../job-state'
+import {
+  estimateRemainingMs,
+  filterJobs,
+  getJobProgressView,
+  getLatestActiveJobsBySource,
+  groupJobsByHostname,
+  jobViewStatus,
+  upsertLocalJob
+} from '../job-state'
 
 describe('任务域名视图状态', () => {
   it('按 hostname 分组并把活动域名排在前面', () => {
@@ -42,6 +50,63 @@ describe('任务域名视图状态', () => {
     expect(estimateRemainingMs(running, new Date('2026-08-27T00:00:40.000Z').getTime())).toBe(
       60_000
     )
+  })
+
+  it('未知总量时保持准备状态，总量确定后再计算真实百分比', () => {
+    const preparing = job({
+      status: 'running',
+      result: {
+        queued: 0,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        limitReached: false,
+        node: { id: 'spec', url: 'https://api.example.com', title: '探测中', status: 'running' }
+      }
+    })
+    const converting = job({
+      status: 'running',
+      result: {
+        queued: 560,
+        processed: 28,
+        succeeded: 28,
+        failed: 0,
+        limitReached: false
+      }
+    })
+
+    expect(getJobProgressView(preparing)).toMatchObject({
+      kind: 'indeterminate',
+      processed: 0
+    })
+    expect(getJobProgressView(converting)).toMatchObject({
+      kind: 'determinate',
+      processed: 28,
+      total: 560,
+      percent: 5
+    })
+  })
+
+  it('为卡片选择最新活动任务，并用接口返回状态更新缓存', () => {
+    const completed = job({ id: 'completed', sourceId: 'source-a', status: 'completed' })
+    const older = job({
+      id: 'older',
+      sourceId: 'source-a',
+      status: 'running',
+      updatedAt: '2026-08-27T00:00:01.000Z'
+    })
+    const latest = job({
+      id: 'latest',
+      sourceId: 'source-a',
+      status: 'pending',
+      updatedAt: '2026-08-27T00:00:02.000Z'
+    })
+
+    expect(getLatestActiveJobsBySource([completed, older, latest]).get('source-a')).toBe(latest)
+    expect(upsertLocalJob([older], { ...older, status: 'completed' })).toEqual([
+      expect.objectContaining({ id: 'older', status: 'completed' })
+    ])
+    expect(upsertLocalJob([older], latest).map((item) => item.id)).toEqual(['latest', 'older'])
   })
 })
 

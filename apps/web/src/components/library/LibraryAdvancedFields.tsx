@@ -140,7 +140,7 @@ export function LibraryAdvancedFields(props: LibraryAdvancedFieldsProps): React.
                   </Space.Compact>
                 </Form.Item>
 
-                <Form.Item label="Markdown 单文件上限" extra="留空继承全局设置 (100MB)">
+                <Form.Item label="Markdown/MDX 单文件上限" extra="留空继承全局设置 (100MB)">
                   <Space.Compact block>
                     <Form.Item
                       name="githubMarkdownLimitMb"
@@ -149,7 +149,7 @@ export function LibraryAdvancedFields(props: LibraryAdvancedFieldsProps): React.
                           type: 'number',
                           min: DOCUMENT_SOURCE_LIMITS.githubSizeMb.min,
                           max: DOCUMENT_SOURCE_LIMITS.githubSizeMb.max,
-                          message: `Markdown 上限需在 ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.min} 到 ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.max} MB 之间`
+                          message: `Markdown/MDX 上限需在 ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.min} 到 ${DOCUMENT_SOURCE_LIMITS.githubSizeMb.max} MB 之间`
                         }
                       ]}
                       noStyle

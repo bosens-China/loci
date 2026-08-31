@@ -51,9 +51,9 @@ export function formatSourceSummary(
     return [
       `名称：${input.name}`,
       `仓库：${input.url}`,
-      `Markdown 上限：${input.pageLimit}`,
+      `Markdown/MDX 上限：${input.pageLimit}`,
       `ZIP 上限：${archiveLimit ? `${archiveLimit} MB` : '继承全局设置'}`,
-      `Markdown 总量：${markdownLimit ? `${markdownLimit} MB` : '继承全局设置'}`
+      `Markdown/MDX 总量：${markdownLimit ? `${markdownLimit} MB` : '继承全局设置'}`
     ].join('\n')
   }
   return [
@@ -98,7 +98,7 @@ export function formatSourceChanges(
       : `ZIP 上限：${current.githubArchiveLimitMb ?? '继承全局'} → ${input.githubArchiveLimitMb ?? '继承全局'} MB`,
     current.githubMarkdownLimitMb === (input.githubMarkdownLimitMb ?? null)
       ? null
-      : `Markdown 总量：${current.githubMarkdownLimitMb ?? '继承全局'} → ${input.githubMarkdownLimitMb ?? '继承全局'} MB`
+      : `Markdown/MDX 总量：${current.githubMarkdownLimitMb ?? '继承全局'} → ${input.githubMarkdownLimitMb ?? '继承全局'} MB`
   ].filter((change): change is string => Boolean(change))
   return changes.join('\n')
 }

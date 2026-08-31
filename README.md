@@ -6,7 +6,7 @@ Loci 将公开技术文档收录为本地 Markdown，提供全文搜索，并通
 
 ## 特性
 
-- 收录网页、公开 GitHub 仓库中的 Markdown、`llms.txt` 和 OpenAPI 文档。
+- 收录网页、公开 GitHub 仓库中的 Markdown/MDX、`llms.txt` 和 OpenAPI 文档。
 - Web UI 的本机 HTTP 只在当前终端会话期间运行；抓取由独立的无 HTTP worker 执行。默认数据目录中的定时抓取或云端每日同步会自动准备用户级常驻 worker，普通后台任务使用空闲后退出的按需 worker。各入口共享同一份本地 SQLite 数据和全文索引。
 - Agent 可通过 MCP 按需搜索和读取文档；长时间抓取使用 SDK 原生逐页进度和取消，Host 不支持时由 Skill 降级到 CLI。
 - 已知页面不在自动抓取路径时，可通过 MCP 只插入或刷新指定 URL，而不扩大站点发现范围。

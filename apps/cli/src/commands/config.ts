@@ -178,7 +178,7 @@ function configLabel(key: ConfigKey): string {
     'max-retries': '失败重试次数',
     'batch-interval-seconds': '抓取批次间隔',
     'github-archive-limit-mb': 'GitHub ZIP 默认上限（MB）',
-    'github-markdown-limit-mb': 'GitHub Markdown 默认上限（MB）',
+    'github-markdown-limit-mb': 'GitHub Markdown/MDX 默认上限（MB）',
     'server-url': 'Loci Server 地址'
   }[key]
 }

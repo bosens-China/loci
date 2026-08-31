@@ -11,11 +11,12 @@ import {
 } from '@loci/shared'
 import { ADMIN_CRAWL_SETTINGS_KEY } from '@/pages/admin/AdminCrawlSettingsPanel'
 import { ADMIN_JOBS_KEY, ADMIN_LIBRARIES_KEY } from '@/pages/admin/admin-query-keys'
+import { JOBS_QUERY_KEY } from '@/api/jobs'
 
 export const LOCAL_QUERY_KEYS = {
   sources: [['sources']],
   documents: [['documents'], ['document'], ['library-tree'], ['library-file']],
-  jobs: [['jobs']],
+  jobs: [JOBS_QUERY_KEY],
   settings: [['settings']],
   logs: [['operation-logs']]
 } satisfies Record<keyof ResourceRevisions, readonly QueryKey[]>

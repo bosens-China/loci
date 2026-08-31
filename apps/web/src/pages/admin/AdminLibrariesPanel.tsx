@@ -25,6 +25,7 @@ import {
 import { getSchedulePreset, type CloudLibrary, type CloudSyncJob } from '@loci/shared'
 import { AsyncState } from '@/components/AsyncState'
 import { formatDateTime } from '@/utils/format'
+import { PAGE_SIZE_OPTIONS } from '@/utils/pagination'
 import { getAdminSyncPercent, isAdminJobActive } from '@/pages/admin/admin-state'
 
 export type LibraryStatusFilter = 'all' | 'published' | 'attention' | 'pending'
@@ -177,7 +178,7 @@ export function AdminLibrariesPanel(props: AdminLibrariesPanelProps): React.JSX.
             pagination={{
               defaultPageSize: 10,
               showSizeChanger: true,
-              pageSizeOptions: ['10', '20', '50'],
+              pageSizeOptions: PAGE_SIZE_OPTIONS,
               showQuickJumper: true,
               showTotal: (t) => `共 ${t} 个文档库`
             }}

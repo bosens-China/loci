@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { DocumentSource } from '@loci/shared'
+import type { DocumentSource, LocalJob } from '@loci/shared'
 import {
   CheckSquareOutlined,
   CloudOutlined,
@@ -32,10 +32,13 @@ import {
 import { LocalLibraryCardItem } from '@/pages/documents/LocalLibraryCardItem'
 import { BatchDeleteError, deleteLibrarySources } from '@/pages/documents/library-batch-delete'
 import { SourceFormModal } from '@/pages/documents/SourceFormModal'
+import { getLatestActiveJobsBySource } from '@/pages/jobs/job-state'
+import { PAGE_SIZE_OPTIONS } from '@/utils/pagination'
 
 /** 本地文档库卡片列表：包含类型筛选、关键字搜索、多选批量删除、弹窗编辑、分页及进入目录阅读。 */
 export function LocalLibraryCards(props: {
   sources: DocumentSource[]
+  jobs: LocalJob[]
   onSelect: (id: string) => void
   onPublish: (source: DocumentSource) => void
   canPublish: boolean
@@ -46,10 +49,11 @@ export function LocalLibraryCards(props: {
   const [kindFilter, setKindFilter] = useState<LibraryKindFilter>('all')
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(9)
+  const [pageSize, setPageSize] = useState(10)
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [editingSource, setEditingSource] = useState<DocumentSource | 'new' | null>(null)
+  const activeJobs = useMemo(() => getLatestActiveJobsBySource(props.jobs), [props.jobs])
 
   // 统计各类来源数量
   const counts = useMemo(() => countLocalLibrarySources(props.sources), [props.sources])
@@ -265,6 +269,7 @@ export function LocalLibraryCards(props: {
                 <LocalLibraryCardItem
                   key={source.id}
                   source={source}
+                  activeJob={activeJobs.get(source.id)}
                   isSelected={isSelected}
                   selectMode={selectMode}
                   onSelectCard={() => props.onSelect(source.id)}
@@ -290,7 +295,7 @@ export function LocalLibraryCards(props: {
               pageSize={pageSize}
               total={filtered.length}
               showSizeChanger
-              pageSizeOptions={['6', '9', '12', '24']}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
               showQuickJumper
               onChange={(p, ps) => {
                 setPage(p)

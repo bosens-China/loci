@@ -48,7 +48,12 @@ export function registerDocumentCommands(program: Command): void {
         const tree =
           getUrlTreeSlice(
             buildUrlTree(
-              documents.map((item) => ({ id: item.id, url: item.url, title: item.title })),
+              documents.map((item) => ({
+                id: item.id,
+                url: item.url,
+                title: item.title,
+                relativePath: item.relativePath
+              })),
               source.id
             ),
             options.parent,

@@ -118,15 +118,15 @@ loci config set server-url https://your-loci.example.com
 
 常用设置如下：
 
-| 设置项                     | 用途                                   |
-| -------------------------- | -------------------------------------- |
-| `server-url`               | 指定云端文档库和 Admin API 的 Server。 |
-| `http-concurrency`         | 调整普通网页抓取的并发数。             |
-| `browser-concurrency`      | 调整浏览器渲染页面的并发数。           |
-| `max-retries`              | 调整页面抓取失败后的重试次数。         |
-| `batch-interval-seconds`   | 设置固定值或 `min-max` 随机批次间隔。  |
-| `github-archive-limit-mb`  | 调整 GitHub 仓库下载大小上限。         |
-| `github-markdown-limit-mb` | 调整 GitHub Markdown 文件的总量上限。  |
+| 设置项                     | 用途                                      |
+| -------------------------- | ----------------------------------------- |
+| `server-url`               | 指定云端文档库和 Admin API 的 Server。    |
+| `http-concurrency`         | 调整普通网页抓取的并发数。                |
+| `browser-concurrency`      | 调整浏览器渲染页面的并发数。              |
+| `max-retries`              | 调整页面抓取失败后的重试次数。            |
+| `batch-interval-seconds`   | 设置固定值或 `min-max` 随机批次间隔。     |
+| `github-archive-limit-mb`  | 调整 GitHub 仓库下载大小上限。            |
+| `github-markdown-limit-mb` | 调整 GitHub Markdown/MDX 文件的总量上限。 |
 
 例如，遇到网站限流时，可以降低并发数或增加批次间隔：
 

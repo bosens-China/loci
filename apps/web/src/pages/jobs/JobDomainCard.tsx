@@ -1,10 +1,16 @@
 import { CaretRightOutlined, CloseOutlined, PauseOutlined, StopOutlined } from '@ant-design/icons'
 import type { LocalJob } from '@loci/shared'
-import { Card, Progress, Select, Space, Tag, Tooltip, Typography } from 'antd'
+import { Button, Card, Progress, Select, Space, Spin, Tag, Tooltip, Typography } from 'antd'
 import { ConfirmedActionButton } from '@/components/ConfirmedActionButton'
 import { formatBytes, formatDateTime, formatDuration } from '@/utils/format'
 import { triggerLabel } from '@/utils/status-labels'
-import { estimateRemainingMs, jobViewStatus, type HostnameJobGroup } from './job-state'
+import {
+  estimateRemainingMs,
+  getJobProgressView,
+  jobViewStatus,
+  localJobElementId,
+  type HostnameJobGroup
+} from './job-state'
 
 interface JobDomainCardProps {
   group: HostnameJobGroup
@@ -15,6 +21,8 @@ interface JobDomainCardProps {
   onDomainAction: (hostname: string, action: 'pause-all' | 'resume-all') => void
   onPriorityChange: (job: LocalJob, priority: number) => void
   onContinue: (job: LocalJob) => void
+  activeJobsBySource: ReadonlyMap<string, LocalJob>
+  onViewActiveJob: (job: LocalJob) => void
 }
 
 /** 域名抓取卡片：展示共享队列概览与域名下各个子任务。 */
@@ -112,7 +120,7 @@ export function JobDomainCard(props: JobDomainCardProps): React.JSX.Element {
         </div>
       }
     >
-      <div className="divide-y divide-[var(--ant-color-border-secondary)]">
+      <div className="max-h-[36rem] divide-y divide-[var(--ant-color-border-secondary)] overflow-y-auto overscroll-contain">
         {group.jobs.map((job) => (
           <JobRow key={job.id} {...props} job={job} />
         ))}
@@ -125,68 +133,79 @@ function JobRow(props: JobDomainCardProps & { job: LocalJob }): React.JSX.Elemen
   const { job } = props
   const status = jobViewStatus(job)
   const progress = job.result
-  const total = Math.max(progress?.queued ?? 0, progress?.processed ?? 0)
-  const percent = total ? Math.min(100, Math.round(((progress?.processed ?? 0) / total) * 100)) : 0
+  const progressView = getJobProgressView(job)
   const elapsed = job.startedAt
     ? (job.finishedAt ? new Date(job.finishedAt).getTime() : props.now) -
       new Date(job.startedAt).getTime()
     : null
   const active = job.status === 'pending' || job.status === 'running'
+  const remaining = estimateRemainingMs(job, props.now)
+  const currentJob = props.activeJobsBySource.get(job.sourceId)
+  const retryableHistory = status === 'stopped' || status === 'failed' || status === 'cancelled'
+  const activeReplacement = retryableHistory && currentJob?.id !== job.id ? currentJob : undefined
 
   return (
-    <article className="px-4 py-3.5 transition-colors hover:bg-[var(--ant-color-fill-quaternary)] sm:px-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        {/* 左侧主要信息 + 标题下方进度条 */}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Typography.Text strong className="truncate text-sm">
+    <article
+      id={localJobElementId(job.id)}
+      className="scroll-m-4 px-4 py-3.5 transition-colors hover:bg-[var(--ant-color-fill-quaternary)] sm:px-5"
+    >
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <Typography.Text strong className="min-w-0 truncate text-sm">
               {props.sourceNames.get(job.sourceId) ?? '文档同步'}
             </Typography.Text>
             <JobStatus status={status} />
-            {job.priority !== 0 && (
-              <Tag color="blue" className="text-xs">
-                优先级 {job.priority}
-              </Tag>
-            )}
           </div>
 
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--ant-color-text-secondary)]">
-            <span className="font-mono" title={job.id}>
+          <div className="mt-1 flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-xs text-[var(--ant-color-text-secondary)]">
+            <span className="max-w-64 shrink truncate font-mono" title={job.id}>
               {job.id}
             </span>
             <span>·</span>
-            <span>{triggerLabel(job.trigger)}</span>
+            <span className="shrink-0">{triggerLabel(job.trigger)}</span>
             <span>·</span>
-            <span>{formatDateTime(job.scheduledAt)}</span>
+            <span className="shrink-0">{formatDateTime(job.scheduledAt)}</span>
+            {job.priority !== 0 && (
+              <>
+                <span>·</span>
+                <span className="shrink-0">优先级 {job.priority}</span>
+              </>
+            )}
           </div>
 
-          {/* 进度条仅在标题下方紧凑展示，避免割裂页面 */}
           {active ? (
-            <div className="mt-2.5 max-w-lg">
-              <Progress
-                percent={percent}
-                size="small"
-                status={job.status === 'running' ? 'active' : 'normal'}
-                className="m-0!"
-              />
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--ant-color-text-secondary)]">
-                <span>
-                  已处理 {progress?.processed ?? 0}/{total || '—'} 页 ({percent}%)
+            <div className="mt-3 max-w-3xl" aria-live="polite">
+              <div className="mb-1 flex min-w-0 items-center justify-between gap-4 text-xs">
+                <div className="flex min-w-0 items-center gap-2 text-[var(--ant-color-text)]">
+                  {progressView.kind === 'indeterminate' && <Spin size="small" />}
+                  <span className="truncate" title={progressView.current}>
+                    {progressView.current}
+                  </span>
+                </div>
+                <span className="shrink-0 tabular-nums text-[var(--ant-color-text-secondary)]">
+                  {progressView.kind === 'determinate'
+                    ? `${progressView.processed}/${progressView.total} 页 · ${progressView.percent}%`
+                    : '准备中'}
                 </span>
-                <span>·</span>
-                <span>已抓取 {formatBytes(job.contentBytes)}</span>
-                {progress?.node?.title && (
-                  <>
-                    <span>·</span>
-                    <span className="truncate max-w-xs text-[var(--ant-color-text)]">
-                      当前: {progress.node.title}
-                    </span>
-                  </>
-                )}
+              </div>
+              {progressView.kind === 'determinate' ? (
+                <Progress
+                  percent={progressView.percent}
+                  showInfo={false}
+                  size="small"
+                  status={job.status === 'running' ? 'active' : 'normal'}
+                  className="m-0! block!"
+                />
+              ) : (
+                <div className="h-1.5 rounded-full bg-[var(--ant-color-fill-secondary)]" />
+              )}
+              <div className="mt-1 text-xs text-[var(--ant-color-text-secondary)]">
+                已抓取 {formatBytes(job.contentBytes)}
               </div>
             </div>
           ) : (
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[var(--ant-color-text-secondary)]">
+            <div className="mt-1.5 flex items-center gap-2 overflow-hidden whitespace-nowrap text-xs text-[var(--ant-color-text-secondary)]">
               <span>处理 {progress?.processed ?? 0} 页</span>
               <span>·</span>
               <span>{formatBytes(job.contentBytes)}</span>
@@ -205,42 +224,54 @@ function JobRow(props: JobDomainCardProps & { job: LocalJob }): React.JSX.Elemen
             </div>
           )}
 
-          {job.error && (
-            <div className="mt-2 inline-flex items-center gap-1 rounded bg-[var(--ant-color-error-bg)] px-2 py-0.5 text-xs text-[var(--ant-color-error)]">
-              <span>失败原因：{job.error}</span>
+          {(job.error || activeReplacement) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {job.error && (
+                <div className="inline-flex items-center gap-1 rounded bg-[var(--ant-color-error-bg)] px-2 py-0.5 text-xs text-[var(--ant-color-error)]">
+                  <span>失败原因：{job.error}</span>
+                </div>
+              )}
+              {activeReplacement && (
+                <div className="rounded bg-[var(--ant-color-info-bg)] px-2 py-0.5 text-xs text-[var(--ant-color-info)]">
+                  已有新的同步任务正在运行
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* 右侧耗时指标与操作按钮区 */}
-        <div className="flex shrink-0 flex-wrap items-center gap-4 lg:self-center">
+        <div className="flex shrink-0 flex-col items-end gap-2">
           {active && (
-            <div className="text-right text-xs">
-              <Typography.Text type="secondary" className="block">
-                预计剩余
-              </Typography.Text>
-              <Typography.Text strong className="block">
-                {formatDuration(estimateRemainingMs(job))}
-              </Typography.Text>
+            <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+              <div className="flex items-center gap-1 text-xs">
+                <Typography.Text type="secondary">预计剩余</Typography.Text>
+                <Typography.Text strong>
+                  {remaining === null ? '计算中' : formatDuration(remaining)}
+                </Typography.Text>
+              </div>
+              <Select
+                aria-label="任务优先级"
+                size="small"
+                value={job.priority}
+                className="w-20"
+                options={[
+                  { value: 100, label: '高' },
+                  { value: 0, label: '普通' },
+                  { value: -50, label: '低' }
+                ]}
+                onChange={(value) => props.onPriorityChange(job, value)}
+              />
             </div>
           )}
 
-          {active && (
-            <Select
-              aria-label="任务优先级"
-              size="small"
-              value={job.priority}
-              className="w-20"
-              options={[
-                { value: 100, label: '高' },
-                { value: 0, label: '普通' },
-                { value: -50, label: '低' }
-              ]}
-              onChange={(value) => props.onPriorityChange(job, value)}
+          <div className="flex justify-end">
+            <JobActions
+              {...props}
+              job={job}
+              status={status}
+              activeReplacement={activeReplacement}
             />
-          )}
-
-          <JobActions {...props} job={job} status={status} />
+          </div>
         </div>
       </div>
     </article>
@@ -248,11 +279,27 @@ function JobRow(props: JobDomainCardProps & { job: LocalJob }): React.JSX.Elemen
 }
 
 function JobActions(
-  props: JobDomainCardProps & { job: LocalJob; status: ReturnType<typeof jobViewStatus> }
+  props: JobDomainCardProps & {
+    job: LocalJob
+    status: ReturnType<typeof jobViewStatus>
+    activeReplacement?: LocalJob
+  }
 ): React.JSX.Element {
-  const { job, status } = props
+  const { activeReplacement, job, status } = props
   const loading = (action: string): boolean => props.pendingAction === `${action}:${job.id}`
   if (status === 'stopped' || status === 'failed' || status === 'cancelled') {
+    if (activeReplacement) {
+      return (
+        <Button
+          type="link"
+          size="small"
+          icon={<CaretRightOutlined />}
+          onClick={() => props.onViewActiveJob(activeReplacement)}
+        >
+          查看当前同步
+        </Button>
+      )
+    }
     const continuation = status === 'stopped'
     return (
       <ConfirmedActionButton

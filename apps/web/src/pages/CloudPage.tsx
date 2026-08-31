@@ -34,6 +34,7 @@ import {
   setCloudAutoSync,
   updateCloudLibrary
 } from '@/api/cloud'
+import { PAGE_SIZE_OPTIONS } from '@/utils/pagination'
 import { deleteSource } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
@@ -49,7 +50,7 @@ export function CloudPage(): React.JSX.Element {
   const [selectedLibraryId, setSelectedLibraryId] = useState<string>()
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(6)
+  const [pageSize, setPageSize] = useState(10)
 
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['cloud-catalog'], queryFn: listCloudCatalog })
@@ -347,7 +348,7 @@ export function CloudPage(): React.JSX.Element {
                 pageSize={pageSize}
                 total={filtered.length}
                 showSizeChanger
-                pageSizeOptions={['6', '10', '20']}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
                 showQuickJumper
                 showTotal={(total) => `共 ${total} 个公开库`}
                 onChange={(p, ps) => {

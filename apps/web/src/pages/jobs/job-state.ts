@@ -19,6 +19,22 @@ export interface HostnameJobGroup {
   contentBytes: number
 }
 
+export type JobProgressView =
+  | {
+      kind: 'indeterminate'
+      processed: number
+      current: string
+    }
+  | {
+      kind: 'determinate'
+      processed: number
+      total: number
+      percent: number
+      current: string
+    }
+
+export const localJobElementId = (jobId: string): string => `local-job-${jobId}`
+
 export function jobViewStatus(job: LocalJob): JobViewStatus {
   if (job.status === 'running' && job.stopRequested) return 'stopping'
   if (job.status === 'running' && job.pauseRequested) return 'pausing'
@@ -66,6 +82,41 @@ export function estimateRemainingMs(job: LocalJob, now = Date.now()): number | n
   if (remaining <= 0) return 0
   const elapsed = Math.max(0, now - new Date(job.startedAt).getTime())
   return Math.round((elapsed / progress.processed) * remaining)
+}
+
+/** 将持久任务进度归一为“准备中”与“可计算百分比”两种稳定展示状态。 */
+export function getJobProgressView(job: LocalJob): JobProgressView {
+  const processed = job.result?.processed ?? 0
+  const total = Math.max(job.result?.queued ?? 0, processed)
+  const current =
+    job.result?.node?.title ?? (job.status === 'pending' ? '等待任务开始' : '正在准备同步')
+  if (total === 0) return { kind: 'indeterminate', processed, current }
+  return {
+    kind: 'determinate',
+    processed,
+    total,
+    percent: Math.min(100, Math.round((processed / total) * 100)),
+    current
+  }
+}
+
+/** 每个文档库只保留更新时间最新的活动同步任务，供任务中心外的轻量进度入口复用。 */
+export function getLatestActiveJobsBySource(
+  jobs: readonly LocalJob[]
+): ReadonlyMap<string, LocalJob> {
+  const activeJobs = new Map<string, LocalJob>()
+  for (const job of jobs) {
+    if (job.status !== 'pending' && job.status !== 'running') continue
+    const current = activeJobs.get(job.sourceId)
+    if (!current || job.updatedAt > current.updatedAt) activeJobs.set(job.sourceId, job)
+  }
+  return activeJobs
+}
+
+/** 用任务接口返回的新状态更新缓存，同时保留其他任务。 */
+export function upsertLocalJob(jobs: readonly LocalJob[], incoming: LocalJob): LocalJob[] {
+  const found = jobs.some((job) => job.id === incoming.id)
+  return found ? jobs.map((job) => (job.id === incoming.id ? incoming : job)) : [incoming, ...jobs]
 }
 
 function summarizeGroup(hostname: string, jobs: LocalJob[]): HostnameJobGroup {

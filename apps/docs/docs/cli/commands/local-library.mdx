@@ -14,20 +14,20 @@ loci source add https://rspress.rs/guide/introduction.html
 
 常用选项如下：
 
-| 参数                             | 用途                                        |
-| -------------------------------- | ------------------------------------------- |
-| `--url <url>`                    | 覆盖位置参数中的入口 URL。                  |
-| `--name <name>`                  | 指定文档源名称。                            |
-| `--scope <path>`                 | 只收录指定路径，例如 `/guide`。             |
-| `--page-limit <number>`          | 限制最多收录的页面数。                      |
-| `--mode <auto\|http\|browser>`   | 选择自动、HTTP 或浏览器抓取。               |
-| `--exclude-path <regex>`         | 排除匹配的 URL 路径，例如不需要的语言目录。 |
-| `--http-concurrency <number>`    | 覆盖这个普通站点的 HTTP 并发数。            |
-| `--browser-concurrency <number>` | 覆盖这个普通站点的浏览器并发数。            |
-| `--archive-limit <size>`         | 覆盖这个 GitHub 仓库的 ZIP 上限。           |
-| `--markdown-limit <size>`        | 覆盖这个 GitHub 仓库的 Markdown 总量上限。  |
-| `--no-sync`                      | 只保存文档源，稍后再同步。                  |
-| `--background`                   | 提交持久后台任务，使当前终端立即返回。      |
+| 参数                             | 用途                                           |
+| -------------------------------- | ---------------------------------------------- |
+| `--url <url>`                    | 覆盖位置参数中的入口 URL。                     |
+| `--name <name>`                  | 指定文档源名称。                               |
+| `--scope <path>`                 | 只收录指定路径，例如 `/guide`。                |
+| `--page-limit <number>`          | 限制最多收录的页面数。                         |
+| `--mode <auto\|http\|browser>`   | 选择自动、HTTP 或浏览器抓取。                  |
+| `--exclude-path <regex>`         | 排除匹配的 URL 路径，例如不需要的语言目录。    |
+| `--http-concurrency <number>`    | 覆盖这个普通站点的 HTTP 并发数。               |
+| `--browser-concurrency <number>` | 覆盖这个普通站点的浏览器并发数。               |
+| `--archive-limit <size>`         | 覆盖这个 GitHub 仓库的 ZIP 上限。              |
+| `--markdown-limit <size>`        | 覆盖这个 GitHub 仓库的 Markdown/MDX 总量上限。 |
+| `--no-sync`                      | 只保存文档源，稍后再同步。                     |
+| `--background`                   | 提交持久后台任务，使当前终端立即返回。         |
 
 `--background` 与 `--no-sync` 不能同时使用。CLI 会在执行前直接拒绝这组冲突参数。
 
@@ -47,7 +47,7 @@ loci source add https://fastapi.tiangolo.com/ --scope /tutorial --exclude-path '
 loci source add https://github.com/vuejs/docs
 ```
 
-Loci 会保留仓库 Markdown 的目录结构，并保持相对文档和图片链接可用。当前只支持公开仓库的默认分支；不支持私有仓库、Git LFS、Git clone、子目录范围和 MDX。
+Loci 会保留仓库 Markdown/MDX 的目录结构，并保持相对文档和图片链接可用。当前只支持公开仓库的默认分支；不支持私有仓库、Git LFS、Git clone 和子目录范围。
 
 ## 同步和更新文档源
 

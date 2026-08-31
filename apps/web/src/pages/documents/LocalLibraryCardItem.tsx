@@ -18,17 +18,20 @@ import {
   Card,
   Checkbox,
   Popconfirm,
+  Progress,
   Space,
   Tag,
   Tooltip,
   Typography
 } from 'antd'
-import type { DocumentSource } from '@loci/shared'
-import { enqueueSourceSync } from '@/api/jobs'
+import type { DocumentSource, LocalJob } from '@loci/shared'
+import { enqueueSourceSync, JOBS_QUERY_KEY } from '@/api/jobs'
+import { getJobProgressView, upsertLocalJob } from '@/pages/jobs/job-state'
 import { formatBytes } from '@/utils/format'
 
 export interface LocalLibraryCardItemProps {
   source: DocumentSource
+  activeJob?: LocalJob
   isSelected: boolean
   selectMode: boolean
   onSelectCard: () => void
@@ -49,8 +52,11 @@ export function LocalLibraryCardItem(props: LocalLibraryCardItemProps): React.JS
   const sync = useMutation({
     mutationFn: enqueueSourceSync,
     onSuccess: (result) => {
+      client.setQueryData<LocalJob[]>(JOBS_QUERY_KEY, (current = []) =>
+        upsertLocalJob(current, result.job)
+      )
       void client.invalidateQueries({ queryKey: ['sources'] })
-      void client.invalidateQueries({ queryKey: ['jobs'] })
+      void client.invalidateQueries({ queryKey: JOBS_QUERY_KEY })
       void message.success(
         result.reused ? '已有同步任务，已复用当前进度' : '同步任务已进入后台队列'
       )
@@ -76,7 +82,7 @@ export function LocalLibraryCardItem(props: LocalLibraryCardItemProps): React.JS
   return (
     <Card
       hoverable
-      className={`group flex flex-col justify-between cursor-pointer transition-all duration-200 ${
+      className={`group relative flex flex-col justify-between overflow-hidden cursor-pointer transition-all duration-200 ${
         isSelected
           ? 'border-[var(--ant-color-primary)]! bg-[var(--ant-color-primary-bg-hover)]'
           : 'hover:border-[var(--ant-color-primary)] hover:shadow-sm'
@@ -286,6 +292,42 @@ export function LocalLibraryCardItem(props: LocalLibraryCardItemProps): React.JS
           </Space>
         )}
       </div>
+
+      {props.activeJob && <LibrarySyncProgress job={props.activeJob} />}
     </Card>
+  )
+}
+
+function LibrarySyncProgress(props: { job: LocalJob }): React.JSX.Element {
+  const progress = getJobProgressView(props.job)
+  if (progress.kind === 'indeterminate') {
+    return (
+      <div
+        aria-label="正在准备同步，页面总数尚未确定"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-[var(--ant-color-fill-secondary)]"
+        title="正在准备同步，页面总数尚未确定"
+      >
+        <div className="h-full w-1/3 animate-pulse bg-[var(--ant-color-primary)] motion-reduce:animate-none" />
+      </div>
+    )
+  }
+  return (
+    <div
+      aria-label={`同步进度 ${progress.percent}%`}
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={progress.percent}
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5"
+      role="progressbar"
+      title={`同步进度 ${progress.processed}/${progress.total} 页 · ${progress.percent}%`}
+    >
+      <Progress
+        className="m-0! block! leading-none!"
+        percent={progress.percent}
+        showInfo={false}
+        size={['100%', 2]}
+        trailColor="transparent"
+      />
+    </div>
   )
 }

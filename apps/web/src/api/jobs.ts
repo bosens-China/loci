@@ -1,6 +1,8 @@
 import type { EnqueueLocalJobResult, LocalJob } from '@loci/shared'
 import { request } from '@/api/client'
 
+export const JOBS_QUERY_KEY = ['jobs'] as const
+
 export async function listJobs(): Promise<LocalJob[]> {
   return (await request.get<LocalJob[]>('/api/jobs')).data
 }

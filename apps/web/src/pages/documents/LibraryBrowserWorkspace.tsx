@@ -11,13 +11,13 @@ import {
   SearchOutlined
 } from '@ant-design/icons'
 import type { DataNode } from 'antd/es/tree'
-import type { DocumentRecord, UrlTreeNode } from '@loci/shared'
+import type { UrlTreeNode } from '@loci/shared'
 import { useQuery } from '@tanstack/react-query'
 import { Button, Card, Empty, Input, Tag, Tooltip, Typography, Tree } from 'antd'
 import { getLibraryTree, readLibraryFile, type LibraryLocation } from '@/api/library-browser'
 import { AsyncState } from '@/components/AsyncState'
 import { useRawLayout } from '@/components/shell/ShellLayoutContext'
-import { DocumentReaderPanel } from '@/pages/documents/DocumentReaderPanel'
+import { DocumentReaderPanel, type ReaderDocument } from '@/pages/documents/DocumentReaderPanel'
 
 export function LibraryBrowserWorkspace(props: {
   location: LibraryLocation
@@ -290,7 +290,8 @@ function toTreeData(
 function toDocument(
   file: Awaited<ReturnType<typeof readLibraryFile>>,
   sourceName: string
-): DocumentRecord {
+): ReaderDocument {
+  const contentBytes = file.contentBytes ?? new TextEncoder().encode(file.content).byteLength
   return {
     id: file.id,
     sourceId: file.libraryId,
@@ -300,6 +301,8 @@ function toDocument(
     folder: file.path,
     language: file.language,
     updatedAt: file.updatedAt,
-    content: file.content
+    content: file.content,
+    contentBytes,
+    contentSizeIsPartial: file.contentBytes === undefined && file.truncated
   }
 }

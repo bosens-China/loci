@@ -213,7 +213,7 @@ export function SettingsPage(): React.JSX.Element {
               />
               <NumberField
                 name="githubMarkdownLimitMb"
-                label="Markdown 提取总量限制"
+                label="Markdown/MDX 提取总量限制"
                 unit="MB"
                 {...APP_SETTINGS_LIMITS.githubSizeMb}
               />

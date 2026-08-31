@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { DocumentSource } from '@loci/shared'
 import { getAdminSession } from '@/api/admin'
+import { JOBS_QUERY_KEY, listJobs } from '@/api/jobs'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
 import { ADMIN_SESSION_KEY } from '@/pages/admin/admin-query-keys'
@@ -15,6 +16,7 @@ export function DocumentsPage(): React.JSX.Element {
   const { state, selectSource } = useDocumentRoute()
   const navigate = useNavigate()
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
+  const jobs = useQuery({ queryKey: JOBS_QUERY_KEY, queryFn: listJobs })
   const adminSession = useQuery({
     queryKey: ADMIN_SESSION_KEY,
     queryFn: getAdminSession,
@@ -43,6 +45,7 @@ export function DocumentsPage(): React.JSX.Element {
       ) : (
         <LocalLibraryCards
           sources={sources.data ?? []}
+          jobs={jobs.data ?? []}
           onSelect={selectSource}
           onPublish={openPublish}
           canPublish={canPublish}
