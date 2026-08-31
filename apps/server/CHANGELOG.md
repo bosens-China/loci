@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.12.0](https://github.com/bosens-China/loci/compare/server-v1.11.0...server-v1.12.0) (2026-08-31)
+
+
+### Features
+
+* 优化任务中心与文档浏览体验 ([96b55c4](https://github.com/bosens-China/loci/commit/96b55c4811b0a80b525f9d50e37af9c17f31f2df))
+* 支持结构化文档快照与任务进度持久化 ([5c82d7c](https://github.com/bosens-China/loci/commit/5c82d7c53e9eb3a7069fdfe3f82873634c9a6cbf))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @loci/core bumped to 1.16.0
+    * @loci/shared bumped to 1.25.0
+
 ## [1.11.0](https://github.com/bosens-China/loci/compare/server-v1.10.0...server-v1.11.0) (2026-08-28)
 
 
