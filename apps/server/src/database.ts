@@ -209,7 +209,6 @@ export class ServerDatabase {
   }
 
   updateLibrary(id: string, input: LibraryInput): Library {
-    const current = this.getLibrary(id)
     const url = normalizeUrl(input.url)
     const hostname = getHostname(url)
     const scopePath = normalizeLibraryScope(url, hostname, input.scopePath)
@@ -228,6 +227,7 @@ export class ServerDatabase {
 
     transaction(this.#database, () => {
       this.assertLibraryIdle(id)
+      const current = this.getLibrary(id)
       const resetGithubState = current.url !== url || current.pageLimit !== input.pageLimit
       this.#drizzle
         .update(libraries)
@@ -254,6 +254,14 @@ export class ServerDatabase {
         this.#drizzle.delete(serverDocuments).where(eq(serverDocuments.libraryId, id)).run()
       } else if (current.scopePath !== scopePath) {
         this.deleteDocumentsOutsideScope(id, hostname, scopePath)
+      }
+      // 配置变更立即作用于下载快照；删除后为空时撤销发布，不能继续分发旧正文。
+      if (current.revision) {
+        if (this.getLibrary(id).pages > 0) {
+          this.publishSnapshot(id)
+        } else {
+          this.#drizzle.delete(librarySnapshots).where(eq(librarySnapshots.libraryId, id)).run()
+        }
       }
     })
     return this.getLibrary(id)
