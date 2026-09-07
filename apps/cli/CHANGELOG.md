@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.20.1](https://github.com/bosens-China/loci/compare/cli-v1.20.0...cli-v1.20.1) (2026-09-07)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/runtime bumped to 1.19.1
+
 ## [1.20.0](https://github.com/bosens-China/loci/compare/cli-v1.19.1...cli-v1.20.0) (2026-08-31)
 
 

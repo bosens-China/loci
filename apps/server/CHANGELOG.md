@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.12.1](https://github.com/bosens-China/loci/compare/server-v1.12.0...server-v1.12.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **server:** 修复任务暂停与取消收尾 ([07a5300](https://github.com/bosens-China/loci/commit/07a53001ba70e54b1c9925bdbae8f1a5bdc3a79e))
+* **server:** 同步配置变更后的公开快照 ([574ca43](https://github.com/bosens-China/loci/commit/574ca4379fd6ce05a0c7a76a415763a68acd5536))
+
 ## [1.12.0](https://github.com/bosens-China/loci/compare/server-v1.11.0...server-v1.12.0) (2026-08-31)
 
 
