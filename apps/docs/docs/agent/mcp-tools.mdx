@@ -138,3 +138,5 @@ Server 管理工具只用于用户明确要求的管理任务，不属于普通�
 - `loci_get_server_crawl_settings` 读取全局默认；`loci_save_server_crawl_settings` 需要提交读取到的 `revision` 和完整设置，冲突时重新读取后再决定是否重试。
 
 独立 stdio MCP 或 `loci mcp call` 通过 `LOCI_ADMIN_USERNAME` 和 `LOCI_ADMIN_PASSWORD` 建立只保存在进程内存中的管理员会话。不要把密码放入工具参数。删除、覆盖发布、取消、结束、收窄范围或其他破坏性操作必须先说明影响并取得用户授权。
+
+`loci_update_server_library` 更换起始 URL 或收窄范围时，正文和已发布快照会立即清空或裁剪；正文清空后撤销公开快照。确认时应说明这会立即影响下载结果，不能描述为下次同步才生效。

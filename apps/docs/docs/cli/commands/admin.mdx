@@ -134,7 +134,9 @@ loci admin publish <本地文档库> --yes
 `--schedule off` 关闭 Server 自动更新计划；旧脚本中的 `manual` 仍可作为兼容别名。`admin libraries` 显示发布状态、最近同步和错误；`admin jobs` 显示 hostname、页面进度、正文大小、耗时和失败原因。任务引用可以是完整 ID 或列表中的唯一短 ID；暂停与恢复复用原任务，结束保留部分正文和剩余检查点，取消丢弃本次内容。`admin sync` 可以接收多个名称、完整 ID 或唯一短 ID；使用 `--all` 提交全部文档库，使用 `--wait` 在当前终端等待聚合结果。同一文档库重复提交时，Loci 会复用已有任务并显示当前进度。
 
 `admin settings` 查看 Server 全局抓取策略，`admin settings-set` 修改明确提供的字段；全局 `--interval` 接受 `0`、固定秒数或 `min-max`。`admin domain-list`、`domain-set` 和 `domain-delete` 管理 Server hostname 抓取覆盖；域名规则使用 `default` 恢复继承。`admin publish` 将所选本地文档库打包为经过校验的压缩二进制归档；省略 `--target` 创建新 Server 文档库，提供 `--target` 时只在明确确认后覆盖目标。归档只包含该库的公开元数据和正文，不上传本机设置、凭据或任务历史。
-`admin update` 更换 URL 或收窄范围时，Server 会在保存事务中立即清空或裁剪正文；显式脚本参数表示调用方已确认影响。CLI 的 Server 地址遵循 `LOCI_SERVER_URL` 高于持久 `server-url` 的优先级。
+暂停的排队任务会释放执行名额，让其他文档库继续运行；恢复时复用原任务 ID 并重新入队。等待执行资格时也可以安全取消任务。
+
+`admin update` 更换 URL 或收窄范围时，Server 会在保存事务中立即清空或裁剪正文，并同步更新已发布快照；正文清空后，该库从公开目录移除，旧快照不再可下载。未发布的文档库不会因修改配置自动发布。显式脚本参数表示调用方已确认影响。CLI 的 Server 地址遵循 `LOCI_SERVER_URL` 高于持久 `server-url` 的优先级。
 
 删除命令在非交互环境中必须显式提供 `--yes`。
 

@@ -130,6 +130,8 @@ description: 使用 Loci 发现、获取、同步、搜索和阅读开发者技�
 
 `loci_*_server_*`、Server hostname 策略、Server 抓取策略和发布工具只用于用户明确要求的服务器管理，不属于普通文档发现、获取或阅读流程。不要仅为回答技术问题而创建、修改、同步、控制、发布、删除 Server 文档库或调整 Server 抓取策略。保存 Server 抓取策略前先读取当前配置并提交其 `revision`；冲突时重新读取并向用户说明变化，不静默覆盖。独立 MCP 进程所需的管理员凭据只能从 `LOCI_ADMIN_USERNAME` 与 `LOCI_ADMIN_PASSWORD` 环境变量读取，不能作为工具参数传递。
 
+修改 Server 文档库的起始 URL 或收窄收录范围前，确认信息应包含立即清空或裁剪正文及已发布快照的影响；正文清空后会撤销公开快照，不能描述为下次同步才生效。
+
 `loci_sync_libraries` 只用于已经存在的网页文档库；不存在的文档库必须通过云端拉取或添加官方入口获取。不要为每个问题同步文档库，仅在用户要求最新信息、文档库长期没有成功更新、本地结果明显缺失或可能与官网不一致时建议同步。
 
 用户已授权同步，但另一个工具或 Agent 可能已经启动任务时，先以 `{"library_ids":["目标文档库 ID"]}` 调用 `loci_get_sync_status`。对 `discovery_mode=agent_review` 的文档库，任何带活动 `run_id` 的审查运行都先调用 `loci_get_url_review`，不论外层 `sync_status` 是 `syncing` 还是 `awaiting_review`：内层状态为 `discovering` 时用同一 `library_id` 重调 `loci_start_url_review`，为 `awaiting_review` 时提交当前批次。不要把审查运行的 `syncing` 当作会自动推进的普通同步。其他文档库在 `sync_status=syncing` 时跟随已有任务，不要并行启动第二份抓取。确实需要在当前调用中等待普通同步时，对同一文档库调用 `loci_sync_libraries` 并设置 `wait_for_completion: true`。MCP 路径使用 SDK 原生 Progress 和 Cancellation；当前 Host 无法让 Agent 使用其中任一能力时，按调用通道路由改走 CLI。Loci 会复用活动任务，跨进程调用由持久任务 single-flight 阻止重复写入。
