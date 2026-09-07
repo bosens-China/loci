@@ -124,7 +124,9 @@ export class SyncService {
     const local = this.#jobs.get(id)
     if (local) assignJob(local, persisted)
     this.#controllers.get(id)?.abort(new SyncCanceledError('同步已取消'))
-    if (!local && persisted.status === 'canceled') this.#cleanupCanceledEmptyLibrary(persisted)
+    if (!this.#controllers.has(id) && persisted.status === 'canceled') {
+      this.#cleanupCanceledEmptyLibrary(persisted)
+    }
     return local ?? persisted
   }
 
@@ -203,7 +205,13 @@ export class SyncService {
       )
       .catch(async (error: unknown) => {
         // p-queue 会立即拒绝被取消的任务；已启动任务仍需等待抓取协作式退出。
-        if (execution) await execution
+        if (execution) {
+          try {
+            await execution
+          } catch (executionError) {
+            error = executionError
+          }
+        }
         if (controller.signal.aborted) {
           const persisted = this.database.syncJobs.get(job.id)
           if (persisted) assignJob(job, persisted)
@@ -230,6 +238,19 @@ export class SyncService {
         this.#controllers.delete(job.id)
         this.#deleteActiveJob(job)
         this.#cleanupCanceledEmptyLibrary(job)
+        // 恢复请求可能发生在暂停已持久化、旧执行尚未收尾的窗口。
+        const current = this.database.syncJobs.get(job.id)
+        if (
+          current?.ownerId === this.#ownerId &&
+          current.status === 'queued' &&
+          !current.paused &&
+          !current.pauseRequested &&
+          !current.stopRequested &&
+          !controller.signal.aborted
+        ) {
+          assignJob(job, current)
+          this.#enqueue(job)
+        }
       })
     this.#tasks.set(job.id, task)
     return job
@@ -268,7 +289,15 @@ export class SyncService {
     while (!this.database.syncJobs.markRunning(job.id, this.#ownerId, leaseExpiresAt())) {
       const persisted = this.database.syncJobs.get(job.id)
       if (persisted) assignJob(job, persisted)
-      if (!persisted || persisted.status !== 'queued') return
+      // 暂停任务让出两个队列的名额，由显式恢复重新入队。
+      if (
+        !persisted ||
+        persisted.ownerId !== this.#ownerId ||
+        persisted.status !== 'queued' ||
+        persisted.paused ||
+        persisted.pauseRequested
+      )
+        return
       await delay(50, undefined, { signal })
     }
     job.status = 'running'
