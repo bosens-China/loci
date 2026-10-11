@@ -17,11 +17,13 @@ import { acquireRuntimeLock } from '../runtime-lock.js'
 import { skillLockKey } from '../skill-files.js'
 
 const directories: string[] = []
+const closeDatabases: Array<() => void> = []
 const skillResourceDir = fileURLToPath(
   new URL('../../../../.agents/skills/use-loci/', import.meta.url)
 )
 
 afterEach(() => {
+  closeDatabases.splice(0).forEach((close) => close())
   directories.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true }))
 })
 
@@ -29,6 +31,7 @@ function setup(): { root: string; manager: SkillManager } {
   const root = mkdtempSync(join(tmpdir(), 'loci-skills-'))
   directories.push(root)
   const database = createDatabase(join(root, 'loci.sqlite'))
+  closeDatabases.push(() => database.close())
   return {
     root,
     manager: new SkillManager({

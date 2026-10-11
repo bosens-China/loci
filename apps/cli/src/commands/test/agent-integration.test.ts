@@ -6,12 +6,14 @@ import { createProgram } from '../../cli.js'
 
 const originalDataDir = process.env.LOCI_DATA_DIR
 const originalHome = process.env.HOME
+const originalUserProfile = process.env.USERPROFILE
 let root = ''
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'loci-cli-agent-integration-'))
   process.env.LOCI_DATA_DIR = join(root, 'data')
   process.env.HOME = join(root, 'home')
+  process.env.USERPROFILE = process.env.HOME
   vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 })
@@ -22,6 +24,8 @@ afterEach(() => {
   else process.env.LOCI_DATA_DIR = originalDataDir
   if (originalHome === undefined) delete process.env.HOME
   else process.env.HOME = originalHome
+  if (originalUserProfile === undefined) delete process.env.USERPROFILE
+  else process.env.USERPROFILE = originalUserProfile
   rmSync(root, { recursive: true, force: true })
 })
 

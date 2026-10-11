@@ -15,6 +15,7 @@ import { askConfirm, askSelect } from '../../ui.js'
 
 const originalDataDir = process.env.LOCI_DATA_DIR
 const originalHome = process.env.HOME
+const originalUserProfile = process.env.USERPROFILE
 const isTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY')
 let dataDir = ''
 let homeDir = ''
@@ -25,6 +26,7 @@ beforeEach(() => {
   homeDir = join(dataDir, 'home')
   process.env.LOCI_DATA_DIR = dataDir
   process.env.HOME = homeDir
+  process.env.USERPROFILE = homeDir
   Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true })
   vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
@@ -37,6 +39,8 @@ afterEach(() => {
   else process.env.LOCI_DATA_DIR = originalDataDir
   if (originalHome === undefined) delete process.env.HOME
   else process.env.HOME = originalHome
+  if (originalUserProfile === undefined) delete process.env.USERPROFILE
+  else process.env.USERPROFILE = originalUserProfile
   if (isTtyDescriptor) Object.defineProperty(process.stdin, 'isTTY', isTtyDescriptor)
 })
 

@@ -8,11 +8,13 @@ let directory = ''
 const originalCwd = process.cwd()
 const originalDataDir = process.env.LOCI_DATA_DIR
 const originalHome = process.env.HOME
+const originalUserProfile = process.env.USERPROFILE
 
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'loci-cli-skills-'))
   process.env.LOCI_DATA_DIR = join(directory, 'data')
   process.env.HOME = join(directory, 'home')
+  process.env.USERPROFILE = process.env.HOME
   process.chdir(directory)
   vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 })
@@ -24,6 +26,8 @@ afterEach(() => {
   else process.env.LOCI_DATA_DIR = originalDataDir
   if (originalHome === undefined) delete process.env.HOME
   else process.env.HOME = originalHome
+  if (originalUserProfile === undefined) delete process.env.USERPROFILE
+  else process.env.USERPROFILE = originalUserProfile
   rmSync(directory, { recursive: true, force: true })
 })
 

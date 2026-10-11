@@ -17,6 +17,7 @@ let root = ''
 let homeDir = ''
 let dataDir = ''
 const originalHome = process.env.HOME
+const originalUserProfile = process.env.USERPROFILE
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'loci-agent-import-'))
@@ -24,6 +25,7 @@ beforeEach(() => {
   dataDir = join(root, 'data')
   mkdirSync(dataDir, { recursive: true })
   process.env.HOME = homeDir
+  process.env.USERPROFILE = process.env.HOME
   vi.mocked(which).mockClear()
 })
 
@@ -31,6 +33,8 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true })
   if (originalHome === undefined) delete process.env.HOME
   else process.env.HOME = originalHome
+  if (originalUserProfile === undefined) delete process.env.USERPROFILE
+  else process.env.USERPROFILE = originalUserProfile
 })
 
 describe('Agent MCP 导入命令', () => {

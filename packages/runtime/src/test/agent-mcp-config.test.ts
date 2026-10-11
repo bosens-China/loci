@@ -143,7 +143,7 @@ describe('Agent MCP 用户配置文件', () => {
 
   it('按操作系统解析 VS Code 默认用户 Profile 路径', () => {
     expect(resolveAgentMcpConfigPath('vscode', { homeDir, platform: 'darwin' })).toContain(
-      'Library/Application Support/Code/User/mcp.json'
+      join('Library', 'Application Support', 'Code', 'User', 'mcp.json')
     )
     expect(
       resolveAgentMcpConfigPath('vscode', {
@@ -151,7 +151,7 @@ describe('Agent MCP 用户配置文件', () => {
         platform: 'win32',
         environment: { APPDATA: 'C:\\Users\\demo\\AppData\\Roaming' }
       })
-    ).toContain('Code/User/mcp.json')
+    ).toContain(join('Code', 'User', 'mcp.json'))
     expect(
       resolveAgentMcpConfigPath('vscode', {
         homeDir,

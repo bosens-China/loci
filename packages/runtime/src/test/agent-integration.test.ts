@@ -74,7 +74,7 @@ describe('Agent 全局接入服务', () => {
       {
         component: 'rules',
         status: 'current',
-        path: expect.stringContaining('.cursor/rules/loci.mdc')
+        path: expect.stringContaining(join('.cursor', 'rules', 'loci.mdc'))
       }
     ])
     expect((await service.remove('cursor')).status.overall).toBe('missing')
@@ -107,6 +107,7 @@ describe('Agent 全局接入服务', () => {
     await vi.advanceTimersByTimeAsync(5_100)
     lock.release()
     await vi.advanceTimersByTimeAsync(AGENT_INTEGRATION_LOCK_RETRY_INTERVAL_MS)
+    vi.useRealTimers()
 
     await expect(pending).resolves.toMatchObject({ status: { overall: 'ready' } })
     close()
@@ -121,14 +122,15 @@ describe('Agent 全局接入服务', () => {
       '另一个 Loci 入口'
     )
     const pending = service.setup('antigravity')
+    const rejected = expect(pending).rejects.toMatchObject({
+      name: 'RuntimeLockedError',
+      message: expect.stringContaining('请稍后重试')
+    })
     await vi.advanceTimersByTimeAsync(
       AGENT_INTEGRATION_LOCK_WAIT_TIMEOUT_MS + AGENT_INTEGRATION_LOCK_RETRY_INTERVAL_MS
     )
 
-    await expect(pending).rejects.toMatchObject({
-      name: 'RuntimeLockedError',
-      message: expect.stringContaining('请稍后重试')
-    })
+    await rejected
     lock.release()
     vi.useRealTimers()
 
