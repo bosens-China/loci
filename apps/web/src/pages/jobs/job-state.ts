@@ -14,6 +14,7 @@ export interface HostnameJobGroup {
   active: number
   paused: number
   failed: number
+  stopped: number
   processed: number
   queued: number
   contentBytes: number
@@ -67,8 +68,20 @@ export function groupJobsByHostname(jobs: readonly LocalJob[]): HostnameJobGroup
     .map(([hostname, items]) => summarizeGroup(hostname, items))
     .sort((left, right) => {
       if (left.active !== right.active) return right.active - left.active
+      if (left.paused !== right.paused) return right.paused - left.paused
       return left.hostname.localeCompare(right.hostname)
     })
+}
+
+/** 卡片、详情与筛选复用同一状态分类，暂停和部分结束不能被当成已完成。 */
+export function getDomainJobStatus(
+  group: Pick<HostnameJobGroup, 'active' | 'paused' | 'failed' | 'stopped'>
+): 'running' | 'paused' | 'failed' | 'stopped' | 'completed' {
+  if (group.active > 0) return 'running'
+  if (group.paused > 0) return 'paused'
+  if (group.failed > 0) return 'failed'
+  if (group.stopped > 0) return 'stopped'
+  return 'completed'
 }
 
 export function filterJobs(
@@ -118,6 +131,15 @@ export function getJobProgressView(job: LocalJob): JobProgressView {
   }
 }
 
+/** 域名内串行执行，优先展示正在执行的任务，不混入历史记录的页面进度。 */
+export function getDomainJobProgress(jobs: readonly LocalJob[]): JobProgressView | undefined {
+  const current =
+    jobs.find((job) => job.status === 'running') ??
+    jobs.find(isActiveJob) ??
+    jobs.find((job) => jobViewStatus(job) === 'paused')
+  return current ? getJobProgressView(current) : undefined
+}
+
 /** 每个文档库只保留更新时间最新的活动同步任务，供任务中心外的轻量进度入口复用。 */
 export function getLatestActiveJobsBySource(
   jobs: readonly LocalJob[]
@@ -144,6 +166,7 @@ function summarizeGroup(hostname: string, jobs: LocalJob[]): HostnameJobGroup {
     active: jobs.filter(isActiveJob).length,
     paused: jobs.filter((job) => jobViewStatus(job) === 'paused').length,
     failed: jobs.filter(isFailedJob).length,
+    stopped: jobs.filter((job) => jobViewStatus(job) === 'stopped').length,
     processed: jobs.reduce((total, job) => total + (job.result?.processed ?? 0), 0),
     queued: jobs.reduce(
       (total, job) => total + Math.max(job.result?.queued ?? 0, job.result?.processed ?? 0),

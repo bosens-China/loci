@@ -14,6 +14,12 @@ import {
 } from '@ant-design/icons'
 import { App, Button, Card, Empty, Skeleton, Space, Tag, Typography } from 'antd'
 import { formatBytes, formatDateTime } from '@/utils/format'
+import {
+  normalizeReaderMarkdown,
+  readerTitle,
+  remarkReaderHeadings,
+  resolveReaderUrl
+} from './reader-markdown'
 
 export type ReaderDocument = DocumentRecord & {
   contentBytes: number
@@ -109,7 +115,7 @@ export function DocumentReaderPanel(props: DocumentReaderPanelProps): React.JSX.
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <Typography.Title level={3} className="m-0! text-lg font-bold tracking-tight">
-              {props.document.title}
+              {readerTitle(props.document.title)}
             </Typography.Title>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {props.document.folder && (
@@ -165,7 +171,24 @@ export function DocumentReaderPanel(props: DocumentReaderPanelProps): React.JSX.
       {/* Markdown 阅读内容区 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6 bg-[var(--ant-color-bg-container)]">
         <div className="prose prose-sm max-w-4xl dark:prose-invert">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{props.document.content}</ReactMarkdown>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkReaderHeadings]}
+            urlTransform={(url) => resolveReaderUrl(url, props.document!.url)}
+            components={{
+              a: ({ href, children, title }) => (
+                <a
+                  href={href}
+                  title={title}
+                  target={href?.startsWith('#') ? undefined : '_blank'}
+                  rel="noopener noreferrer"
+                >
+                  {children}
+                </a>
+              )
+            }}
+          >
+            {normalizeReaderMarkdown(props.document.content)}
+          </ReactMarkdown>
         </div>
       </div>
     </Card>

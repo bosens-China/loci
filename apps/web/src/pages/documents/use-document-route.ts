@@ -30,7 +30,7 @@ export function useDocumentRoute(): {
       rememberedDocuments.current.set(state.sourceId, state.documentId)
   }, [state.documentId, state.sourceId])
   const write = useCallback(
-    (next: Partial<DocumentRouteState>) => {
+    (next: Partial<DocumentRouteState>, replace = true) => {
       void navigate({
         search: (previous) => {
           const merged = {
@@ -45,7 +45,7 @@ export function useDocumentRoute(): {
             q: merged.query
           })
         },
-        replace: true,
+        replace,
         resetScroll: false
       })
     },
@@ -56,7 +56,7 @@ export function useDocumentRoute(): {
       write({ sourceId, documentId: rememberedDocuments.current.get(sourceId) ?? '' }),
     [write]
   )
-  const selectDocument = useCallback((documentId: string) => write({ documentId }), [write])
+  const selectDocument = useCallback((documentId: string) => write({ documentId }, false), [write])
   const setQuery = useCallback((query: string) => write({ query, documentId: '' }), [write])
   return {
     state,

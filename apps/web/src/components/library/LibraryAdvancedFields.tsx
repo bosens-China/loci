@@ -189,7 +189,7 @@ export function LibraryAdvancedFields(props: LibraryAdvancedFieldsProps): React.
 
                 <Form.Item
                   name="excludePathPattern"
-                  label="排除路径正则（可选）"
+                  label="排除路径正则"
                   extra="新增或修改后，保存会立即删除匹配页面的正文和搜索索引。"
                   rules={[
                     {

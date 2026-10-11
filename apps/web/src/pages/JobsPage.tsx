@@ -16,9 +16,15 @@ import { ConfirmedActionButton } from '@/components/ConfirmedActionButton'
 import { PageHeader } from '@/components/PageHeader'
 import { formatBytes } from '@/utils/format'
 import { JobDomainCard } from './jobs/JobDomainCard'
-import { groupJobsByHostname } from './jobs/job-state'
+import {
+  getDomainJobStatus,
+  groupJobsByHostname,
+  isActiveJob,
+  isFailedJob,
+  jobViewStatus
+} from './jobs/job-state'
 
-type DomainFilter = 'all' | 'running' | 'failed' | 'completed'
+type DomainFilter = 'all' | 'running' | 'paused' | 'failed' | 'stopped' | 'completed'
 const EMPTY_JOBS: LocalJob[] = []
 
 /** 一级路由页面：任务中心域名概览大盘（/jobs） */
@@ -55,11 +61,11 @@ export function JobsPage(): React.JSX.Element {
 
   const allJobs = jobs.data ?? EMPTY_JOBS
   const totalCount = allJobs.length
-  const activeCount = allJobs.filter((j) => ['pending', 'running'].includes(j.status)).length
+  const activeCount = allJobs.filter(isActiveJob).length
   const runningCount = allJobs.filter((j) => j.status === 'running').length
   const pausedCount = allJobs.filter((j) => j.status === 'pending' && Boolean(j.paused)).length
-  const completedCount = allJobs.filter((j) => j.status === 'completed').length
-  const failedCount = allJobs.filter((j) => j.status === 'failed').length
+  const completedCount = allJobs.filter((j) => jobViewStatus(j) === 'completed').length
+  const failedCount = allJobs.filter(isFailedJob).length
   const overallPercent = totalCount ? Math.round((completedCount / totalCount) * 100) : 0
   const totalBytes = allJobs.reduce((acc, j) => acc + (j.contentBytes ?? 0), 0)
   const totalProcessedPages = allJobs.reduce((acc, j) => acc + (j.result?.processed ?? 0), 0)
@@ -73,9 +79,11 @@ export function JobsPage(): React.JSX.Element {
   const filteredGroups = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return groups.filter((group) => {
-      if (filter === 'running' && group.active === 0) return false
+      if (filter === 'running' && getDomainJobStatus(group) !== 'running') return false
+      if (filter === 'paused' && group.paused === 0) return false
       if (filter === 'failed' && group.failed === 0) return false
-      if (filter === 'completed' && (group.active > 0 || group.failed > 0)) return false
+      if (filter === 'stopped' && group.stopped === 0) return false
+      if (filter === 'completed' && getDomainJobStatus(group) !== 'completed') return false
 
       if (!q) return true
 
@@ -88,7 +96,7 @@ export function JobsPage(): React.JSX.Element {
     <div className="px-6 py-6 sm:px-8 sm:py-8 space-y-4">
       <PageHeader
         title="任务中心"
-        description="按域名划分独立并发队列与限速策略；不同域名并行推进，点击域名卡片可查看任务详情。"
+        description="同一域名的任务依次执行，不同域名可并行；点击域名查看进度和控制操作。"
       />
 
       <AsyncState
@@ -125,7 +133,7 @@ export function JobsPage(): React.JSX.Element {
 
           <Card size="small" className="shadow-xs border-[var(--ant-color-border-secondary)]">
             <Typography.Text type="secondary" className="text-sm">
-              整体进度
+              任务完成率
             </Typography.Text>
             <div className="mt-1.5 flex items-baseline justify-between">
               <span className="text-2xl font-semibold text-[var(--ant-color-text)]">
@@ -187,13 +195,13 @@ export function JobsPage(): React.JSX.Element {
                   onConfirm={() => bulkControl.mutate({ action: 'resume-all' })}
                 />
               )}
-              {totalCount > 0 && activeCount === 0 && pausedCount === 0 && (
+              {totalCount > 0 && completedCount === totalCount && (
                 <Tag
                   color="success"
                   icon={<CheckCircleOutlined />}
                   className="m-0! px-3 py-1 text-sm"
                 >
-                  全部任务已就绪
+                  全部任务已完成
                 </Tag>
               )}
               {totalCount === 0 && (
@@ -205,7 +213,7 @@ export function JobsPage(): React.JSX.Element {
 
         {/* 域名筛选与搜索工具栏 */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          <div className="flex items-center gap-3">
+          <div className="min-w-0 overflow-x-auto">
             <Segmented<DomainFilter>
               value={filter}
               onChange={setFilter}
@@ -216,11 +224,19 @@ export function JobsPage(): React.JSX.Element {
                   value: 'running'
                 },
                 {
+                  label: `已暂停 (${groups.filter((g) => g.paused > 0).length})`,
+                  value: 'paused'
+                },
+                {
                   label: `存在异常 (${groups.filter((g) => g.failed > 0).length})`,
                   value: 'failed'
                 },
                 {
-                  label: `全部就绪 (${groups.filter((g) => g.active === 0 && g.failed === 0).length})`,
+                  label: `部分结束 (${groups.filter((g) => g.stopped > 0).length})`,
+                  value: 'stopped'
+                },
+                {
+                  label: `全部完成 (${groups.filter((g) => getDomainJobStatus(g) === 'completed').length})`,
                   value: 'completed'
                 }
               ]}

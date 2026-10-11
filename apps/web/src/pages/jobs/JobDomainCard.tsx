@@ -1,15 +1,10 @@
 import { useMemo } from 'react'
-import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  GlobalOutlined,
-  RightOutlined,
-  WarningOutlined
-} from '@ant-design/icons'
+import { GlobalOutlined, RightOutlined } from '@ant-design/icons'
 import type { DocumentSource } from '@loci/shared'
-import { Button, Card, Progress, Space, Tag, Typography } from 'antd'
+import { Button, Card, Progress, Space, Typography } from 'antd'
 import { formatBytes } from '@/utils/format'
-import { jobViewStatus, type HostnameJobGroup } from './job-state'
+import { getDomainJobProgress, type HostnameJobGroup } from './job-state'
+import { DomainStatus } from './DomainStatus'
 
 interface JobDomainCardProps {
   group: HostnameJobGroup
@@ -23,13 +18,9 @@ export function JobDomainCard(props: JobDomainCardProps): React.JSX.Element {
   const sourcesMap = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources])
   const activeCount = group.active
   const failedCount = group.failed
-  const completedCount = group.jobs.filter((j) => jobViewStatus(j) === 'completed').length
 
-  const percent = group.queued
-    ? Math.min(100, Math.round((group.processed / group.queued) * 100))
-    : completedCount > 0
-      ? 100
-      : 0
+  const progress = getDomainJobProgress(group.jobs)
+  const percent = progress?.kind === 'determinate' ? progress.percent : 0
 
   // 获取关联的文档来源名称列表
   const sourceNames = useMemo(() => {
@@ -76,39 +67,7 @@ export function JobDomainCard(props: JobDomainCardProps): React.JSX.Element {
 
             {/* 状态徽标 */}
             <div className="shrink-0">
-              {activeCount > 0 ? (
-                <Tag
-                  color="processing"
-                  className="m-0! flex items-center gap-1 px-2.5 py-0.5 text-sm"
-                >
-                  <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                  <span>{activeCount} 运行中</span>
-                </Tag>
-              ) : failedCount > 0 && completedCount === 0 ? (
-                <Tag
-                  color="error"
-                  icon={<CloseCircleOutlined />}
-                  className="m-0! px-2.5 py-0.5 text-sm font-normal"
-                >
-                  同步失败
-                </Tag>
-              ) : failedCount > 0 && completedCount > 0 ? (
-                <Tag
-                  color="warning"
-                  icon={<WarningOutlined />}
-                  className="m-0! px-2.5 py-0.5 text-sm font-normal"
-                >
-                  部分失败 ({failedCount})
-                </Tag>
-              ) : (
-                <Tag
-                  color="success"
-                  icon={<CheckCircleOutlined />}
-                  className="m-0! px-2.5 py-0.5 text-sm font-normal"
-                >
-                  全部就绪
-                </Tag>
-              )}
+              <DomainStatus {...group} />
             </div>
           </div>
 
@@ -118,7 +77,9 @@ export function JobDomainCard(props: JobDomainCardProps): React.JSX.Element {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm text-[var(--ant-color-text-secondary)]">
                   <span>抓取进度</span>
-                  <span className="font-mono font-medium">{percent}%</span>
+                  <span className="font-mono font-medium">
+                    {progress?.kind === 'indeterminate' ? '准备中' : `${percent}%`}
+                  </span>
                 </div>
                 <Progress
                   percent={percent}

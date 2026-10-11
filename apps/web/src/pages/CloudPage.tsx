@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import type { CloudCatalogItem } from '@loci/shared'
 import {
   App,
@@ -42,12 +42,17 @@ import { formatBytes, formatDate } from '@/utils/format'
 import { LibraryBrowserWorkspace } from '@/pages/documents/LibraryBrowserWorkspace'
 
 type CatalogAction = { item: CloudCatalogItem; run: () => Promise<unknown>; success: string }
+const cloudRoute = getRouteApi('/_app/cloud')
 
 /** 云端目录页：从公开目录浏览与拉取文档库快照至本机。 */
 export function CloudPage(): React.JSX.Element {
   const { message } = App.useApp()
   const navigate = useNavigate()
-  const [selectedLibraryId, setSelectedLibraryId] = useState<string>()
+  const search = cloudRoute.useSearch()
+  const selectedLibraryId = search.source
+  const setSelectedLibraryId = (source?: string): void => {
+    void navigate({ to: '/cloud', search: source ? { source } : {} })
+  }
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -98,9 +103,18 @@ export function CloudPage(): React.JSX.Element {
   if (selectedLibrary) {
     return (
       <LibraryBrowserWorkspace
+        key={selectedLibrary.id}
         location="cloud"
         libraryId={selectedLibrary.id}
         title={selectedLibrary.name}
+        fileId={search.doc ?? search.document}
+        onSelectFile={(doc) =>
+          void navigate({
+            to: '/cloud',
+            search: { source: selectedLibrary.id, doc },
+            resetScroll: false
+          })
+        }
         onBack={() => setSelectedLibraryId(undefined)}
       />
     )

@@ -6,12 +6,13 @@ export type LibraryLocation = 'local' | 'cloud'
 export async function getLibraryTree(
   location: LibraryLocation,
   libraryId: string,
-  parentId?: string
+  parentId?: string,
+  depth = 1
 ): Promise<{ libraryId: string; title: string; parentId: string | null; nodes: UrlTreeNode[] }> {
   const prefix = location === 'local' ? '/api/libraries' : '/api/cloud/libraries'
   return (
     await request.get(`${prefix}/${encodeURIComponent(libraryId)}/tree`, {
-      params: { depth: 1, ...(parentId ? { parent_id: parentId } : {}) }
+      params: { depth, ...(parentId ? { parent_id: parentId } : {}) }
     })
   ).data
 }

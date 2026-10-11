@@ -6,11 +6,38 @@ import {
   getJobProgressView,
   getLatestActiveJobsBySource,
   groupJobsByHostname,
+  getDomainJobStatus,
+  getDomainJobProgress,
   jobViewStatus,
   upsertLocalJob
 } from '../job-state'
 
 describe('任务域名视图状态', () => {
+  it('正在执行的页面进度不混入历史任务或排队记录', () => {
+    const result = { queued: 100, processed: 100, succeeded: 100, failed: 0, limitReached: false }
+    const history = job({ status: 'completed', result })
+    const queued = job({ status: 'pending', result: null })
+    const running = job({ status: 'running', result: { ...result, processed: 10, succeeded: 10 } })
+    expect(getDomainJobProgress([history, queued, running])).toMatchObject({
+      kind: 'determinate',
+      percent: 10
+    })
+    expect(getDomainJobProgress([history, queued])).toMatchObject({ kind: 'indeterminate' })
+    expect(getDomainJobProgress([history])).toBeUndefined()
+  })
+
+  it('暂停与部分结束不会进入完成分类，恢复后返回活动分类', () => {
+    const completed = job({ id: 'old', status: 'completed' })
+    const pending = job({ id: 'current', status: 'pending', paused: true })
+    const group = (current: LocalJob) => groupJobsByHostname([completed, current])[0]!
+    expect(getDomainJobStatus(group(pending))).toBe('paused')
+    expect(group(pending)).toMatchObject({ active: 0, paused: 1 })
+    expect(getDomainJobStatus(group({ ...pending, paused: false }))).toBe('running')
+    expect(getDomainJobStatus(group(job({ status: 'completed', partial: true })))).toBe('stopped')
+    expect(getDomainJobStatus(group(job({ status: 'failed' })))).toBe('failed')
+    expect(getDomainJobStatus(group(completed))).toBe('completed')
+  })
+
   it('按 hostname 分组并把活动域名排在前面', () => {
     const groups = groupJobsByHostname([
       job({ id: 'a', hostname: 'idle.example.com', status: 'completed' }),

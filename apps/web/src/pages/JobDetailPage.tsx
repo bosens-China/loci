@@ -259,6 +259,7 @@ export function JobDetailPage(): React.JSX.Element {
           activeCount={activeCount}
           pausedCount={pausedCount}
           failedCount={failedCount}
+          stoppedCount={currentGroup?.stopped ?? 0}
           processed={currentGroup?.processed ?? 0}
           contentBytes={currentGroup?.contentBytes ?? 0}
           pendingAction={pendingAction}

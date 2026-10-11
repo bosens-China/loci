@@ -13,7 +13,7 @@ import { useDocumentRoute } from '@/pages/documents/use-document-route'
 
 /** 文档库卡片是一级入口；进入后才按需读取目录和正文。 */
 export function DocumentsPage(): React.JSX.Element {
-  const { state, selectSource } = useDocumentRoute()
+  const { state, selectSource, selectDocument } = useDocumentRoute()
   const navigate = useNavigate()
   const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
   const jobs = useQuery({ queryKey: JOBS_QUERY_KEY, queryFn: listJobs })
@@ -37,9 +37,12 @@ export function DocumentsPage(): React.JSX.Element {
     >
       {selected ? (
         <LibraryBrowserWorkspace
+          key={selected.id}
           location="local"
           libraryId={selected.id}
           title={selected.name}
+          fileId={state.documentId}
+          onSelectFile={selectDocument}
           onBack={() => selectSource('')}
         />
       ) : (

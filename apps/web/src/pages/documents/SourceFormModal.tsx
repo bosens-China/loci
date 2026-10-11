@@ -122,6 +122,8 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
       title={props.editing === 'new' ? '添加文档库' : '编辑文档库'}
       open={props.editing !== null}
       width={600}
+      centered
+      classNames={{ body: 'max-h-[calc(100dvh-180px)] overflow-y-auto pr-1' }}
       okText={props.editing === 'new' ? '添加并同步' : '保存修改'}
       cancelText="取消"
       confirmLoading={save.isPending}

@@ -18,11 +18,15 @@ import { getLibraryTree, readLibraryFile, type LibraryLocation } from '@/api/lib
 import { AsyncState } from '@/components/AsyncState'
 import { useRawLayout } from '@/components/shell/ShellLayoutContext'
 import { DocumentReaderPanel, type ReaderDocument } from '@/pages/documents/DocumentReaderPanel'
+import { filterLibraryTree, libraryFolderKeys, loadLibraryTree } from './library-tree'
+import { readerTitle } from './reader-markdown'
 
 export function LibraryBrowserWorkspace(props: {
   location: LibraryLocation
   libraryId: string
   title: string
+  fileId?: string
+  onSelectFile: (fileId: string) => void
   onBack: () => void
 }): React.JSX.Element {
   // 进入全屏 raw 布局，跳出白色内容面板约束，unmount 时自动还原
@@ -30,9 +34,9 @@ export function LibraryBrowserWorkspace(props: {
 
   const [children, setChildren] = useState<Record<string, UrlTreeNode[]>>({})
   const [expandedKeys, setExpandedKeys] = useState<React.Key[] | null>(null)
-  const [fileId, setFileId] = useState<string>()
+  const fileId = props.fileId
   const [search, setSearch] = useState('')
-  const [expanding, setExpanding] = useState(false)
+  const [expandAll, setExpandAll] = useState(false)
 
   const root = useQuery({
     queryKey: ['library-tree', props.location, props.libraryId, 'root'],
@@ -42,6 +46,11 @@ export function LibraryBrowserWorkspace(props: {
     queryKey: ['library-file', props.location, props.libraryId, fileId],
     queryFn: () => readLibraryFile(props.location, props.libraryId, fileId!),
     enabled: Boolean(fileId)
+  })
+  const complete = useQuery({
+    queryKey: ['library-tree', props.location, props.libraryId, 'complete'],
+    queryFn: () => loadLibraryTree(props.location, props.libraryId),
+    enabled: Boolean(search.trim()) || expandAll
   })
 
   const loadFolderChildren = async (key: string): Promise<void> => {
@@ -54,7 +63,12 @@ export function LibraryBrowserWorkspace(props: {
     () => (root.data?.nodes ?? []).filter((node) => !node.readable).map((node) => node.id),
     [root.data?.nodes]
   )
-  const visibleExpandedKeys = expandedKeys ?? defaultExpandedKeys
+  const nodes = useMemo(
+    () => filterLibraryTree(complete.data ?? root.data?.nodes ?? [], search),
+    [complete.data, root.data?.nodes, search]
+  )
+  const visibleExpandedKeys =
+    search.trim() || expandAll ? libraryFolderKeys(nodes) : (expandedKeys ?? defaultExpandedKeys)
 
   // 首次加载完成时预加载第一层目录；展开状态直接由查询结果派生，避免 effect 内同步更新状态。
   useEffect(() => {
@@ -80,45 +94,13 @@ export function LibraryBrowserWorkspace(props: {
     }
   }, [props.libraryId, props.location, root.data?.nodes])
 
-  // 一键展开全部目录：递归拉取所有未加载层级的子目录并全部展开
-  const handleExpandAll = async (): Promise<void> => {
-    setExpanding(true)
-    try {
-      const folderKeys = new Set<string>()
-      const queue: string[] = (root.data?.nodes ?? []).filter((n) => !n.readable).map((n) => n.id)
-      const nextChildren = { ...children }
-
-      while (queue.length > 0) {
-        const key = queue.shift()!
-        folderKeys.add(key)
-        if (!nextChildren[key]) {
-          const resp = await getLibraryTree(props.location, props.libraryId, key)
-          nextChildren[key] = resp.nodes
-        }
-        const subFolders = (nextChildren[key] ?? []).filter((n) => !n.readable).map((n) => n.id)
-        for (const sub of subFolders) {
-          if (!folderKeys.has(sub)) {
-            queue.push(sub)
-          }
-        }
-      }
-
-      setChildren(nextChildren)
-      setExpandedKeys(Array.from(folderKeys))
-    } finally {
-      setExpanding(false)
-    }
-  }
-
   // 一键收起全部目录
   const handleCollapseAll = (): void => {
+    setExpandAll(false)
     setExpandedKeys([])
   }
 
-  const treeData = useMemo(
-    () => toTreeData(root.data?.nodes ?? [], children, search),
-    [children, root.data?.nodes, search]
-  )
+  const treeData = useMemo(() => toTreeData(nodes, children), [children, nodes])
   const document = file.data ? toDocument(file.data, props.title) : null
 
   return (
@@ -174,8 +156,8 @@ export function LibraryBrowserWorkspace(props: {
               <Button
                 size="middle"
                 icon={<ExpandOutlined />}
-                loading={expanding}
-                onClick={handleExpandAll}
+                loading={expandAll && complete.isFetching}
+                onClick={() => setExpandAll(true)}
                 aria-label="一键展开全部"
                 className="shrink-0 text-xs px-2 text-[var(--ant-color-text-secondary)] hover:text-[var(--ant-color-primary)]"
               />
@@ -184,7 +166,7 @@ export function LibraryBrowserWorkspace(props: {
               <Button
                 size="middle"
                 icon={<CompressOutlined />}
-                disabled={visibleExpandedKeys.length === 0}
+                disabled={visibleExpandedKeys.length === 0 || Boolean(search.trim())}
                 onClick={handleCollapseAll}
                 aria-label="一键收起全部"
                 className="shrink-0 text-xs px-2 text-[var(--ant-color-text-secondary)] hover:text-[var(--ant-color-primary)]"
@@ -194,9 +176,13 @@ export function LibraryBrowserWorkspace(props: {
 
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <AsyncState
-              loading={root.isLoading}
-              error={root.error}
-              onRetry={() => void root.refetch()}
+              loading={
+                root.isLoading || ((Boolean(search.trim()) || expandAll) && complete.isLoading)
+              }
+              error={root.error ?? (search.trim() || expandAll ? complete.error : null)}
+              onRetry={() =>
+                void (search.trim() || expandAll ? complete.refetch() : root.refetch())
+              }
             >
               {treeData.length ? (
                 <Tree
@@ -205,7 +191,10 @@ export function LibraryBrowserWorkspace(props: {
                   treeData={treeData}
                   selectedKeys={fileId ? [fileId] : []}
                   expandedKeys={visibleExpandedKeys}
-                  onExpand={(keys) => setExpandedKeys(keys)}
+                  onExpand={(keys) => {
+                    setExpandAll(false)
+                    setExpandedKeys(keys)
+                  }}
                   loadData={async (node) => {
                     if (node.isLeaf) return
                     await loadFolderChildren(String(node.key))
@@ -213,7 +202,7 @@ export function LibraryBrowserWorkspace(props: {
                   onSelect={async (_, info) => {
                     const key = String(info.node.key)
                     if (info.node.isLeaf) {
-                      setFileId(key)
+                      props.onSelectFile(key)
                     } else {
                       // 点击目录文本行或图标，自动加载子项并展开/收起目录
                       await loadFolderChildren(key)
@@ -251,40 +240,31 @@ export function LibraryBrowserWorkspace(props: {
   )
 }
 
-function toTreeData(
-  nodes: UrlTreeNode[],
-  loaded: Record<string, UrlTreeNode[]>,
-  keyword: string
-): DataNode[] {
-  const q = keyword.trim().toLowerCase()
-  return nodes
-    .filter(
-      (node) => !q || node.title.toLowerCase().includes(q) || node.id.toLowerCase().includes(q)
-    )
-    .map((node) => ({
-      key: node.id,
-      title: (
-        <span className="truncate block select-none text-xs" title={node.title}>
-          {node.title}
-        </span>
-      ),
-      isLeaf: node.readable,
-      icon: (props: { isLeaf?: boolean; expanded?: boolean }) => {
-        if (props.isLeaf) {
-          return <FileTextOutlined className="text-[var(--ant-color-primary)]" />
-        }
-        return props.expanded ? (
-          <FolderOpenOutlined className="text-[var(--ant-color-warning)]" />
-        ) : (
-          <FolderOutlined className="text-[var(--ant-color-warning)]" />
-        )
-      },
-      children: node.readable
-        ? undefined
-        : loaded[node.id]
-          ? toTreeData(loaded[node.id], loaded, keyword)
-          : undefined
-    }))
+function toTreeData(nodes: UrlTreeNode[], loaded: Record<string, UrlTreeNode[]>): DataNode[] {
+  return nodes.map((node) => ({
+    key: node.id,
+    title: (
+      <span className="truncate block select-none text-xs" title={readerTitle(node.title)}>
+        {readerTitle(node.title)}
+      </span>
+    ),
+    isLeaf: node.readable,
+    icon: (props: { isLeaf?: boolean; expanded?: boolean }) => {
+      if (props.isLeaf) {
+        return <FileTextOutlined className="text-[var(--ant-color-primary)]" />
+      }
+      return props.expanded ? (
+        <FolderOpenOutlined className="text-[var(--ant-color-warning)]" />
+      ) : (
+        <FolderOutlined className="text-[var(--ant-color-warning)]" />
+      )
+    },
+    children: node.readable
+      ? undefined
+      : (node.children ?? loaded[node.id])
+        ? toTreeData(node.children ?? loaded[node.id]!, loaded)
+        : undefined
+  }))
 }
 
 function toDocument(

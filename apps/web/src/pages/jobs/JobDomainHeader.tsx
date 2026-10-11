@@ -1,12 +1,11 @@
 import {
   ArrowLeftOutlined,
   CaretRightOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   GlobalOutlined,
   PauseOutlined
 } from '@ant-design/icons'
-import { Breadcrumb, Button, Card, Tag, Typography } from 'antd'
+import { Breadcrumb, Button, Card, Typography } from 'antd'
+import { DomainStatus } from './DomainStatus'
 import { ConfirmedActionButton } from '@/components/ConfirmedActionButton'
 import { formatBytes } from '@/utils/format'
 
@@ -16,6 +15,7 @@ interface JobDomainHeaderProps {
   activeCount: number
   pausedCount: number
   failedCount: number
+  stoppedCount: number
   processed: number
   contentBytes: number
   pendingAction?: string
@@ -56,7 +56,12 @@ export function JobDomainHeader(props: JobDomainHeaderProps): React.JSX.Element 
               <Typography.Title level={3} className="m-0! font-mono text-xl">
                 {props.hostname}
               </Typography.Title>
-              <DomainStatus activeCount={props.activeCount} failedCount={props.failedCount} />
+              <DomainStatus
+                active={props.activeCount}
+                paused={props.pausedCount}
+                failed={props.failedCount}
+                stopped={props.stoppedCount}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--ant-color-text-secondary)]">
               <span>共 {props.totalCount} 项任务记录</span>
@@ -92,28 +97,5 @@ export function JobDomainHeader(props: JobDomainHeaderProps): React.JSX.Element 
         </div>
       </Card>
     </>
-  )
-}
-
-function DomainStatus(props: { activeCount: number; failedCount: number }): React.JSX.Element {
-  if (props.activeCount > 0) {
-    return (
-      <Tag color="processing" className="m-0! flex items-center gap-1.5 px-3 py-1 text-sm">
-        <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-        <span>{props.activeCount} 任务运行中</span>
-      </Tag>
-    )
-  }
-  if (props.failedCount > 0) {
-    return (
-      <Tag color="error" icon={<CloseCircleOutlined />} className="m-0! px-3 py-1 text-sm">
-        存在失败任务
-      </Tag>
-    )
-  }
-  return (
-    <Tag color="success" icon={<CheckCircleOutlined />} className="m-0! px-3 py-1 text-sm">
-      全部任务就绪
-    </Tag>
   )
 }
