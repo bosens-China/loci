@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.0.0](https://github.com/bosens-China/loci/compare/cli-v1.20.1...cli-v2.0.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **crawl:** 使用 Crawlee 统一抓取并简化配置
+
+### Bug Fixes
+
+* **test:** 修复 Windows 测试隔离与资源清理 ([bbb1409](https://github.com/bosens-China/loci/commit/bbb1409a879582b26697adf0b07699cffa4053dd))
+
+
+### Code Refactoring
+
+* **crawl:** 使用 Crawlee 统一抓取并简化配置 ([b0d2659](https://github.com/bosens-China/loci/commit/b0d2659d158158c3f44ec9cdc981d2cdea7b1627))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 2.0.0
+    * @loci/runtime bumped to 2.0.0
+    * @loci/shared bumped to 2.0.0
+
 ## [1.20.1](https://github.com/bosens-China/loci/compare/cli-v1.20.0...cli-v1.20.1) (2026-09-07)
 
 
