@@ -7,8 +7,6 @@ import type {
   CloudLibraryInput,
   CloudLibraryPublishResult,
   CloudSyncJob,
-  HostnameCrawlPolicy,
-  SaveHostnameCrawlPolicyInput,
   SaveServerCrawlSettingsInput,
   ServerAdminAuditLogPage,
   ServerCrawlSettings,
@@ -68,14 +66,6 @@ const syncJobSchema = z.object({
   failures: z.array(z.unknown()),
   error: z.string().nullable()
 })
-const hostnamePolicySchema = z.object({
-  hostname: z.string(),
-  httpConcurrency: z.number().int().nullable(),
-  browserConcurrency: z.number().int().nullable(),
-  batchIntervalMinSeconds: z.number().int().nullable(),
-  batchIntervalMaxSeconds: z.number().int().nullable(),
-  updatedAt: z.string()
-})
 const publishResultSchema = z.object({
   library: librarySchema,
   revision: z.string(),
@@ -95,10 +85,6 @@ const serverBrowserStatusSchema = z.object({
 })
 const serverCrawlSettingsSchema = z.object({
   maxConcurrentJobs: z.number().int(),
-  httpConcurrency: z.number().int(),
-  browserConcurrency: z.number().int(),
-  batchIntervalMinSeconds: z.number().int(),
-  batchIntervalMaxSeconds: z.number().int(),
   revision: z.number().int().positive(),
   updatedAt: z.string()
 })
@@ -280,13 +266,6 @@ export class CloudAdminClient {
     return result.changed
   }
 
-  async listHostnamePolicies(): Promise<HostnameCrawlPolicy[]> {
-    const result = z
-      .object({ policies: z.array(hostnamePolicySchema) })
-      .parse(await this.authRequest('/api/v1/admin/hostname-policies'))
-    return result.policies
-  }
-
   async getCrawlSettings(): Promise<ServerCrawlSettings> {
     const result = z
       .object({ settings: serverCrawlSettingsSchema })
@@ -298,28 +277,13 @@ export class CloudAdminClient {
     const result = z.object({ settings: serverCrawlSettingsSchema }).parse(
       await this.authRequest('/api/v1/admin/crawl-settings', {
         method: 'PUT',
-        body: JSON.stringify(input)
+        body: JSON.stringify({
+          maxConcurrentJobs: input.maxConcurrentJobs,
+          revision: input.revision
+        })
       })
     )
     return result.settings
-  }
-
-  async saveHostnamePolicy(input: SaveHostnameCrawlPolicyInput): Promise<HostnameCrawlPolicy> {
-    const result = z
-      .object({ policy: hostnamePolicySchema })
-      .parse(
-        await this.authRequest(
-          `/api/v1/admin/hostname-policies/${encodeURIComponent(input.hostname)}`,
-          { method: 'PUT', body: JSON.stringify(input) }
-        )
-      )
-    return result.policy
-  }
-
-  async deleteHostnamePolicy(hostname: string): Promise<void> {
-    await this.authRequest(`/api/v1/admin/hostname-policies/${encodeURIComponent(hostname)}`, {
-      method: 'DELETE'
-    })
   }
 
   async publishLibrary(archive: Buffer): Promise<CloudLibraryPublishResult> {

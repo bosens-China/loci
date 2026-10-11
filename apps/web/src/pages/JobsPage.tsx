@@ -10,7 +10,6 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { App, Button, Card, Empty, Input, Progress, Segmented, Tag, Typography } from 'antd'
 import { controlAllJobs, listJobs, JOBS_QUERY_KEY } from '@/api/jobs'
-import { getSettings, listHostnameCrawlPolicies } from '@/api/settings'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
 import { ConfirmedActionButton } from '@/components/ConfirmedActionButton'
@@ -41,16 +40,6 @@ export function JobsPage(): React.JSX.Element {
     queryFn: listSources
   })
 
-  const settings = useQuery({
-    queryKey: ['settings'],
-    queryFn: getSettings
-  })
-
-  const policies = useQuery({
-    queryKey: ['settings', 'hostname-policies'],
-    queryFn: listHostnameCrawlPolicies
-  })
-
   const bulkControl = useMutation({
     mutationFn: ({ action }: { action: 'pause-all' | 'resume-all' }) => controlAllJobs(action),
     onSuccess: (result, { action }) => {
@@ -74,9 +63,6 @@ export function JobsPage(): React.JSX.Element {
   const overallPercent = totalCount ? Math.round((completedCount / totalCount) * 100) : 0
   const totalBytes = allJobs.reduce((acc, j) => acc + (j.contentBytes ?? 0), 0)
   const totalProcessedPages = allJobs.reduce((acc, j) => acc + (j.result?.processed ?? 0), 0)
-
-  const defaultHttpConcurrency = settings.data?.httpConcurrency ?? 9
-  const defaultBrowserConcurrency = settings.data?.browserConcurrency ?? 5
 
   const groups = useMemo(() => groupJobsByHostname(allJobs), [allJobs])
   const sourcesMap = useMemo(
@@ -184,7 +170,7 @@ export function JobsPage(): React.JSX.Element {
               {activeCount > 0 && (
                 <ConfirmedActionButton
                   title="暂停全部活动任务？"
-                  description="已经发出的页面请求会完成，所有域名将在下一批次暂停。"
+                  description="已经发出的页面请求会完成，所有域名将停止领取新页面。"
                   label="全部暂停"
                   icon={<PauseOutlined />}
                   loading={bulkControl.isPending}
@@ -271,9 +257,6 @@ export function JobsPage(): React.JSX.Element {
                 key={group.hostname}
                 group={group}
                 sources={sources.data}
-                policies={policies.data}
-                defaultHttpConcurrency={defaultHttpConcurrency}
-                defaultBrowserConcurrency={defaultBrowserConcurrency}
                 onSelect={(hostname) =>
                   void navigate({ to: '/jobs/$hostname', params: { hostname } })
                 }

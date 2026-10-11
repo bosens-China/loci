@@ -1,14 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { runCrawlQueue } from '../crawl.js'
 
-describe('抓取批次控制', () => {
-  it('每批重新读取策略并记录剩余 URL', async () => {
-    const policies = [
-      { concurrency: 1, batchIntervalMs: 20 },
-      { concurrency: 2, batchIntervalMs: 0 }
-    ]
+describe('抓取任务控制', () => {
+  it('检查点包含所有尚未完成的页面并逐页收敛', async () => {
     const checkpoints: string[][] = []
-    const sleep = vi.fn(async () => undefined)
 
     const result = await runCrawlQueue({
       firstUrl: 'https://docs.example.com/start',
@@ -22,23 +17,26 @@ describe('抓取批次控制', () => {
         status: 200,
         page: { title: url, language: 'en', markdown: `# ${url}`, links: [] }
       }),
-      getBatchPolicy: () => policies.shift() ?? { concurrency: 2 },
       onCheckpoint: ({ pendingUrls }) => {
         checkpoints.push(pendingUrls)
       },
-      onDocument: () => undefined,
-      sleep
+      onDocument: () => undefined
     })
 
     expect(result).toMatchObject({ processed: 3, succeeded: 3 })
     expect(checkpoints).toEqual([
+      [
+        'https://docs.example.com/start',
+        'https://docs.example.com/one',
+        'https://docs.example.com/two'
+      ],
       ['https://docs.example.com/one', 'https://docs.example.com/two'],
+      ['https://docs.example.com/two'],
       []
     ])
-    expect(sleep).toHaveBeenCalledWith(20)
   })
 
-  it('批次之间可以暂停且不会领取下一批页面', async () => {
+  it('暂停后不再执行下一个页面', async () => {
     let batches = 0
     const fetched: string[] = []
 

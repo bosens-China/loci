@@ -5,8 +5,6 @@ import type {
   CloudLibraryInput,
   CloudLibraryPublishResult,
   CloudSyncJob,
-  HostnameCrawlPolicy,
-  SaveHostnameCrawlPolicyInput,
   SaveServerCrawlSettingsInput,
   ServerAdminAuditLogPage,
   ServerCrawlSettings,
@@ -92,10 +90,6 @@ export async function controlAllAdminJobs(
   return (await request.post<{ changed: number }>(`/api/admin/jobs/${action}`, { hostname })).data
 }
 
-export async function listAdminHostnamePolicies(): Promise<HostnameCrawlPolicy[]> {
-  return (await request.get<HostnameCrawlPolicy[]>('/api/admin/hostname-policies')).data
-}
-
 export async function getAdminCrawlSettings(): Promise<ServerCrawlSettings> {
   return (await request.get<ServerCrawlSettings>('/api/admin/crawl-settings')).data
 }
@@ -104,21 +98,6 @@ export async function saveAdminCrawlSettings(
   input: SaveServerCrawlSettingsInput
 ): Promise<ServerCrawlSettings> {
   return (await request.put<ServerCrawlSettings>('/api/admin/crawl-settings', input)).data
-}
-
-export async function saveAdminHostnamePolicy(
-  input: SaveHostnameCrawlPolicyInput
-): Promise<HostnameCrawlPolicy> {
-  return (
-    await request.put<HostnameCrawlPolicy>(
-      `/api/admin/hostname-policies/${encodeURIComponent(input.hostname)}`,
-      input
-    )
-  ).data
-}
-
-export async function deleteAdminHostnamePolicy(hostname: string): Promise<void> {
-  await request.delete(`/api/admin/hostname-policies/${encodeURIComponent(hostname)}`)
 }
 
 export async function publishAdminLibrary(

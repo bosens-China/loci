@@ -1,4 +1,5 @@
 import { parse } from 'node-html-parser'
+import { setTimeout as wait } from 'node:timers/promises'
 import { htmlToMarkdown } from 'mdream'
 import {
   createPathExclusionMatcher,
@@ -6,7 +7,8 @@ import {
   DOCUMENT_SOURCE_LIMITS
 } from '@loci/shared'
 import { abortableSleep, throwIfAborted } from './abort.js'
-import { fetchWithRetry } from './retry.js'
+import { CRAWL_EXECUTION_DEFAULTS, executeCrawlTasks } from './crawl-executor.js'
+import { fetchWithRetry, isRetryableStatus, retryAfterMs } from './retry.js'
 export { fetchWithRetry, isRetryableStatus, retryAfterMs } from './retry.js'
 import { discoverSitemapUrls } from './sitemap.js'
 export { discoverSitemapUrls, parseSitemap } from './sitemap.js'
@@ -14,7 +16,6 @@ import { isUrlInScope } from './scope.js'
 import type {
   CrawledDocument,
   CrawledPage,
-  CrawlBatchPolicy,
   CrawlFailure,
   CrawlNode,
   CrawlProgress,
@@ -28,7 +29,6 @@ export { getHostname, isAllowedNavigation, isSameHostname, normalizeUrl } from '
 export type {
   CrawledDocument,
   CrawledPage,
-  CrawlBatchPolicy,
   CrawlCheckpoint,
   CrawlDuplicate,
   CrawlFailure,
@@ -56,26 +56,12 @@ interface QueueItem {
 interface SlashContentCandidate {
   url: string
   markdown: string
-}
-
-const immediateStaticHostnameSuffixes = ['.github.io', '.gitlab.io'] as const
-
-interface ImmediateCrawlOptions {
-  concurrency: number
-  batchIntervalMs: undefined
-}
-
-/** 已知可整批直取的静态页面不受用户批次节流配置影响。 */
-export function immediateCrawlOptions(pageCount: number): ImmediateCrawlOptions {
-  return {
-    concurrency: Math.max(1, pageCount),
-    batchIntervalMs: undefined
-  }
+  saved: Promise<void>
 }
 
 export function isImmediateStaticHostname(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase().replace(/\.$/u, '')
-  return immediateStaticHostnameSuffixes.some((suffix) => normalized.endsWith(suffix))
+  return ['.github.io', '.gitlab.io'].some((suffix) => normalized.endsWith(suffix))
 }
 
 export function parsePage(html: string, pageUrl: string): ParsedPage {
@@ -146,6 +132,7 @@ export async function fetchHttpPage(
   return {
     url: finalUrl,
     status: response.status,
+    retryAfter: response.headers.get('retry-after'),
     ...(body === undefined ? {} : { page: parsePage(body, finalUrl) })
   }
 }
@@ -166,20 +153,16 @@ export async function crawlHttpSource(options: HttpCrawlOptions): Promise<CrawlP
     },
     options.scopePath
   )
-  const requestPolicy =
-    sitemapUrls.length > 0 || isImmediateStaticHostname(options.hostname)
-      ? immediateCrawlOptions(options.pageLimit)
-      : { concurrency: options.concurrency ?? 9 }
   return runCrawlQueue({
     ...options,
-    ...requestPolicy,
+    concurrency: options.concurrency ?? CRAWL_EXECUTION_DEFAULTS.httpConcurrency,
     fetchMode: 'http',
     sitemapUrls,
     followPageLinks: sitemapUrls.length === 0,
     fetchPage: (url) =>
       fetchHttpPage(url, {
         fetchImpl: options.fetch,
-        maxRetries: options.maxRetries,
+        maxRetries: 0,
         sleep: options.sleep,
         signal: options.signal
       })
@@ -195,7 +178,7 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
   const isExcluded = createPathExclusionMatcher(options.excludePathPattern)
   let limitReached = false
 
-  const enqueue = (input: string, parentId?: string, id?: string): boolean => {
+  const enqueue = (input: string, parentId?: string, id?: string): QueueItem | undefined => {
     let url: string
     try {
       url = normalizeUrl(input)
@@ -204,18 +187,19 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
         isExcluded?.(url) ||
         seen.has(url)
       ) {
-        return false
+        return undefined
       }
     } catch {
-      return false
+      return undefined
     }
     if (seen.size >= options.pageLimit) {
       limitReached = true
-      return false
+      return undefined
     }
     seen.add(url)
-    queue.push({ id: id ?? url, url, ...(parentId ? { parentId } : {}) })
-    return true
+    const item = { id: id ?? url, url, ...(parentId ? { parentId } : {}) }
+    queue.push(item)
+    return item
   }
 
   if (isExcluded?.(firstUrl)) throw new Error('起始页面被排除路径正则命中')
@@ -232,9 +216,10 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
   }
   const failures: CrawlFailure[] = []
   let seedPage = options.seedPage
-  let cursor = 0
-
-  const processPage = async (item: QueueItem): Promise<void> => {
+  const processPage = async (
+    item: QueueItem,
+    addTask: (item: QueueItem) => Promise<void>
+  ): Promise<void> => {
     throwIfAborted(options.signal)
     const node: CrawlNode = {
       id: item.id,
@@ -250,6 +235,9 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
       const result = seedPage?.url === item.url ? seedPage : await options.fetchPage(item.url)
       if (result === seedPage) seedPage = undefined
       const page = result.page
+      if (isRetryableStatus(result.status)) {
+        throw new PageRequestError(result.status, result.retryAfter)
+      }
       node.url = normalizeUrl(result.url)
       if (!isUrlInScope(node.url, options.hostname, options.scopePath)) {
         failure = {
@@ -296,36 +284,46 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
         const candidate = slashKey ? slashCandidates.get(slashKey) : undefined
         const duplicate = candidate?.markdown === page.markdown
         if (duplicate && candidate) {
+          await candidate.saved
           await options.onDuplicate?.({ url: node.url, duplicateOf: candidate.url })
         } else {
+          const saved = Promise.resolve().then(() =>
+            options.onDocument({
+              url: node.url,
+              title: page.title,
+              language: page.language,
+              markdown: page.markdown,
+              crawledAt: new Date().toISOString(),
+              fetchMode: options.fetchMode
+            })
+          )
           if (slashKey && !candidate) {
-            slashCandidates.set(slashKey, { url: node.url, markdown: page.markdown })
+            // 写入完成前占位，避免并行处理斜杠变体时同时保存相同正文。
+            slashCandidates.set(slashKey, { url: node.url, markdown: page.markdown, saved })
           }
-          await options.onDocument({
-            url: node.url,
-            title: page.title,
-            language: page.language,
-            markdown: page.markdown,
-            crawledAt: new Date().toISOString(),
-            fetchMode: options.fetchMode
-          })
+          try {
+            await saved
+          } catch (error) {
+            if (slashKey && slashCandidates.get(slashKey)?.saved === saved)
+              slashCandidates.delete(slashKey)
+            throw error
+          }
         }
         progress.succeeded += 1
         node.status = 'success'
         if (!duplicate && options.followPageLinks !== false) {
           for (const link of page.links) {
-            if (enqueue(link, item.id)) progress.queued = queue.length
+            const next = enqueue(link, item.id)
+            if (next) {
+              progress.queued = queue.length
+              await addTask(next)
+            }
           }
         }
       }
     } catch (error) {
       throwIfAborted(options.signal)
-      failure = {
-        url: item.url,
-        reason: 'request_error',
-        message: error instanceof Error ? error.message : '页面请求失败',
-        retryable: true
-      }
+      throw error
     }
 
     try {
@@ -345,36 +343,51 @@ export async function runCrawlQueue(options: CrawlRunnerOptions): Promise<CrawlP
     }
   }
 
-  while (cursor < queue.length) {
-    throwIfAborted(options.signal)
-    await options.waitIfPaused?.()
-    throwIfAborted(options.signal)
-    const policy = await resolveBatchPolicy(options)
-    const batch = queue.slice(cursor, cursor + policy.concurrency)
-    cursor += batch.length
-    await Promise.all(batch.map(processPage))
-    throwIfAborted(options.signal)
-    await options.onCheckpoint?.({ pendingUrls: queue.slice(cursor).map((item) => item.url) })
-    if (cursor < queue.length && policy.batchIntervalMs) {
-      await abortableSleep(policy.batchIntervalMs, options.signal, options.sleep ?? defaultSleep)
+  await executeCrawlTasks({
+    tasks: [...queue],
+    concurrency: options.concurrency,
+    maxRetries: options.maxRetries,
+    signal: options.signal,
+    beforeRequest: options.waitIfPaused,
+    onCheckpoint: (pendingUrls) => options.onCheckpoint?.({ pendingUrls }),
+    handle: processPage,
+    onRetry: (error) =>
+      abortableSleep(
+        error instanceof PageRequestError ? retryAfterMs(error.retryAfter ?? null) : 0,
+        options.signal,
+        options.sleep ?? ((ms, signal) => wait(ms, undefined, { signal }))
+      ),
+    onFailure: async (item, error) => {
+      const failure: CrawlFailure = {
+        url: item.url,
+        reason: error instanceof PageRequestError ? 'http_error' : 'request_error',
+        message: error.message,
+        retryable: true,
+        ...(error instanceof PageRequestError ? { statusCode: error.status } : {})
+      }
+      failures.push(failure)
+      progress.failed += 1
+      progress.processed += 1
+      progress.limitReached = limitReached
+      await options.onError?.(failure)
+      options.onProgress?.({
+        ...progress,
+        node: { ...item, title: item.url, status: 'failed' }
+      })
     }
-  }
+  })
   const completed = failures.length ? { ...progress, failures } : progress
   options.onProgress?.(completed)
   return completed
 }
 
-async function resolveBatchPolicy(options: CrawlRunnerOptions): Promise<CrawlBatchPolicy> {
-  const current = await options.getBatchPolicy?.()
-  return {
-    concurrency: Math.max(1, Math.trunc(current?.concurrency ?? options.concurrency)),
-    batchIntervalMs: normalizeBatchInterval(current?.batchIntervalMs ?? options.batchIntervalMs)
+class PageRequestError extends Error {
+  constructor(
+    readonly status: number,
+    readonly retryAfter?: string | null
+  ) {
+    super(`页面返回 HTTP ${status}`)
   }
-}
-
-function normalizeBatchInterval(value: number | undefined): number | undefined {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return undefined
-  return Math.trunc(value)
 }
 
 function trailingSlashGroup(input: string): string | undefined {
@@ -382,8 +395,4 @@ function trailingSlashGroup(input: string): string | undefined {
   if (url.pathname === '/') return undefined
   url.pathname = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname
   return url.toString()
-}
-
-function defaultSleep(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }

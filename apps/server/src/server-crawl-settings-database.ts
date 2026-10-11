@@ -37,10 +37,6 @@ export function createServerCrawlSettingsDatabase(
         .update(serverCrawlSettings)
         .set({
           maxConcurrentJobs: normalized.maxConcurrentJobs,
-          httpConcurrency: normalized.httpConcurrency,
-          browserConcurrency: normalized.browserConcurrency,
-          batchIntervalMinSeconds: normalized.batchIntervalMinSeconds,
-          batchIntervalMaxSeconds: normalized.batchIntervalMaxSeconds,
           revision: sql`${serverCrawlSettings.revision} + 1`,
           updatedAt
         })

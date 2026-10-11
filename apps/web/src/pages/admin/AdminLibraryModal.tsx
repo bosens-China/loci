@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { GithubOutlined, GlobalOutlined } from '@ant-design/icons'
-import { Badge, Form, Modal, Segmented, Tabs } from 'antd'
+import { Badge, Form, Modal, Tabs } from 'antd'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
   normalizeCronSchedule,
@@ -30,7 +29,8 @@ interface AdminLibraryFormValue extends LibraryCoreFormValue {
 export function AdminLibraryModal(props: Props): React.JSX.Element {
   const [form] = Form.useForm<AdminLibraryFormValue>()
   const [activeTab, setActiveTab] = useState<string>('basic')
-  const kind = Form.useWatch('kind', form) ?? 'web'
+  const url = Form.useWatch('url', form) ?? ''
+  const kind = parseGithubRepositoryUrl(url) ? 'github' : 'web'
   const formValues = Form.useWatch([], form)
 
   const isEditing = props.editing !== null && props.editing !== 'new'
@@ -104,15 +104,6 @@ export function AdminLibraryModal(props: Props): React.JSX.Element {
         className="pt-2"
         requiredMark="optional"
       >
-        <Form.Item name="kind" label="来源类型" className="mb-4">
-          <Segmented
-            block
-            options={[
-              { value: 'web', icon: <GlobalOutlined />, label: '普通站点' },
-              { value: 'github', icon: <GithubOutlined />, label: 'GitHub 仓库' }
-            ]}
-          />
-        </Form.Item>
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}

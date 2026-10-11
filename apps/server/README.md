@@ -123,8 +123,7 @@ interface LibrarySnapshot {
 - `POST /api/v1/admin/jobs/:id/pause|resume|stop|cancel`：控制单个任务。
 - `PUT /api/v1/admin/jobs/:id/priority`：调整同 hostname 队列优先级。
 - `POST /api/v1/admin/jobs/pause-all|resume-all`：全局或按请求正文中的 `hostname` 批量控制。
-- `GET|PUT /api/v1/admin/crawl-settings`：读取或按 `revision` 保存 Server 全局任务并发、页面并发和批次间隔。
-- `GET /api/v1/admin/hostname-policies` 与 `PUT|DELETE /api/v1/admin/hostname-policies/:hostname`：实时管理 hostname 并发和批次间隔。
+- `GET|PUT /api/v1/admin/crawl-settings`：读取或按 `revision` 保存 Server 任务容量；PUT 只接收 `{ "maxConcurrentJobs": 3, "revision": 1 }`。
 - `POST /api/v1/admin/publish`：接收经过校验的 `application/zip` 本地文档库发布归档。
 
 Server 会在认证后的 `POST`、`PUT`、`DELETE` 管理请求成功时追加审计记录，保存管理员、请求方法、路径、响应状态和时间。登录请求、GET 请求、请求正文、密码和 Token 不写入审计表。审计写入发生在业务操作成功之后，审计存储故障不会把已经完成的管理操作伪装成可安全重试的失败。
@@ -145,7 +144,7 @@ Server 会在认证后的 `POST`、`PUT`、`DELETE` 管理请求成功时追加�
 但同一域名与范围组合不能重复。PUT 更换起始 URL 会立即清空全部正文，缩小范围会立即删除范围外的旧文档。已发布快照在同一事务中更新，目录页数与快照 `ETag` 随内容变化；正文清空后撤销快照并从公开目录移除，下载接口返回 `404`。未发布的文档库不会因修改配置自动发布。
 
 `schedule` 使用五段 Linux Cron，传 `null` 表示关闭定时同步。批量同步任务由 Server
-统一排队，默认最多同时抓取 3 个文档库，管理员可以通过抓取策略调整。同一 hostname 的文档库始终共享串行队列，不同 hostname 可以并发；任务内部默认使用 HTTP 并发 9、浏览器并发 5 和 0 秒批次间隔，hostname 策略可以覆盖全局默认。降低全局任务并发不会中止正在运行的任务，页面并发与间隔从下一批次开始读取新值。全局设置写入使用修订号避免并发管理员静默覆盖，相同内容的重复提交幂等复用当前结果。任务、进度、正文大小、剩余检查点、优先级、所有者和租约保存在 SQLite；共享同一
+统一排队，默认最多同时抓取 3 个文档库，管理员可调整最大并行任务数。同一 hostname 的文档库始终串行，不同 hostname 可以并发；任务内部由 Crawlee 管理队列和资源并发，HTTP/浏览器并发上限为 9/5，临时失败最多重试 3 次，单次页面请求超时 30 秒。降低任务容量不会中止正在运行的任务。页面并发、批次间隔和 hostname 覆盖不再对外配置，Server 设置接口和存储已移除旧页面执行字段；旧客户端传入这些字段会被拒绝。全局设置写入使用修订号避免并发管理员静默覆盖，相同内容的重复提交幂等复用当前结果。任务、进度、正文大小、剩余检查点、优先级、所有者和租约保存在 SQLite；共享同一
 数据库的多个 Server 进程同时提交同一文档库时会返回同一个活动任务。暂停和恢复复用原任务；暂停的排队任务不占用执行名额，恢复后重新入队，其他文档库可以继续执行。结束发布已抓取正文并保留剩余检查点；取消会传递到 HTTP、浏览器、GitHub 下载和 ZIP 解析，取消后不会提交本次工作内容，等待执行资格时的取消也正常收尾。首次任务取消且库仍为空时同时删库，已有成功内容不会受影响。进程异常退出后的过期租约会失败收口，后续请求可以重试。配置浏览器
 后，服务端会比较入口页的 HTTP 与浏览器渲染结果，再为整个文档库选择一种抓取方式；
 后续页面不会重复双通道抓取。

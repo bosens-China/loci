@@ -7,7 +7,6 @@ import {
 } from '@loci/core'
 import type { CrawlRunState } from '@loci/shared'
 import { LocalBrowserCrawler, type BrowserInstallPrompt } from './browser-crawler.js'
-import { resolveCrawlBatchPolicy } from './crawl-batch-policy.js'
 import type { LociDatabase } from './database.js'
 import { assertLocalJobCanContinue, LocalJobControlError } from './local-job-control.js'
 import { createLocalJobProgressWriter } from './local-job-progress-writer.js'
@@ -148,11 +147,6 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
               pageLimit: source.pageLimit,
               initialUrls: pendingUrls.length ? pendingUrls : database.listDocumentUrls(sourceId),
               fetchMode: source.fetchMode,
-              httpConcurrency: resolveCrawlBatchPolicy(database, source, 'http').concurrency,
-              browserConcurrency: resolveCrawlBatchPolicy(database, source, 'browser').concurrency,
-              maxRetries: database.getSettings().maxRetries,
-              batchIntervalMs: resolveCrawlBatchPolicy(database, source, source.fetchMode)
-                .batchIntervalMs,
               githubArchiveLimitBytes:
                 (source.githubArchiveLimitMb ?? database.getSettings().githubArchiveLimitMb) *
                 1024 *
@@ -166,10 +160,6 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
               signal,
               waitIfPaused: async () => {
                 if (localJob) assertLocalJobCanContinue(database, localJob.id)
-              },
-              getBatchPolicy: () => {
-                const fetchMode = resolution?.fetchMode ?? source.fetchMode
-                return resolveCrawlBatchPolicy(database, source, fetchMode)
               },
               onCheckpoint: ({ pendingUrls: remaining }) => {
                 pendingUrls = remaining

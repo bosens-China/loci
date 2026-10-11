@@ -24,50 +24,53 @@ function renderedPage(markdown: string): CrawledPage {
 }
 
 describe('crawlSource', () => {
-  it('优先复用 llms.txt 流程，不启动浏览器', async () => {
-    const documents: CrawledDocument[] = []
-    const fetchPage = vi.fn(async () => renderedPage('browser'))
-    const beforeBrowserCrawl = vi.fn(async () => undefined)
-    const fetchImpl = createFetchMock(async (input) => {
-      const url = String(input)
-      if (url.endsWith('/llms.txt')) {
-        return new Response('- [Guide](/guide.md)', { status: 200 })
-      }
-      return new Response('# Guide', {
-        status: 200,
-        headers: { 'content-type': 'text/markdown' }
+  it.each(['auto', 'browser'] as const)(
+    '优先复用 llms.txt 流程，%s 模式也不启动浏览器',
+    async (fetchMode) => {
+      const documents: CrawledDocument[] = []
+      const fetchPage = vi.fn(async () => renderedPage('browser'))
+      const beforeBrowserCrawl = vi.fn(async () => undefined)
+      const fetchImpl = createFetchMock(async (input) => {
+        const url = String(input)
+        if (url.endsWith('/llms.txt')) {
+          return new Response('- [Guide](/guide.md)', { status: 200 })
+        }
+        return new Response('# Guide', {
+          status: 200,
+          headers: { 'content-type': 'text/markdown' }
+        })
       })
-    })
 
-    const result = await crawlSource({
-      kind: 'web',
-      firstUrl: 'https://docs.example.com/docs',
-      hostname: 'docs.example.com',
-      pageLimit: 10,
-      fetchMode: 'auto',
-      fetch: fetchImpl,
-      crawler: { fetchPage },
-      beforeBrowserCrawl,
-      onDocument: (document) => {
-        documents.push(document)
-      },
-      onSnapshot: (snapshot) => {
-        documents.push(...snapshot)
-      }
-    })
+      const result = await crawlSource({
+        kind: 'web',
+        firstUrl: 'https://docs.example.com/docs',
+        hostname: 'docs.example.com',
+        pageLimit: 10,
+        fetchMode,
+        fetch: fetchImpl,
+        crawler: { fetchPage },
+        beforeBrowserCrawl,
+        onDocument: (document) => {
+          documents.push(document)
+        },
+        onSnapshot: (snapshot) => {
+          documents.push(...snapshot)
+        }
+      })
 
-    expect(result.resolution).toMatchObject({
-      discovery: 'llms',
-      iconUrl: 'https://docs.example.com/favicon.ico'
-    })
-    expect(beforeBrowserCrawl).not.toHaveBeenCalled()
-    expect(fetchPage).not.toHaveBeenCalled()
-    expect(fetchImpl).not.toHaveBeenCalledWith(
-      'https://docs.example.com/openapi.json',
-      expect.anything()
-    )
-    expect(documents[0]?.markdown).toBe('# Guide')
-  })
+      expect(result.resolution).toMatchObject({
+        discovery: 'llms',
+        iconUrl: 'https://docs.example.com/favicon.ico'
+      })
+      expect(beforeBrowserCrawl).not.toHaveBeenCalled()
+      expect(fetchPage).not.toHaveBeenCalled()
+      expect(fetchImpl).not.toHaveBeenCalledWith(
+        'https://docs.example.com/openapi.json',
+        expect.anything()
+      )
+      expect(documents[0]?.markdown).toBe('# Guide')
+    }
+  )
 
   it('llms.txt 清单中的 404 只记为失败，不回退抓取 HTML', async () => {
     const fetchPage = vi.fn(async () => renderedPage('# Browser fallback'))
@@ -313,8 +316,8 @@ describe('crawlSource', () => {
     expect(documents[0]).toMatchObject({ markdown: '# HTTP docs', fetchMode: 'http' })
   })
 
-  it('浏览器模式在发起网络请求前检查浏览器运行时', async () => {
-    const fetchImpl = createFetchMock()
+  it('浏览器模式在结构化发现未命中后、页面读取前检查浏览器运行时', async () => {
+    const fetchImpl = createFetchMock(async () => new Response('', { status: 404 }))
     const beforeBrowserCrawl = vi.fn(async () => {
       throw new Error('Browser missing')
     })
@@ -332,7 +335,9 @@ describe('crawlSource', () => {
       })
     ).rejects.toThrow('Browser missing')
     expect(beforeBrowserCrawl).toHaveBeenCalledOnce()
-    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(fetchImpl.mock.calls.map(([input]) => String(input))).toEqual([
+      'https://docs.example.com/llms.txt'
+    ])
   })
 
   it('双路均失败时保留各自的底层原因', async () => {

@@ -3,14 +3,7 @@ import { accessSync, constants, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import type { Readable } from 'node:stream'
-import {
-  isAllowedNavigation,
-  normalizeUrl,
-  parsePage,
-  waitForStableContent,
-  type CrawledPage,
-  type RenderedPageRequest
-} from '@loci/core'
+import { PooledBrowserCrawler, type CrawledPage, type RenderedPageRequest } from '@loci/core'
 
 type PlaywrightModule = typeof import('playwright-core')
 type Browser = Awaited<ReturnType<PlaywrightModule['chromium']['launch']>>
@@ -33,8 +26,7 @@ const HEADLESS_SHELL = 'chromium-headless-shell'
 
 /** 本地运行时统一使用 Playwright 执行浏览器抓取。 */
 export class LocalBrowserCrawler {
-  private browser: Browser | undefined
-  private browserPromise: Promise<Browser> | undefined
+  private crawler: PooledBrowserCrawler | undefined
   private closePromise: Promise<void> | undefined
 
   constructor(
@@ -45,58 +37,19 @@ export class LocalBrowserCrawler {
 
   async fetchPage(url: string, request: RenderedPageRequest = {}): Promise<CrawledPage> {
     request.signal?.throwIfAborted()
-    const browser = await this.getBrowser()
-    const context = await browser.newContext({ acceptDownloads: false })
-    const page = await context.newPage()
-    const abort = (): void => {
-      void context.close().catch(() => undefined)
+    if (this.closePromise) await this.closePromise
+    if (!this.crawler) {
+      configureBrowserPath(this.browsersPath)
+      this.crawler = new PooledBrowserCrawler({ executablePath: resolveHeadlessShellExecutable() })
     }
-    request.signal?.addEventListener('abort', abort, { once: true })
-    const timeout = 30_000
-    page.setDefaultTimeout(timeout)
-    page.setDefaultNavigationTimeout(timeout)
-    page.on('popup', (popup) => void popup.close())
-    await page.route('**/*', async (route) => {
-      const current = route.request()
-      if (
-        current.isNavigationRequest() &&
-        current.frame() === page.mainFrame() &&
-        !isAllowedNavigation(current.url(), request.hostname, request.scopePath)
-      ) {
-        await route.abort('blockedbyclient')
-        return
-      }
-      await route.continue()
-    })
-
-    try {
-      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout })
-      const status = response?.status() ?? 200
-      if (status >= 200 && status < 300) {
-        await waitForStableContent(
-          async () => page.evaluate(() => document.body?.innerText ?? ''),
-          { isIdle: () => Promise.resolve(true), signal: request.signal }
-        )
-      }
-      request.signal?.throwIfAborted()
-      const finalUrl = normalizeUrl(page.url() || url)
-      return {
-        url: finalUrl,
-        status,
-        retryAfter: response?.headers()['retry-after'] ?? null,
-        ...(status >= 200 && status < 300
-          ? { page: parsePage(await page.content(), finalUrl) }
-          : {})
-      }
-    } finally {
-      request.signal?.removeEventListener('abort', abort)
-      await context.close().catch(() => undefined)
-    }
+    return this.crawler.fetchPage(url, request)
   }
 
   async close(): Promise<void> {
     if (this.closePromise) return this.closePromise
-    this.closePromise = this.closeCurrentBrowser().finally(() => {
+    const crawler = this.crawler
+    this.crawler = undefined
+    this.closePromise = (crawler?.close() ?? Promise.resolve()).finally(() => {
       this.closePromise = undefined
     })
     return this.closePromise
@@ -109,38 +62,6 @@ export class LocalBrowserCrawler {
   /** 只检查本地安装文件，不启动 Chromium。 */
   isInstalled(): boolean {
     return browserInstallationStatus(this.browsersPath).installed
-  }
-
-  private async getBrowser(): Promise<Browser> {
-    if (this.closePromise) await this.closePromise
-    if (this.browser) return this.browser
-    if (this.browserPromise) return this.browserPromise
-    configureBrowserPath(this.browsersPath)
-    const launch = launchHeadlessShell()
-      .then(async (browser) => {
-        if (this.closePromise) {
-          await browser.close().catch(() => undefined)
-          throw new Error('浏览器正在关闭')
-        }
-        this.browser = browser
-        return browser
-      })
-      .catch((error: unknown) => {
-        throw new Error(
-          `无法启动无头浏览器：${error instanceof Error ? error.message : '未知错误'}\n请先运行 loci browser install。`
-        )
-      })
-      .finally(() => {
-        if (this.browserPromise === launch) this.browserPromise = undefined
-      })
-    this.browserPromise = launch
-    return launch
-  }
-
-  private async closeCurrentBrowser(): Promise<void> {
-    const browser = this.browser ?? (await this.browserPromise?.catch(() => undefined))
-    if (this.browser === browser) this.browser = undefined
-    await browser?.close()
   }
 }
 

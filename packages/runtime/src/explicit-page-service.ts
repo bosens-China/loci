@@ -275,18 +275,13 @@ export function fetchSourceExplicitPages(options: {
   signal?: AbortSignal
   onProgress?: (progress: CrawlProgress) => void
 }): ReturnType<typeof fetchExplicitPages> {
-  const settings = options.database.getSettings()
   const fetchMode = options.fetchMode ?? options.source.fetchMode
   return fetchExplicitPages({
     urls: options.urls,
     hostname: options.source.hostname,
     excludePathPattern: options.source.excludePathPattern,
     fetchMode,
-    concurrency:
-      fetchMode === 'browser'
-        ? (options.source.browserConcurrency ?? settings.browserConcurrency)
-        : (options.source.httpConcurrency ?? settings.httpConcurrency),
-    maxRetries: settings.maxRetries,
+    concurrency: fetchMode === 'browser' ? 5 : 9,
     signal: options.signal,
     onProgress: options.onProgress,
     crawler: {

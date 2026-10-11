@@ -3,6 +3,7 @@ import {
   discoverOpenApiEntries,
   discoverSitemapUrls,
   fetchCrawledPageWithRetry,
+  executeCrawlTasks,
   fetchHttpPage,
   fetchMarkdownPage,
   probeSourcePage,
@@ -162,7 +163,6 @@ async function discoverInitial(
   source: SourceConfig,
   signal?: AbortSignal
 ): Promise<void> {
-  const settings = database.getSettings()
   const stored: UrlReviewCandidateInput[] = database
     .listDocumentCandidates(source.id)
     .map((item) => ({ ...item, titleSource: 'stored' }))
@@ -212,7 +212,7 @@ async function discoverInitial(
     source.firstUrl,
     source.hostname,
     source.pageLimit,
-    { maxRetries: settings.maxRetries, signal },
+    { maxRetries: 3, signal },
     source.scopePath
   )
   if (!isDiscovering(database, run.id)) return
@@ -277,35 +277,24 @@ async function processApproved(
     await options.browser.ensureInstalled(onBrowserMissing)
     if (!isDiscovering(options.database, run.id)) return
   }
-  const settings = options.database.getSettings()
-  const concurrency =
-    fetchMode === 'browser'
-      ? (source.browserConcurrency ?? settings.browserConcurrency)
-      : (source.httpConcurrency ?? settings.httpConcurrency)
-  let cursor = 0
-  const worker = async (): Promise<void> => {
-    while (cursor < approved.length) {
+  const concurrency = fetchMode === 'browser' ? 5 : 9
+  await executeCrawlTasks({
+    tasks: approved,
+    concurrency,
+    maxRetries: 0,
+    signal,
+    handle: async (candidate) => {
       if (!isDiscovering(options.database, run.id)) return
-      const candidate = approved[cursor++]
-      if (!candidate) continue
       signal?.throwIfAborted()
       if (candidate.document) {
         options.database.completeUrlReviewCandidate(candidate.id, candidate.document, undefined, [])
-        continue
+        return
       }
       try {
         const page =
           seed?.url === candidate.url
             ? seed.page
-            : await fetchReviewPage(
-                options,
-                run,
-                source,
-                candidate,
-                fetchMode,
-                settings.maxRetries,
-                signal
-              )
+            : await fetchReviewPage(options, run, source, candidate, fetchMode, 3, signal)
         if (!isDiscovering(options.database, run.id)) return
         if (seed?.url === candidate.url) seed = undefined
         const outcome = reviewPageOutcome(candidate.url, page, source, fetchMode)
@@ -339,9 +328,11 @@ async function processApproved(
           []
         )
       }
+    },
+    onFailure: async (_candidate, error) => {
+      throw error
     }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, approved.length) }, () => worker()))
+  })
 }
 
 async function fetchReviewPage(

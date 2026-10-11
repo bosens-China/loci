@@ -84,8 +84,6 @@ function registerUpdateLibrary(register: LociToolRegistrar, services: LociMcpSer
         .optional(),
       scope_path: z.string().trim().startsWith('/').optional(),
       exclude_path: excludePathSchema.describe('传 null 清除排除规则'),
-      http_concurrency: nullableConcurrency('传 null 恢复继承全局 HTTP 并发'),
-      browser_concurrency: nullableConcurrency('传 null 恢复继承全局浏览器并发'),
       github_archive_limit_mb: nullableSize('传 null 恢复继承全局 GitHub ZIP 上限'),
       github_markdown_limit_mb: nullableSize('传 null 恢复继承全局 Markdown 上限')
     })
@@ -126,12 +124,8 @@ function registerUpdateLibrary(register: LociToolRegistrar, services: LociMcpSer
           input.exclude_path === undefined
             ? (source.excludePathPattern ?? null)
             : input.exclude_path,
-        httpConcurrency:
-          input.http_concurrency === undefined ? source.httpConcurrency : input.http_concurrency,
-        browserConcurrency:
-          input.browser_concurrency === undefined
-            ? source.browserConcurrency
-            : input.browser_concurrency,
+        httpConcurrency: null,
+        browserConcurrency: null,
         githubArchiveLimitMb:
           input.github_archive_limit_mb === undefined
             ? source.githubArchiveLimitMb
@@ -147,17 +141,6 @@ function registerUpdateLibrary(register: LociToolRegistrar, services: LociMcpSer
       )
     }
   )
-}
-
-function nullableConcurrency(description: string): z.ZodOptional<z.ZodNullable<z.ZodNumber>> {
-  return z
-    .number()
-    .int()
-    .min(DOCUMENT_SOURCE_LIMITS.concurrency.min)
-    .max(DOCUMENT_SOURCE_LIMITS.concurrency.max)
-    .nullable()
-    .optional()
-    .describe(description)
 }
 
 function nullableSize(description: string): z.ZodOptional<z.ZodNullable<z.ZodNumber>> {

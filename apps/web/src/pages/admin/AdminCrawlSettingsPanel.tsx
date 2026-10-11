@@ -1,11 +1,7 @@
 import { useEffect } from 'react'
 import { SaveOutlined } from '@ant-design/icons'
 import type { SaveServerCrawlSettingsInput, ServerCrawlSettings } from '@loci/shared'
-import {
-  SERVER_CRAWL_SETTINGS_LIMITS,
-  isValidBatchIntervalRange,
-  isValidBatchIntervalSeconds
-} from '@loci/shared'
+import { SERVER_CRAWL_SETTINGS_LIMITS } from '@loci/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button, Card, Form, InputNumber, Tag, Typography } from 'antd'
 import { getAdminCrawlSettings, saveAdminCrawlSettings } from '@/api/admin'
@@ -39,11 +35,10 @@ export function AdminCrawlSettingsPanel(): React.JSX.Element {
   }, [form, query.data])
 
   const submit = (input: SaveServerCrawlSettingsInput): void => {
-    if (!isValidBatchIntervalRange(input.batchIntervalMinSeconds, input.batchIntervalMaxSeconds)) {
-      form.setFields([{ name: 'batchIntervalMaxSeconds', errors: ['最大值不能小于最小值'] }])
-      return
-    }
-    save.mutate(input)
+    save.mutate({
+      maxConcurrentJobs: input.maxConcurrentJobs,
+      revision: input.revision
+    })
   }
 
   return (
@@ -73,37 +68,6 @@ export function AdminCrawlSettingsPanel(): React.JSX.Element {
               {...SERVER_CRAWL_SETTINGS_LIMITS.maxConcurrentJobs}
             />
           </Card>
-          <Card title="任务内抓取默认值" extra={<Tag color="processing">下一批次生效</Tag>}>
-            <Typography.Paragraph type="secondary" className="mb-4! text-xs">
-              hostname 覆盖为空时继承这里的默认值；运行中的任务会在下一批次重新读取。
-            </Typography.Paragraph>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <SettingNumber
-                name="httpConcurrency"
-                label="HTTP 并发"
-                {...SERVER_CRAWL_SETTINGS_LIMITS.concurrency}
-              />
-              <SettingNumber
-                name="browserConcurrency"
-                label="浏览器并发"
-                {...SERVER_CRAWL_SETTINGS_LIMITS.concurrency}
-              />
-              <SettingNumber
-                name="batchIntervalMinSeconds"
-                label="批次间隔最小（秒）"
-                min={0}
-                max={SERVER_CRAWL_SETTINGS_LIMITS.batchIntervalSeconds.max}
-                batchInterval
-              />
-              <SettingNumber
-                name="batchIntervalMaxSeconds"
-                label="批次间隔最大（秒）"
-                min={0}
-                max={SERVER_CRAWL_SETTINGS_LIMITS.batchIntervalSeconds.max}
-                batchInterval
-              />
-            </div>
-          </Card>
           <div className="flex justify-end">
             <Button
               type="primary"
@@ -125,25 +89,12 @@ function SettingNumber(props: {
   label: string
   min: number
   max: number
-  batchInterval?: boolean
 }): React.JSX.Element {
   return (
     <Form.Item
       name={props.name}
       label={props.label}
-      rules={[
-        { required: true, message: `请输入${props.label}` },
-        ...(props.batchInterval
-          ? [
-              {
-                validator: (_: unknown, value: unknown) =>
-                  isValidBatchIntervalSeconds(value)
-                    ? Promise.resolve()
-                    : Promise.reject(new Error('请输入 0 或允许范围内的整数'))
-              }
-            ]
-          : [])
-      ]}
+      rules={[{ required: true, message: `请输入${props.label}` }]}
       className="mb-0"
     >
       <InputNumber min={props.min} max={props.max} precision={0} className="w-full" />
@@ -157,10 +108,6 @@ function setFormValues(
 ): void {
   form.setFieldsValue({
     maxConcurrentJobs: settings.maxConcurrentJobs,
-    httpConcurrency: settings.httpConcurrency,
-    browserConcurrency: settings.browserConcurrency,
-    batchIntervalMinSeconds: settings.batchIntervalMinSeconds,
-    batchIntervalMaxSeconds: settings.batchIntervalMaxSeconds,
     revision: settings.revision
   })
 }

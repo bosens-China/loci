@@ -13,18 +13,15 @@ import {
   JOBS_QUERY_KEY,
   type JobControlAction
 } from '@/api/jobs'
-import { getSettings, listHostnameCrawlPolicies } from '@/api/settings'
 import { listSources } from '@/api/sources'
 import { AsyncState } from '@/components/AsyncState'
 import { useCurrentTime } from '@/hooks/use-current-time'
 import { ActiveJobItem } from './jobs/ActiveJobItem'
 import { CompletedJobItem } from './jobs/CompletedJobItem'
 import { FailedJobItem } from './jobs/FailedJobItem'
-import { JobConcurrencyModal } from './jobs/JobConcurrencyModal'
 import { JobDomainHeader } from './jobs/JobDomainHeader'
 import { JobFiltersToolbar } from './jobs/JobFiltersToolbar'
 import {
-  calculateDomainConcurrency,
   filterJobs,
   groupJobsByHostname,
   isActiveJob,
@@ -43,7 +40,6 @@ export function JobDetailPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { message, modal } = App.useApp()
   const client = useQueryClient()
-  const [modalOpen, setModalOpen] = useState(false)
   const [filters, setFilters] = useState<JobFilters>({
     status: 'all',
     query: '',
@@ -62,16 +58,6 @@ export function JobDetailPage(): React.JSX.Element {
     queryFn: listSources
   })
 
-  const settings = useQuery({
-    queryKey: ['settings'],
-    queryFn: getSettings
-  })
-
-  const policies = useQuery({
-    queryKey: ['settings', 'hostname-policies'],
-    queryFn: listHostnameCrawlPolicies
-  })
-
   const safeHostname = decodeURIComponent(hostname || '')
   const sourcesMap = useMemo(
     () => new Map((sources.data ?? []).map((s) => [s.id, s])),
@@ -82,7 +68,6 @@ export function JobDetailPage(): React.JSX.Element {
     [sources.data]
   )
 
-  const policy = (policies.data ?? []).find((p) => p.hostname === safeHostname)
   const allJobs = jobs.data ?? EMPTY_JOBS
   const domainJobs = useMemo(
     () => allJobs.filter((j) => j.hostname === safeHostname),
@@ -103,17 +88,6 @@ export function JobDetailPage(): React.JSX.Element {
     }
     return map
   }, [allJobs])
-
-  const defaultHttpConcurrency = settings.data?.httpConcurrency ?? 9
-  const defaultBrowserConcurrency = settings.data?.browserConcurrency ?? 5
-
-  const hasBrowserJobs = domainJobs.some((job) => sourcesMap.get(job.sourceId)?.mode === 'browser')
-  const configuredLimit = hasBrowserJobs
-    ? (policy?.browserConcurrency ?? defaultBrowserConcurrency)
-    : (policy?.httpConcurrency ?? defaultHttpConcurrency)
-
-  const activeJobs = domainJobs.filter(isActiveJob)
-  const concurrencySummary = calculateDomainConcurrency(activeJobs, configuredLimit)
 
   const activeCount = domainJobs.filter(isActiveJob).length
   const now = useCurrentTime(activeCount > 0)
@@ -201,16 +175,11 @@ export function JobDetailPage(): React.JSX.Element {
       const source = sourcesMap.get(job.sourceId)
 
       if (isActive) {
-        const allocated = concurrencySummary.allocations.get(job.id) ?? 0
         activeList.push(
           <ActiveJobItem
             key={job.id}
             job={job}
             source={source}
-            policy={policy}
-            defaultHttpConcurrency={defaultHttpConcurrency}
-            defaultBrowserConcurrency={defaultBrowserConcurrency}
-            allocatedConcurrency={allocated}
             now={now}
             sourceNames={sourceNames}
             pendingAction={pendingAction}
@@ -226,7 +195,6 @@ export function JobDetailPage(): React.JSX.Element {
                 onOk: () => priority.mutateAsync({ id: j.id, value: val })
               })
             }}
-            onOpenConcurrency={() => setModalOpen(true)}
           />
         )
       } else if (isFailed) {
@@ -268,15 +236,11 @@ export function JobDetailPage(): React.JSX.Element {
     return [...activeList, ...failedList, ...completedList]
   }, [
     activeJobsBySource,
-    concurrencySummary.allocations,
-    defaultBrowserConcurrency,
-    defaultHttpConcurrency,
     filteredJobs,
     itemControl,
     modal,
     now,
     pendingAction,
-    policy,
     priority,
     sourceNames,
     sourcesMap
@@ -297,11 +261,8 @@ export function JobDetailPage(): React.JSX.Element {
           failedCount={failedCount}
           processed={currentGroup?.processed ?? 0}
           contentBytes={currentGroup?.contentBytes ?? 0}
-          configuredLimit={configuredLimit}
-          concurrency={concurrencySummary}
           pendingAction={pendingAction}
           onBack={() => void navigate({ to: '/jobs' })}
-          onOpenConcurrency={() => setModalOpen(true)}
           onPause={() => bulkControl.mutate({ action: 'pause-all', hostname: safeHostname })}
           onResume={() => bulkControl.mutate({ action: 'resume-all', hostname: safeHostname })}
         />
@@ -326,16 +287,6 @@ export function JobDetailPage(): React.JSX.Element {
               description={domainJobs.length ? '没有符合筛选条件的任务' : '该域名下暂无任务'}
             />
           </Card>
-        )}
-
-        {/* 并发限速弹窗 */}
-        {modalOpen && (
-          <JobConcurrencyModal
-            open
-            hostname={safeHostname}
-            initialMode={hasBrowserJobs ? 'browser' : 'http'}
-            onClose={() => setModalOpen(false)}
-          />
         )}
       </AsyncState>
     </div>
@@ -365,9 +316,9 @@ function pendingActionKey(
 }
 
 const actionSuccess: Record<ItemAction, string> = {
-  pause: '任务将在当前批次后暂停',
+  pause: '任务将在当前页面处理后暂停',
   resume: '任务已恢复执行',
-  stop: '任务将在当前批次后结束并保留已抓取内容',
+  stop: '任务将在当前页面处理后结束并保留已抓取内容',
   cancel: '已提交取消请求',
   continue: '任务已从检查点恢复继续执行'
 }

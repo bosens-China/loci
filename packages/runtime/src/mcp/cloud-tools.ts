@@ -112,7 +112,7 @@ export function registerCloudTools(register: LociToolRegistrar, services: LociMc
     {
       title: '拉取云端公开文档库',
       description:
-        '从当前 Loci Server 下载公开快照并保存到本地；重复调用会更新已有副本。该操作会访问网络并修改本地数据库，调用前必须取得用户确认。',
+        '从当前 Loci Server 下载公开快照并保存到本地；重复调用会更新已有副本。该操作会访问网络并修改本地数据库；当前任务所需的公开资料获取默认允许，无需逐次确认，应按范围和新鲜度选择匹配快照并遵守用户限制。',
       inputSchema: z
         .object({
           library_id: z.string().trim().min(1).describe('来自 loci_list_cloud_libraries 的云端 ID')

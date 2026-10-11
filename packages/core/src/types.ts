@@ -53,13 +53,7 @@ export interface FetchOptions {
   signal?: AbortSignal
 }
 
-/** 每个抓取批次开始前重新读取，允许持久化域名规则在运行中生效。 */
-export interface CrawlBatchPolicy {
-  concurrency: number
-  batchIntervalMs?: number
-}
-
-/** 批次完成后的可恢复边界，只保存尚未处理的标准化 URL。 */
+/** 每页完成后的可恢复边界，包含排队和仍在处理的标准化 URL。 */
 export interface CrawlCheckpoint {
   pendingUrls: string[]
 }
@@ -77,10 +71,8 @@ export interface HttpCrawlOptions {
   fetch?: FetchOptions['fetchImpl']
   sleep?: FetchOptions['sleep']
   maxRetries?: number
-  batchIntervalMs?: number
   signal?: AbortSignal
   waitIfPaused?: () => Promise<void>
-  getBatchPolicy?: () => CrawlBatchPolicy | Promise<CrawlBatchPolicy>
   onCheckpoint?: (checkpoint: CrawlCheckpoint) => Promise<void> | void
   onDocument: (document: CrawledDocument) => Promise<void> | void
   onSnapshot?: (documents: CrawledDocument[]) => Promise<void> | void

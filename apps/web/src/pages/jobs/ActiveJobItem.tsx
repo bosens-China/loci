@@ -5,13 +5,12 @@ import {
   ExclamationCircleOutlined,
   FileTextOutlined,
   GlobalOutlined,
-  HourglassOutlined,
   PauseOutlined,
   StopOutlined,
   ThunderboltOutlined,
   UpOutlined
 } from '@ant-design/icons'
-import type { DocumentSource, HostnameCrawlPolicy, LocalJob } from '@loci/shared'
+import type { DocumentSource, LocalJob } from '@loci/shared'
 import { Badge, Button, Progress, Select, Tag, Tooltip, Typography } from 'antd'
 import { ConfirmedActionButton } from '@/components/ConfirmedActionButton'
 import { formatBytes, formatDateTime, formatDuration } from '@/utils/format'
@@ -26,30 +25,17 @@ import {
 interface ActiveJobItemProps {
   job: LocalJob
   source?: DocumentSource
-  policy?: HostnameCrawlPolicy
-  defaultHttpConcurrency: number
-  defaultBrowserConcurrency: number
-  allocatedConcurrency: number
   relatedFailures?: LocalJob[]
   now: number
   sourceNames: ReadonlyMap<string, string>
   pendingAction?: string
   onJobAction: (job: LocalJob, action: 'pause' | 'resume' | 'stop' | 'cancel') => void
   onPriorityChange: (job: LocalJob, priority: number) => void
-  onOpenConcurrency: (mode: 'http' | 'browser') => void
 }
 
 /** 运行中 / 活跃任务聚焦卡片（支持内嵌关联历史失败记录聚合与标准控件尺寸） */
 export function ActiveJobItem(props: ActiveJobItemProps): React.JSX.Element {
-  const {
-    job,
-    source,
-    policy,
-    defaultHttpConcurrency,
-    defaultBrowserConcurrency,
-    allocatedConcurrency,
-    relatedFailures = []
-  } = props
+  const { job, source, relatedFailures = [] } = props
   const [showFailures, setShowFailures] = useState(false)
   const status = jobViewStatus(job)
   const progressView = getJobProgressView(job)
@@ -60,16 +46,12 @@ export function ActiveJobItem(props: ActiveJobItemProps): React.JSX.Element {
   const isBrowserMode = source?.mode === 'browser'
   const isGithub = source?.kind === 'github'
 
-  const effectiveLimit = isBrowserMode
-    ? (policy?.browserConcurrency ?? defaultBrowserConcurrency)
-    : (policy?.httpConcurrency ?? defaultHttpConcurrency)
-
   return (
     <article
       id={localJobElementId(job.id)}
       className="scroll-m-4 rounded-lg border border-[var(--ant-color-primary-border)] bg-[var(--ant-color-primary-bg)]/20 p-4 transition-all hover:bg-[var(--ant-color-primary-bg)]/30"
     >
-      {/* 头部：标题、抓取模式 Tag、状态徽标、动态并发分配 Tag 与预计剩余 */}
+      {/* 头部：标题、抓取模式 Tag、状态徽标与预计剩余 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Badge status="processing" />
@@ -101,37 +83,6 @@ export function ActiveJobItem(props: ActiveJobItemProps): React.JSX.Element {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* 并发 Tag：显示按优先级动态分配到的并发数，点击直接呼出对应的并发调节弹窗 */}
-          <Tooltip
-            title={
-              allocatedConcurrency > 0
-                ? `当前任务分配并发: ${allocatedConcurrency} (域名上限: ${effectiveLimit})。点击调整限速策略。`
-                : `并发配额已被前序/高优先级任务占满，当前排队等待中。点击调整限速策略。`
-            }
-          >
-            {allocatedConcurrency > 0 ? (
-              <Tag
-                color={isBrowserMode ? 'purple' : 'blue'}
-                className="m-0! cursor-pointer px-3 py-1 hover:opacity-80 transition-opacity flex items-center gap-1.5 text-sm font-medium"
-                onClick={() => props.onOpenConcurrency(isBrowserMode ? 'browser' : 'http')}
-              >
-                <ThunderboltOutlined />
-                <span>
-                  {isBrowserMode ? '浏览器' : 'HTTP'} 并发: {allocatedConcurrency}
-                </span>
-              </Tag>
-            ) : (
-              <Tag
-                color="warning"
-                className="m-0! cursor-pointer px-3 py-1 hover:opacity-80 transition-opacity flex items-center gap-1.5 text-sm font-medium"
-                onClick={() => props.onOpenConcurrency(isBrowserMode ? 'browser' : 'http')}
-              >
-                <HourglassOutlined />
-                <span>排队中 (0 并发)</span>
-              </Tag>
-            )}
-          </Tooltip>
-
           <div className="flex items-center gap-1.5 text-sm text-[var(--ant-color-text-secondary)]">
             <span>预计剩余</span>
             <Typography.Text strong className="text-sm font-mono text-[var(--ant-color-text)]">

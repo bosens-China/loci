@@ -1,9 +1,5 @@
 import * as z from 'zod/v4'
-import {
-  SERVER_CRAWL_SETTINGS_LIMITS,
-  isValidBatchIntervalRange,
-  isValidBatchIntervalSeconds
-} from '@loci/shared'
+import { SERVER_CRAWL_SETTINGS_LIMITS } from '@loci/shared'
 import { remoteReadAnnotations, result, writeAnnotations } from './server-support.js'
 import type { LociMcpServices } from './services.js'
 import type { LociToolRegistrar } from './tool-registry.js'
@@ -14,18 +10,6 @@ const values = {
     .int()
     .min(SERVER_CRAWL_SETTINGS_LIMITS.maxConcurrentJobs.min)
     .max(SERVER_CRAWL_SETTINGS_LIMITS.maxConcurrentJobs.max),
-  http_concurrency: z
-    .number()
-    .int()
-    .min(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.min)
-    .max(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.max),
-  browser_concurrency: z
-    .number()
-    .int()
-    .min(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.min)
-    .max(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.max),
-  batch_interval_min_seconds: z.number().int().refine(isValidBatchIntervalSeconds),
-  batch_interval_max_seconds: z.number().int().refine(isValidBatchIntervalSeconds),
   revision: z.number().int().positive()
 } as const
 
@@ -40,7 +24,7 @@ export function registerServerCrawlSettingsTools(
     'loci_get_server_crawl_settings',
     {
       title: '读取 Server 抓取策略',
-      description: '读取 Server 全局任务并发、页面并发和批次间隔；同 hostname 始终串行。',
+      description: '读取 Server 最大并行任务数；页面执行策略自动管理，同 hostname 始终串行。',
       inputSchema: z.object({}).strict(),
       outputSchema,
       annotations: remoteReadAnnotations()
@@ -54,33 +38,20 @@ export function registerServerCrawlSettingsTools(
     {
       title: '保存 Server 抓取策略',
       description: '按修订号保存 Server 全局策略；降低并发不会终止正在运行的任务。',
-      inputSchema: z
-        .object(values)
-        .strict()
-        .refine(
-          (input) =>
-            isValidBatchIntervalRange(
-              input.batch_interval_min_seconds,
-              input.batch_interval_max_seconds
-            ),
-          { message: '批次间隔最小值不能大于最大值' }
-        ),
+      inputSchema: z.object(values).strict(),
       outputSchema,
       annotations: writeAnnotations(false)
     },
-    async (input) =>
-      result(
+    async (input) => {
+      return result(
         {
           settings: await services.saveServerCrawlSettings({
             maxConcurrentJobs: input.max_concurrent_jobs,
-            httpConcurrency: input.http_concurrency,
-            browserConcurrency: input.browser_concurrency,
-            batchIntervalMinSeconds: input.batch_interval_min_seconds,
-            batchIntervalMaxSeconds: input.batch_interval_max_seconds,
             revision: input.revision
           })
         },
-        'Server 抓取策略已保存'
+        'Server 任务策略已保存'
       )
+    }
   )
 }

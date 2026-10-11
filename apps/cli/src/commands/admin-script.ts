@@ -14,11 +14,6 @@ import { resolveSource } from '../resources.js'
 import { confirmAction, printTable } from '../ui.js'
 import { createAdminJobTable, createAdminLibraryTable } from './admin-output.js'
 import { resolveAdminJob } from './admin-tasks.js'
-import {
-  formatDomainInterval,
-  parseDomainConcurrency,
-  parseDomainInterval
-} from './domain-policy-options.js'
 import { registerAdminCrawlSettings } from './admin-crawl-settings.js'
 
 interface LibraryOptions {
@@ -134,7 +129,6 @@ export function registerAdminSubcommands(admin: Command, waitForSync: WaitForSyn
 
   registerAdminJobControls(admin)
   registerAdminCrawlSettings(admin, withAdmin)
-  registerAdminDomainPolicies(admin)
 
   admin
     .command('publish <source>')
@@ -159,65 +153,6 @@ export function registerAdminSubcommands(admin: Command, waitForSync: WaitForSyn
         )
         const result = await client.publishLibrary(archive)
         return `${result.reused ? '已复用' : '已完成'}发布：${result.library.name}（${result.pages} 篇）`
-      })
-    )
-}
-
-function registerAdminDomainPolicies(admin: Command): void {
-  admin
-    .command('domain-list')
-    .description('列出 Server hostname 抓取限制')
-    .action(() =>
-      withAdmin('Server 域名抓取限制', async (client) => {
-        const rows = await client.listHostnamePolicies()
-        printTable(
-          ['hostname', 'HTTP', '浏览器', '批次间隔'],
-          rows.map((item) => [
-            item.hostname,
-            item.httpConcurrency ?? '默认',
-            item.browserConcurrency ?? '默认',
-            formatDomainInterval(item.batchIntervalMinSeconds, item.batchIntervalMaxSeconds)
-          ])
-        )
-        return `共 ${rows.length} 条 Server 域名规则`
-      })
-    )
-
-  admin
-    .command('domain-set <hostname>')
-    .description('实时新增或修改 Server hostname 抓取限制')
-    .option('--http <number>', 'HTTP 并发；default 表示默认')
-    .option('--browser <number>', '浏览器并发；default 表示默认')
-    .option('--interval <seconds>', '固定值、min-max 或 default')
-    .action((hostname: string, options: { http?: string; browser?: string; interval?: string }) =>
-      withAdmin('保存 Server 域名抓取限制', async (client) => {
-        const current = (await client.listHostnamePolicies()).find(
-          (item) => item.hostname === hostname.toLowerCase()
-        )
-        const interval = parseDomainInterval(options.interval, current)
-        const saved = await client.saveHostnamePolicy({
-          hostname,
-          httpConcurrency: parseDomainConcurrency(options.http, current?.httpConcurrency ?? null),
-          browserConcurrency: parseDomainConcurrency(
-            options.browser,
-            current?.browserConcurrency ?? null
-          ),
-          batchIntervalMinSeconds: interval[0],
-          batchIntervalMaxSeconds: interval[1]
-        })
-        return `已保存 ${saved.hostname} 的 Server 抓取限制`
-      })
-    )
-
-  admin
-    .command('domain-delete <hostname>')
-    .description('删除 Server hostname 自定义限制')
-    .option('--yes', '跳过确认')
-    .action((hostname: string, options: ConfirmOptions) =>
-      withAdmin('删除 Server 域名抓取限制', async (client) => {
-        await requireConfirmation(`确定删除 ${hostname} 的 Server 域名规则吗？`, options)
-        await client.deleteHostnamePolicy(hostname)
-        return `已删除 ${hostname} 的 Server 域名规则`
       })
     )
 }

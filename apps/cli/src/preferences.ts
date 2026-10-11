@@ -1,91 +1,16 @@
 import { z } from 'zod'
-import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
-import {
-  getSourceScopeOptions,
-  normalizeServerUrl,
-  type McpClient,
-  type FetchMode
-} from '@loci/shared'
+import { normalizeServerUrl, type McpClient } from '@loci/shared'
 import type { LociDatabase } from '@loci/runtime'
-
-const sourceCreateSchema = z.object({
-  mode: z.enum(['auto', 'http', 'browser']),
-  pageLimit: z
-    .number()
-    .int()
-    .min(DOCUMENT_SOURCE_LIMITS.pageLimit.min)
-    .max(DOCUMENT_SOURCE_LIMITS.pageLimit.max),
-  scopeDepth: z.number().int().nonnegative(),
-  syncAfterCreate: z.boolean()
-})
-
-const adminCreateSchema = z.object({
-  pageLimit: z
-    .number()
-    .int()
-    .min(DOCUMENT_SOURCE_LIMITS.pageLimit.min)
-    .max(DOCUMENT_SOURCE_LIMITS.pageLimit.max),
-  scopeDepth: z.number().int().nonnegative(),
-  schedule: z.string().nullable()
-})
 
 const mcpConfigureSchema = z.object({
   client: z.enum(['codex', 'cursor', 'vscode', 'claude-code', 'antigravity'])
 })
-
-export interface SourceCreatePreference {
-  mode: FetchMode
-  pageLimit: number
-  scopeDepth: number
-  syncAfterCreate: boolean
-}
-
-export interface AdminCreatePreference {
-  pageLimit: number
-  scopeDepth: number
-  schedule: string | null
-}
 
 export interface McpConfigurePreference {
   client: McpClient
 }
 
 const CLI_SCOPE = 'cli'
-
-export function readSourceCreatePreference(database: LociDatabase): SourceCreatePreference {
-  return readPreference(database, CLI_SCOPE, 'source-create', sourceCreateSchema, {
-    mode: DOCUMENT_SOURCE_DEFAULTS.mode,
-    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
-    scopeDepth: 0,
-    syncAfterCreate: true
-  })
-}
-
-export function saveSourceCreatePreference(
-  database: LociDatabase,
-  preference: SourceCreatePreference
-): void {
-  database.setInteractionPreference(CLI_SCOPE, 'source-create', preference)
-}
-
-export function readAdminCreatePreference(
-  database: LociDatabase,
-  serverUrl: string
-): AdminCreatePreference {
-  return readPreference(database, adminScope(serverUrl), 'create', adminCreateSchema, {
-    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
-    scopeDepth: 0,
-    schedule: null
-  })
-}
-
-export function saveAdminCreatePreference(
-  database: LociDatabase,
-  serverUrl: string,
-  preference: AdminCreatePreference
-): void {
-  database.setInteractionPreference(adminScope(serverUrl), 'create', preference)
-}
 
 export function readAdminUsername(database: LociDatabase, serverUrl: string): string | undefined {
   const value = database.getInteractionPreference(adminScope(serverUrl), 'username')
@@ -134,16 +59,6 @@ export function saveMcpConfigurePreference(
   preference: McpConfigurePreference
 ): void {
   database.setInteractionPreference(CLI_SCOPE, 'mcp-configure', preference)
-}
-
-export function scopeAtDepth(url: string, depth: number): string {
-  const options = getSourceScopeOptions(url)
-  return options[Math.min(depth, Math.max(0, options.length - 1))]?.value ?? '/'
-}
-
-export function scopeDepth(url: string, scopePath: string): number {
-  const index = getSourceScopeOptions(url).findIndex((option) => option.value === scopePath)
-  return Math.max(0, index)
 }
 
 function adminScope(serverUrl: string): string {

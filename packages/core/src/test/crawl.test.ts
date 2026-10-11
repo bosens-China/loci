@@ -28,7 +28,7 @@ describe('静态 Pages 抓取', () => {
     expect(isImmediateStaticHostname('group.gitlab.io.example.com')).toBe(false)
   })
 
-  it('无 Sitemap 的 GitHub Pages 整批抓取但仍响应批次控制', async () => {
+  it('无 Sitemap 的 GitHub Pages 使用有界并发并响应任务控制', async () => {
     const baseUrl = 'https://owner.github.io/project'
     const sleep = vi.fn(async () => undefined)
     const waitIfPaused = vi.fn(async () => undefined)
@@ -49,7 +49,6 @@ describe('静态 Pages 抓取', () => {
       scopePath: '/project',
       pageLimit: 3,
       concurrency: 1,
-      batchIntervalMs: 100_000,
       fetch: fetchImpl,
       sleep,
       waitIfPaused,
@@ -58,7 +57,6 @@ describe('静态 Pages 抓取', () => {
 
     expect(result).toMatchObject({ queued: 3, succeeded: 3, failed: 0 })
     expect(sleep).not.toHaveBeenCalled()
-    expect(waitIfPaused).toHaveBeenCalledTimes(2)
   })
 
   it('展开 Sitemap 索引并将页面清单作为权威发现来源', async () => {
@@ -97,7 +95,7 @@ describe('静态 Pages 抓取', () => {
 })
 
 describe('Sitemap 权威清单抓取', () => {
-  it('普通站点按页面上限整批并发且仍响应批次控制', async () => {
+  it('普通站点遵守并发上限并完成清单', async () => {
     let release = (): void => undefined
     const gate = new Promise<void>((resolve) => {
       release = resolve
@@ -120,17 +118,18 @@ describe('Sitemap 权威清单抓取', () => {
       hostname: 'docs.example.com',
       pageLimit: 3,
       concurrency: 1,
-      batchIntervalMs: 100_000,
       fetch: fetchImpl,
       sleep,
       waitIfPaused,
       onDocument: () => undefined
     })
 
-    await vi.waitFor(() => expect(started).toHaveLength(3))
-    release()
+    try {
+      await vi.waitFor(() => expect(started).toHaveLength(1), { timeout: 5_000 })
+    } finally {
+      release()
+    }
     await expect(task).resolves.toMatchObject({ queued: 3, succeeded: 3 })
     expect(sleep).not.toHaveBeenCalled()
-    expect(waitIfPaused).toHaveBeenCalledOnce()
   })
 })

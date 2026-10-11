@@ -3,7 +3,6 @@ import type {
   AppSettings,
   CreateSourceInput,
   CreateSourceResult,
-  SaveHostnameCrawlPolicyInput,
   UpdateSourceInput
 } from '@loci/shared'
 import type { LocalRuntime } from './local-runtime.js'
@@ -221,25 +220,6 @@ async function handleSettings(
         await runtime.admin.logout().catch(() => undefined)
       }
       return saved
-    })
-    return true
-  }
-  if (request.method === 'GET' && url.pathname === '/api/settings/hostname-policies') {
-    json(response, 200, runtime.database.listHostnameCrawlPolicies())
-    return true
-  }
-  const policyMatch = /^\/api\/settings\/hostname-policies\/([^/]+)$/u.exec(url.pathname)
-  if (request.method === 'PUT' && policyMatch) {
-    await mutationJson(response, 200, async () => {
-      const hostname = decodeURIComponent(policyMatch[1]!)
-      const input = (await readJson(request)) as SaveHostnameCrawlPolicyInput
-      return runtime.database.saveHostnameCrawlPolicy({ ...input, hostname })
-    })
-    return true
-  }
-  if (request.method === 'DELETE' && policyMatch) {
-    json(response, 200, {
-      deleted: runtime.database.deleteHostnameCrawlPolicy(decodeURIComponent(policyMatch[1]!))
     })
     return true
   }

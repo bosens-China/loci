@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { DEFAULT_SERVER_CRAWL_SETTINGS } from '@loci/shared'
+import { withImmediateTransaction } from './sqlite.js'
 
 const schema = `
   PRAGMA foreign_keys = ON;
@@ -84,10 +85,6 @@ const schema = `
   CREATE TABLE IF NOT EXISTS server_crawl_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     max_concurrent_jobs INTEGER NOT NULL CHECK (max_concurrent_jobs BETWEEN 1 AND 32),
-    http_concurrency INTEGER NOT NULL CHECK (http_concurrency BETWEEN 1 AND 32),
-    browser_concurrency INTEGER NOT NULL CHECK (browser_concurrency BETWEEN 1 AND 32),
-    batch_interval_min_seconds INTEGER NOT NULL,
-    batch_interval_max_seconds INTEGER NOT NULL,
     revision INTEGER NOT NULL CHECK (revision >= 1),
     updated_at TEXT NOT NULL
   ) STRICT;
@@ -95,19 +92,11 @@ const schema = `
   INSERT OR IGNORE INTO server_crawl_settings (
     id,
     max_concurrent_jobs,
-    http_concurrency,
-    browser_concurrency,
-    batch_interval_min_seconds,
-    batch_interval_max_seconds,
     revision,
     updated_at
   ) VALUES (
     1,
     ${DEFAULT_SERVER_CRAWL_SETTINGS.maxConcurrentJobs},
-    ${DEFAULT_SERVER_CRAWL_SETTINGS.httpConcurrency},
-    ${DEFAULT_SERVER_CRAWL_SETTINGS.browserConcurrency},
-    ${DEFAULT_SERVER_CRAWL_SETTINGS.batchIntervalMinSeconds},
-    ${DEFAULT_SERVER_CRAWL_SETTINGS.batchIntervalMaxSeconds},
     1,
     '1970-01-01T00:00:00.000Z'
   );
@@ -135,6 +124,20 @@ const schema = `
 
 /** 初始化当前结构，并兼容迁移只有 hostname 唯一约束的旧版数据库。 */
 export function initializeServerDatabase(database: DatabaseSync): void {
+  // DDL 需要原生连接；跨进程事务保证重复启动只清理一次已废弃配置列。
+  withImmediateTransaction(database, () => {
+    const columns = database.prepare('PRAGMA table_info(server_crawl_settings)').all()
+    for (const name of [
+      'http_concurrency',
+      'browser_concurrency',
+      'batch_interval_min_seconds',
+      'batch_interval_max_seconds'
+    ]) {
+      if (columns.some((column) => column.name === name)) {
+        database.exec(`ALTER TABLE server_crawl_settings DROP COLUMN ${name}`)
+      }
+    }
+  })
   database.exec(schema)
   addColumn(database, 'documents', 'relative_path', 'TEXT')
   addColumn(database, 'libraries', 'github_revision', 'TEXT')

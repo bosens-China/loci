@@ -15,15 +15,10 @@ import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError, errorMessage } from '../errors.js'
 import { validatePublicUrl, validateSourceName } from '../input.js'
 import {
-  readAdminCreatePreference,
   readAdminSyncSelection,
   readAdminUsername,
-  saveAdminCreatePreference,
   saveAdminSyncSelection,
-  saveAdminUsername,
-  scopeAtDepth,
-  scopeDepth,
-  type AdminCreatePreference
+  saveAdminUsername
 } from '../preferences.js'
 import { askScope } from './source.js'
 import { registerAdminSubcommands } from './admin-script.js'
@@ -126,18 +121,8 @@ async function adminLoop(
     try {
       if (action === 'list') printLibraries(await client.listLibraries())
       if (action === 'create') {
-        const input = await askLibraryInput(readAdminCreatePreference(database, serverUrl))
-        note(formatLibrarySummary(input), '请确认创建配置')
-        if (!(await askConfirm('确认创建这个 Server 文档库吗？', true))) {
-          warning('已取消创建')
-          continue
-        }
+        const input = await askLibraryInput()
         const library = await client.createLibrary(input)
-        saveAdminCreatePreference(database, serverUrl, {
-          pageLimit: input.pageLimit,
-          scopeDepth: scopeDepth(input.url, input.scopePath),
-          schedule: input.schedule
-        })
         success(`已创建“${library.name}”；可选择手动同步进行首次发布`)
       }
       if (action === 'update') {
@@ -209,25 +194,22 @@ async function adminLoop(
   }
 }
 
-export async function askLibraryInput(
-  preference: AdminCreatePreference = {
-    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
-    scopeDepth: 0,
-    schedule: DOCUMENT_SOURCE_DEFAULTS.schedule
-  }
-): Promise<CloudLibraryInput> {
+export async function askLibraryInput(): Promise<CloudLibraryInput> {
+  const url = await askText('起始页面 URL', {
+    placeholder: 'https://example.com/docs/start',
+    validate: validatePublicUrl
+  })
   return {
-    ...(await askLibraryBasics(undefined, preference)),
-    schedule: await askSchedule(preference.schedule)
+    name: deriveSourceName(url) || new URL(url).hostname,
+    url,
+    scopePath: DOCUMENT_SOURCE_DEFAULTS.scopePath,
+    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
+    schedule: DOCUMENT_SOURCE_DEFAULTS.schedule
   }
 }
 
 async function askLibraryBasics(
-  current?: CloudLibrary,
-  preference: Pick<AdminCreatePreference, 'pageLimit' | 'scopeDepth'> = {
-    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
-    scopeDepth: 0
-  }
+  current: CloudLibrary
 ): Promise<Omit<CloudLibraryInput, 'schedule'>> {
   const url = await askText('起始页面 URL', {
     initialValue: current?.url,
@@ -239,12 +221,9 @@ async function askLibraryBasics(
     initialValue: current?.name ?? inferredName,
     validate: validateSourceName
   })
-  const scopePath = await askScope(
-    url,
-    current?.scopePath ?? scopeAtDepth(url, preference.scopeDepth)
-  )
+  const scopePath = await askScope(url, current.scopePath)
   const pageLimit = await askInteger('收录页面上限', {
-    initialValue: current?.pageLimit ?? preference.pageLimit,
+    initialValue: current.pageLimit,
     minimum: DOCUMENT_SOURCE_LIMITS.pageLimit.min,
     maximum: DOCUMENT_SOURCE_LIMITS.pageLimit.max
   })
@@ -327,16 +306,6 @@ function formatSchedulePreview(schedule: string | null): string {
   if (!schedule) return '仅手动更新，不执行定时同步'
   const preset = getSchedulePreset(schedule)
   return `${preset ? `${preset.label} · ${preset.description}` : schedule}\n${formatScheduleLiveHint(schedule)}`
-}
-
-function formatLibrarySummary(input: CloudLibraryInput): string {
-  return [
-    `名称：${input.name}`,
-    `URL：${input.url}`,
-    `收录范围：${input.scopePath}`,
-    `页面上限：${input.pageLimit}`,
-    `更新计划：${formatSchedulePreview(input.schedule)}`
-  ].join('\n')
 }
 
 function formatLibraryChanges(current: CloudLibrary, input: CloudLibraryInput): string {

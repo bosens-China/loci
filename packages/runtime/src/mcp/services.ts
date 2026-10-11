@@ -13,14 +13,12 @@ import type {
   DocumentSource,
   LocalJob,
   LibraryFileRecord,
-  HostnameCrawlPolicy,
   OperationLog,
   SaveServerCrawlSettingsInput,
   ServerCrawlSettings,
   UrlTreeNode,
   UpdateSourceInput
 } from '@loci/shared'
-import type { SaveHostnameCrawlPolicyInput } from '@loci/shared'
 import type { InspectSourceOptions, SourceInspection } from '@loci/core'
 import type { DocumentSearchMode } from '../document-content-database.js'
 import type { ExplicitPageFetchResult } from '../explicit-page-service.js'
@@ -76,12 +74,6 @@ export interface LociMcpServices {
   pauseLocalJobs: (hostname?: string) => number
   resumeLocalJobs: (hostname?: string) => number
   listOperationLogs: (filters?: OperationLogFilters) => { total: number; items: OperationLog[] }
-  listHostnameCrawlPolicies: () => HostnameCrawlPolicy[]
-  saveHostnameCrawlPolicy: (input: SaveHostnameCrawlPolicyInput) => HostnameCrawlPolicy
-  deleteHostnameCrawlPolicy: (hostname: string) => boolean
-  listServerHostnamePolicies: () => Promise<HostnameCrawlPolicy[]>
-  saveServerHostnamePolicy: (input: SaveHostnameCrawlPolicyInput) => Promise<HostnameCrawlPolicy>
-  deleteServerHostnamePolicy: (hostname: string) => Promise<void>
   getServerCrawlSettings: () => Promise<ServerCrawlSettings>
   saveServerCrawlSettings: (input: SaveServerCrawlSettingsInput) => Promise<ServerCrawlSettings>
   listCloudLibraries: () => Promise<CloudCatalogItem[]>

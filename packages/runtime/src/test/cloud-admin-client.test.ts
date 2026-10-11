@@ -178,10 +178,6 @@ function syncJob(): Record<string, unknown> {
 function serverCrawlSettings(): ServerCrawlSettings {
   return {
     maxConcurrentJobs: 3,
-    httpConcurrency: 9,
-    browserConcurrency: 5,
-    batchIntervalMinSeconds: 0,
-    batchIntervalMaxSeconds: 0,
     revision: 1,
     updatedAt: '2026-08-28T00:00:00.000Z'
   }

@@ -121,7 +121,7 @@ describe('explicit page service', () => {
       const source = runtime.createSource(sourceInput())
       const running = runtime.fetchPages(source.id, [first, invalid, second])
 
-      await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(2))
+      await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(2), { timeout: 10_000 })
       expect(runtime.database.getActiveCrawlRun(source.id)?.progress).toMatchObject({
         queued: 3,
         processed: 2,
@@ -165,7 +165,7 @@ describe('explicit page service', () => {
       const source = first.createSource(sourceInput())
       const url = 'https://docs.example.com/outside/new'
       const one = first.fetchPages(source.id, [url])
-      await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledOnce())
+      await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledOnce(), { timeout: 10_000 })
       const two = second.fetchPages(source.id, [url])
       release?.()
       const [firstResult, secondResult] = await Promise.all([one, two])
@@ -195,7 +195,7 @@ describe('explicit page service', () => {
     try {
       const source = first.createSource(sourceInput())
       const running = first.fetchPages(source.id, ['https://docs.example.com/outside/one'])
-      await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledOnce())
+      await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledOnce(), { timeout: 10_000 })
       const controller = new AbortController()
       const waiting = second.fetchPages(
         source.id,

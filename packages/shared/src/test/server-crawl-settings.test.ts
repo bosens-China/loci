@@ -12,7 +12,7 @@ describe('Server 抓取策略', () => {
     ).toEqual({ ...DEFAULT_SERVER_CRAWL_SETTINGS, revision: 1 })
   })
 
-  it('拒绝无效并发与反向间隔', () => {
+  it('拒绝无效任务容量与修订号', () => {
     expect(() =>
       normalizeServerCrawlSettingsInput({
         ...DEFAULT_SERVER_CRAWL_SETTINGS,
@@ -23,11 +23,9 @@ describe('Server 抓取策略', () => {
     expect(() =>
       normalizeServerCrawlSettingsInput({
         ...DEFAULT_SERVER_CRAWL_SETTINGS,
-        batchIntervalMinSeconds: 300,
-        batchIntervalMaxSeconds: 100,
-        revision: 1
+        revision: 0
       })
-    ).toThrow('批次间隔')
+    ).toThrow('配置修订号')
   })
 
   it('比较设置值时忽略修订元数据', () => {

@@ -3,7 +3,8 @@ import { frontmatterFromMarkdown } from 'mdast-util-frontmatter'
 import { frontmatter } from 'micromark-extension-frontmatter'
 import { deriveUrlPathTitle } from '@loci/shared'
 import { throwIfAborted } from './abort.js'
-import { immediateCrawlOptions, normalizeUrl, parsePage, runCrawlQueue } from './crawl.js'
+import { fetchWithRetry } from './retry.js'
+import { normalizeUrl, parsePage, runCrawlQueue } from './crawl.js'
 import { isUrlInScope } from './scope.js'
 import type { CrawledPage, CrawlProgress, FetchOptions, HttpCrawlOptions } from './types.js'
 
@@ -186,10 +187,10 @@ function firstMarkdownHeading(markdown: string): string | undefined {
   }
 }
 
-/** llms.txt 及其静态资源直接请求，不应用网页抓取的超时、重试和退避策略。 */
+/** 清单探测只请求一次；页面重试由共享 Crawlee 执行器管理。 */
 function fetchLlmsFile(url: string, options: LlmsFetchOptions): Promise<Response> {
   throwIfAborted(options.signal)
-  return (options.fetchImpl ?? fetch)(url, { redirect: 'follow', signal: options.signal })
+  return fetchWithRetry(url, { ...options, maxRetries: 0 })
 }
 
 export async function fetchMarkdownPage(
@@ -199,7 +200,8 @@ export async function fetchMarkdownPage(
   const response = await fetchLlmsFile(entry.url, options)
   throwIfAborted(options.signal)
   const url = normalizeUrl(response.url || entry.url)
-  if (!response.ok) return { url, status: response.status }
+  if (!response.ok)
+    return { url, status: response.status, retryAfter: response.headers.get('retry-after') }
   const body = await response.text()
   const markdown = normalizeMarkdown(body)
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
@@ -229,7 +231,7 @@ export function crawlLlmsSource(
   const entryByUrl = new Map(selectedEntries.map((entry) => [entry.url, entry]))
   return runCrawlQueue({
     ...options,
-    ...immediateCrawlOptions(selectedEntries.length),
+    concurrency: options.concurrency ?? 9,
     firstUrl: first.url,
     firstNodeId: options.firstNodeId ?? options.firstUrl,
     initialUrls: [],

@@ -34,7 +34,7 @@ loci mcp call loci_sync_libraries \
 | 规划 | 只读检查来源规模和路径分布，或修改已有文档库的抓取配置。 |
 | 管理 | 添加、拉取、抓取指定页、同步、查询状态和删除文档库。     |
 
-列出、查看、搜索、读取和 `loci_inspect_library_source` 属于只读操作。拉取、新增抓取、指定页面插入或刷新、修改配置、同步和删除会访问网络或修改本地状态，Agent 必须先得到用户当前请求或明确确认。
+列出、查看、搜索、读取和 `loci_inspect_library_source` 属于只读操作。任务所需的公开云端拉取、官方抓取、指定页获取和必要本地刷新默认允许，无需逐次确认；较大获取前简要说明来源和范围。删除、刻意覆盖、已有来源配置变更、跨库移动及远端管理或发布仍需明确授权。资料获取范围取决于证据深度、新鲜度、成本和复用价值，缺库本身不构成整站抓取理由；轻量调研可直接搜索。
 
 ## 创建与搜索
 
@@ -91,7 +91,7 @@ loci mcp call loci_sync_libraries \
 
 `loci_add_library` 会返回持久化的 `url_review`。候选项至少包含 `title`、`url` 和 `title_source`；系统先应用 hostname、`scope_path`、`exclude_path` 和 URL 标准化等硬规则，但不会根据路径替 Agent 判断内容是否相关。
 
-Agent 逐项思考后，只提交不要的 URL，并明确批准其余项。候选也可能来自文档库已有正文；排除这类 URL 会在审查完成事务中删除对应正文和搜索索引：
+Agent 逐项思考后，只提交不要的 URL，并明确批准其余项。候选也可能来自文档库已有正文；排除这类 URL 会在审查完成事务中删除对应正文和搜索索引，因此提交这些排除项前需取得相应删除授权，无法确定是否已存储时先核对：
 
 ```json
 {
@@ -118,11 +118,10 @@ Agent 逐项思考后，只提交不要的 URL，并明确批准其余项。候�
 
 详细输入字段以当前 MCP 工具 Schema 为准。CLI 的 `loci mcp call <tool> --input '<json>'` 与 MCP 使用相同的工具名和输入字段。
 
-## 持久任务、域名策略与操作日志
+## 持久任务、执行容量与操作日志
 
 - `loci_list_tasks` 按 hostname、状态和本地批次日期分页查看本机任务；`loci_control_task` 支持暂停、恢复、结束、取消和优先级；`loci_control_tasks` 支持全局或 hostname 级暂停/恢复。
-- `loci_list_hostname_policies`、`loci_save_hostname_policy` 和 `loci_delete_hostname_policy` 管理本机或 Server 规则。Server 目标需要管理员凭据。
-- `loci_get_server_crawl_settings` 和 `loci_save_server_crawl_settings` 读取或按修订号保存 Server 全局任务并发、页面并发与批次间隔；同 hostname 串行不可关闭。
+- `loci_get_server_crawl_settings` 和 `loci_save_server_crawl_settings` 读取或按修订号保存 Server 最大并行任务数，保存只需 `max_concurrent_jobs` 和 `revision`；同 hostname 串行不可关闭。网页并发、重试、超时和浏览器回收由底层管理，建库与配置更新工具不再接收页面并发参数。
 - `loci_list_operation_logs` 按日期、类别、级别和 hostname 查看结构化操作记录。
 - `loci_move_documents_to_new_library` 事务性地把多篇本地文档移到一个新库，并可删除已经为空的原库。该操作必须取得用户对目标和删除影响的明确授权。
 

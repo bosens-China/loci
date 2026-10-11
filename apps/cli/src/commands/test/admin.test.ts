@@ -47,21 +47,15 @@ describe('CLI Admin 文档库交互', () => {
     vi.clearAllMocks()
   })
 
-  it('创建时先询问 URL，再用 URL 推导名称默认值', async () => {
+  it('创建时只需 URL，其余采用安全默认值', async () => {
     ui.askText.mockResolvedValueOnce('https://docs.rsbuild.dev/guide')
-    ui.askText.mockResolvedValueOnce('rsbuild')
-    ui.askInteger.mockResolvedValueOnce(1000)
-    ui.askSelect.mockResolvedValueOnce('/guide').mockResolvedValueOnce('manual')
-
     await expect(askLibraryInput()).resolves.toEqual({
       name: 'rsbuild',
       url: 'https://docs.rsbuild.dev/guide',
-      scopePath: '/guide',
+      scopePath: '/',
       pageLimit: 1000,
       schedule: null
     })
-    expect(ui.askText).toHaveBeenCalledTimes(2)
-    expect(ui.askText.mock.calls[1]?.[1]).toMatchObject({ initialValue: 'rsbuild' })
   })
 
   it('计划预设直接返回，自定义计划提供实时解释', async () => {

@@ -6,7 +6,6 @@ import {
   getUpcomingScheduleRuns,
   parseGithubRepositoryUrl,
   type DocumentSource,
-  type FetchMode,
   type SourceKind
 } from '@loci/shared'
 
@@ -28,11 +27,6 @@ interface LibraryUrlDefaultsInput {
 export interface LibraryUrlDefaults {
   name?: string
   scopePath?: string
-}
-
-/** 浏览器状态未知时保留产品默认值，明确未安装时使用 HTTP。 */
-export function getNewSourceFetchMode(browserInstalled?: boolean): FetchMode {
-  return browserInstalled === false ? 'http' : DOCUMENT_SOURCE_DEFAULTS.mode
 }
 
 /** 根据 URL 补齐安全默认值，不覆盖用户主动输入的名称。 */
@@ -99,8 +93,6 @@ export function getAdvancedSettingsSummary(source?: Partial<DocumentSource> | nu
     if (source.excludePathPattern && source.excludePathPattern.trim()) {
       customCount++
     }
-    if (source.httpConcurrency != null) customCount++
-    if (source.browserConcurrency != null) customCount++
   }
 
   return customCount

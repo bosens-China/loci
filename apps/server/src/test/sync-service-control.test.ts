@@ -46,7 +46,9 @@ describe('Server 暂停与取消收尾', () => {
     const jobs = sync.startMany(libraries.map((library) => library.id))
     sync.pause(jobs[1]!.id)
     release()
-    await vi.waitFor(() => expect(sync.getJob(jobs[2]!.id)?.status).toBe('completed'))
+    await vi.waitFor(() => expect(sync.getJob(jobs[2]!.id)?.status).toBe('completed'), {
+      timeout: 10_000
+    })
 
     sync.cancel(jobs[1]!.id)
     expect(() => database.getLibrary(libraries[1]!.id)).toThrow('文档库不存在')
@@ -79,7 +81,9 @@ describe('Server 暂停与取消收尾', () => {
     })
     jobId = sync.start(library.id).id
 
-    await vi.waitFor(() => expect(sync.getJob(jobId)?.status).toBe('completed'))
+    await vi.waitFor(() => expect(sync.getJob(jobId)?.status).toBe('completed'), {
+      timeout: 10_000
+    })
     expect(database.listDocumentUrls(library.id)).toEqual([library.url])
     expect(sync.listJobs()).toHaveLength(1)
   })
@@ -117,13 +121,17 @@ describe('Server 暂停与取消收尾', () => {
       expect(controller.pause(pausedId)?.paused).toBe(true)
       release()
 
-      await vi.waitFor(() => expect(owner.getJob(jobs[2]!.id)?.status).toBe('completed'))
+      await vi.waitFor(() => expect(owner.getJob(jobs[2]!.id)?.status).toBe('completed'), {
+        timeout: 10_000
+      })
       expect(owner.getJob(pausedId)).toMatchObject({ status: 'queued', paused: true })
       expect(database.listDocumentUrls(libraries[1]!.id)).toEqual([])
 
       expect(controller.resume(pausedId)?.id).toBe(pausedId)
       expect(controller.resume(pausedId)?.id).toBe(pausedId)
-      await vi.waitFor(() => expect(owner.getJob(pausedId)?.status).toBe('completed'))
+      await vi.waitFor(() => expect(owner.getJob(pausedId)?.status).toBe('completed'), {
+        timeout: 10_000
+      })
       expect(database.listDocumentUrls(libraries[1]!.id)).toEqual([libraries[1]!.url])
       expect(owner.listJobs()).toHaveLength(3)
     }

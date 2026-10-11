@@ -53,6 +53,8 @@
   "dependencies": {
     "@clack/core": "1.4.3",
     "@clack/prompts": "^1.7.0",
+    "@crawlee/basic": "^3.18.2",
+    "@crawlee/browser-pool": "^3.18.2",
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "cli-table3": "^0.6.5",

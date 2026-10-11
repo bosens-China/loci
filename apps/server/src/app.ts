@@ -9,14 +9,7 @@ import {
   parseLibraryPublishArchive
 } from '@loci/core'
 import { z } from 'zod'
-import {
-  APP_SETTINGS_LIMITS,
-  SERVER_CRAWL_SETTINGS_LIMITS,
-  buildUrlTree,
-  getUrlTreeSlice,
-  isValidBatchIntervalRange,
-  isValidBatchIntervalSeconds
-} from '@loci/shared'
+import { SERVER_CRAWL_SETTINGS_LIMITS, buildUrlTree, getUrlTreeSlice } from '@loci/shared'
 import type { ServerAdminAuditMethod } from '@loci/shared'
 import { AdminAuth, readBearerToken } from './auth.js'
 import { createAdminEventsHandler } from './admin-event-route.js'
@@ -51,30 +44,6 @@ const syncBatchSchema = z.object({
 
 const prioritySchema = z.object({ priority: z.number().int().min(-100).max(100) })
 const hostnameSchema = z.object({ hostname: z.string().trim().min(1).optional() })
-const hostnamePolicySchema = z.object({
-  hostname: z.string().trim().min(1).optional(),
-  httpConcurrency: z
-    .number()
-    .int()
-    .min(APP_SETTINGS_LIMITS.concurrency.min)
-    .max(APP_SETTINGS_LIMITS.concurrency.max)
-    .nullable(),
-  browserConcurrency: z
-    .number()
-    .int()
-    .min(APP_SETTINGS_LIMITS.concurrency.min)
-    .max(APP_SETTINGS_LIMITS.concurrency.max)
-    .nullable(),
-  batchIntervalMinSeconds: z
-    .number()
-    .refine(isValidBatchIntervalSeconds, '批次间隔超出允许范围')
-    .nullable(),
-  batchIntervalMaxSeconds: z
-    .number()
-    .refine(isValidBatchIntervalSeconds, '批次间隔超出允许范围')
-    .nullable()
-})
-
 const serverCrawlSettingsSchema = z
   .object({
     maxConcurrentJobs: z
@@ -82,25 +51,9 @@ const serverCrawlSettingsSchema = z
       .int()
       .min(SERVER_CRAWL_SETTINGS_LIMITS.maxConcurrentJobs.min)
       .max(SERVER_CRAWL_SETTINGS_LIMITS.maxConcurrentJobs.max),
-    httpConcurrency: z
-      .number()
-      .int()
-      .min(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.min)
-      .max(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.max),
-    browserConcurrency: z
-      .number()
-      .int()
-      .min(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.min)
-      .max(SERVER_CRAWL_SETTINGS_LIMITS.concurrency.max),
-    batchIntervalMinSeconds: z.number().refine(isValidBatchIntervalSeconds),
-    batchIntervalMaxSeconds: z.number().refine(isValidBatchIntervalSeconds),
     revision: z.number().int().positive()
   })
-  .refine(
-    (input) =>
-      isValidBatchIntervalRange(input.batchIntervalMinSeconds, input.batchIntervalMaxSeconds),
-    { message: '批次间隔最小值不能大于最大值' }
-  )
+  .strict()
 
 class InputError extends Error {}
 
@@ -281,22 +234,6 @@ export function createApp({ database, sync, auth }: AppServices): Hono {
   app.put('/api/v1/admin/crawl-settings', async (c) => {
     const settings = sync.saveCrawlSettings(await parseJson(c, serverCrawlSettingsSchema))
     return c.json({ settings })
-  })
-
-  app.get('/api/v1/admin/hostname-policies', (c) =>
-    c.json({ policies: database.hostnamePolicies.list() })
-  )
-
-  app.put('/api/v1/admin/hostname-policies/:hostname', async (c) => {
-    const input = await parseJson(c, hostnamePolicySchema)
-    return c.json({
-      policy: database.hostnamePolicies.save({ ...input, hostname: c.req.param('hostname') })
-    })
-  })
-
-  app.delete('/api/v1/admin/hostname-policies/:hostname', (c) => {
-    database.hostnamePolicies.delete(c.req.param('hostname'))
-    return c.body(null, 204)
   })
 
   app.get('/api/v1/admin/jobs/:id', (c) => {

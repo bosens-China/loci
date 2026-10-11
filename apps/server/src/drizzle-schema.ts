@@ -83,10 +83,6 @@ export const hostnameCrawlPolicies = sqliteTable('hostname_crawl_policies', {
 export const serverCrawlSettings = sqliteTable('server_crawl_settings', {
   id: integer('id').primaryKey(),
   maxConcurrentJobs: integer('max_concurrent_jobs').notNull(),
-  httpConcurrency: integer('http_concurrency').notNull(),
-  browserConcurrency: integer('browser_concurrency').notNull(),
-  batchIntervalMinSeconds: integer('batch_interval_min_seconds').notNull(),
-  batchIntervalMaxSeconds: integer('batch_interval_max_seconds').notNull(),
   revision: integer('revision').notNull(),
   updatedAt: text('updated_at').notNull()
 })

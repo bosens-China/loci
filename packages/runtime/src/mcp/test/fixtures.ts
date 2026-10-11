@@ -207,21 +207,8 @@ export function createServices(): LociMcpServices {
     pauseLocalJobs: () => 1,
     resumeLocalJobs: () => 1,
     listOperationLogs: () => ({ total: 0, items: [] }),
-    listHostnameCrawlPolicies: () => [],
-    saveHostnameCrawlPolicy: (input) => ({ ...input, updatedAt: '2026-08-27T00:00:00.000Z' }),
-    deleteHostnameCrawlPolicy: () => true,
-    listServerHostnamePolicies: async () => [],
-    saveServerHostnamePolicy: async (input) => ({
-      ...input,
-      updatedAt: '2026-08-27T00:00:00.000Z'
-    }),
-    deleteServerHostnamePolicy: async () => undefined,
     getServerCrawlSettings: async () => ({
       maxConcurrentJobs: 3,
-      httpConcurrency: 9,
-      browserConcurrency: 5,
-      batchIntervalMinSeconds: 0,
-      batchIntervalMaxSeconds: 0,
       revision: 1,
       updatedAt: '2026-08-27T00:00:00.000Z'
     }),

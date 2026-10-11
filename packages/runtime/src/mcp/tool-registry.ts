@@ -8,7 +8,6 @@ import type {
 } from '@modelcontextprotocol/server'
 import * as z from 'zod/v4'
 import { registerCloudTools } from './cloud-tools.js'
-import { registerHostnamePolicyTools } from './hostname-policy-tools.js'
 import { registerDocumentMoveTools } from './document-move-tools.js'
 import { registerLibraryContentTools, registerListLibrariesTool } from './core-tools.js'
 import { registerLogTools } from './log-tools.js'
@@ -123,7 +122,6 @@ export function registerLociTools(register: LociToolRegistrar, services: LociMcp
   registerSourcePlanningTools(register, services)
   registerListLibrariesTool(register, services)
   registerCloudTools(register, services)
-  registerHostnamePolicyTools(register, services)
   registerDocumentMoveTools(register, services)
   registerLibraryContentTools(register, services)
   registerSearchTool(register, services)

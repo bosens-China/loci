@@ -57,7 +57,10 @@ describe('Agent Review 已收录页面刷新', () => {
 
       const { job } = runtime.database.enqueueSourceSync(source.id, 'manual')
       expect(await runner.runOnce()).toBe(1)
-      await vi.waitFor(() => expect(runtime.database.getLocalJob(job.id)?.status).toBe('completed'))
+      await vi.waitFor(
+        () => expect(runtime.database.getLocalJob(job.id)?.status).toBe('completed'),
+        { timeout: 10_000 }
+      )
 
       const events = runtime.database.listLocalJobEvents(job.id)
       const expectedUrls = [

@@ -10,20 +10,13 @@ import { runWithRuntime } from '../command-runtime.js'
 import { CliCanceledError, CliError } from '../errors.js'
 import { validateExcludePathPattern, validatePublicUrl, validateSourceName } from '../input.js'
 import { resolveSource } from '../resources.js'
-import {
-  readSourceCreatePreference,
-  saveRecentResource,
-  saveSourceCreatePreference,
-  scopeAtDepth,
-  scopeDepth
-} from '../preferences.js'
+import { saveRecentResource } from '../preferences.js'
 import { registerSourceHistoryCommands } from './source-history.js'
 import { askConfirm, askInteger, askText, note, printTable, warning } from '../ui.js'
 import {
   askMode,
   askScope,
   formatSourceChanges,
-  formatSourceSummary,
   getSourceRemovalWarning,
   hasSourceUpdates,
   modeLabel,
@@ -41,8 +34,6 @@ interface SourceOptions {
   pageLimit?: number
   scope?: string
   excludePath?: string
-  httpConcurrency?: number
-  browserConcurrency?: number
   yes?: boolean
   sync?: boolean
   background?: boolean
@@ -98,8 +89,6 @@ export function registerSourceCommands(program: Command): void {
     )
     .option('--scope <path>', `收录路径，默认 ${DOCUMENT_SOURCE_DEFAULTS.scopePath}`)
     .option('--exclude-path <regex>', '排除 pathname 的正则，默认不启用')
-    .option('--http-concurrency <number>', 'HTTP 并发覆盖值，默认继承共享设置', numberValue)
-    .option('--browser-concurrency <number>', '浏览器并发覆盖值，默认继承共享设置', numberValue)
     .option('--archive-limit <size>', 'GitHub ZIP 上限，例如 200mb', sizeMbValue)
     .option('--markdown-limit <size>', 'GitHub Markdown 总量上限，例如 100mb', sizeMbValue)
     .option('--no-sync', '创建后不执行首次同步')
@@ -109,26 +98,11 @@ export function registerSourceCommands(program: Command): void {
         '使用用户级后台服务执行首次同步；不能与 --no-sync 同时使用'
       ).conflicts('sync')
     )
-    .action((urlArgument: string | undefined, options: SourceOptions, command: Command) =>
+    .action((urlArgument: string | undefined, options: SourceOptions) =>
       runWithRuntime('添加文档源', async (runtime) => {
         if (options.background && options.sync === false) {
           throw new CliError('--background 不能与 --no-sync 同时使用', 2)
         }
-        const preference = process.stdin.isTTY
-          ? readSourceCreatePreference(runtime.database)
-          : {
-              mode: DOCUMENT_SOURCE_DEFAULTS.mode,
-              pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
-              scopeDepth: 0,
-              syncAfterCreate: true
-            }
-        const guided =
-          process.stdin.isTTY &&
-          !urlArgument &&
-          !options.url &&
-          !command.options.some(
-            (option) => command.getOptionValueSource(option.attributeName()) === 'cli'
-          )
         const url =
           options.url ??
           urlArgument ??
@@ -139,71 +113,24 @@ export function registerSourceCommands(program: Command): void {
         const repository = parseGithubRepositoryUrl(url)
         const hostname = new URL(url).hostname
         const input = {
-          name:
-            options.name ??
-            (guided
-              ? await askText('文档源名称', {
-                  initialValue: repository?.repo || deriveSourceName(url) || hostname,
-                  validate: validateSourceName
-                })
-              : repository?.repo || deriveSourceName(url) || hostname),
+          name: options.name ?? (repository?.repo || deriveSourceName(url) || hostname),
           url,
           mode: repository
             ? DOCUMENT_SOURCE_DEFAULTS.mode
-            : (options.mode ??
-              (guided ? await askMode('抓取方式', preference.mode) : preference.mode)),
-          pageLimit:
-            options.pageLimit ??
-            (guided
-              ? await askInteger('页面上限', {
-                  initialValue: preference.pageLimit,
-                  minimum: DOCUMENT_SOURCE_LIMITS.pageLimit.min,
-                  maximum: DOCUMENT_SOURCE_LIMITS.pageLimit.max
-                })
-              : preference.pageLimit),
-          scopePath: repository
-            ? DOCUMENT_SOURCE_DEFAULTS.scopePath
-            : (options.scope ??
-              (guided
-                ? await askScope(url, scopeAtDepth(url, preference.scopeDepth))
-                : scopeAtDepth(url, preference.scopeDepth))),
-          excludePathPattern: repository
-            ? null
-            : (options.excludePath ??
-              (guided
-                ? await askText('排除路径正则（选填）', {
-                    required: false,
-                    placeholder: '/(zh|de|fr)(/|$)',
-                    validate: validateExcludePathPattern
-                  })
-                : null)),
+            : (options.mode ?? DOCUMENT_SOURCE_DEFAULTS.mode),
+          pageLimit: options.pageLimit ?? DOCUMENT_SOURCE_DEFAULTS.pageLimit,
+          scopePath: repository ? '/' : (options.scope ?? '/'),
+          excludePathPattern: repository ? null : (options.excludePath ?? null),
           schedule: DOCUMENT_SOURCE_DEFAULTS.schedule,
-          httpConcurrency: options.httpConcurrency ?? DOCUMENT_SOURCE_DEFAULTS.httpConcurrency,
-          browserConcurrency:
-            options.browserConcurrency ?? DOCUMENT_SOURCE_DEFAULTS.browserConcurrency,
+          httpConcurrency: null,
+          browserConcurrency: null,
           githubArchiveLimitMb:
             options.archiveLimit ?? DOCUMENT_SOURCE_DEFAULTS.githubArchiveLimitMb,
           githubMarkdownLimitMb:
             options.markdownLimit ?? DOCUMENT_SOURCE_DEFAULTS.githubMarkdownLimitMb
         }
-        let syncAfterSave = options.sync !== false
-        if (guided) {
-          note(formatSourceSummary(input, runtime.database.getSettings()), '请确认文档源配置')
-          if (!(await askConfirm('确认添加这个文档源吗？', true))) throw new CliCanceledError()
-          if (options.sync !== false) {
-            syncAfterSave = await askConfirm(
-              '创建后是否立即开始第一次同步？',
-              preference.syncAfterCreate
-            )
-          }
-        }
+        const syncAfterSave = options.sync !== false
         const saved = runtime.createSource(input)
-        saveSourceCreatePreference(runtime.database, {
-          mode: input.mode,
-          pageLimit: input.pageLimit,
-          scopeDepth: scopeDepth(input.url, input.scopePath),
-          syncAfterCreate: syncAfterSave
-        })
         if (syncAfterSave && options.background) {
           await startBackgroundSourceSync(saved.id)
           return `已添加文档源“${saved.name}”并启动后台同步；运行 loci source history ${saved.id.slice(0, 8)} 查看记录`
@@ -222,8 +149,6 @@ export function registerSourceCommands(program: Command): void {
     .option('--page-limit <number>', '页面上限', numberValue)
     .option('--scope <path>', '收录路径')
     .option('--exclude-path <regex>', '排除 pathname 的正则；传空字符串可清除')
-    .option('--http-concurrency <number>', 'HTTP 并发覆盖值', numberValue)
-    .option('--browser-concurrency <number>', '浏览器并发覆盖值', numberValue)
     .option('--archive-limit <size>', 'GitHub ZIP 上限，例如 200mb', sizeMbValue)
     .option('--markdown-limit <size>', 'GitHub Markdown 总量上限，例如 100mb', sizeMbValue)
     .action((reference: string | undefined, options: SourceOptions) =>
@@ -283,8 +208,8 @@ export function registerSourceCommands(program: Command): void {
                     validate: validateExcludePathPattern
                   })
                 : (current.excludePathPattern ?? null),
-          httpConcurrency: options.httpConcurrency ?? current.httpConcurrency,
-          browserConcurrency: options.browserConcurrency ?? current.browserConcurrency,
+          httpConcurrency: null,
+          browserConcurrency: null,
           githubArchiveLimitMb: options.archiveLimit ?? current.githubArchiveLimitMb,
           githubMarkdownLimitMb: options.markdownLimit ?? current.githubMarkdownLimitMb
         }

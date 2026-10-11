@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { toSourceInput } from '../source-form'
 
 describe('文档源表单提交契约', () => {
+  it('从 URL 识别 GitHub 来源，无需手动选择类型', () => {
+    expect(
+      toSourceInput({
+        name: 'Vue docs',
+        url: 'https://github.com/vuejs/docs',
+        scopePath: '/docs'
+      })
+    ).toMatchObject({ kind: 'github', mode: 'auto', scopePath: '/' })
+  })
+
   it('高级设置尚未挂载时补齐网页抓取默认值', () => {
     expect(
       toSourceInput({
@@ -36,9 +46,7 @@ describe('文档源表单提交契约', () => {
         pageLimit: 200,
         scopePath: '/docs',
         excludePathPattern: ' ^/docs/legacy ',
-        schedule: '0 2 * * *',
-        httpConcurrency: 8,
-        browserConcurrency: 4
+        schedule: '0 2 * * *'
       })
     ).toMatchObject({
       mode: 'browser',
@@ -46,8 +54,8 @@ describe('文档源表单提交契约', () => {
       scopePath: '/docs',
       excludePathPattern: '^/docs/legacy',
       schedule: '0 2 * * *',
-      httpConcurrency: 8,
-      browserConcurrency: 4
+      httpConcurrency: null,
+      browserConcurrency: null
     })
   })
 })

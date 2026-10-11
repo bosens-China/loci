@@ -212,53 +212,6 @@ export function LibraryAdvancedFields(props: LibraryAdvancedFieldsProps): React.
                   <Input placeholder="例如：^/(zh|de|fr)(?:/|$) 或 ^/v[0-9]+/" />
                 </Form.Item>
               </div>
-
-              <div className="rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)]/30 p-3.5">
-                <div className="mb-3 text-xs font-semibold text-[var(--ant-color-text-secondary)] flex items-center gap-1.5">
-                  <span>⚡ 网络并发覆盖</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Form.Item
-                    name="httpConcurrency"
-                    label="HTTP 并发覆盖"
-                    extra="留空继承全局设置 (9)"
-                    rules={[
-                      {
-                        type: 'number',
-                        min: DOCUMENT_SOURCE_LIMITS.concurrency.min,
-                        max: DOCUMENT_SOURCE_LIMITS.concurrency.max,
-                        message: `并发数需在 ${DOCUMENT_SOURCE_LIMITS.concurrency.min} 到 ${DOCUMENT_SOURCE_LIMITS.concurrency.max} 之间`
-                      }
-                    ]}
-                  >
-                    <InputNumber
-                      {...DOCUMENT_SOURCE_LIMITS.concurrency}
-                      placeholder="继承全局设置 (9)"
-                      className="w-full"
-                    />
-                  </Form.Item>
-
-                  <Form.Item
-                    name="browserConcurrency"
-                    label="浏览器并发覆盖"
-                    extra="留空继承全局设置 (5)"
-                    rules={[
-                      {
-                        type: 'number',
-                        min: DOCUMENT_SOURCE_LIMITS.concurrency.min,
-                        max: DOCUMENT_SOURCE_LIMITS.concurrency.max,
-                        message: `并发数需在 ${DOCUMENT_SOURCE_LIMITS.concurrency.min} 到 ${DOCUMENT_SOURCE_LIMITS.concurrency.max} 之间`
-                      }
-                    ]}
-                  >
-                    <InputNumber
-                      {...DOCUMENT_SOURCE_LIMITS.concurrency}
-                      placeholder="继承全局设置 (5)"
-                      className="w-full"
-                    />
-                  </Form.Item>
-                </div>
-              </div>
             </>
           )}
         </>

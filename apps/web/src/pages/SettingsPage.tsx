@@ -3,7 +3,6 @@ import {
   CloudOutlined,
   ControlOutlined,
   DatabaseOutlined,
-  GlobalOutlined,
   SaveOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons'
@@ -21,7 +20,7 @@ import {
   Tabs,
   Typography
 } from 'antd'
-import { APP_SETTINGS_LIMITS, isValidBatchIntervalSeconds, type AppSettings } from '@loci/shared'
+import { APP_SETTINGS_LIMITS, type AppSettings } from '@loci/shared'
 import { getSettings, saveSettings } from '@/api/settings'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
@@ -31,9 +30,8 @@ import {
   ADMIN_LIBRARIES_KEY,
   ADMIN_SESSION_KEY
 } from '@/pages/admin/admin-query-keys'
-import { HostnamePolicyPanel } from '@/pages/settings/HostnamePolicyPanel'
 
-/** 系统设置页面：包含基础连接、全局抓取、域名限速覆盖与数据备份 4 大一级设置面板 */
+/** 系统设置页面：集中管理连接、主题、GitHub 容量保护和数据备份 */
 export function SettingsPage(): React.JSX.Element {
   const { message } = App.useApp()
   const client = useQueryClient()
@@ -140,71 +138,11 @@ export function SettingsPage(): React.JSX.Element {
       label: (
         <span className="flex items-center gap-2">
           <ThunderboltOutlined />
-          <span>全局抓取策略</span>
+          <span>容量保护</span>
         </span>
       ),
       children: (
         <div className="w-full space-y-6 pt-2">
-          <Card title="全局并发与频率策略">
-            <div className="space-y-6">
-              <div>
-                <Typography.Text
-                  strong
-                  className="block text-sm text-[var(--ant-color-text)] mb-3 font-medium"
-                >
-                  并发与重试控制
-                </Typography.Text>
-                <div className="flex flex-wrap gap-6 items-start">
-                  <NumberField
-                    name="httpConcurrency"
-                    label="HTTP 请求并发数"
-                    unit="个"
-                    {...APP_SETTINGS_LIMITS.concurrency}
-                  />
-                  <NumberField
-                    name="browserConcurrency"
-                    label="无头浏览器并发数"
-                    unit="个"
-                    {...APP_SETTINGS_LIMITS.concurrency}
-                  />
-                  <NumberField
-                    name="maxRetries"
-                    label="单页面最大重试次数"
-                    unit="次"
-                    {...APP_SETTINGS_LIMITS.maxRetries}
-                  />
-                </div>
-              </div>
-
-              <div className="pt-5 border-t border-[var(--ant-color-border-secondary)]">
-                <Typography.Text
-                  strong
-                  className="block text-sm text-[var(--ant-color-text)] mb-3 font-medium"
-                >
-                  批次请求等待间隔（防封禁限速）
-                </Typography.Text>
-                <div className="flex flex-wrap gap-6 items-start">
-                  <NumberField
-                    name="batchIntervalSeconds"
-                    label="批次间隔最小（秒）"
-                    unit="秒"
-                    min={0}
-                    max={APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
-                    batchInterval
-                  />
-                  <NumberField
-                    name="batchIntervalMaxSeconds"
-                    label="批次间隔最大（秒）"
-                    unit="秒"
-                    min={0}
-                    max={APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
-                    batchInterval
-                  />
-                </div>
-              </div>
-            </div>
-          </Card>
-
           <Card title="GitHub 仓库抓取上限">
             <div className="flex flex-wrap gap-6 items-start">
               <NumberField
@@ -229,23 +167,9 @@ export function SettingsPage(): React.JSX.Element {
               htmlType="submit"
               loading={save.isPending}
             >
-              保存全局抓取策略
+              保存容量保护
             </Button>
           </div>
-        </div>
-      )
-    },
-    {
-      key: 'hostname',
-      label: (
-        <span className="flex items-center gap-2">
-          <GlobalOutlined />
-          <span>域名限速覆盖</span>
-        </span>
-      ),
-      children: (
-        <div className="w-full pt-2">
-          <HostnamePolicyPanel />
         </div>
       )
     },
@@ -267,10 +191,7 @@ export function SettingsPage(): React.JSX.Element {
 
   return (
     <div className="w-full px-6 py-6 sm:px-8 sm:py-8">
-      <PageHeader
-        title="系统设置"
-        description="管理本地服务、抓取与并发限速策略、以及本地 SQLite 数据的备份与恢复。"
-      />
+      <PageHeader title="系统设置" description="管理连接、容量保护与本地数据备份。" />
       <AsyncState
         loading={query.isLoading}
         error={query.error}
@@ -296,8 +217,7 @@ function NumberField({
   min,
   max,
   unit,
-  className = 'w-64',
-  batchInterval = false
+  className = 'w-64'
 }: {
   name: keyof AppSettings
   label: string
@@ -305,23 +225,11 @@ function NumberField({
   max: number
   unit?: string
   className?: string
-  batchInterval?: boolean
 }): React.JSX.Element {
-  const rules = batchInterval
-    ? [
-        { required: true },
-        {
-          validator: (_rule: unknown, value: unknown) =>
-            isValidBatchIntervalSeconds(value)
-              ? Promise.resolve()
-              : Promise.reject(new Error('请输入 0，或 100 到 3000 之间的整数秒'))
-        }
-      ]
-    : [{ required: true }]
   return (
     <Form.Item label={<span className="text-sm">{label}</span>} className={`mb-0 ${className}`}>
       <Space.Compact block>
-        <Form.Item name={name} rules={rules} noStyle>
+        <Form.Item name={name} rules={[{ required: true }]} noStyle>
           <InputNumber min={min} max={max} className="w-full" />
         </Form.Item>
         {unit ? (

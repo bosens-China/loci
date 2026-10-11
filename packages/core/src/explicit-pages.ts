@@ -1,5 +1,5 @@
 import { createPathExclusionMatcher } from '@loci/shared'
-import { throwIfAborted } from './abort.js'
+import { executeCrawlTasks } from './crawl-executor.js'
 import { fetchHttpPage, getHostname, normalizeUrl } from './crawl.js'
 import { fetchCrawledPageWithRetry, type RenderedCrawler } from './rendered.js'
 import { probeSourcePage, type SourceFetchMode } from './source.js'
@@ -51,7 +51,6 @@ export async function fetchExplicitPages(
   const selected = await selectModeAndFirstPage(options, urls[0])
   const results = new Array<ExplicitPageResult>(urls.length)
   let iconUrl = selected.firstPage?.page?.iconUrl ?? null
-  let cursor = 0
   let processed = 0
   let succeeded = 0
   let failed = 0
@@ -78,41 +77,32 @@ export async function fetchExplicitPages(
     })
   }
 
-  const worker = async (): Promise<void> => {
-    while (cursor < urls.length) {
-      throwIfAborted(options.signal)
-      const index = cursor++
-      const url = urls[index]
-      if (!url) continue
-      let item: ExplicitPageResult
-      try {
-        const page =
-          index === 0 && selected.firstPage
-            ? selected.firstPage
-            : await fetchPage(options, url, selected.fetchMode)
-        iconUrl ??= page.page?.iconUrl ?? null
-        item = toExplicitResult(url, page, selected.fetchMode, options)
-      } catch (error) {
-        throwIfAborted(options.signal)
-        item = {
-          url,
-          status: 'failed',
-          failure: {
-            url,
-            reason: 'request_error',
-            message: error instanceof Error ? error.message : '页面请求失败',
-            retryable: true
-          }
-        }
-      }
+  const fail = (url: string, error: Error): ExplicitPageResult => ({
+    url,
+    status: 'failed',
+    failure: { url, reason: 'request_error', message: error.message, retryable: true }
+  })
+  await executeCrawlTasks({
+    tasks: urls.map((url, index) => ({ url, index })),
+    concurrency: options.concurrency,
+    maxRetries: 0,
+    signal: options.signal,
+    handle: async ({ url, index }) => {
+      const page =
+        index === 0 && selected.firstPage
+          ? selected.firstPage
+          : await fetchPage(options, url, selected.fetchMode)
+      iconUrl ??= page.page?.iconUrl ?? null
+      const item = toExplicitResult(url, page, selected.fetchMode, options)
+      results[index] = item
+      report(item)
+    },
+    onFailure: async ({ url, index }, error) => {
+      const item = fail(url, error)
       results[index] = item
       report(item)
     }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(options.concurrency, urls.length) }, () => worker())
-  )
+  })
   return {
     fetchMode: selected.fetchMode,
     iconUrl,

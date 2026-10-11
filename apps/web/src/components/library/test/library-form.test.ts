@@ -3,17 +3,10 @@ import {
   getAdvancedSettingsSummary,
   getLocalLibraryRemovalWarning,
   getLibraryUrlDefaults,
-  getNewSourceFetchMode,
   validateLibrarySourceKind
 } from '../library-form'
 
 describe('文档库共享表单默认值', () => {
-  it('浏览器明确未安装时新建来源默认使用 HTTP', () => {
-    expect(getNewSourceFetchMode(false)).toBe('http')
-    expect(getNewSourceFetchMode(true)).toBe('auto')
-    expect(getNewSourceFetchMode()).toBe('auto')
-  })
-
   it('从 URL 推导名称并修复失效的收录范围', () => {
     expect(
       getLibraryUrlDefaults({
@@ -135,7 +128,7 @@ describe('文档库共享表单默认值', () => {
         httpConcurrency: 12,
         browserConcurrency: 8
       })
-    ).toBe(6)
+    ).toBe(4)
 
     // GitHub 自定义项
     expect(

@@ -85,8 +85,6 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
             .nullable()
             .optional()
             .describe('可选 pathname 排除正则；省略时不排除'),
-          http_concurrency: concurrencySchema('省略时使用全局 HTTP 默认值'),
-          browser_concurrency: concurrencySchema('省略时使用全局浏览器默认值'),
           github_archive_limit_mb: sizeSchema('省略时使用全局 GitHub ZIP 默认值'),
           github_markdown_limit_mb: sizeSchema('省略时使用全局 GitHub Markdown 默认值'),
           wait_for_completion: z.boolean().default(false)
@@ -121,9 +119,8 @@ function registerAddLibrary(register: LociToolRegistrar, services: LociMcpServic
         scopePath: normalizeScopePath(input.scope_path),
         excludePathPattern: input.exclude_path ?? DOCUMENT_SOURCE_DEFAULTS.excludePathPattern,
         schedule: DOCUMENT_SOURCE_DEFAULTS.schedule,
-        httpConcurrency: input.http_concurrency ?? DOCUMENT_SOURCE_DEFAULTS.httpConcurrency,
-        browserConcurrency:
-          input.browser_concurrency ?? DOCUMENT_SOURCE_DEFAULTS.browserConcurrency,
+        httpConcurrency: null,
+        browserConcurrency: null,
         githubArchiveLimitMb:
           input.github_archive_limit_mb ?? DOCUMENT_SOURCE_DEFAULTS.githubArchiveLimitMb,
         githubMarkdownLimitMb:
@@ -360,16 +357,6 @@ function registerSyncFailures(register: LociToolRegistrar, services: LociMcpServ
       )
     }
   )
-}
-
-function concurrencySchema(description: string): z.ZodOptional<z.ZodNumber> {
-  return z
-    .number()
-    .int()
-    .min(DOCUMENT_SOURCE_LIMITS.concurrency.min)
-    .max(DOCUMENT_SOURCE_LIMITS.concurrency.max)
-    .optional()
-    .describe(description)
 }
 
 function sizeSchema(description: string): z.ZodOptional<z.ZodNumber> {

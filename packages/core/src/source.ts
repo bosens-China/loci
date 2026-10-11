@@ -91,7 +91,6 @@ export async function crawlSource(options: SourceCrawlOptions): Promise<SourceCr
     await options.onResolved?.(resolution)
     return { progress: result.progress, resolution }
   }
-  if (options.fetchMode === 'browser') await options.beforeBrowserCrawl?.()
   reportDiscoveryStage(options, '正在检查 llms.txt 文档清单')
   const llmsEntries = await discoverLlmsEntries(
     options.firstUrl,
@@ -181,6 +180,7 @@ export async function probeSourcePage(options: SourceCrawlOptions): Promise<{
   fetchMode: SourceResolution['fetchMode']
   firstPage: CrawledPage
 }> {
+  if (options.fetchMode === 'browser') await options.beforeBrowserCrawl?.()
   if (options.fetchMode === 'http' || !options.crawler) {
     if (options.fetchMode === 'browser') throw new Error('当前环境没有可用的浏览器抓取器')
     return {
@@ -277,10 +277,8 @@ function toCrawlOptions(
     fetch: options.fetch,
     sleep: options.sleep,
     maxRetries: options.maxRetries,
-    batchIntervalMs: options.batchIntervalMs,
     signal: options.signal,
     waitIfPaused: options.waitIfPaused,
-    getBatchPolicy: options.getBatchPolicy,
     onCheckpoint: options.onCheckpoint,
     onDocument: options.onDocument,
     onSnapshot: options.onSnapshot,

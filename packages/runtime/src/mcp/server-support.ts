@@ -119,8 +119,6 @@ export function serializeLibrary(source: DocumentSource): Record<string, unknown
     exclude_path: source.excludePathPattern ?? null,
     last_updated: source.lastUpdated,
     schedule: source.schedule,
-    http_concurrency: source.httpConcurrency,
-    browser_concurrency: source.browserConcurrency,
     kind: source.kind,
     github_archive_limit_mb: source.githubArchiveLimitMb,
     github_markdown_limit_mb: source.githubMarkdownLimitMb,

@@ -58,15 +58,6 @@ export function createLocalMcpServices(
     pauseLocalJobs: (hostname) => runtime.database.pauseLocalJobs(hostname),
     resumeLocalJobs: (hostname) => runtime.database.resumeLocalJobs(hostname),
     listOperationLogs: (filters) => runtime.database.listOperationLogs(filters),
-    listHostnameCrawlPolicies: () => runtime.database.listHostnameCrawlPolicies(),
-    saveHostnameCrawlPolicy: (input) => runtime.database.saveHostnameCrawlPolicy(input),
-    deleteHostnameCrawlPolicy: (hostname) => runtime.database.deleteHostnameCrawlPolicy(hostname),
-    listServerHostnamePolicies: () =>
-      withMcpAdmin(runtime, () => runtime.admin.listHostnamePolicies()),
-    saveServerHostnamePolicy: (input) =>
-      withMcpAdmin(runtime, () => runtime.admin.saveHostnamePolicy(input)),
-    deleteServerHostnamePolicy: (hostname) =>
-      withMcpAdmin(runtime, () => runtime.admin.deleteHostnamePolicy(hostname)),
     getServerCrawlSettings: () => withMcpAdmin(runtime, () => runtime.admin.getCrawlSettings()),
     saveServerCrawlSettings: (input) =>
       withMcpAdmin(runtime, () => runtime.admin.saveCrawlSettings(input)),

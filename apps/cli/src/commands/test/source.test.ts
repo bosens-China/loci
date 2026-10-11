@@ -34,7 +34,15 @@ describe('文档源最短输入', () => {
     await runtime.close()
   })
 
-  it('只提供 URL 时采用共享名称和抓取默认值', async () => {
+  it('只提供 URL 时采用共享默认值，不读取历史创建偏好', async () => {
+    const previous = createCliRuntime()
+    previous.database.setInteractionPreference('cli', 'source-create', {
+      mode: 'browser',
+      pageLimit: 10,
+      scopeDepth: 2,
+      syncAfterCreate: false
+    })
+    await previous.close()
     await createProgram().parseAsync(
       ['source', 'add', 'https://rspress.rs/guide/introduction.html', '--no-sync'],
       {

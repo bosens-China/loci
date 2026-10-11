@@ -18,8 +18,6 @@ export const librarySchema = z.object({
   exclude_path: z.string().nullable(),
   last_updated: z.string(),
   schedule: z.string().nullable(),
-  http_concurrency: z.number().int().nullable(),
-  browser_concurrency: z.number().int().nullable(),
   kind: z.enum(['web', 'github']),
   github_archive_limit_mb: z.number().int().nullable(),
   github_markdown_limit_mb: z.number().int().nullable(),

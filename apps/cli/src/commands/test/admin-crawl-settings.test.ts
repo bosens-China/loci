@@ -8,10 +8,6 @@ describe('CLI Server 抓取策略', () => {
   it('读取当前修订并只覆盖显式提供的字段', async () => {
     const current: ServerCrawlSettings = {
       maxConcurrentJobs: 3,
-      httpConcurrency: 9,
-      browserConcurrency: 5,
-      batchIntervalMinSeconds: 0,
-      batchIntervalMaxSeconds: 0,
       revision: 4,
       updatedAt: '2026-08-28T00:00:00.000Z'
     }
@@ -27,16 +23,12 @@ describe('CLI Server 抓取策略', () => {
       await action(client, {} as LocalRuntime)
     })
 
-    await program.parseAsync(['settings-set', '--max-jobs', '4', '--interval', '100-300'], {
+    await program.parseAsync(['settings-set', '--max-jobs', '4'], {
       from: 'user'
     })
 
     expect(saveCrawlSettings).toHaveBeenCalledWith({
       maxConcurrentJobs: 4,
-      httpConcurrency: 9,
-      browserConcurrency: 5,
-      batchIntervalMinSeconds: 100,
-      batchIntervalMaxSeconds: 300,
       revision: 4
     })
   })

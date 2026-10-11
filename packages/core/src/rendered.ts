@@ -1,11 +1,5 @@
 import { abortableSleep, throwIfAborted } from './abort.js'
-import {
-  discoverSitemapUrls,
-  immediateCrawlOptions,
-  isRetryableStatus,
-  retryAfterMs,
-  runCrawlQueue
-} from './crawl.js'
+import { discoverSitemapUrls, isRetryableStatus, retryAfterMs, runCrawlQueue } from './crawl.js'
 import type { CrawledPage, CrawlProgress, FetchOptions, HttpCrawlOptions } from './types.js'
 
 export interface RenderedPageRequest {
@@ -84,15 +78,13 @@ export async function crawlRenderedSource(options: RenderedCrawlOptions): Promis
     }
     return runCrawlQueue({
       ...options,
-      ...(sitemapUrls.length > 0
-        ? immediateCrawlOptions(options.pageLimit)
-        : { concurrency: options.concurrency ?? 5 }),
+      concurrency: options.concurrency ?? 5,
       fetchMode: 'browser',
       sitemapUrls,
       followPageLinks: sitemapUrls.length === 0,
       fetchPage: (url) =>
         fetchCrawledPageWithRetry(crawler, url, request, {
-          maxRetries: options.maxRetries,
+          maxRetries: 0,
           sleep: options.sleep,
           signal: options.signal
         })

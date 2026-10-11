@@ -1,15 +1,11 @@
 import type { Command } from 'commander'
-import { SERVER_CRAWL_SETTINGS_LIMITS, type ServerCrawlSettings } from '@loci/shared'
+import { SERVER_CRAWL_SETTINGS_LIMITS } from '@loci/shared'
 import type { CloudAdminClient, LocalRuntime } from '@loci/runtime'
 import { CliError } from '../errors.js'
 import { printTable } from '../ui.js'
-import { formatDomainInterval, parseDomainInterval } from './domain-policy-options.js'
 
 interface CrawlSettingsOptions {
   maxJobs?: number
-  http?: number
-  browser?: number
-  interval?: string
 }
 
 type WithAdmin = (
@@ -17,7 +13,7 @@ type WithAdmin = (
   action: (client: CloudAdminClient, runtime: LocalRuntime) => Promise<string | void>
 ) => Promise<void>
 
-/** 注册 Server 全局抓取策略命令；hostname 覆盖继续由 domain-* 命令管理。 */
+/** 注册 Server 任务容量命令，页面执行参数由共享底层管理。 */
 export function registerAdminCrawlSettings(admin: Command, withAdmin: WithAdmin): void {
   admin
     .command('settings')
@@ -25,21 +21,7 @@ export function registerAdminCrawlSettings(admin: Command, withAdmin: WithAdmin)
     .action(() =>
       withAdmin('Server 全局抓取策略', async (client) => {
         const settings = await client.getCrawlSettings()
-        printTable(
-          ['最大并行任务', '同域名任务', 'HTTP 并发', '浏览器并发', '批次间隔'],
-          [
-            [
-              settings.maxConcurrentJobs,
-              '串行（固定）',
-              settings.httpConcurrency,
-              settings.browserConcurrency,
-              formatDomainInterval(
-                settings.batchIntervalMinSeconds,
-                settings.batchIntervalMaxSeconds
-              )
-            ]
-          ]
-        )
+        printTable(['最大并行任务', '同域名任务'], [[settings.maxConcurrentJobs, '串行（固定）']])
         return `配置修订号：${settings.revision}`
       })
     )
@@ -52,35 +34,12 @@ export function registerAdminCrawlSettings(admin: Command, withAdmin: WithAdmin)
       '最大并行任务数',
       settingInteger('最大并行任务数', SERVER_CRAWL_SETTINGS_LIMITS.maxConcurrentJobs)
     )
-    .option(
-      '--http <number>',
-      '默认 HTTP 并发',
-      settingInteger('HTTP 并发', SERVER_CRAWL_SETTINGS_LIMITS.concurrency)
-    )
-    .option(
-      '--browser <number>',
-      '默认浏览器并发',
-      settingInteger('浏览器并发', SERVER_CRAWL_SETTINGS_LIMITS.concurrency)
-    )
-    .option('--interval <seconds>', '默认固定间隔或 min-max；0 表示关闭')
     .action((options: CrawlSettingsOptions) =>
       withAdmin('修改 Server 全局抓取策略', async (client) => {
-        if (
-          options.maxJobs === undefined &&
-          options.http === undefined &&
-          options.browser === undefined &&
-          options.interval === undefined
-        ) {
-          throw new CliError('至少提供一个要修改的抓取策略选项', 2)
-        }
+        if (options.maxJobs === undefined) throw new CliError('请提供 --max-jobs', 2)
         const current = await client.getCrawlSettings()
-        const interval = requiredInterval(options.interval, current)
         const saved = await client.saveCrawlSettings({
           maxConcurrentJobs: options.maxJobs ?? current.maxConcurrentJobs,
-          httpConcurrency: options.http ?? current.httpConcurrency,
-          browserConcurrency: options.browser ?? current.browserConcurrency,
-          batchIntervalMinSeconds: interval[0],
-          batchIntervalMaxSeconds: interval[1],
           revision: current.revision
         })
         return `Server 抓取策略已保存（修订号 ${saved.revision}）`
@@ -99,15 +58,4 @@ function settingInteger(
     }
     return parsed
   }
-}
-
-function requiredInterval(
-  value: string | undefined,
-  current: ServerCrawlSettings
-): [number, number] {
-  const interval = parseDomainInterval(value, current)
-  if (interval[0] === null || interval[1] === null) {
-    throw new CliError('Server 全局批次间隔不能使用 default', 2)
-  }
-  return [interval[0], interval[1]]
 }

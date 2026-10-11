@@ -62,9 +62,7 @@ export function formatSourceSummary(
     `抓取方式：${modeLabel(input.mode)}`,
     `页面上限：${input.pageLimit}`,
     `收录范围：${input.scopePath}`,
-    `排除路径：${input.excludePathPattern || '未启用'}`,
-    `HTTP 并发：${input.httpConcurrency ?? '继承全局设置'}`,
-    `浏览器并发：${input.browserConcurrency ?? '继承全局设置'}`
+    `排除路径：${input.excludePathPattern || '未启用'}`
   ].join('\n')
 }
 
@@ -87,12 +85,6 @@ export function formatSourceChanges(
     (current.excludePathPattern ?? null) === (input.excludePathPattern ?? null)
       ? null
       : `排除路径：${current.excludePathPattern || '未启用'} → ${input.excludePathPattern || '未启用'}`,
-    current.httpConcurrency === input.httpConcurrency
-      ? null
-      : `HTTP 并发：${current.httpConcurrency ?? '继承全局'} → ${input.httpConcurrency ?? '继承全局'}`,
-    current.browserConcurrency === input.browserConcurrency
-      ? null
-      : `浏览器并发：${current.browserConcurrency ?? '继承全局'} → ${input.browserConcurrency ?? '继承全局'}`,
     current.githubArchiveLimitMb === (input.githubArchiveLimitMb ?? null)
       ? null
       : `ZIP 上限：${current.githubArchiveLimitMb ?? '继承全局'} → ${input.githubArchiveLimitMb ?? '继承全局'} MB`,
@@ -114,8 +106,6 @@ export function sameSourceInput(
     current.pageLimit === input.pageLimit &&
     current.scopePath === input.scopePath &&
     (current.excludePathPattern ?? null) === (input.excludePathPattern ?? null) &&
-    current.httpConcurrency === input.httpConcurrency &&
-    current.browserConcurrency === input.browserConcurrency &&
     current.githubArchiveLimitMb === (input.githubArchiveLimitMb ?? null) &&
     current.githubMarkdownLimitMb === (input.githubMarkdownLimitMb ?? null)
   )

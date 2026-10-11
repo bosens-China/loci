@@ -3,15 +3,12 @@ import {
   CaretRightOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  ControlOutlined,
   GlobalOutlined,
-  PauseOutlined,
-  ThunderboltOutlined
+  PauseOutlined
 } from '@ant-design/icons'
-import { Breadcrumb, Button, Card, Tag, Tooltip, Typography } from 'antd'
+import { Breadcrumb, Button, Card, Tag, Typography } from 'antd'
 import { ConfirmedActionButton } from '@/components/ConfirmedActionButton'
 import { formatBytes } from '@/utils/format'
-import type { DomainConcurrencySummary } from './job-state'
 
 interface JobDomainHeaderProps {
   hostname: string
@@ -21,19 +18,14 @@ interface JobDomainHeaderProps {
   failedCount: number
   processed: number
   contentBytes: number
-  configuredLimit: number
-  concurrency: DomainConcurrencySummary
   pendingAction?: string
   onBack: () => void
-  onOpenConcurrency: () => void
   onPause: () => void
   onResume: () => void
 }
 
 /** 域名任务详情头部，集中展示导航、状态摘要和域名级控制。 */
 export function JobDomainHeader(props: JobDomainHeaderProps): React.JSX.Element {
-  const concurrencyLabel = `${props.concurrency.totalUsed}/${props.configuredLimit} (${props.concurrency.utilizationPercent}%)`
-
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -76,33 +68,10 @@ export function JobDomainHeader(props: JobDomainHeaderProps): React.JSX.Element 
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {props.activeCount > 0 ? (
-              <Tooltip
-                title={`实际并发占用: ${props.concurrency.totalUsed} / 并发上限: ${props.configuredLimit} (${props.concurrency.utilizationPercent}%)`}
-              >
-                <Tag
-                  color={props.concurrency.utilizationPercent >= 100 ? 'success' : 'processing'}
-                  className="m-0! cursor-pointer px-3 py-1.5 text-sm font-mono hover:opacity-80"
-                  onClick={props.onOpenConcurrency}
-                >
-                  <ThunderboltOutlined /> 并发占用: {concurrencyLabel}
-                </Tag>
-              </Tooltip>
-            ) : (
-              <Tag
-                className="m-0! cursor-pointer px-3 py-1.5 text-sm text-[var(--ant-color-text-tertiary)] hover:opacity-80"
-                onClick={props.onOpenConcurrency}
-              >
-                并发空闲 (上限: {props.configuredLimit})
-              </Tag>
-            )}
-            <Button icon={<ControlOutlined />} onClick={props.onOpenConcurrency}>
-              限速与并发
-            </Button>
             {props.activeCount > 0 && (
               <ConfirmedActionButton
                 title={`暂停 ${props.hostname} 的全部活动任务？`}
-                description="已经发出的页面请求会完成，后续批次将停止领取。"
+                description="已经发出的页面请求会完成，后续页面将停止领取。"
                 label="暂停此域名"
                 icon={<PauseOutlined />}
                 loading={props.pendingAction === `pause-all:${props.hostname}`}

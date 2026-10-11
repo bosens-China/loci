@@ -1,21 +1,20 @@
-import { useEffect, useState } from 'react'
-import { GithubOutlined, GlobalOutlined, SyncOutlined } from '@ant-design/icons'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Badge, Button, Form, Modal, Popconfirm, Segmented, Tabs } from 'antd'
+import { useState } from 'react'
+import { SyncOutlined } from '@ant-design/icons'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { App, Badge, Button, Form, Modal, Popconfirm, Tabs } from 'antd'
 import {
   DOCUMENT_SOURCE_DEFAULTS,
+  parseGithubRepositoryUrl,
   type CreateSourceResult,
   type DocumentSource
 } from '@loci/shared'
-import { getLocalBrowserStatus } from '@/api/browser'
 import { enqueueSourceSync } from '@/api/jobs'
 import { createSource, deleteSource, updateSource } from '@/api/sources'
 import { LibraryAdvancedFields } from '@/components/library/LibraryAdvancedFields'
 import { LibraryBasicFields } from '@/components/library/LibraryCoreFields'
 import {
   getAdvancedSettingsSummary,
-  getLocalLibraryRemovalWarning,
-  getNewSourceFetchMode
+  getLocalLibraryRemovalWarning
 } from '@/components/library/library-form'
 import { toSourceInput, type SourceFormValue } from './source-form'
 
@@ -30,8 +29,6 @@ const ADVANCED_FIELD_NAMES = [
   'schedule',
   'mode',
   'excludePathPattern',
-  'httpConcurrency',
-  'browserConcurrency',
   'githubArchiveLimitMb',
   'githubMarkdownLimitMb'
 ]
@@ -41,27 +38,14 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
   const client = useQueryClient()
   const [form] = Form.useForm<SourceFormValue>()
   const [activeTab, setActiveTab] = useState<string>('basic')
-  const kind = Form.useWatch('kind', form) ?? 'web'
+  const url = Form.useWatch('url', form) ?? ''
+  const kind = parseGithubRepositoryUrl(url) ? 'github' : 'web'
   const formValues = Form.useWatch([], form)
-  const browserStatus = useQuery({
-    queryKey: ['local-browser'],
-    queryFn: getLocalBrowserStatus,
-    enabled: props.editing === 'new',
-    staleTime: 30_000
-  })
 
   const isEditing = props.editing !== null && props.editing !== 'new'
   const customSettingsCount = getAdvancedSettingsSummary(
     formValues ?? (isEditing ? props.editing : null)
   )
-
-  useEffect(() => {
-    if (props.editing !== 'new' || browserStatus.data?.installed !== false) return
-    if (form.isFieldTouched('mode')) return
-    if (form.getFieldValue('mode') === DOCUMENT_SOURCE_DEFAULTS.mode) {
-      form.setFieldValue('mode', getNewSourceFetchMode(false))
-    }
-  }, [browserStatus.data?.installed, form, props.editing])
 
   const refresh = (): void => {
     void client.invalidateQueries({ queryKey: ['sources'] })
@@ -148,39 +132,11 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
         if (!open) return
         setActiveTab('basic')
         form.setFieldsValue(
-          props.editing === 'new' || !props.editing
-            ? createEmptyForm(browserStatus.data?.installed)
-            : fromSource(props.editing)
+          props.editing === 'new' || !props.editing ? createEmptyForm() : fromSource(props.editing)
         )
       }}
     >
       <Form form={form} layout="vertical" className="pt-2" requiredMark="optional">
-        <Form.Item name="kind" label="来源类型" className="mb-4">
-          <Segmented
-            block
-            options={[
-              {
-                value: 'web',
-                label: (
-                  <span className="flex items-center justify-center gap-1.5 py-1">
-                    <GlobalOutlined />
-                    普通站点
-                  </span>
-                )
-              },
-              {
-                value: 'github',
-                label: (
-                  <span className="flex items-center justify-center gap-1.5 py-1">
-                    <GithubOutlined />
-                    GitHub 仓库
-                  </span>
-                )
-              }
-            ]}
-          />
-        </Form.Item>
-
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
@@ -307,12 +263,12 @@ export function SourceActions(props: SourceActionsProps): React.JSX.Element {
   )
 }
 
-function createEmptyForm(browserInstalled?: boolean): SourceFormValue {
+function createEmptyForm(): SourceFormValue {
   return {
     name: '',
     url: '',
     kind: 'web',
-    mode: getNewSourceFetchMode(browserInstalled),
+    mode: DOCUMENT_SOURCE_DEFAULTS.mode,
     pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
     scopePath: DOCUMENT_SOURCE_DEFAULTS.scopePath
   }
@@ -328,8 +284,6 @@ function fromSource(source: DocumentSource): SourceFormValue {
     scopePath: source.scopePath,
     excludePathPattern: source.excludePathPattern ?? undefined,
     schedule: source.schedule ?? undefined,
-    httpConcurrency: source.httpConcurrency ?? undefined,
-    browserConcurrency: source.browserConcurrency ?? undefined,
     githubArchiveLimitMb: source.githubArchiveLimitMb ?? undefined,
     githubMarkdownLimitMb: source.githubMarkdownLimitMb ?? undefined
   }

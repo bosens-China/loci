@@ -140,7 +140,7 @@ describe('crawlRenderedSource', () => {
     expect(progress).toMatchObject({ queued: 2, succeeded: 2, failed: 0 })
   })
 
-  it('有效 Sitemap 的浏览器页面整批并发且仍响应批次控制', async () => {
+  it('有效 Sitemap 的浏览器页面遵守并发上限并完成清单', async () => {
     let release = (): void => undefined
     const gate = new Promise<void>((resolve) => {
       release = resolve
@@ -163,7 +163,6 @@ describe('crawlRenderedSource', () => {
       hostname: 'docs.example.com',
       pageLimit: 3,
       concurrency: 1,
-      batchIntervalMs: 100_000,
       crawler: { fetchPage },
       fetch: async () =>
         new Response('<urlset><url><loc>/one</loc></url><url><loc>/two</loc></url></urlset>'),
@@ -172,10 +171,12 @@ describe('crawlRenderedSource', () => {
       onDocument: () => undefined
     })
 
-    await vi.waitFor(() => expect(started).toHaveLength(3))
-    release()
+    try {
+      await vi.waitFor(() => expect(started).toHaveLength(1), { timeout: 5_000 })
+    } finally {
+      release()
+    }
     await expect(task).resolves.toMatchObject({ queued: 3, succeeded: 3 })
     expect(sleep).not.toHaveBeenCalled()
-    expect(waitIfPaused).toHaveBeenCalledOnce()
   })
 })

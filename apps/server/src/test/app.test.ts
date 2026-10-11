@@ -140,7 +140,7 @@ describe('Loci Server API', () => {
     }
     expect(initial.settings).toMatchObject(DEFAULT_SERVER_CRAWL_SETTINGS)
 
-    const update = { ...initial.settings, maxConcurrentJobs: 4 }
+    const update = { maxConcurrentJobs: 4, revision: initial.settings.revision }
     const savedResponse = await app.request('/api/v1/admin/crawl-settings', {
       method: 'PUT',
       headers,
@@ -154,7 +154,7 @@ describe('Loci Server API', () => {
     const conflict = await app.request('/api/v1/admin/crawl-settings', {
       method: 'PUT',
       headers,
-      body: JSON.stringify({ ...initial.settings, httpConcurrency: 8 })
+      body: JSON.stringify({ maxConcurrentJobs: 5, revision: initial.settings.revision })
     })
     expect(conflict.status).toBe(409)
 
