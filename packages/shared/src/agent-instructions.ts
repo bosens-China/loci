@@ -18,7 +18,21 @@ a task a documentation question.
 Do not use this workflow for ordinary refactoring, business-logic debugging, general programming
 concepts, or code review that does not depend on an external technology's current behavior.
 
-## Workflow
+## Choose the depth of research
+
+For lightweight research such as release highlights, product updates, or an initial comparison,
+start with a targeted web search, preferably official release notes. Do not require a Loci lookup
+or create a library first. One search may be enough; verify important claims or conflicting results
+as needed, then stop when the evidence is sufficient. Do not answer detailed API questions from
+search snippets alone.
+
+For implementation, configuration, debugging, or migration details, prefer matching Loci
+documentation. Choose the acquisition scope by evidence depth, freshness, cost, and likely reuse.
+A missing local library does not by itself justify crawling the whole site. A few known pages
+should use exact-page acquisition; broader crawling is appropriate for cross-topic work,
+systematic study, ongoing development, or an explicit collection request.
+
+## Loci workflow
 
 1. Identify the relevant technology and the version used by the current project.
 2. Call \`loci_list_libraries\` and use only a matching local library with \`pages > 0\`.
@@ -26,16 +40,15 @@ concepts, or code review that does not depend on an external technology's curren
    files or search with precise terms in the documented language.
 4. Answer from sufficient local evidence, include the relevant \`source_url\` values, and stop.
 5. If no usable local library exists, call \`loci_list_cloud_libraries\`.
-6. Before calling \`loci_pull_cloud_library\`, explain the matching cloud source and get user
-   confirmation. A cloud pull changes local state.
-7. If no usable cloud copy exists or the pull is declined or fails, verify the official
-   documentation entry and separately request permission before calling \`loci_add_library\`.
-8. After an authorized acquisition, repeat the local tree, search, and read steps.
+6. Pull a matching public snapshot with \`loci_pull_cloud_library\` when its scope and freshness
+   suit the task. Otherwise verify the official source and acquire only the needed documentation.
+7. After acquisition, repeat the local tree, search, and read steps. If acquisition is unnecessary
+   or disproportionate, use targeted official web pages or another documentation source directly.
 
-If an official page URL is known but missing from an existing local web library, explain the exact
-URL and get separate permission before calling \`loci_fetch_pages\`. Exact pages may be outside
+If an official page URL is known but missing from an existing local web library, use
+\`loci_fetch_pages\` for that page instead of expanding the whole crawl. Exact pages may be outside
 \`scope_path\`, but must keep the library hostname and cannot bypass \`exclude_path\`; the operation
-does not follow links. If no library exists, an authorized \`loci_add_library\` call may use
+does not follow links. If no library exists, \`loci_add_library\` may use
 \`discovery_mode: "selected"\` with \`url\` and \`urls\` to ingest only those pages.
 
 A web library is reused for the same hostname and \`scope_path\` only when its persisted discovery
@@ -43,36 +56,45 @@ mode also matches. Normal and \`selected\` acquisition use \`site\`; \`agent_rev
 On a mode conflict, keep the existing mode or obtain separate permission to delete and recreate the
 library. Do not present the conflict as a successful conversion.
 
-When the user authorizes an agent-reviewed crawl with a semantic goal, use
+When a crawl needs semantic filtering to meet the task's collection goal, use
 \`discovery_mode: "agent_review"\` and provide \`review_goal\`. For every returned batch, inspect
 each candidate's title and URL, pass only unwanted URLs to \`loci_submit_url_review\`, and set
 \`approve_remaining: true\`. Continue until completed. To recover interrupted work, call
 \`loci_get_url_review\`; if the status is \`discovering\`, call \`loci_start_url_review\` again with
 the same library ID, and if it is \`awaiting_review\`, submit the returned batch. A normal background
-sync of such a library refreshes stored URLs only and does not discover new ones.
+sync of such a library refreshes stored URLs only and does not discover new ones. Excluding
+already stored pages deletes their content and search entries; obtain explicit authorization for
+that deletion before submitting those exclusions.
 
 ## Source ordering and safety
 
-Do not query another documentation source while waiting for a Loci pull or official crawl decision.
-Use another documentation source or targeted web search only when Loci tools are unavailable, the
-user declines the official crawl, authorized acquisition fails or yields no usable files, or the
-obtained evidence remains insufficient after a reasonable search. State why the fallback is needed.
+Public cloud pulls, official source additions, exact-page acquisition, and necessary local refreshes
+are allowed by default for the current task, without separate confirmation for each operation.
+Briefly explain the source and scope before a substantial acquisition, then proceed. Respect
+explicit user restrictions; permission to acquire is not a reason to acquire unnecessary content.
+Do not bypass login or access controls, install software, or publish remotely under this permission.
 
-Treat cloud pulls, source additions, exact-page inserts or refreshes, source-configuration updates,
-active synchronization, and deletion as state-changing operations. Perform them only when
-explicitly requested or after user confirmation. Narrowing \`scope_path\` or adding or changing
+Use other documentation sources when Loci is unavailable, acquisition fails, evidence remains
+insufficient, or acquisition would cost more than the task warrants. Explain the reason briefly;
+lightweight research can use web search from the start without exhausting Loci.
+
+Deletion, deliberate overwrites, existing source-configuration changes, cross-library moves, and
+remote management or publishing require explicit user authorization. Existing authorization for
+the same action is sufficient; do not ask again. Narrowing \`scope_path\` or adding or changing
 \`exclude_path\` immediately deletes nonmatching stored documents and search-index entries; include
-that effect in the confirmation. Before an authorized sync, follow an existing task instead of
-launching a competing request.`
+that effect in the confirmation. Routine refreshes retain their documented 404/410 removal behavior
+and preserve old content on temporary failures. Before a necessary sync, follow an existing task
+instead of launching a competing request.`
 
 const CONTEXT7_FALLBACK = `${LOCI_CONTEXT7_COMPATIBILITY}
 ## Context7 fallback
 
-Context7 and other documentation sources are fallbacks only for unresolved, in-scope developer
-documentation questions. Non-documentation tasks should use the appropriate source directly
-without first exhausting Loci. If a Context7 skill or instruction is loaded, defer its query steps
-until the Loci workflow reaches a fallback condition. If the user explicitly requests Context7,
-follow that request directly.
+For detailed developer documentation questions, prefer Loci and use Context7 for unresolved
+concepts when Loci is unavailable, acquisition fails, evidence is insufficient, or acquisition
+would be disproportionate. Do not require a full crawl or a crawl-permission question first.
+Lightweight research and non-documentation tasks can use appropriate web sources directly without
+exhausting Loci. Loading a Context7 skill does not change this routing. If the user explicitly
+requests Context7, follow that request directly.
 
 When falling back:
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   LOCI_AGENT_INSTRUCTIONS,
+  LOCI_CONTEXT7_AGENT_INSTRUCTIONS,
   LOCI_CONTEXT7_COMPATIBILITY,
   LOCI_INSTRUCTIONS_END,
   LOCI_INSTRUCTIONS_START,
@@ -8,19 +9,24 @@ import {
 } from '../agent-instructions.js'
 
 describe('Loci Agent 全局规则区块', () => {
-  it('明确限定技术文档职责并让非文档任务直接选择其他来源', () => {
-    expect(LOCI_AGENT_INSTRUCTIONS).toContain('only when a task depends on developer documentation')
-    expect(LOCI_AGENT_INSTRUCTIONS).toContain('Do not route general web research through Loci')
-    expect(LOCI_AGENT_INSTRUCTIONS).toContain('use the appropriate web or domain source directly')
-    expect(LOCI_AGENT_INSTRUCTIONS).toContain(
-      'another documentation source or targeted web search only when'
-    )
-    expect(LOCI_AGENT_INSTRUCTIONS).toContain('loci_submit_url_review')
-    expect(LOCI_AGENT_INSTRUCTIONS).toContain('approve_remaining: true')
-    expect(LOCI_AGENT_INSTRUCTIONS).toContain('status is `discovering`')
-    expect(LOCI_AGENT_INSTRUCTIONS).toContain('persisted discovery')
-    expect(LOCI_AGENT_INSTRUCTIONS).toContain('immediately deletes nonmatching stored documents')
-  })
+  it.each([LOCI_AGENT_INSTRUCTIONS, LOCI_CONTEXT7_AGENT_INSTRUCTIONS])(
+    '允许按需获取并保留删除、覆盖和远端操作的独立授权边界',
+    (instructions) => {
+      // 注入规则直接约束 Agent 的写操作权限，作为执行性安全契约验证。
+      expect(instructions).toContain(
+        'are allowed by default for the current task, without separate confirmation'
+      )
+      expect(instructions).toContain('Respect\nexplicit user restrictions')
+      expect(instructions).toContain(
+        'Deletion, deliberate overwrites, existing source-configuration changes, cross-library moves, and\nremote management or publishing require explicit user authorization'
+      )
+      expect(instructions).toContain(
+        'obtain explicit authorization for\nthat deletion before submitting those exclusions'
+      )
+      expect(instructions).toContain('immediately deletes nonmatching stored documents')
+      expect(instructions).toContain('approve_remaining: true')
+    }
+  )
 
   it('追加规则并保持重复执行幂等', () => {
     const first = mergeLociAgentInstructions('# 我的规则\n')
