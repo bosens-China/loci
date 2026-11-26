@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.0.0](https://github.com/bosens-China/loci/compare/cli-v2.0.0...cli-v3.0.0) (2026-11-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* 将 Loci 收敛为本地文档工作台
+
+### Code Refactoring
+
+* 将 Loci 收敛为本地文档工作台 ([9371713](https://github.com/bosens-China/loci/commit/9371713765069f7eb982fffa734f96ef8d40b8d0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 3.0.0
+    * @loci/runtime bumped to 3.0.0
+    * @loci/shared bumped to 3.0.0
+
 ## [2.0.0](https://github.com/bosens-China/loci/compare/cli-v1.20.1...cli-v2.0.0) (2026-10-11)
 
 
