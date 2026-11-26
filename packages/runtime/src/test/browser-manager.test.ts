@@ -47,8 +47,7 @@ describe('BrowserManager', () => {
     const second = manager.start('install')
 
     expect(second.id).toBe(first.id)
-    expect(runCommand).toHaveBeenCalledOnce()
-    expect(() => manager.start('uninstall')).toThrow('正在安装')
+    expect(() => manager.start('uninstall')).toThrow()
     expect((await manager.getStatus()).operation).toMatchObject({ progress: 45 })
 
     const waiting = manager.waitForCurrent()

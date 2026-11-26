@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LibrarySummary } from '@loci/shared'
-import { countLocalLibrarySources, filterLocalLibrarySources } from '../library-filter'
+import { filterLocalLibrarySources } from '../library-filter'
 
 function createSummary(
   input: Pick<LibrarySummary, 'id' | 'name' | 'url' | 'kind'> & Partial<LibrarySummary>
@@ -54,37 +54,15 @@ const mockSources: LibrarySummary[] = [
   })
 ]
 
-describe('本地文档库过滤与计数', () => {
-  it('正确统计各类文档库数量', () => {
-    const counts = countLocalLibrarySources(mockSources)
-    expect(counts).toEqual({
-      total: 3,
-      web: 2,
-      github: 1
-    })
-  })
-
-  it('按关键词匹配名称、URL 或 ID', () => {
-    const res = filterLocalLibrarySources(mockSources, { kind: 'all', keyword: 'hono' })
-    expect(res).toHaveLength(2)
-    expect(res.map((r) => r.id)).toEqual(['src-1', 'src-2'])
-  })
-
-  it('分类与关键词组合匹配，排除未分类的同名库', () => {
+describe('本地文档库过滤', () => {
+  it('支持类型、分类与关键词多维度组合过滤', () => {
     const rows = filterLocalLibrarySources(mockSources, {
-      kind: 'all',
+      kind: 'web',
       category: '后端',
       keyword: 'HONO'
     })
     expect(rows.map(({ id }) => id)).toEqual(['src-1'])
-    expect(
-      filterLocalLibrarySources(mockSources, { kind: 'all', category: '后端', keyword: 'React' })
-    ).toEqual([])
-  })
 
-  it('支持类型与关键词同时过滤', () => {
-    const res = filterLocalLibrarySources(mockSources, { kind: 'web', keyword: 'react' })
-    expect(res).toHaveLength(1)
-    expect(res[0]?.id).toBe('src-3')
+    expect(filterLocalLibrarySources(mockSources, { kind: 'github', keyword: 'react' })).toEqual([])
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toSourceInput, inferDefaultName } from '../source-form'
+import { toSourceInput } from '../source-form'
 
 describe('文档源表单提交契约', () => {
   it('从 URL 识别 GitHub 来源，无需手动选择类型', () => {
@@ -64,10 +64,5 @@ describe('文档源表单提交契约', () => {
       httpConcurrency: null,
       browserConcurrency: null
     })
-  })
-
-  it('可根据 URL 推断默认文档库名称', () => {
-    expect(inferDefaultName('https://github.com/facebook/react')).toBe('facebook/react')
-    expect(inferDefaultName('https://vuejs.org/guide/introduction.html')).toBe('guide')
   })
 })

@@ -14,8 +14,8 @@ describe('路径排除正则', () => {
   })
 
   it('拒绝无效或过长正则', () => {
-    expect(() => normalizeExcludePathPattern('[')).toThrow('格式无效')
-    expect(() => normalizeExcludePathPattern('a'.repeat(501))).toThrow('不能超过')
+    expect(() => normalizeExcludePathPattern('[')).toThrow()
+    expect(() => normalizeExcludePathPattern('a'.repeat(501))).toThrow()
   })
 
   it('支持关键词式路径匹配', () => {

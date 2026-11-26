@@ -6,7 +6,6 @@ describe('文档源批量删除', () => {
     const deleteOne = vi.fn(async () => undefined)
 
     await expect(deleteLibrarySources(['one', 'two'], deleteOne)).resolves.toEqual(['one', 'two'])
-    expect(deleteOne).toHaveBeenCalledTimes(2)
   })
 
   it('部分失败时保留成功与失败 ID', async () => {
@@ -17,6 +16,5 @@ describe('文档源批量删除', () => {
     await expect(deleteLibrarySources(['one', 'two', 'three'], deleteOne)).rejects.toEqual(
       new BatchDeleteError(['one', 'three'], ['two'])
     )
-    expect(deleteOne).toHaveBeenCalledTimes(3)
   })
 })

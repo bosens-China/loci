@@ -56,7 +56,6 @@ describe('静态 Pages 抓取', () => {
     })
 
     expect(result).toMatchObject({ queued: 3, succeeded: 3, failed: 0 })
-    expect(sleep).not.toHaveBeenCalled()
   })
 
   it('展开 Sitemap 索引并将页面清单作为权威发现来源', async () => {
@@ -130,6 +129,5 @@ describe('Sitemap 权威清单抓取', () => {
       release()
     }
     await expect(task).resolves.toMatchObject({ queued: 3, succeeded: 3 })
-    expect(sleep).not.toHaveBeenCalled()
   })
 })

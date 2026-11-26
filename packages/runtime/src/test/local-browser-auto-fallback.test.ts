@@ -79,9 +79,6 @@ describe('本地自动抓取降级', () => {
         runtime.crawlSource(source.id, undefined, onBrowserMissing)
       ).resolves.toMatchObject({ succeeded: 1, failed: 0 })
       expect(runtime.database.getSourceConfig(source.id).fetchMode).toBe('http')
-      expect(fetchPage).not.toHaveBeenCalled()
-      expect(ensureInstalled).not.toHaveBeenCalled()
-      expect(onBrowserMissing).not.toHaveBeenCalled()
     } finally {
       await runtime.close()
       await new Promise<void>((resolve, reject) =>

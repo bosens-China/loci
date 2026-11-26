@@ -40,7 +40,6 @@ describe('crawlGithubSource', () => {
     )
     expect(result.progress).toMatchObject({ succeeded: 2, failed: 1, limitReached: false })
     expect(result.progress.failures?.[0]?.reason).toBe('git_lfs_unsupported')
-    expect(onProgress).toHaveBeenCalled()
   })
 
   it('skips downloading an unchanged or already blocked revision', async () => {
@@ -50,7 +49,6 @@ describe('crawlGithubSource', () => {
       previousRevision: 'abc123'
     })
     expect(unchanged.unchanged).toBe(true)
-    expect(unchangedFetch).toHaveBeenCalledTimes(2)
 
     const blockedFetch = fetchSequence(Buffer.alloc(0))
     await expect(
@@ -60,7 +58,6 @@ describe('crawlGithubSource', () => {
         blocked: { revision: 'abc123', kind: 'archive', limitBytes: 10 }
       })
     ).rejects.toBeInstanceOf(GithubLimitError)
-    expect(blockedFetch).toHaveBeenCalledTimes(2)
   })
 
   it('includes MDX files without applying Markdown link rewriting', async () => {

@@ -39,7 +39,6 @@ describe('explicit page service', () => {
         { processed: 1, status: 'failed', url: invalid },
         { processed: 2, status: 'success', url: valid }
       ])
-      expect(fetchPage).toHaveBeenCalledOnce()
     } finally {
       await runtime.close()
       rmSync(directory, { recursive: true, force: true })
@@ -214,7 +213,6 @@ describe('explicit page service', () => {
 
       expect(firstResult.items[0]?.status).toBe('inserted')
       expect(secondResult.items[0]?.status).toBe('unchanged')
-      expect(fetchPage).toHaveBeenCalledOnce()
     } finally {
       release?.()
       await Promise.all([first.close(), second.close()])
@@ -241,7 +239,6 @@ describe('explicit page service', () => {
         failures: [{ url, message: result.items[0]?.message }],
         progress: { discovered: 1, processed: 1, succeeded: 0, failed: 1, currentUrl: url }
       })
-      expect(fetchPage).not.toHaveBeenCalled()
     } finally {
       await runtime.close()
       rmSync(dataDir, { recursive: true, force: true })

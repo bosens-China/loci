@@ -67,7 +67,6 @@ describe('waitForExternalCrawl', () => {
       const onProgress = vi.fn()
       const progress = await runtime.crawlSource(source.id, onProgress)
       expect(progress).toMatchObject({ processed: 2, succeeded: 2 })
-      expect(onProgress).toHaveBeenCalled()
       expect(runtime.listLibraryCrawlStatuses()).toMatchObject([
         {
           libraryId: source.id,

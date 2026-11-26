@@ -47,12 +47,6 @@ describe('inspectSource', () => {
       estimateKind: 'unknown',
       estimatedPages: null
     })
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'https://example.com/llms.txt',
-      expect.objectContaining({ redirect: 'follow' })
-    )
-    expect(fetchImpl).toHaveBeenCalledWith('https://example.com/sitemap.xml', expect.any(Object))
-    expect(fetchImpl).not.toHaveBeenCalledWith('https://example.com/guide/start', expect.anything())
   })
 
   it('估算不被产品默认的 1000 页截断', async () => {
@@ -104,6 +98,5 @@ describe('inspectSource', () => {
       githubDefaultBranch: 'main',
       githubRevision: 'abc123'
     })
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 })

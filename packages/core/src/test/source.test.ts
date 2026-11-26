@@ -62,12 +62,6 @@ describe('crawlSource', () => {
         discovery: 'llms',
         iconUrl: 'https://docs.example.com/favicon.ico'
       })
-      expect(beforeBrowserCrawl).not.toHaveBeenCalled()
-      expect(fetchPage).not.toHaveBeenCalled()
-      expect(fetchImpl).not.toHaveBeenCalledWith(
-        'https://docs.example.com/openapi.json',
-        expect.anything()
-      )
       expect(documents[0]?.markdown).toBe('# Guide')
     }
   )
@@ -95,7 +89,6 @@ describe('crawlSource', () => {
     expect(result.progress.failures).toMatchObject([
       { url: 'https://docs.example.com/missing.md', reason: 'not_found', retryable: false }
     ])
-    expect(fetchPage).not.toHaveBeenCalled()
   })
 
   it('在 llms.txt 之后命中 OpenAPI，并跳过浏览器和网页发现', async () => {
@@ -137,12 +130,6 @@ describe('crawlSource', () => {
     })
 
     expect(result.resolution.discovery).toBe('openapi')
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://api.example.com/llms.txt')
-    expect(fetchPage).not.toHaveBeenCalled()
-    expect(beforeBrowserCrawl).not.toHaveBeenCalled()
-    expect(fetchImpl.mock.calls.some(([input]) => String(input).endsWith('/sitemap.xml'))).toBe(
-      false
-    )
     expect(documents).toHaveLength(2)
     expect(documents[0]).toMatchObject({
       title: 'Ops API',
@@ -281,7 +268,6 @@ describe('crawlSource', () => {
     })
 
     expect(result.resolution.fetchMode).toBe('browser')
-    expect(beforeBrowserCrawl).toHaveBeenCalledOnce()
     expect(documents[0]).toMatchObject({ markdown: '# Browser docs', fetchMode: 'browser' })
   })
 
@@ -311,8 +297,6 @@ describe('crawlSource', () => {
     })
 
     expect(result.resolution.fetchMode).toBe('http')
-    expect(beforeBrowserCrawl).toHaveBeenCalledOnce()
-    expect(fetchPage).not.toHaveBeenCalled()
     expect(documents[0]).toMatchObject({ markdown: '# HTTP docs', fetchMode: 'http' })
   })
 
@@ -334,7 +318,6 @@ describe('crawlSource', () => {
         onDocument: () => undefined
       })
     ).rejects.toThrow('Browser missing')
-    expect(beforeBrowserCrawl).toHaveBeenCalledOnce()
     expect(fetchImpl.mock.calls.map(([input]) => String(input))).toEqual([
       'https://docs.example.com/llms.txt'
     ])

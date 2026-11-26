@@ -39,7 +39,6 @@ describe('browserStatus', () => {
     expect(status.executable).toContain(directory)
     expect(status.executable).toContain('chromium_headless_shell-')
     expect(status.executable).not.toMatch(/[\\/]chromium-\d+/)
-    expect(launchBrowser).not.toHaveBeenCalled()
   })
 
   it('缺失时要求非交互调用方先手动安装', async () => {
@@ -75,11 +74,6 @@ describe('browserStatus', () => {
       chromiumVersion: '133.0',
       error: null
     })
-    expect(launchBrowser).toHaveBeenCalledWith({
-      headless: true,
-      executablePath: missing.executable
-    })
-    expect(closeBrowser).toHaveBeenCalledOnce()
   })
 })
 

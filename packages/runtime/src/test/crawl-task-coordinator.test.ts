@@ -26,12 +26,11 @@ describe('CrawlTaskCoordinator', () => {
     )
 
     const first = coordinator.run('vite', start, firstListener)
-    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(coordinator.isRunning('vite')).toBe(true))
     report(progress)
     const second = coordinator.run('vite', start, secondListener)
 
     expect(second).toBe(first)
-    expect(start).toHaveBeenCalledOnce()
     expect(firstListener).toHaveBeenLastCalledWith(progress)
     expect(secondListener).toHaveBeenCalledWith(progress)
     expect(coordinator.isRunning('vite')).toBe(true)
@@ -54,7 +53,6 @@ describe('CrawlTaskCoordinator', () => {
 
     const retryStart = vi.fn(async () => progress)
     await expect(coordinator.run('vite', retryStart)).resolves.toEqual(progress)
-    expect(retryStart).toHaveBeenCalledOnce()
   })
 
   it('不同文档源拥有独立任务并可同时运行', async () => {

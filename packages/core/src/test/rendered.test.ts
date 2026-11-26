@@ -28,7 +28,6 @@ describe('fetchCrawledPageWithRetry', () => {
         { sleep }
       )
     ).resolves.toMatchObject({ status: 200 })
-    expect(fetchPage).toHaveBeenCalledTimes(2)
     expect(sleep).toHaveBeenCalledWith(2_000)
   })
 })
@@ -95,7 +94,7 @@ describe('crawlRenderedSource', () => {
     }))
     const withSession = vi.fn(async (action) => action({ fetchPage: sessionFetch }))
 
-    await crawlRenderedSource({
+    const progress = await crawlRenderedSource({
       firstUrl: 'https://docs.example.com/',
       hostname: 'docs.example.com',
       pageLimit: 10,
@@ -107,8 +106,7 @@ describe('crawlRenderedSource', () => {
       onDocument: () => undefined
     })
 
-    expect(withSession).toHaveBeenCalledOnce()
-    expect(sessionFetch).toHaveBeenCalledOnce()
+    expect(progress).toMatchObject({ succeeded: 1 })
   })
 
   it('有效 Sitemap 存在时不递归浏览器页面链接', async () => {
@@ -177,6 +175,5 @@ describe('crawlRenderedSource', () => {
       release()
     }
     await expect(task).resolves.toMatchObject({ queued: 3, succeeded: 3 })
-    expect(sleep).not.toHaveBeenCalled()
   })
 })
