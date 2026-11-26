@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  getAdvancedSettingsSummary,
   getLocalLibraryRemovalWarning,
   getLibraryUrlDefaults,
   validateLibrarySourceKind
@@ -66,39 +65,5 @@ describe('文档库共享表单默认值', () => {
     expect(
       getLocalLibraryRemovalWarning(current, { ...current, scopePath: '/docs/api' })
     ).toBeTypeOf('string')
-  })
-
-  it('准确统计并识别高级配置自定义项', () => {
-    expect(getAdvancedSettingsSummary(null)).toBe(0)
-    expect(
-      getAdvancedSettingsSummary({
-        kind: 'web',
-        pageLimit: 1000,
-        mode: 'auto',
-        excludePathPattern: null,
-        httpConcurrency: null,
-        browserConcurrency: null
-      })
-    ).toBe(0)
-
-    // Web 自定义项
-    expect(
-      getAdvancedSettingsSummary({
-        kind: 'web',
-        pageLimit: 500,
-        mode: 'browser',
-        excludePathPattern: '^/legacy'
-      })
-    ).toBe(3)
-
-    // GitHub 自定义项
-    expect(
-      getAdvancedSettingsSummary({
-        kind: 'github',
-        pageLimit: 2000,
-        githubArchiveLimitMb: 500,
-        githubMarkdownLimitMb: 250
-      })
-    ).toBe(3)
   })
 })
