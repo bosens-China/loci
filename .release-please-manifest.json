@@ -1,6 +1,6 @@
 {
-  "apps/cli": "2.0.0",
-  "packages/core": "2.0.0",
-  "packages/shared": "2.0.0",
-  "packages/runtime": "2.0.0"
+  "apps/cli": "3.0.0",
+  "packages/core": "3.0.0",
+  "packages/shared": "3.0.0",
+  "packages/runtime": "3.0.0"
 }
