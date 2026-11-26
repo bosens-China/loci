@@ -21,10 +21,10 @@ Pi 用户执行 `loci setup pi`，也可以在“Agent 接入”页选择 Pi。�
 1. 从项目依赖确定版本，运行 `loci list --json` 找到相应库。
 2. 用 `loci tree <lib> --query <kw...> --json` 筛选目录，或用 `loci search <queries...> --library <lib> --json` 查找命中段落。搜索可省略库以跨库查找，也可加 `--tree` 返回命中树。
 3. 用 `loci read <targets...> --library <lib> --json` 核对正文，引用结果中的 `url`。
-4. 缺库时先确认官方 URL 与所需范围，再运行 `loci fetch <url>`。已有库过时时运行 `loci update <lib>`。两条命令默认异步返回，需要前台等待时加 `--wait`。
+4. 缺库时核实官方文档 URL 后直接运行 `loci fetch <url>`（仅需已知页面时加 `--pages`）。已有库过时时运行 `loci update <lib>`。两条命令默认异步返回，需要前台等待时加 `--wait`。
 5. 轮询 `loci status <lib> --json` 至终态，检查 `error` 与 `failures` 中的具体原因，完成后再次定位并阅读。需要取消时用 `loci cancel <lib>`。省略库可查看有抓取记录的各库。
 6. 用户要求维护内容时，用 `loci doc sections <doc> --library <lib>` 确认小节后编辑，或在确认删除目标后执行 `loci delete <lib> --doc <targets...> --yes`。已授权的非交互覆盖、删除或可能裁剪正文的配置变更使用 `--yes`。
 
-轻量的版本亮点调研可直接查官方发布说明。证据充分即可回答；已有本地资料不足时，也可以查官方网页。安装软件、删除、刻意覆盖和可能裁剪已有文档的配置变更需用户授权，已获同一操作的授权可以沿用。
+非文档类需求（如报错排查、Issue、社区讨论、博客、选型对比或版本发布亮点）建议直接使用搜索工具或官方网页，不必强行通过 Loci。证据充分即可回答；已有本地资料不足时，也可以查官方网页。安装软件、删除、刻意覆盖和可能裁剪已有文档的配置变更需用户授权，已获同一操作的授权可以沿用。
 
 项目级安装见 [使用 use-loci Skill](/agent/skill)。单独写入规则和客户端文件位置见 [配置全局规则](/agent/global-rules)。

@@ -5,8 +5,9 @@ export const LOCI_CONTEXT7_COMPATIBILITY = '<!-- loci:context7 -->'
 const LOCI_INSTRUCTIONS_BODY = `# Technical documentation with the local Loci CLI
 
 Use local documentation for questions about a library's API, configuration, version, or migration.
-Identify the project's version before choosing sources. For release highlights, consult official
-release notes directly. Use the relevant domain source for general research.
+Identify the project's version before choosing sources. For non-documentation questions (error
+troubleshooting, issues/PRs, community discussions, blogs, comparisons, release highlights, or
+general web research), use web search or the relevant source directly instead of Loci.
 
 1. Run \`loci list --json\` to find a local library matching the technology and version.
    List categories and counts with \`loci category --json\`. Filter by exact labels with \`loci list --category <name> --version <ver> --json\`.
@@ -14,8 +15,8 @@ release notes directly. Use the relevant domain source for general research.
    Run \`loci search <queries...> --json\` across libraries, or \`loci search <queries...> --library <lib> --tree --json\` for a matching tree. Use identifiers and error messages verbatim.
 3. Read the matching document IDs or subtree paths with \`loci read <targets...> --library <lib> --json\`.
    Cite the source URLs from the text you read.
-4. When the library is missing, identify the official documentation URL and confirm the source and scope
-   with the user before running \`loci fetch <url>\`. Existing authorization for the same fetch is sufficient.
+4. When the library is missing, verify the official documentation URL and run \`loci fetch <url>\`
+   directly (use \`--pages\` when only specific known pages are needed).
    If the local documentation is stale, refresh it with \`loci update <lib>\`.
    Both commands accept \`--category <name>\` and \`--version <ver>\`. New categories are created automatically. New libraries default to 未分类 and latest. Existing libraries keep their labels unless explicitly changed. The same source can have independent libraries for different versions.
    Both commands return asynchronously by default. If another crawl with different targets is running, wait for it to finish before resubmitting. Add \`--wait\` to wait in the foreground.
