@@ -4,7 +4,6 @@ import type { CreateSourceInput, DocumentSource } from '@loci/shared'
 import { count, eq, inArray } from 'drizzle-orm'
 import type { LociDrizzleDatabase } from './drizzle-database.js'
 import { documentMoveOperations, documents, documentSources } from './drizzle-schema.js'
-import type { OperationLogDatabase } from './operation-log-database.js'
 import { withImmediateTransaction } from './sqlite.js'
 
 export interface MoveDocumentsInput {
@@ -27,8 +26,7 @@ export function moveDocumentsToNewSource(
   drizzle: LociDrizzleDatabase,
   input: MoveDocumentsInput,
   createSource: (source: CreateSourceInput) => DocumentSource,
-  readSource: (id: string) => DocumentSource,
-  logs: OperationLogDatabase
+  readSource: (id: string) => DocumentSource
 ): MoveDocumentsResult {
   const ids = [...new Set(input.documentIds)].sort()
   if (!ids.length) throw new Error('请选择至少一篇文档')
@@ -107,16 +105,6 @@ export function moveDocumentsToNewSource(
         createdAt: new Date().toISOString()
       })
       .run()
-    logs.recordOperationLog({
-      category: 'library',
-      action: 'documents.move',
-      level: 'info',
-      resourceType: 'library',
-      resourceId: target.id,
-      hostname: new URL(target.url).hostname,
-      message: `已移动 ${ids.length} 篇文档到 ${target.name}`,
-      details: { operationId, deletedSourceIds }
-    })
     return { operationId, target, moved: ids.length, deletedSourceIds, reused: false }
   })
 }

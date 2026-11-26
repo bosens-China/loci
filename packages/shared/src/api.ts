@@ -1,4 +1,4 @@
-import type { AgentGlobalRulesClient, McpClient } from './mcp-clients.js'
+import type { AgentGlobalRulesClient, AgentClient } from './agent-clients.js'
 
 export type FetchMode = 'auto' | 'http' | 'browser'
 
@@ -11,33 +11,8 @@ export interface AppSettings {
   maxRetries: number
   batchIntervalSeconds: number
   batchIntervalMaxSeconds: number
-  serverUrl: string
   githubArchiveLimitMb: number
   githubMarkdownLimitMb: number
-}
-
-export const RESOURCE_REVISION_KEYS = ['sources', 'documents', 'jobs', 'settings', 'logs'] as const
-
-export type ResourceRevisionKey = (typeof RESOURCE_REVISION_KEYS)[number]
-
-export type ResourceRevisions = Record<ResourceRevisionKey, number>
-
-export const SERVER_RESOURCE_REVISION_KEYS = [
-  'libraries',
-  'jobs',
-  'hostnamePolicies',
-  'crawlSettings',
-  'auditLogs'
-] as const
-
-export type ServerResourceRevisionKey = (typeof SERVER_RESOURCE_REVISION_KEYS)[number]
-
-/** Server 管理 UI 可观察的持久资源版本，仅用于失效本地查询缓存。 */
-export type ServerResourceRevisions = Record<ServerResourceRevisionKey, number>
-
-export interface AgentImportResult {
-  client: McpClient
-  message: string
 }
 
 export interface AgentGlobalRulesResult {
@@ -47,7 +22,7 @@ export interface AgentGlobalRulesResult {
   message: string
 }
 
-export type AgentIntegrationComponent = 'mcp' | 'skill' | 'rules'
+export type AgentIntegrationComponent = 'skill' | 'rules'
 export type AgentIntegrationComponentStatus =
   'missing' | 'current' | 'outdated' | 'conflict' | 'manual'
 export type AgentIntegrationOverallStatus = 'ready' | 'partial' | 'missing' | 'attention'
@@ -61,7 +36,7 @@ export interface AgentIntegrationComponentState {
 }
 
 export interface AgentIntegrationStatus {
-  client: McpClient
+  client: AgentClient
   label: string
   overall: AgentIntegrationOverallStatus
   components: AgentIntegrationComponentState[]
@@ -73,91 +48,6 @@ export interface AgentIntegrationActionResult {
   status: AgentIntegrationStatus
 }
 
-export interface CloudAdminLoginInput {
-  username: string
-  password: string
-}
-
-export interface CloudAdminSession {
-  serverUrl: string
-  username: string
-  expiresAt: string
-}
-
-export interface CloudLibraryInput {
-  name: string
-  url: string
-  scopePath: string
-  pageLimit: number
-  schedule: string | null
-}
-
-export interface CloudLibrary extends CloudLibraryInput {
-  id: string
-  hostname: string
-  pages: number
-  lastCrawledAt: string | null
-  lastError: string | null
-  revision: string | null
-  publishedAt: string | null
-}
-
-export interface CloudLibraryPublishResult {
-  library: CloudLibrary
-  revision: string
-  publishedAt: string
-  pages: number
-  contentSize: number
-  reused: boolean
-}
-
-export interface CloudCatalogItem {
-  id: string
-  name: string
-  url: string
-  revision: string
-  pages: number
-  contentSize: number
-  lastCrawledAt: string | null
-  publishedAt: string
-  localSourceId: string | null
-  localRevision: string | null
-  autoSync: boolean
-  updateAvailable: boolean
-}
-
-export interface CloudImportResult {
-  source: DocumentSource
-  updated: boolean
-  documents: number
-}
-
-export type CloudSyncJobStatus =
-  'queued' | 'running' | 'canceling' | 'canceled' | 'completed' | 'completed_with_errors' | 'failed'
-
-export interface CloudSyncJob {
-  id: string
-  libraryId: string
-  hostname: string
-  status: CloudSyncJobStatus
-  priority: number
-  paused: boolean
-  pauseRequested: boolean
-  stopRequested: boolean
-  partial: boolean
-  contentBytes: number
-  remainingCount: number
-  createdAt: string
-  updatedAt: string
-  finishedAt: string | null
-  progress: CrawlProgress | null
-  failures: CrawlFailure[]
-  error: string | null
-}
-
-export const PRODUCTION_SERVER_URL = 'https://loci.xiaowo.live'
-export const DEVELOPMENT_SERVER_URL = 'http://localhost:7001'
-
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   theme: 'auto',
   httpConcurrency: 9,
@@ -165,7 +55,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   maxRetries: 3,
   batchIntervalSeconds: 0,
   batchIntervalMaxSeconds: 0,
-  serverUrl: PRODUCTION_SERVER_URL,
   githubArchiveLimitMb: 200,
   githubMarkdownLimitMb: 100
 }
@@ -183,10 +72,45 @@ export type SaveHostnameCrawlPolicyInput = Omit<HostnameCrawlPolicy, 'updatedAt'
 
 export type SourceStatus = 'healthy' | 'syncing' | 'attention'
 export type SourceKind = 'web' | 'github'
-export type SourceDiscoveryMode = 'site' | 'agent_review'
 export type ResolvedSourceDiscovery = 'github' | 'llms' | 'openapi' | 'pages'
 
+export interface CategorySummary {
+  name: string
+  libraryCount: number
+  isDefault?: boolean
+  createdAt: string
+}
+
+export interface LibraryFilters {
+  query?: string
+  category?: string
+  version?: string
+}
+
+export type ClearDataScope = 'documents' | 'sources'
+
+export interface ClearDataCounts {
+  libraries: number
+  documents: number
+}
+
+export interface ClearDataSummary extends ClearDataCounts {
+  scope: ClearDataScope
+}
+
+export interface BackupImportSummary {
+  mode: 'merge' | 'replace'
+  importedLibraries: number
+  replacedLibraries: number
+  importedDocuments: number
+  categoriesCreated: number
+  sources: number
+  documents: number
+}
+
 export interface DocumentSource {
+  category: string
+  version: string
   id: string
   name: string
   url: string
@@ -197,30 +121,24 @@ export interface DocumentSource {
   pageLimit: number
   scopePath: string
   excludePathPattern?: string | null
+  /** 旧版导入的远端快照可在本机读取、导出及删除。 */
+  readOnly: boolean
+  updatedAt: string
   lastUpdated: string
-  schedule: string | null
   httpConcurrency: number | null
   browserConcurrency: number | null
   iconUrl: string | null
-  cloud: CloudSourceOrigin | null
   kind: SourceKind
   githubArchiveLimitMb: number | null
   githubMarkdownLimitMb: number | null
   githubDefaultBranch: string | null
   githubRevision: string | null
-  discoveryMode: SourceDiscoveryMode
   resolvedDiscovery: ResolvedSourceDiscovery | null
-  reviewGoal: string | null
-}
-
-export interface CloudSourceOrigin {
-  serverUrl: string
-  libraryId: string
-  revision: string
-  autoSync: boolean
 }
 
 export interface CreateSourceInput {
+  category?: string | null
+  version?: string | null
   name: string
   url: string
   kind?: SourceKind
@@ -228,13 +146,10 @@ export interface CreateSourceInput {
   pageLimit: number
   scopePath?: string
   excludePathPattern?: string | null
-  schedule: string | null
   httpConcurrency: number | null
   browserConcurrency: number | null
   githubArchiveLimitMb?: number | null
   githubMarkdownLimitMb?: number | null
-  discoveryMode?: SourceDiscoveryMode
-  reviewGoal?: string | null
 }
 
 export type UpdateSourceInput = CreateSourceInput
@@ -280,86 +195,38 @@ export interface CrawlRunState {
   paused: boolean
 }
 
-export type LocalJobKind = 'source_sync'
-export type LocalJobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
-export type LocalJobTrigger = 'manual' | 'background' | 'schedule' | 'ui' | 'mcp'
+export type ExplicitPageWriteStatus = 'inserted' | 'updated' | 'unchanged' | 'missing' | 'failed'
+export interface ExplicitPageWriteResult {
+  url: string
+  status: ExplicitPageWriteStatus
+  message?: string
+}
 
-/** 本地持久任务的浏览器安全传输契约。 */
-export interface LocalJob {
-  id: string
-  kind: LocalJobKind
-  resourceKey: string
-  sourceId: string
-  hostname: string
-  trigger: LocalJobTrigger
-  status: LocalJobStatus
-  priority: number
-  paused: boolean
-  pauseRequested: boolean
-  stopRequested: boolean
-  partial: boolean
-  contentBytes: number
-  remainingCount: number
-  scheduledAt: string
+export interface LibraryCrawlStatus {
+  libraryId: string
+  runId: string
+  kind: 'sync' | 'pages'
+  status: 'running' | 'completed' | 'completed_with_errors' | 'failed' | 'cancelled'
+  progress: {
+    discovered: number
+    processed: number
+    succeeded: number
+    failed: number
+    currentUrl: string | null
+  }
   startedAt: string | null
   finishedAt: string | null
-  leaseOwner: string | null
-  leaseExpiresAt: string | null
-  heartbeatAt: string | null
-  attemptCount: number
-  cancelRequested: boolean
   error: string | null
-  result: CrawlProgress | null
-  createdAt: string
-  updatedAt: string
+  failures?: Array<{ url: string; message: string }>
 }
 
-export interface EnqueueLocalJobResult {
-  job: LocalJob
-  reused: boolean
-}
-
-export type LocalJobEventStatus = Extract<CrawlNodeStatus, 'success' | 'failed'>
-
-/** 持久任务的逐页完成事件；sequence 可用于跨进程断点续读。 */
-export interface LocalJobEvent {
-  sequence: number
-  jobId: string
-  sourceId: string
-  runId: string | null
-  node: CrawlNode & { status: LocalJobEventStatus }
-  progress: CrawlProgress
-  createdAt: string
-}
-
-export type OperationLogLevel = 'info' | 'warning' | 'error'
-
-/** 跨 UI、CLI、MCP、worker 的结构化操作记录。 */
-export interface OperationLog {
-  id: number
-  category: 'task' | 'library' | 'settings' | 'cloud' | 'maintenance' | 'system'
-  action: string
-  level: OperationLogLevel
-  resourceType: string | null
-  resourceId: string | null
-  hostname: string | null
-  message: string
-  details: Record<string, unknown> | null
-  createdAt: string
-}
-
-export type CreateOperationLogInput = Pick<
-  OperationLog,
-  'category' | 'action' | 'level' | 'message'
-> &
-  Partial<Pick<OperationLog, 'resourceType' | 'resourceId' | 'hostname' | 'details'>> & {
-    createdAt?: string
-  }
-
-export interface CreateSourceResult {
-  source: DocumentSource
-  sync: EnqueueLocalJobResult | null
-  workerError: string | null
+export interface ForegroundCrawlState {
+  items?: ExplicitPageWriteResult[]
+  libraryId: string
+  kind: 'sync' | 'pages'
+  status: LibraryCrawlStatus['status']
+  progress: CrawlProgress | null
+  error: string | null
 }
 
 export interface DocumentSummary {
@@ -378,7 +245,7 @@ export interface DocumentRecord extends DocumentSummary {
   content: string
 }
 
-/** 本地与云端渐进浏览共用的轻量文件契约。 */
+/** 文档浏览的轻量文件元数据。 */
 export interface LibraryFileSummary {
   id: string
   libraryId: string
@@ -391,7 +258,7 @@ export interface LibraryFileSummary {
 
 export interface LibraryFileRecord extends LibraryFileSummary {
   content: string
-  /** 完整 Markdown 正文的 UTF-8 字节数；旧版远端 Server 可能不返回。 */
+  /** 完整 Markdown 正文的 UTF-8 字节数。 */
   contentBytes?: number
   offset: number
   nextOffset?: number

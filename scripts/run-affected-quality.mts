@@ -12,7 +12,6 @@ const packageByScope: Partial<Record<QualityScope, string>> = {
   shared: '@loci/shared',
   runtime: '@loci/runtime',
   cli: '@boses/cli',
-  server: '@loci/server',
   web: '@loci/web',
   docs: '@loci/docs'
 }
@@ -23,7 +22,6 @@ const directoryByScope: Partial<Record<QualityScope, string>> = {
   shared: 'packages/shared',
   runtime: 'packages/runtime',
   cli: 'apps/cli',
-  server: 'apps/server',
   web: 'apps/web',
   docs: 'apps/docs'
 }

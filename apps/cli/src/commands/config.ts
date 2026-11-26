@@ -1,146 +1,61 @@
+import { DEFAULT_APP_SETTINGS, type AppSettings } from '@loci/shared'
 import type { Command } from 'commander'
-import { APP_SETTINGS_LIMITS, normalizeServerUrl, type AppSettings } from '@loci/shared'
-import { runWithRuntime } from '../command-runtime.js'
+import { jsonOption, natural, output, withRuntime, type OutputOptions } from '../command-runtime.js'
 import { CliError } from '../errors.js'
-import { askConfirm, askInteger, askSelect, askText, note, printTable } from '../ui.js'
+import { confirmWrite } from '../ui.js'
 
-type ConfigKey = 'github-archive-limit-mb' | 'github-markdown-limit-mb' | 'server-url'
+const keys = Object.keys(DEFAULT_APP_SETTINGS) as (keyof AppSettings)[]
+const flag = (key: string) => key.replace(/[A-Z]/gu, (s) => '-' + s.toLowerCase())
+function override(value: string): number | null {
+  return value === 'inherit' ? null : natural(value)
+}
+interface DomainOptions extends OutputOptions {
+  httpConcurrency?: string
+  browserConcurrency?: string
+  batchIntervalMinSeconds?: string
+  batchIntervalMaxSeconds?: string
+}
 
 export function registerConfigCommands(program: Command): void {
-  const config = program.command('config').description('查看和修改 Loci 本地设置')
-
-  config
-    .command('list')
-    .description('显示 CLI 支持的共享设置')
-    .action(() =>
-      runWithRuntime('共享设置', async (runtime) => {
-        const settings = runtime.database.getSettings()
-        const serverUrlOverride = process.env.LOCI_SERVER_URL?.trim()
-        printTable(
-          ['设置', '当前值'],
-          [
-            ['github-archive-limit-mb', settings.githubArchiveLimitMb],
-            ['github-markdown-limit-mb', settings.githubMarkdownLimitMb],
-            [
-              'server-url',
-              serverUrlOverride
-                ? `${settings.serverUrl}（由 LOCI_SERVER_URL 覆盖）`
-                : settings.serverUrl
-            ]
-          ]
-        )
-        return '共享设置读取成功'
+  const config = jsonOption(program.command('config').description('查看和修改本地配置及域名策略'))
+  const list = async (opts: OutputOptions) =>
+    output(opts, await withRuntime((r) => r.database.getSettings()))
+  config.action(list)
+  jsonOption(config.command('list').description('显示本地设置')).action(list)
+  jsonOption(
+    config.command('set <key> <value>').description(`设置 ${keys.map(flag).join('、')}`)
+  ).action(async (name: string, value: string, opts: OutputOptions) => {
+    const key = keys.find((k) => k === name || flag(k) === name)
+    if (!key) throw new CliError(`未知设置：${name}`, 2)
+    const result = await withRuntime((r) =>
+      r.patchAppSettings({
+        [key]: key === 'theme' ? value : natural(value)
       })
     )
-
-  config
-    .command('set [key] [value]')
-    .description('修改一个共享设置')
-    .action((key: ConfigKey | undefined, value: string | undefined) =>
-      runWithRuntime('修改共享设置', async (runtime) => {
-        runtime.assertWritable()
-        const selected =
-          key ??
-          (await askSelect<ConfigKey>('请选择设置', configOptions(runtime.database.getSettings())))
-        if (!isConfigKey(selected)) throw new CliError(`不支持的设置：${selected}`, 2)
-        if (selected === 'server-url' && process.env.LOCI_SERVER_URL?.trim()) {
-          throw new CliError(
-            'LOCI_SERVER_URL 正在覆盖 Server 地址；请先取消该环境变量，再运行 config set server-url',
-            2
-          )
-        }
-        const settings = runtime.database.getSettings()
-        const current = configValue(settings, selected)
-        const input = value ?? (await askConfigValue(selected, current))
-        const normalized = normalizeConfigValue(selected, input)
-        if (normalized === current) return `${configLabel(selected)}保持为 ${current}`
-        if (value === undefined) {
-          note(`当前值：${current}\n新值：${normalized}`, configLabel(selected))
-          if (!(await askConfirm('确认保存这个设置吗？', true))) return '设置未修改'
-        }
-        applyConfigValue(settings, selected, normalized)
-        runtime.database.saveSettings(settings)
-        return `已将${configLabel(selected)}设置为 ${normalized}`
-      })
-    )
-}
-
-function configOptions(settings: AppSettings): Array<{
-  value: ConfigKey
-  label: string
-  hint: string
-}> {
-  return (['github-archive-limit-mb', 'github-markdown-limit-mb', 'server-url'] as const).map(
-    (value) => ({
-      value,
-      label: configLabel(value),
-      hint: `当前：${configValue(settings, value)}`
-    })
+    output(opts, { [name]: result[key] })
+  })
+  const domain = config.command('domain').description('管理域名抓取策略')
+  jsonOption(domain.command('list').description('显示域名策略')).action(
+    async (opts: OutputOptions) =>
+      output(opts, await withRuntime((r) => r.database.listHostnameCrawlPolicies()))
   )
-}
-
-async function askConfigValue(key: ConfigKey, current: string): Promise<string> {
-  if (key === 'server-url') {
-    return askText('Loci Server 地址', {
-      initialValue: current,
-      placeholder: 'https://loci.example.com',
-      validate: validateServerUrl
+  jsonOption(domain.command('set <hostname>').description('更新域名策略，inherit 表示继承全局设置'))
+    .option('--http-concurrency <n|inherit>', 'HTTP 并发')
+    .option('--browser-concurrency <n|inherit>', '浏览器并发')
+    .option('--batch-interval-min-seconds <n|inherit>', '最小批次间隔')
+    .option('--batch-interval-max-seconds <n|inherit>', '最大批次间隔')
+    .action(async (hostname: string, opts: DomainOptions) => {
+      const { json, ...values } = opts
+      const patch = Object.fromEntries(
+        Object.entries(values).map(([key, value]) => [key, override(value)])
+      )
+      const result = await withRuntime((r) => r.patchHostnamePolicy(hostname, patch))
+      output({ json }, result)
     })
-  }
-  const [minimum, maximum] = configRange()
-  return String(
-    await askInteger(configLabel(key), {
-      initialValue: Number(current),
-      minimum,
-      maximum
+  jsonOption(domain.command('remove <hostname>').description('删除域名策略'))
+    .option('--yes', '跳过确认')
+    .action(async (hostname: string, opts: OutputOptions & { yes?: boolean }) => {
+      await confirmWrite(`删除「${hostname}」的域名策略并恢复继承全局设置？`, opts.yes)
+      output(opts, { deleted: await withRuntime((r) => r.deleteHostnameCrawlPolicy(hostname)) })
     })
-  )
-}
-
-function configRange(): [number, number] {
-  return range(APP_SETTINGS_LIMITS.githubSizeMb)
-}
-
-function range(value: { readonly min: number; readonly max: number }): [number, number] {
-  return [value.min, value.max]
-}
-
-function configValue(settings: AppSettings, key: ConfigKey): string {
-  if (key === 'github-archive-limit-mb') return String(settings.githubArchiveLimitMb)
-  if (key === 'github-markdown-limit-mb') return String(settings.githubMarkdownLimitMb)
-  return settings.serverUrl
-}
-
-function applyConfigValue(settings: AppSettings, key: ConfigKey, value: string): void {
-  if (key === 'server-url') settings.serverUrl = value
-  if (key === 'github-archive-limit-mb') settings.githubArchiveLimitMb = Number(value)
-  if (key === 'github-markdown-limit-mb') settings.githubMarkdownLimitMb = Number(value)
-}
-
-function configLabel(key: ConfigKey): string {
-  return {
-    'github-archive-limit-mb': 'GitHub ZIP 默认上限（MB）',
-    'github-markdown-limit-mb': 'GitHub Markdown/MDX 默认上限（MB）',
-    'server-url': 'Loci Server 地址'
-  }[key]
-}
-
-function normalizeConfigValue(key: ConfigKey, value: string): string {
-  if (key === 'server-url') return normalizeServerUrl(value)
-  const number = Number(value)
-  if (!Number.isInteger(number)) throw new CliError(`${configLabel(key)}必须是整数`, 2)
-  return String(number)
-}
-
-function validateServerUrl(value: string | undefined): string | undefined {
-  try {
-    normalizeServerUrl(value ?? '')
-    return undefined
-  } catch (error) {
-    return error instanceof Error ? error.message : '请输入有效的 Server 地址'
-  }
-}
-
-function isConfigKey(value: string): value is ConfigKey {
-  return ['github-archive-limit-mb', 'github-markdown-limit-mb', 'server-url'].includes(value)
 }

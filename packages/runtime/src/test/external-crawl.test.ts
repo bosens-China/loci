@@ -5,21 +5,19 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
-import { createDatabase } from '../database.js'
-import { waitForExternalCrawl } from '../external-crawl.js'
+import { createLocalRuntime } from '../local-runtime.js'
 
 describe('waitForExternalCrawl', () => {
   it('reuses a crawl run produced by another process and follows its progress', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'loci-external-crawl-'))
     const filename = join(directory, 'loci.sqlite')
-    const database = createDatabase(filename)
-    const source = database.createSource({
+    const runtime = createLocalRuntime({ dataDir: directory, cacheDir: directory })
+    const source = runtime.createSource({
       name: 'Vite',
       url: 'https://vite.dev/guide',
       mode: 'http',
       pageLimit: 10,
       scopePath: '/',
-      schedule: null,
       httpConcurrency: null,
       browserConcurrency: null
     })
@@ -62,14 +60,26 @@ describe('waitForExternalCrawl', () => {
           throw new Error(`子进程在任务启动前退出（${String(code)}）：${stderr}`)
         })
       ])
+      expect(runtime.getLibraryCrawlStatus(source.id)).toMatchObject({
+        status: 'running',
+        progress: { discovered: 2, processed: 1 }
+      })
       const onProgress = vi.fn()
-      const progress = await waitForExternalCrawl(database, source.id, onProgress)
+      const progress = await runtime.crawlSource(source.id, onProgress)
       expect(progress).toMatchObject({ processed: 2, succeeded: 2 })
       expect(onProgress).toHaveBeenCalled()
+      expect(runtime.listLibraryCrawlStatuses()).toMatchObject([
+        {
+          libraryId: source.id,
+          status: 'completed',
+          progress: { processed: 2 },
+          finishedAt: expect.any(String)
+        }
+      ])
       if (child.exitCode === null) await once(child, 'exit')
     } finally {
       if (child.exitCode === null) child.kill()
-      database.close()
+      await runtime.close()
       rmSync(directory, { recursive: true, force: true })
     }
   }, 15_000)

@@ -1,73 +1,46 @@
-# Loci CLI 调用参考
+# 本地 CLI 调用参考
 
-在当前会话没有可调用的 `loci_*` MCP 工具，或当前 Agent/Host 无法同时使用 MCP 原生 Progress 与 Cancellation 来执行长时间抓取时，读取和使用本参考。这里的 CLI 主要是工具调用和持久任务载体，不需要为降级重新配置 MCP。
-
-## 准备 CLI
-
-1. 使用 `command -v loci` 检查全局命令是否存在；这一步只读，不需要用户确认。
-2. 命令存在时，可用 `loci --version` 验证它能运行，然后直接进入工具调用。
-3. 命令不存在时，向用户说明需要全局安装 npm 包 `@boses/cli`，并取得明确同意。
-4. 用户同意后执行 `npm install --global @boses/cli`。安装失败时报告实际错误，不要假装 Loci 可用。
-5. 用户拒绝安装、环境没有 npm/Node.js 或安装持续失败时，把 Loci 视为不可用，并按主文档的其他来源兜底条件继续。
-
-安装授权只允许安装 CLI，不扩展删除、覆盖或远端管理授权。任务所需的公开云端拉取、官方抓取和本地刷新默认允许，仍遵守主文档的按需范围与安全边界。不要自行改用 `npx` 绕过用户对安装的决定。
-
-## 调用工具
-
-统一格式：
+下列尖括号代表要替换的值。`<lib>` 取自库列表的 `id`；`<doc>` 和 `<section>` 分别取自命中的 `id` 和 `sectionId`。
 
 ```bash
-loci mcp call <tool> --input '<json>'
+loci list --json
+loci list --category 前端 --version v19 --json
+loci category --json
+loci tree <lib> --query router navigation --json
+loci search "router navigation" --library <lib> --json
+loci search router navigation --tree --json
+loci read <doc> --library <lib> --section <section> --json
+loci read /guide /reference/hooks --library <lib> --max-chars 4000 --json
 ```
 
-例如：
+`--library` 在 `search` 中可接受多个库；省略时跨库搜索。`read` 的位置参数都是读取目标。长正文返回 `nextOffset` 时，单独读取同一篇文档，传入 `--offset <n>`，并沿用原小节。
+
+`fetch` 和 `update` 接受 `--category <name>`、`--version <ver>`，新库默认使用 `未分类` 和 `latest`，已有库保留未显式指定的分类和版本。同一来源按版本建库，新分类名会自动创建。单独管理分类使用 `loci category add <name> --json` 与 `loci category delete <name> --yes --json`，默认分类 `未分类` 不可删除。删除其他分类后，关联库自动归入 `未分类`。
+
+`loci data export <file> --category <name...>` 按分类导出，`--library <lib...>` 按库导出，省略筛选项导出全部。`loci data import <file>` 默认按库 ID 或来源与版本匹配，先删后覆，保留其他库。旧版只读快照按原服务器地址与远端库 ID 匹配。`--replace-all` 清空本地库后恢复，完整备份还会恢复设置和域名策略。导入或覆盖同名备份时，已获授权的非交互调用传 `--yes`。
+
+`loci data clear-documents --yes --json` 清空正文和索引，保留已有库供后续抓取。`loci data clear-sources --yes --json` 清空所有库。两条命令保留分类和设置，只在用户明确授权对应范围后调用。
+
+删除小节、覆盖正文或改变可能裁剪旧内容的收录设置时，已授权的非交互脚本使用 `--yes`。
+
+缺库时先确认官方 URL 和所需范围。`--inspect` 只探测，`--pages` 只取给定页，`--to` 把给定页补入已有库。`fetch` 与 `update` 默认异步启动，每个库返回 `libraryId`、`runId` 与 `reused`。同库相同抓取目标可复用运行。收到其他抓取占用提示时，等当前运行结束后重新提交。轮询 `loci status <lib> --json` 至终态，检查 `error` 和 `failures` 中的逐页原因；需要中止时运行 `loci cancel <lib>`。需要前台进度与最终结果时加 `--wait`，按 `Ctrl+C` 取消。
 
 ```bash
-loci mcp call loci_list_libraries --input '{"query":"vue"}'
-loci mcp call loci_get_library_tree --input '{"library_id":"lib-id","depth":2}'
-loci mcp call loci_search_files --input '{"queries":["router"],"library_ids":["lib-id"]}'
-loci mcp call loci_read_files --input '{"file_ids":["file-id"]}'
+loci fetch <url> --inspect --json
+loci fetch <url> --pages --json
+loci fetch <url> --to <lib> --json
+loci update <lib> --json
+loci status <lib> --json
+loci status --json
+loci cancel <lib> --json
+loci update <lib> --wait --json
 ```
 
-长时间抓取设置等待完成，并让逐页进度以 JSONL 写入 stderr：
+按用户要求编辑时，用文档 ID 指定单篇，小节变更后重新列出小节。删除或刻意覆盖前先确认目标。
 
 ```bash
-loci mcp call loci_sync_libraries \
-  --input '{"library_ids":["lib-id"],"wait_for_completion":true}' \
-  --progress jsonl
+loci doc create <lib> --title "路由笔记" --path /notes/router --file ./router.md --json
+loci doc sections <doc> --library <lib> --json
+loci doc section <doc> --library <lib> --action update --section <section> --file ./section.md --yes --json
+loci delete <lib> --doc <doc>
 ```
-
-stdout 始终只包含最终 `structuredContent` JSON。`--progress text` 提供人类可读逐页输出，`--progress none` 关闭进度流。对该命令发送 `SIGINT`（终端中按 `Ctrl+C`）会取消本次调用：若任务由本次调用创建，底层抓取一并取消；若调用复用了已有 single-flight 任务，只停止当前跟随。
-
-无参数工具可以省略 `--input`，默认输入为 `{}`。成功时 stdout 是该工具的结构化 JSON；把它当成直接 MCP 调用的 `structuredContent` 继续处理。诊断写入 stderr，非零退出码表示调用没有成功；此时读取错误、修正参数或按主流程兜底，不要把错误文本当作文档证据。
-
-CLI 是短进程。调用普通模式的 `loci_add_library`、`loci_fetch_pages` 或 `loci_sync_libraries` 时优先传 `"wait_for_completion":true`，以便在同一次调用中取得最终状态；未传时 CLI 仍会在安全收口已启动任务后退出，再用 `loci_get_sync_status` 读取结果。Agent URL 审查使用持久批次，不设置等待参数；按主文档依次调用 `loci_start_url_review`、`loci_get_url_review`、`loci_submit_url_review` 或 `loci_cancel_url_review`。发现任何活动 URL 审查时，不论外层同步状态是 `syncing` 还是 `awaiting_review`，都先使用返回的 `run_id` 调用 `loci_get_url_review`：内层状态为 `discovering` 时用同一 `library_id` 重调 `loci_start_url_review`，为 `awaiting_review` 时提交当前批次。每个短进程都复用同一运行。
-
-需要在另一个终端或工具调用中管理持久抓取时，使用任务命令：
-
-```bash
-loci task list
-loci task status <task-id>
-loci task follow <task-id> --format jsonl
-loci task cancel <task-id>
-```
-
-`task follow` 按持久 sequence 逐页读取，不会因轮询较慢丢页；其中 `Ctrl+C` 只停止跟随并保留任务，真正停止抓取必须运行 `task cancel`。这些命令只用于进度和取消，不替代 Loci MCP 工具的文档检索流程。
-
-工具名与 MCP 完全一致：
-
-- 发现与读取：`loci_list_libraries`、`loci_get_library_tree`、`loci_search_files`、`loci_read_files`
-- 云端获取：`loci_list_cloud_libraries`、`loci_pull_cloud_library`
-- 抓取规划：`loci_inspect_library_source`（只读）、`loci_update_library`（修改配置，不自动同步）
-- 官网抓取与同步：`loci_add_library`、`loci_fetch_pages`、`loci_sync_libraries`、`loci_get_sync_status`、`loci_list_sync_failures`
-- Agent URL 审查：`loci_start_url_review`、`loci_get_url_review`、`loci_submit_url_review`、`loci_cancel_url_review`
-- 删除：`loci_delete_library`
-
-JSON 应作为单个 shell 参数传递，避免变量插值或命令替换。不要把 Token、密码、Cookie 或其他凭据写入参数、命令历史或错误输出。
-
-## 禁止的替代路径
-
-- 不运行 `loci agent connect` 或 `loci mcp stdio`；CLI 分支不需要创建 MCP 连接。
-- 不要求用户重启 Agent 或开启新会话。
-- 不使用普通 `loci source`、`loci cloud`、`loci document` 等命令拼装第二套文档检索工作流；`loci task` 仅用于允许的长任务进度和取消降级。
-- 当前会话后来出现 Loci MCP 工具时，不对已经完成的 CLI 操作重复执行；下一项操作可切回 MCP 通道。

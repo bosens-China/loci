@@ -17,13 +17,13 @@ describe('detectAffectedScopes', () => {
   it('Core 修改传播到全部依赖方', () => {
     const scopes = detectAffectedScopes(['packages/core/src/index.ts'])
 
-    expect(listQualityScopes(scopes)).toEqual(['core', 'shared', 'runtime', 'cli', 'server', 'web'])
+    expect(listQualityScopes(scopes)).toEqual(['core', 'shared', 'runtime', 'cli', 'web'])
   })
 
   it('Shared 修改传播到全部依赖方', () => {
     const scopes = detectAffectedScopes(['packages/shared/src/index.ts'])
 
-    expect(listQualityScopes(scopes)).toEqual(['core', 'shared', 'runtime', 'cli', 'server', 'web'])
+    expect(listQualityScopes(scopes)).toEqual(['core', 'shared', 'runtime', 'cli', 'web'])
   })
 
   it('内置 Skill 修改触发 CLI 检查和构建', () => {
@@ -33,12 +33,6 @@ describe('detectAffectedScopes', () => {
     ])
 
     expect(listQualityScopes(scopes)).toEqual(['cli'])
-  })
-
-  it('Server 与部署配置只影响 Server', () => {
-    const scopes = detectAffectedScopes(['apps/server/src/index.ts', 'compose.yaml'])
-
-    expect(listQualityScopes(scopes)).toEqual(['server'])
   })
 
   it('根配置和锁文件执行全量检查', () => {
@@ -51,7 +45,6 @@ describe('detectAffectedScopes', () => {
       'shared',
       'runtime',
       'cli',
-      'server',
       'web',
       'docs'
     ])

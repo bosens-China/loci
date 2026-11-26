@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createBackupArchive } from '../database-backup-archive.js'
 import { createDatabase } from '../database.js'
 
 describe('database backup', () => {
@@ -8,20 +9,31 @@ describe('database backup', () => {
     try {
       sourceDatabase.createSource({
         name: 'ZIP Docs',
+        category: '新分类',
+        version: 'v1.2',
         url: 'https://zip.example.com/docs',
         mode: 'http',
         pageLimit: 10,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
+      sourceDatabase.deleteCategory('前端')
+      sourceDatabase.createCategory('空分类')
       const archive = await sourceDatabase.exportBackupArchive()
       expect(archive.subarray(0, 2).toString()).toBe('PK')
-      expect(await targetDatabase.importBackupArchive(archive)).toEqual({
-        sources: 1,
-        documents: 0
+      expect(await targetDatabase.importBackupArchive(archive, { replaceAll: true })).toMatchObject(
+        {
+          mode: 'replace',
+          sources: 1,
+          documents: 0
+        }
+      )
+      expect(targetDatabase.listSources()[0]).toMatchObject({
+        name: 'ZIP Docs',
+        category: '新分类',
+        version: 'v1.2'
       })
-      expect(targetDatabase.listSources()[0]?.name).toBe('ZIP Docs')
+      expect(targetDatabase.listCategories()).toEqual(sourceDatabase.listCategories())
 
       const corrupted = archive.subarray(0, archive.length - 20)
       await expect(targetDatabase.importBackupArchive(corrupted)).rejects.toThrow()
@@ -31,7 +43,7 @@ describe('database backup', () => {
     }
   })
 
-  it('validates and restores all searchable data', () => {
+  it('validates and restores all searchable data', async () => {
     const sourceDatabase = createDatabase(':memory:')
     const targetDatabase = createDatabase(':memory:')
     try {
@@ -42,11 +54,8 @@ describe('database backup', () => {
         pageLimit: 500,
         scopePath: '/learn',
         excludePathPattern: '^/learn/legacy(?:/|$)',
-        schedule: null,
         httpConcurrency: 4,
-        browserConcurrency: 2,
-        discoveryMode: 'agent_review',
-        reviewGoal: '只收录 Learn API'
+        browserConcurrency: 2
       })
       sourceDatabase.saveDocument({
         sourceId: source.id,
@@ -65,7 +74,6 @@ describe('database backup', () => {
         maxRetries: 4,
         batchIntervalSeconds: 100,
         batchIntervalMaxSeconds: 300,
-        serverUrl: 'https://docs.example.com',
         githubArchiveLimitMb: 200,
         githubMarkdownLimitMb: 100
       })
@@ -76,7 +84,7 @@ describe('database backup', () => {
         batchIntervalMinSeconds: 100,
         batchIntervalMaxSeconds: 300
       })
-      const runId = sourceDatabase.startCrawlRun(source.id)
+      const runId = sourceDatabase.startCrawlRun(source.id, 'pages')
       sourceDatabase.finishCrawlRun(
         runId,
         'completed',
@@ -103,13 +111,25 @@ describe('database backup', () => {
         url: 'https://example.com',
         mode: 'auto',
         pageLimit: 10,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
 
       const backup = sourceDatabase.exportBackup()
-      Object.assign(backup.data.settings, { mcp_port: 41000 })
+      delete backup.data.categories
+      delete backup.data.sources[0]!.category
+      delete backup.data.sources[0]!.version
+      delete backup.data.documents[0]!.manual
+      Object.assign(backup.data.settings!, {
+        mcp_port: 41000,
+        server_url: 'https://legacy.example'
+      })
+      Object.assign(backup.data.sources[0]!, {
+        discovery_mode: 'agent_review',
+        review_goal: '旧审查目标',
+        schedule: '0 1 * * *'
+      })
+      Object.assign(backup.data, { operationLogs: [] })
       const invalid = structuredClone(backup)
       invalid.data.documents[0]!.source_id = 'missing-source'
       expect(() => targetDatabase.importBackup(invalid)).toThrow()
@@ -117,22 +137,29 @@ describe('database backup', () => {
       invalidRegex.data.sources[0]!.exclude_path_pattern = '['
       expect(() => targetDatabase.importBackup(invalidRegex)).toThrow()
       const invalidInterval = structuredClone(backup)
-      invalidInterval.data.settings.batch_interval_seconds = 300
-      invalidInterval.data.settings.batch_interval_max_seconds = 100
+      invalidInterval.data.settings!.batch_interval_seconds = 300
+      invalidInterval.data.settings!.batch_interval_max_seconds = 100
       expect(() => targetDatabase.importBackup(invalidInterval)).toThrow()
       expect(targetDatabase.listSources()[0]?.name).toBe('Existing')
 
-      expect(targetDatabase.importBackup(backup)).toEqual({ sources: 1, documents: 1 })
+      targetDatabase.deleteCategory('前端')
+      expect(
+        await targetDatabase.importBackupArchive(await createBackupArchive(backup, 20), {
+          replaceAll: true
+        })
+      ).toMatchObject({ mode: 'replace', sources: 1, documents: 1 })
+      expect(targetDatabase.listSources()).toHaveLength(1)
+      expect(targetDatabase.listCategories().map((row) => row.name)).toContain('前端')
       expect(targetDatabase.listSources()[0]).toMatchObject({
         name: 'React',
         pages: 1,
+        category: '未分类',
+        version: 'latest',
         httpConcurrency: 4,
         browserConcurrency: 2,
         scopePath: '/learn',
         excludePathPattern: '^/learn/legacy(?:/|$)',
-        discoveryMode: 'agent_review',
-        resolvedDiscovery: 'pages',
-        reviewGoal: '只收录 Learn API'
+        resolvedDiscovery: 'pages'
       })
       expect(targetDatabase.searchDocuments('Components')[0]?.title).toBe('Learn React')
       expect(targetDatabase.getSettings()).toMatchObject({
@@ -148,6 +175,7 @@ describe('database backup', () => {
           batchIntervalMaxSeconds: 300
         }
       ])
+      expect(targetDatabase.getCrawlRun(runId)).toEqual(sourceDatabase.getCrawlRun(runId))
       expect(targetDatabase.listCrawlFailures(runId)).toMatchObject([
         { runId, reason: 'http_error', statusCode: 503, retryable: true }
       ])
@@ -166,7 +194,6 @@ describe('database backup', () => {
         url: 'https://example.com',
         mode: 'http',
         pageLimit: 10,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
@@ -181,10 +208,9 @@ describe('database backup', () => {
       })
       targetDatabase.createSource({
         name: 'Existing',
-        url: 'https://existing.example.com',
+        url: source.url,
         mode: 'auto',
         pageLimit: 10,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })

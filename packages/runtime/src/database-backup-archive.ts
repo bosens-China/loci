@@ -12,13 +12,13 @@ import { parseLociBackup, type LociBackup } from './database-backup-schema.js'
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 const MAX_ENTRY_BYTES = 256 * 1024 * 1024
 const DATA_FILES = [
+  ['categories.json', 'categories'],
   ['sources.json', 'sources'],
   ['documents.json', 'documents'],
   ['explicit-page-targets.json', 'explicitPageTargets'],
   ['crawl-runs.json', 'crawlRuns'],
   ['crawl-failures.json', 'crawlFailures'],
   ['hostname-policies.json', 'hostnameCrawlPolicies'],
-  ['operation-logs.json', 'operationLogs'],
   ['settings.json', 'settings']
 ] as const
 
@@ -27,6 +27,7 @@ const indexSchema = z.object({
   version: z.literal(2),
   appVersion: z.string(),
   schemaVersion: z.number().int().positive(),
+  scope: z.enum(['all', 'filtered']).default('all'),
   exportedAt: z.string().datetime(),
   files: z.array(
     z.object({
@@ -49,7 +50,11 @@ export async function createBackupArchive(
   backup: LociBackup,
   schemaVersion: number
 ): Promise<Buffer> {
-  const entries = DATA_FILES.map(([path, key]) => {
+  const entries = DATA_FILES.filter(([, key]) => {
+    if (backup.scope === 'filtered' && (key === 'settings' || key === 'hostnameCrawlPolicies'))
+      return false
+    return key !== 'categories' || schemaVersion >= 21 || backup.data.categories !== undefined
+  }).map(([path, key]) => {
     const value = backup.data[key] ?? []
     const buffer = Buffer.from(JSON.stringify(value), 'utf8')
     return {
@@ -66,6 +71,7 @@ export async function createBackupArchive(
       version: 2,
       appVersion: '1.2.1',
       schemaVersion,
+      scope: backup.scope,
       exportedAt: backup.exportedAt,
       files: entries.map(({ path, records, bytes, sha256 }) => ({
         path,
@@ -124,6 +130,12 @@ export async function parseBackupArchive(buffer: Buffer): Promise<BackupArchiveP
   )
   const listed = new Set(index.files.map((item) => item.path))
   for (const [path] of DATA_FILES) {
+    if (
+      index.scope === 'filtered' &&
+      (path === 'settings.json' || path === 'hostname-policies.json')
+    )
+      continue
+    if (path === 'categories.json' && index.schemaVersion < 21) continue
     if (!listed.has(path)) throw new Error(`备份索引缺少数据文件：${path}`)
   }
   if (files.size !== index.files.length + 1) throw new Error('备份归档包含索引外文件')
@@ -135,6 +147,8 @@ export async function parseBackupArchive(buffer: Buffer): Promise<BackupArchiveP
       throw new Error(`备份文件校验失败：${item.path}`)
     }
     const key = DATA_FILES.find(([path]) => path === item.path)?.[1]
+    // 老版本 ZIP 包含操作日志，仍验证其摘要并跳过已下线的数据域。
+    if (item.path === 'operation-logs.json') continue
     if (!key) throw new Error(`备份索引包含未知数据文件：${item.path}`)
     const value = readArchiveJson(content, '备份归档包含无效 JSON')
     const records = Array.isArray(value) ? value.length : 1
@@ -144,6 +158,7 @@ export async function parseBackupArchive(buffer: Buffer): Promise<BackupArchiveP
   const backup = parseLociBackup({
     format: 'loci-backup',
     version: 1,
+    scope: index.scope,
     exportedAt: index.exportedAt,
     data
   })

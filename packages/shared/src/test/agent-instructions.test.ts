@@ -10,21 +10,29 @@ import {
 
 describe('Loci Agent 全局规则区块', () => {
   it.each([LOCI_AGENT_INSTRUCTIONS, LOCI_CONTEXT7_AGENT_INSTRUCTIONS])(
-    '允许按需获取并保留删除、覆盖和远端操作的独立授权边界',
+    '通过本地 CLI 查阅文档，补抓前确认来源和范围',
     (instructions) => {
       // 注入规则直接约束 Agent 的写操作权限，作为执行性安全契约验证。
-      expect(instructions).toContain(
-        'are allowed by default for the current task, without separate confirmation'
+      expect(instructions).toMatch(
+        /confirm the source and scope\s+with the user before running `loci fetch <url>`/u
       )
-      expect(instructions).toContain('Respect\nexplicit user restrictions')
-      expect(instructions).toContain(
-        'Deletion, deliberate overwrites, existing source-configuration changes, cross-library moves, and\nremote management or publishing require explicit user authorization'
-      )
-      expect(instructions).toContain(
-        'obtain explicit authorization for\nthat deletion before submitting those exclusions'
-      )
-      expect(instructions).toContain('immediately deletes nonmatching stored documents')
-      expect(instructions).toContain('approve_remaining: true')
+      for (const command of [
+        'list --json',
+        'tree <lib> --json',
+        'tree <lib> --query <kw...> --json',
+        'search <queries...> --library <lib> --tree --json',
+        'read <targets...> --library <lib> --json',
+        'update <lib>',
+        'status <lib> --json',
+        'cancel <lib>',
+        'doc sections <doc> --library <lib> --json',
+        'delete <lib> --doc <targets...>'
+      ])
+        expect(instructions).toContain(`loci ${command}`)
+      expect(instructions).not.toMatch(/\bMCP\b|\bloci_\w+|agent_review|cloud librar/iu)
+      expect(instructions).toContain('`--wait`')
+      expect(instructions).toContain('`failures`')
+      expect(instructions).toContain('require explicit user authorization')
     }
   )
 

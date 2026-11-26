@@ -11,9 +11,8 @@ describe('Drizzle 数据库访问层', () => {
     const sqlite = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true })
     try {
       sqlite.exec(LOCI_DATABASE_SCHEMA)
-      initializeSettings(sqlite)
-
       const drizzleDatabase = createDrizzleDatabase(sqlite)
+      initializeSettings(drizzleDatabase)
       const settings = createSettingsDatabase(drizzleDatabase)
       const preferences = createInteractionPreferencesDatabase(drizzleDatabase)
       const skills = createSkillInstallationDatabase(drizzleDatabase)

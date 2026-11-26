@@ -1,101 +1,138 @@
 import { useState } from 'react'
-import { SyncOutlined } from '@ant-design/icons'
+import {
+  CompassOutlined,
+  DownOutlined,
+  GithubOutlined,
+  GlobalOutlined,
+  RightOutlined
+} from '@ant-design/icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { App, Badge, Button, Form, Modal, Popconfirm, Tabs } from 'antd'
 import {
-  DOCUMENT_SOURCE_DEFAULTS,
+  Alert,
+  App,
+  AutoComplete,
+  Button,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Radio,
+  Select,
+  Tag
+} from 'antd'
+import {
   parseGithubRepositoryUrl,
-  type CreateSourceResult,
-  type DocumentSource
+  type CategorySummary,
+  type CreateSourceInput,
+  type DocumentSource,
+  type LibrarySummary,
+  type SourceInspection
 } from '@loci/shared'
-import { enqueueSourceSync } from '@/api/jobs'
-import { createSource, deleteSource, updateSource } from '@/api/sources'
-import { LibraryAdvancedFields } from '@/components/library/LibraryAdvancedFields'
-import { LibraryBasicFields } from '@/components/library/LibraryCoreFields'
 import {
-  getAdvancedSettingsSummary,
-  getLocalLibraryRemovalWarning
-} from '@/components/library/library-form'
-import { toSourceInput, type SourceFormValue } from './source-form'
+  createLibrary,
+  fetchLibraryPages,
+  inspectSource,
+  syncLibrary,
+  updateLibrary
+} from '@/api/libraries'
+import { getLocalLibraryRemovalWarning } from '@/components/library/library-form'
+import { inferDefaultName, toSourceInput, type SourceFormValue } from './source-form'
 
 interface SourceFormModalProps {
-  editing: DocumentSource | 'new' | null
+  editing: LibrarySummary | DocumentSource | 'new' | null
+  categories: CategorySummary[]
   onClose: () => void
   onSaved: () => void
 }
 
-const ADVANCED_FIELD_NAMES = [
-  'pageLimit',
-  'schedule',
-  'mode',
-  'excludePathPattern',
-  'githubArchiveLimitMb',
-  'githubMarkdownLimitMb'
-]
-
+/** 新增与编辑文档库弹窗：支持输入 URL 无感直抓、预先探测规模、展开高级设置及精确页面抓取。 */
 export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element {
   const { message, modal } = App.useApp()
   const client = useQueryClient()
-  const [form] = Form.useForm<SourceFormValue>()
-  const [activeTab, setActiveTab] = useState<string>('basic')
+  const [form] = Form.useForm<SourceFormValue & { explicitUrlsText?: string }>()
+  const [inspection, setInspection] = useState<SourceInspection | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [crawlMode, setCrawlMode] = useState<'all' | 'explicit'>('all')
+
   const url = Form.useWatch('url', form) ?? ''
-  const kind = parseGithubRepositoryUrl(url) ? 'github' : 'web'
-  const formValues = Form.useWatch([], form)
+  const current = typeof props.editing === 'object' ? props.editing : null
+  const isEditing = current !== null
+  const isGithub = Boolean(parseGithubRepositoryUrl(url))
 
-  const isEditing = props.editing !== null && props.editing !== 'new'
-  const customSettingsCount = getAdvancedSettingsSummary(
-    formValues ?? (isEditing ? props.editing : null)
-  )
-
-  const refresh = (): void => {
-    void client.invalidateQueries({ queryKey: ['sources'] })
-    void client.invalidateQueries({ queryKey: ['jobs'] })
-  }
-
-  const save = useMutation({
-    mutationFn: async (value: SourceFormValue) => {
-      const input = toSourceInput(value)
-      if (props.editing === 'new') return createSource(input)
-      const source = await updateSource(props.editing!.id, input)
-      return { source, sync: null, workerError: null } satisfies CreateSourceResult
+  // 探测来源规模
+  const inspect = useMutation({
+    mutationFn: inspectSource,
+    onSuccess: (data: SourceInspection) => {
+      setInspection(data)
+      const pageText =
+        data.estimatedPages !== null ? `约 ${data.estimatedPages} 页` : `${data.discoveredPages} 页`
+      void message.success(`探测完成：预估 ${pageText}（发现策略: ${data.discovery}）`)
     },
-    onSuccess: ({ sync, workerError }) => {
-      props.onClose()
-      refresh()
-      props.onSaved()
-      if (workerError) {
-        void message.warning(`文档来源已保存，首次同步已排队，但后台启动失败：${workerError}`)
-        return
+    onError: (error: Error) => void message.error(`探测失败: ${error.message}`)
+  })
+
+  // 保存与抓取操作
+  const save = useMutation({
+    mutationFn: async (values: SourceFormValue & { explicitUrlsText?: string }) => {
+      const input = toSourceInput(values)
+      if (current) return updateLibrary(current.id, input)
+
+      // 新增库
+      const created = await createLibrary(input as CreateSourceInput)
+
+      // 如果提供了精确页面列表
+      if (crawlMode === 'explicit' && values.explicitUrlsText?.trim()) {
+        const urls = values.explicitUrlsText
+          .split('\n')
+          .map((u) => u.trim())
+          .filter(Boolean)
+        if (urls.length > 0) {
+          await fetchLibraryPages(created.id, urls)
+          return created
+        }
       }
-      void message.success(
-        sync
-          ? sync.reused
-            ? '文档来源已保存；已复用正在进行的首次同步'
-            : '文档来源已保存；首次同步已在后台开始'
-          : '文档来源已保存'
-      )
+
+      // 默认全量抓取
+      await syncLibrary(created.id)
+      return created
+    },
+    onSuccess: () => {
+      props.onClose()
+      void client.invalidateQueries({ queryKey: ['categories'] })
+      void client.invalidateQueries({ queryKey: ['libraries'] })
+      void client.invalidateQueries({ queryKey: ['library-crawl-statuses'] })
+      props.onSaved()
+      void message.success(isEditing ? '文档库配置已更新' : '已创建文档库并开始抓取')
     },
     onError: (error: Error) => void message.error(error.message)
   })
 
-  const submit = async (): Promise<void> => {
-    let value: SourceFormValue
+  const handleInspect = async (): Promise<void> => {
     try {
-      value = await form.validateFields()
-    } catch (err: unknown) {
-      const errorInfo = err as { errorFields?: Array<{ name: (string | number)[] }> }
-      if (errorInfo.errorFields?.length) {
-        const hasAdvancedError = errorInfo.errorFields.some((f) =>
-          ADVANCED_FIELD_NAMES.includes(String(f.name[0]))
-        )
-        setActiveTab(hasAdvancedError ? 'advanced' : 'basic')
-      }
+      const valid = await form.validateFields(['url'])
+      const currentValues = form.getFieldsValue()
+      inspect.mutate({
+        url: valid.url.trim(),
+        scopePath: currentValues.scopePath?.trim() || undefined,
+        excludePathPattern: currentValues.excludePathPattern?.trim() || null
+      })
+    } catch {
+      void message.warning('请先输入有效的起始 URL')
+    }
+  }
+
+  const handleSubmit = async (): Promise<void> => {
+    let values: SourceFormValue & { explicitUrlsText?: string }
+    try {
+      await form.validateFields()
+      // 保留折叠面板内的旧配置和已经输入的值，单独修改标签不会改变抓取范围。
+      values = form.getFieldsValue(true)
+    } catch {
       return
     }
 
-    const current = props.editing
-    if (current !== 'new' && current) {
-      const input = toSourceInput(value)
+    if (current) {
+      const input = toSourceInput(values)
       const warning = getLocalLibraryRemovalWarning(current, {
         kind: input.kind ?? current.kind,
         url: input.url,
@@ -104,189 +141,207 @@ export function SourceFormModal(props: SourceFormModalProps): React.JSX.Element 
       })
       if (warning) {
         modal.confirm({
-          title: '保存并立即删除不匹配的文档？',
+          title: '保存并立即清理范围外的旧文档？',
           content: warning,
-          okText: '删除并保存',
+          okText: '确认更新',
           okButtonProps: { danger: true },
           cancelText: '取消',
-          onOk: () => save.mutateAsync(value)
+          onOk: () => save.mutateAsync(values)
         })
         return
       }
     }
-    save.mutate(value)
+
+    save.mutate(values)
+  }
+
+  // 弹窗打开初始化默认值
+  const initialValues: Partial<SourceFormValue> = current ?? {
+    mode: 'auto',
+    pageLimit: 1000,
+    scopePath: '/'
   }
 
   return (
     <Modal
-      title={props.editing === 'new' ? '添加文档库' : '编辑文档库'}
       open={props.editing !== null}
+      title={current ? `编辑文档库：${current.name}` : '添加并抓取文档库'}
       width={600}
-      centered
-      classNames={{ body: 'max-h-[calc(100dvh-180px)] overflow-y-auto pr-1' }}
-      okText={props.editing === 'new' ? '添加并同步' : '保存修改'}
+      okText={isEditing ? '保存修改' : '立即抓取'}
       cancelText="取消"
       confirmLoading={save.isPending}
       onCancel={props.onClose}
-      onOk={() => void submit()}
+      onOk={handleSubmit}
       destroyOnHidden
-      afterOpenChange={(open) => {
-        if (!open) return
-        setActiveTab('basic')
-        form.setFieldsValue(
-          props.editing === 'new' || !props.editing ? createEmptyForm() : fromSource(props.editing)
-        )
-      }}
     >
-      <Form form={form} layout="vertical" className="pt-2" requiredMark="optional">
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={[
-            {
-              key: 'basic',
-              label: '基础设置',
-              children: (
-                <div className="pt-1">
-                  <LibraryBasicFields
-                    autoFocusUrl
-                    suggestName={props.editing === 'new'}
-                    kind={kind}
-                  />
-                </div>
-              )
-            },
-            {
-              key: 'advanced',
-              forceRender: true,
-              label: (
-                <span className="flex items-center gap-1.5">
-                  高级设置
-                  {customSettingsCount > 0 && (
-                    <Badge
-                      count={customSettingsCount}
-                      size="small"
-                      color="var(--ant-color-primary)"
-                    />
-                  )}
-                </span>
-              ),
-              children: (
-                <div className="pt-1">
-                  <LibraryAdvancedFields kind={kind} />
-                </div>
-              )
-            }
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={initialValues}
+        onValuesChange={(changed) => {
+          if (changed.url && !isEditing && !form.isFieldTouched('name')) {
+            form.setFieldValue('name', inferDefaultName(changed.url))
+          }
+        }}
+        className="pt-3"
+      >
+        <Form.Item
+          name="url"
+          label={
+            <div className="flex items-center justify-between w-full">
+              <span>{isGithub ? 'GitHub 仓库地址' : '文档站点 URL'}</span>
+              {!isEditing && (
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<CompassOutlined />}
+                  loading={inspect.isPending}
+                  onClick={handleInspect}
+                  className="p-0! h-auto text-xs"
+                >
+                  探测规模
+                </Button>
+              )}
+            </div>
+          }
+          rules={[
+            { required: true, message: '请输入目标 URL' },
+            { type: 'url', message: '请输入合法的 HTTP 或 HTTPS 地址' }
           ]}
-        />
+          extra={
+            isGithub
+              ? '支持任意公开 GitHub 仓库，自动同步 Markdown 文档。'
+              : '输入文档站点首页或子目录，自动识别 llms.txt、OpenAPI 或 HTML。'
+          }
+        >
+          <Input
+            prefix={isGithub ? <GithubOutlined /> : <GlobalOutlined />}
+            placeholder={isGithub ? 'https://github.com/vuejs/core' : 'https://react.dev'}
+            disabled={isEditing}
+          />
+        </Form.Item>
+
+        {inspection && (
+          <Alert
+            type="info"
+            showIcon
+            className="mb-4 text-xs"
+            message={`探测策略: ${inspection.discovery} · 预估页面数: ${inspection.estimatedPages !== null ? `~${inspection.estimatedPages}` : inspection.discoveredPages}`}
+            description={
+              inspection.pathGroups?.length ? (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {inspection.pathGroups.slice(0, 4).map((g) => (
+                    <Tag key={g.path} className="text-[10px]">
+                      {g.path} ({g.pages}页)
+                    </Tag>
+                  ))}
+                </div>
+              ) : undefined
+            }
+          />
+        )}
+
+        <Form.Item
+          name="name"
+          label="文档库名称"
+          rules={[{ required: true, message: '请输入文档库名称' }]}
+        >
+          <Input placeholder="例如：React 官方文档" />
+        </Form.Item>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Form.Item name="category" label="分类">
+            <AutoComplete
+              allowClear
+              placeholder="默认未分类，可输入新分类"
+              options={props.categories.map(({ name }) => ({ value: name }))}
+            />
+          </Form.Item>
+          <Form.Item name="version" label="版本">
+            <Input allowClear placeholder="默认 latest，例如 v18" />
+          </Form.Item>
+        </div>
+
+        {!isEditing && (
+          <div className="mb-4">
+            <Radio.Group
+              value={crawlMode}
+              onChange={(e) => setCrawlMode(e.target.value)}
+              size="small"
+              className="mb-2"
+            >
+              <Radio.Button value="all">整站/子树抓取</Radio.Button>
+              <Radio.Button value="explicit">精确指定页面</Radio.Button>
+            </Radio.Group>
+
+            {crawlMode === 'explicit' && (
+              <Form.Item
+                name="explicitUrlsText"
+                label="指定页面 URL 列表（每行一个）"
+                rules={[{ required: true, message: '请输入至少一个页面 URL' }]}
+                className="mb-0"
+              >
+                <Input.TextArea
+                  rows={3}
+                  placeholder="https://example.com/docs/intro&#10;https://example.com/docs/api"
+                />
+              </Form.Item>
+            )}
+          </div>
+        )}
+
+        {/* 高级配置折叠面板 */}
+        <div className="border-t border-[var(--ant-color-split)] pt-3">
+          <Button
+            type="text"
+            size="small"
+            icon={showAdvanced ? <DownOutlined /> : <RightOutlined />}
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="p-0! text-xs text-[var(--ant-color-text-secondary)] mb-3"
+          >
+            {showAdvanced ? '收起抓取高级配置' : '展开抓取高级配置（收录范围、排除正则、模式等）'}
+          </Button>
+
+          {showAdvanced && (
+            <div className="space-y-3 rounded-lg bg-[var(--ant-color-fill-quaternary)] p-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Form.Item name="scopePath" label="限定路径前缀" className="mb-0">
+                  <Input placeholder="/" disabled={isGithub} />
+                </Form.Item>
+                <Form.Item name="pageLimit" label="最大收录页数" className="mb-0">
+                  <InputNumber min={1} max={5000} className="w-full" placeholder="1000" />
+                </Form.Item>
+              </div>
+
+              {!isGithub && (
+                <div className="grid grid-cols-2 gap-3">
+                  <Form.Item name="mode" label="抓取模式" className="mb-0">
+                    <Select
+                      options={[
+                        { label: '自动推断 (推荐)', value: 'auto' },
+                        { label: '纯 HTTP 快速抓取', value: 'http' },
+                        { label: '无头浏览器渲染 (SPA/JS)', value: 'browser' }
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item name="excludePathPattern" label="排除路径正则" className="mb-0">
+                    <Input placeholder="^/(blog|v1)/" />
+                  </Form.Item>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <Form.Item name="httpConcurrency" label="HTTP 并发数" className="mb-0">
+                  <InputNumber min={1} max={30} className="w-full" placeholder="全局默认" />
+                </Form.Item>
+                <Form.Item name="browserConcurrency" label="浏览器并发数" className="mb-0">
+                  <InputNumber min={1} max={10} className="w-full" placeholder="全局默认" />
+                </Form.Item>
+              </div>
+            </div>
+          )}
+        </div>
       </Form>
     </Modal>
   )
-}
-
-interface SourceActionsProps {
-  source: DocumentSource
-  onEdit: () => void
-  compact?: boolean
-}
-
-/** 来源行内操作：同步、编辑、删除。 */
-export function SourceActions(props: SourceActionsProps): React.JSX.Element {
-  const { message } = App.useApp()
-  const client = useQueryClient()
-  const refresh = (): void => {
-    void client.invalidateQueries({ queryKey: ['sources'] })
-    void client.invalidateQueries({ queryKey: ['jobs'] })
-  }
-  const remove = useMutation({
-    mutationFn: deleteSource,
-    onSuccess: () => {
-      refresh()
-      void message.success('文档来源已删除')
-    },
-    onError: (error: Error) => void message.error(error.message)
-  })
-  const sync = useMutation({
-    mutationFn: enqueueSourceSync,
-    onSuccess: (result) => {
-      refresh()
-      void message.success(
-        result.reused ? '已有同步任务，已复用当前进度' : '同步任务已进入后台队列'
-      )
-    },
-    onError: (error: Error) => void message.error(error.message)
-  })
-
-  if (props.source.cloud) {
-    return <span className="text-[11px] text-[var(--ant-color-text-secondary)]">只读快照</span>
-  }
-
-  return (
-    <div className={`flex gap-1 ${props.compact ? '' : 'mt-2'}`}>
-      <Button
-        type="text"
-        size="small"
-        icon={<SyncOutlined spin={sync.isPending} />}
-        loading={sync.isPending}
-        onClick={(event) => {
-          event.stopPropagation()
-          sync.mutate(props.source.id)
-        }}
-      >
-        {props.compact ? undefined : '同步'}
-      </Button>
-      <Button
-        type="text"
-        size="small"
-        onClick={(event) => {
-          event.stopPropagation()
-          props.onEdit()
-        }}
-      >
-        编辑
-      </Button>
-      <Popconfirm
-        title="删除这个来源及其本地文档？"
-        okText="删除"
-        cancelText="取消"
-        onConfirm={() => remove.mutate(props.source.id)}
-      >
-        <Button
-          danger
-          type="text"
-          size="small"
-          loading={remove.isPending}
-          onClick={(event) => event.stopPropagation()}
-        >
-          删除
-        </Button>
-      </Popconfirm>
-    </div>
-  )
-}
-
-function createEmptyForm(): SourceFormValue {
-  return {
-    name: '',
-    url: '',
-    kind: 'web',
-    mode: DOCUMENT_SOURCE_DEFAULTS.mode,
-    pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
-    scopePath: DOCUMENT_SOURCE_DEFAULTS.scopePath
-  }
-}
-
-function fromSource(source: DocumentSource): SourceFormValue {
-  return {
-    name: source.name,
-    url: source.url,
-    kind: source.kind,
-    mode: source.mode,
-    pageLimit: source.pageLimit,
-    scopePath: source.scopePath,
-    excludePathPattern: source.excludePathPattern ?? undefined,
-    schedule: source.schedule ?? undefined,
-    githubArchiveLimitMb: source.githubArchiveLimitMb ?? undefined,
-    githubMarkdownLimitMb: source.githubMarkdownLimitMb ?? undefined
-  }
 }

@@ -4,7 +4,7 @@ import { LOCI_SCHEMA_VERSION } from './database-schema.js'
 
 export function databaseNeedsMigration(filename: string): boolean {
   if (filename === ':memory:' || !existsSync(filename)) return true
-  const database = new DatabaseSync(filename, { readOnly: true })
+  const database = new DatabaseSync(filename, { readOnly: true, timeout: 5000 })
   try {
     const row = database.prepare('PRAGMA user_version').get() as unknown as {
       user_version: number

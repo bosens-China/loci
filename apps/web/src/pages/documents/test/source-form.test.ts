@@ -1,15 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { toSourceInput } from '../source-form'
+import { toSourceInput, inferDefaultName } from '../source-form'
 
 describe('文档源表单提交契约', () => {
   it('从 URL 识别 GitHub 来源，无需手动选择类型', () => {
     expect(
       toSourceInput({
         name: 'Vue docs',
+        category: '  自定义  ',
+        version: ' 5.x ',
         url: 'https://github.com/vuejs/docs',
         scopePath: '/docs'
       })
-    ).toMatchObject({ kind: 'github', mode: 'auto', scopePath: '/' })
+    ).toMatchObject({
+      kind: 'github',
+      mode: 'auto',
+      scopePath: '/',
+      category: '自定义',
+      version: '5.x'
+    })
   })
 
   it('高级设置尚未挂载时补齐网页抓取默认值', () => {
@@ -22,13 +30,14 @@ describe('文档源表单提交契约', () => {
       })
     ).toEqual({
       name: '运维平台接口',
+      category: '未分类',
+      version: 'latest',
       url: 'http://10.2.34.132:18080/doc.html#/home',
       kind: 'web',
       mode: 'auto',
       pageLimit: 1000,
       scopePath: '/',
       excludePathPattern: null,
-      schedule: null,
       httpConcurrency: null,
       browserConcurrency: null,
       githubArchiveLimitMb: null,
@@ -45,17 +54,20 @@ describe('文档源表单提交契约', () => {
         mode: 'browser',
         pageLimit: 200,
         scopePath: '/docs',
-        excludePathPattern: ' ^/docs/legacy ',
-        schedule: '0 2 * * *'
+        excludePathPattern: ' ^/docs/legacy '
       })
     ).toMatchObject({
       mode: 'browser',
       pageLimit: 200,
       scopePath: '/docs',
       excludePathPattern: '^/docs/legacy',
-      schedule: '0 2 * * *',
       httpConcurrency: null,
       browserConcurrency: null
     })
+  })
+
+  it('可根据 URL 推断默认文档库名称', () => {
+    expect(inferDefaultName('https://github.com/facebook/react')).toBe('facebook/react')
+    expect(inferDefaultName('https://vuejs.org/guide/introduction.html')).toBe('guide')
   })
 })

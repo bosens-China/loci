@@ -10,7 +10,6 @@ describe('createDatabase', () => {
         url: 'https://api.example.com/doc.html',
         mode: 'auto',
         pageLimit: 10,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
@@ -53,6 +52,26 @@ describe('createDatabase', () => {
       expect(database.listDocuments()).toMatchObject([
         { title: '当前接口', relativePath: 'all/当前接口.md' }
       ])
+      const before = database.listDocumentSummaries(source.id)[0]!.id
+      const replay = database.listDocuments()[0]!
+      database.commitSourceCrawl(source.id, {
+        replaceAll: true,
+        deletedUrls: [],
+        documents: [
+          {
+            sourceId: source.id,
+            url: replay.url,
+            title: replay.title,
+            markdown: replay.content,
+            language: replay.language,
+            relativePath: replay.relativePath,
+            crawledAt: replay.updatedAt,
+            fetchMode: 'http'
+          }
+        ],
+        resolution: { firstUrl: source.url, mode: 'http', iconUrl: null, discovery: 'openapi' }
+      })
+      expect(database.getDocument(before)?.title).toBe('当前接口')
       expect(database.searchDocuments('已删除接口')).toEqual([])
       expect(database.listSources()[0]?.pages).toBe(1)
     } finally {
@@ -68,7 +87,6 @@ describe('createDatabase', () => {
         url: 'https://api.example.com/doc.html',
         mode: 'auto',
         pageLimit: 10,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
@@ -123,7 +141,6 @@ describe('createDatabase', () => {
           url,
           mode: 'http',
           pageLimit: 10,
-          schedule: null,
           httpConcurrency: null,
           browserConcurrency: null
         })
@@ -160,12 +177,10 @@ describe('createDatabase', () => {
         url: 'https://react.dev/learn#start',
         mode: 'auto',
         pageLimit: 1000,
-        schedule: '0 2 * * *',
         httpConcurrency: 6,
         browserConcurrency: 3
       })
       expect(source.url).toBe('https://react.dev/learn')
-      expect(source.schedule).toBe('0 2 * * *')
       expect(source.status).toBe('attention')
       expect(database.listSources()).toEqual([source])
       const markdown = '# Learn React\n\n组件🙂 are reusable.'
@@ -190,11 +205,10 @@ describe('createDatabase', () => {
           url: source.url,
           mode: 'auto',
           pageLimit: 1000,
-          schedule: null,
           httpConcurrency: null,
           browserConcurrency: null
-        }).schedule
-      ).toBeNull()
+        })
+      ).toMatchObject({ name: 'React' })
       database.updateResolvedSource(
         source.id,
         'https://docs.react.dev/learn?from=redirect',
@@ -236,7 +250,6 @@ describe('createDatabase', () => {
         maxRetries: 3,
         batchIntervalSeconds: 0,
         batchIntervalMaxSeconds: 0,
-        serverUrl: 'https://loci.xiaowo.live',
         githubArchiveLimitMb: 200,
         githubMarkdownLimitMb: 100
       })
@@ -248,7 +261,6 @@ describe('createDatabase', () => {
           maxRetries: 4,
           batchIntervalSeconds: 100,
           batchIntervalMaxSeconds: 300,
-          serverUrl: 'https://docs.example.com/',
           githubArchiveLimitMb: 200,
           githubMarkdownLimitMb: 100
         })
@@ -259,7 +271,6 @@ describe('createDatabase', () => {
         maxRetries: 4,
         batchIntervalSeconds: 100,
         batchIntervalMaxSeconds: 300,
-        serverUrl: 'https://docs.example.com',
         githubArchiveLimitMb: 200,
         githubMarkdownLimitMb: 100
       })
@@ -270,7 +281,6 @@ describe('createDatabase', () => {
         maxRetries: 4,
         batchIntervalSeconds: 100,
         batchIntervalMaxSeconds: 300,
-        serverUrl: 'https://docs.example.com',
         githubArchiveLimitMb: 200,
         githubMarkdownLimitMb: 100
       })
@@ -293,7 +303,6 @@ describe('createDatabase', () => {
           maxRetries: 3,
           batchIntervalSeconds: 0,
           batchIntervalMaxSeconds: 0,
-          serverUrl: 'http://localhost:7001',
           githubArchiveLimitMb: 200,
           githubMarkdownLimitMb: 100
         })

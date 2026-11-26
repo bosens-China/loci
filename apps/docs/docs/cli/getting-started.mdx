@@ -1,93 +1,33 @@
-# CLI 安装与使用
+# CLI 安装与快速上手
 
-Loci CLI 适合终端、自动化脚本和服务器环境。它将公开技术文档保存为本地 Markdown，供后续搜索、阅读和 Agent 查询。
-
-## 安装 CLI
-
-CLI 需要 Node.js 22.16 或更高版本。
-
-示例：
+安装 Node.js 22.16 或更高版本，然后安装 Loci CLI。
 
 ```bash
 npm install --global @boses/cli
+loci --version
 loci --help
 ```
 
-如果要抓取依赖浏览器渲染的文档站，再安装 Chromium headless shell。普通 HTTP 文档站不需要这一步。
+## 从一页文档开始
 
-示例：
-
-```bash
-loci browser install
-```
-
-## 收录第一份文档
-
-以下示例使用最短命令收录 Rspress 文档。首次使用或当前数据目录没有已保存的创建偏好时，只提供 URL 会从域名生成名称，以 `auto` 方式、1,000 页上限和整站范围开始。交互终端之后会复用最近的抓取方式、页面上限和收录路径层级；显式选项始终优先，非交互调用不读取这些人类交互偏好。
-
-`loci source add` 默认会立即开始首次同步。只有需要先检查或调整配置时，才添加 `--no-sync`，再手动执行同步。
-
-示例：
+先查看本机已有的库。第一次使用时，可用以下示例把 Rspress 的入门页收录为 `rspress`。`--pages` 仅抓取给定页面，`--wait` 会等待抓取结束，方便随后读取。
 
 ```bash
-loci source add https://rspress.rs/guide/introduction.html
+loci list --json
+loci fetch https://rspress.rs/guide/introduction.html --pages --name rspress --wait
+loci tree rspress --json
+loci search Rspress --library rspress --json
+loci read /guide/introduction.html --library rspress --json
 ```
 
-接口文档同样只需提供正在阅读的地址。输入 Swagger UI、Knife4j、ReDoc、FastAPI `/docs` 或常见 OpenAPI JSON 地址时，Loci 会自动发现同站的 OpenAPI/Swagger JSON，并按分组、接口标签和数据模型生成目录化 Markdown；没有发现规范时继续按普通网页收录。
+若站点发生重定向，使用 `tree` 返回的实际文档 ID 或路径读取。`search` 返回匹配的段落和小节，`read` 返回正文及原文 URL。之后运行 `loci update rspress --pages https://rspress.rs/guide/introduction.html` 可精确刷新该页，`loci status rspress --json` 查看最近进度与结果。整库发现与范围控制见 [页面发现与抓取](/cli/crawling)。
 
-示例：
-
-```bash
-loci source add http://localhost:8000/docs
-```
-
-公开 GitHub 仓库也可以直接作为文档源。Loci 会收录默认分支中的 Markdown 与 MDX；不需要安装 Git 或浏览器。
-
-示例：
-
-```bash
-loci source add https://github.com/vuejs/docs
-```
-
-同步完成后，使用关键词查找文档。命令会显示每篇文档的短 ID；可用短 ID 读取全文。
-
-示例：
-
-```bash
-loci document search "Quick start"
-loci document read <短 ID>
-```
-
-可以随时查看本地数据和文档源：
-
-示例：
-
-```bash
-loci status
-loci source list
-```
-
-打开浏览器控制台时，Loci 会先打印访问地址、尝试打开浏览器，并在当前终端保持仅用于 Web 会话的本机 HTTP；按 `Ctrl+C` 会结束本次会话：
+## 打开 Web UI
 
 ```bash
 loci ui
 ```
 
-需要让定时更新脱离 UI 终端持续运行时设置计划即可，保存时会确保用户级后台服务可用：
+默认地址为 `http://127.0.0.1:4520`。终端会打印地址并尝试打开浏览器。知识管理、Agent 接入、无头浏览器、设置与数据共用本机运行时；按 `Ctrl+C` 关闭会话并停止其正在执行的抓取。要只打印地址并由系统选择端口，使用 `loci ui --port 0 --no-open`。
 
-```bash
-loci schedule set rspress '0 2 * * *'
-```
-
-云端每日同步同样会自动准备无 HTTP 的常驻 worker。在 Web UI 中开启定时抓取或每日同步时会立即确保 worker 可用，无需等待或保持 Web 会话；普通后台同步则使用队列空闲后自动退出的按需 worker。该登录自启动保证适用于默认数据目录；设置 `LOCI_DATA_DIR` 的自定义目录需要由外部进程管理器长期托管，具体边界见[后台服务与 Web UI](/cli/commands/service#管理常驻-worker)。
-
-## 下一步
-
-- 查看[基础命令与运行设置](/cli/commands/basics)，了解浏览器、共享设置和脚本退出码。
-- 查看[后台服务与 Web UI](/cli/commands/service)，了解任务恢复、服务生命周期和本机安全边界。
-- 查看[本地文档库](/cli/commands/local-library)和[云端文档库](/cli/commands/cloud-library)。
-- 查看[页面发现与抓取](/cli/crawling)，了解 GitHub、`llms.txt`、OpenAPI 和普通网页的识别顺序。
-- 查看[数据备份与清理](/cli/commands/data)。
-- 需要让 Agent 使用本地文档时，查看 [接入 Agent](/agent/overview)。
-- 如果需要为其他人提供云端文档库，可选阅读 [Admin：部署与管理 Server](/cli/commands/admin)。
-- 遇到环境或浏览器问题，运行 `loci doctor`；浏览器不可用时运行 `loci browser install`。
+浏览、编辑和删除命令见 [本地文档库](/cli/commands/local-library)。脚本输出、浏览器和配置见 [基础命令与运行设置](/cli/commands/basics)。让 Agent 使用同一份资料见 [接入 Agent](/agent/overview)。

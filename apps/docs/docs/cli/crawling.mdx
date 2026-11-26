@@ -1,83 +1,42 @@
 # 页面发现与抓取
 
-Loci 接受任意公开文档页面作为入口。同步时，它会优先使用站点提供的结构化信息，让本地文档尽量保持原站的组织方式。
+`loci fetch <urls...>` 从一个或多个 URL 建库或复用已有库。网页按 hostname 与收录路径组合确定来源，GitHub 按 `owner/repo` 确定来源。每个来源可分别保存 `latest`、`v18` 等版本。`fetch` 和 `update` 默认异步执行。每个库由独立的短生命周期进程负责，抓取结束后退出。命令在运行记录可查时返回；`--json` 向 stdout 输出启动结果数组，每项含 `libraryId`、`name`、`runId`、`status`、`reused` 及查询和取消命令。`reused: true` 表示复用了同库、同抓取类型及同目标的运行。后台请求遇到同库的其他抓取时会报告冲突，待当前任务结束后可重新提交。需要前台显示实时进度并等待最终结果时加 `--wait`，可按 `Ctrl+C` 取消。
 
-## 两类文档来源
-
-| 来源类型    | 入口                         | 收录方式                                 |
-| ----------- | ---------------------------- | ---------------------------------------- |
-| GitHub 仓库 | 公开 `github.com/owner/repo` | 收录默认分支中的 Markdown 与 MDX。       |
-| 普通站点    | 任意公开文档页面             | 在站点内部自动选择结构化发现或网页发现。 |
-
-GitHub 仓库直接进入仓库快照流程，不参与普通站点的 `llms.txt`、OpenAPI、Sitemap 或页面链接发现。Web UI、CLI 和 Agent 工具都根据 URL 自动判断来源类型，无需先选择。
-
-首次成功读取入口页后，Loci 会保存页面声明的网站图标 URL；没有声明时尝试站点根目录的 `favicon.ico`。本地文档库卡片会优先显示该图标，加载失败时回退到对应的来源类型图标，不额外下载或缓存图片文件。同步任务活动期间，成功页面会实时写入且不会预先清空旧文档，卡片底边显示轻量进度线；页面总数确定后按实际百分比推进，完整成功后再清理过期页面。详细阶段和控制操作仍在任务中心查看。同一文档库已有新任务时不会再次创建或恢复第二个活动任务；新任务完整成功后，旧失败提示会自动清除。同一域名任务较多时，任务列表会在卡片内部滚动。
-
-## 普通站点发现顺序
-
-| 优先级 | 识别结果                | 收录方式                                     |
-| ------ | ----------------------- | -------------------------------------------- |
-| 1      | 有效的 `llms.txt`       | 只收录清单列出的页面。                       |
-| 2      | OpenAPI 或 Swagger 文档 | 按分组、标签和数据模型生成目录化 Markdown。  |
-| 3      | 普通文档站              | 优先读取 Sitemap，否则跟随页面中的文档链接。 |
-
-例如，站点同时提供 `llms.txt` 和 Sitemap 时，Loci 只使用 `llms.txt`。接口文档没有可用的 OpenAPI 规范时，Loci 会继续按普通网页收录。
-
-## 支持的文档来源
-
-### GitHub 仓库
-
-将公开仓库地址作为入口时，Loci 会保留 Markdown 目录结构，并改写相对文档和图片链接，使链接继续指向对应版本的仓库内容。
-
-当前只支持公开仓库的默认分支。不支持私有仓库、Git LFS、Git clone 和子目录范围。每次成功同步都会保存仓库当前的 Markdown/MDX 快照；同步失败时保留已有内容。
-
-### `llms.txt`
-
-非 GitHub 仓库会优先检查站点根目录的 `/llms.txt`。命中有效清单后，Loci 只收录清单中的同站页面，不再从 Sitemap 或页面链接扩展范围。
-
-清单优先于 HTTP/浏览器模式选择；即使设置了浏览器模式，有效清单也通过 HTTP 获取，不要求安装浏览器。清单仍遵守收录路径、排除规则和页面上限（默认 1,000 页）；它保证按权威列表发现文档，不代表取消数量限制。GitHub Markdown/MDX 快照同样遵守页面及体积上限。
-
-### OpenAPI 与 Swagger
-
-输入 Swagger UI、Knife4j、ReDoc、FastAPI `/docs` 或常见 OpenAPI 地址时，Loci 会尝试发现同站规范。入口本身返回规范时直接使用入口；阅读页提供有效分组配置时只收录配置声明的可用分组，分组全部不可用时才回退到常见规范地址。
-
-每个规范会生成一篇 `index.md` 概览；每个接口按第一个 tag 放入目录并单独生成 Markdown；共享 schema 放入“数据模型”目录。接口的全部 tags、参数、请求体、响应和认证信息仍保留在正文中。成功同步会整体替换上一次 OpenAPI 结果，因此规范中已经删除或移动的接口不会残留。
-
-## 控制收录范围
-
-文档源的入口 URL 决定站点。创建时可以使用以下参数控制收录量：
-
-| 参数                     | 用途                                            |
-| ------------------------ | ----------------------------------------------- |
-| `--scope <path>`         | 只收录指定路径，例如 `/guide`。                 |
-| `--page-limit <number>`  | 限制网页数量；OpenAPI 中限制规范 URL 数量。     |
-| `--exclude-path <regex>` | 排除 URL 路径匹配的页面，例如不需要的语言目录。 |
-
-这些范围同时适用于清单、Sitemap 和页面链接。保存收窄的范围或新增、修改排除规则时，Loci 会在同一事务中立即删除不再匹配的正文和搜索索引；命中排除规则的显式页面目标也会被移除，后续整库同步不再刷新，不会等到下次同步。CLI、Web 和 Server Admin 会在交互式保存前说明这个影响；脚本和 Agent 必须把显式参数或写操作授权视为删除确认。
-
-单个文档源还可以覆盖共享资源设置：
-
-| 参数                      | 用途                                          |
-| ------------------------- | --------------------------------------------- |
-| `--archive-limit <size>`  | 覆盖 GitHub ZIP 上限，例如 `250mb`。          |
-| `--markdown-limit <size>` | 覆盖 GitHub Markdown/MDX 总量，例如 `120mb`。 |
-
-GitHub 仓库可覆盖这两项大小限制，省略时继承 `loci config` 的共享设置。网页执行由 Crawlee 统一管理队列、资源并发、失败重试和浏览器回收；HTTP 并发上限 9，浏览器并发上限 5，单次请求 30 秒超时，临时失败最多重试 3 次。`llms.txt`、Sitemap 和静态 Pages 也遵守这些保护，不再整批无界并发。
-
-## 选择页面获取方式
-
-`auto`、`http` 和 `browser` 只控制普通网页如何读取，不代表来源类型或页面发现方式。有效 `llms.txt` 和 OpenAPI 都直接使用 HTTP；GitHub 仓库使用仓库 ZIP 流程。
-
-默认的 `auto` 模式只在本地浏览器已安装时比较第一个普通页面的 HTTP 与浏览器结果；未安装时直接使用 HTTP，不触发安装提示或浏览器页面探测。遇到 HTTP 渲染不完整的页面时，先运行：
+## 选择收录范围
 
 ```bash
-loci browser install
+loci fetch https://rspress.rs/guide/ --scope /guide --inspect --json
+loci fetch https://rspress.rs/guide/ --name rspress --scope /guide --page-limit 100
+loci fetch https://rspress.rs/api/cli.html --to rspress --json
 ```
 
-也可以在创建或更新文档源时，显式选择 `http` 或 `browser`。
+- `--category <name>` 与 `--version <ver>` 设置文档库分类和版本标签。新分类自动创建，新库默认使用 `未分类` 和 `latest`。更新已有库时保留未显式指定的分类和版本。同一来源按版本区分文档库。`loci list --category <name> --version <ver>` 可精确筛选。
+- `--inspect` 探测发现方式、估计页数和路径分布。估计结果取决于站点提供的清单。
+- `--scope <path>` 设置网页收录路径，默认为 `/`。`--exclude <pattern>` 用正则排除 URL 路径。`--page-limit <n>` 默认为 1,000。
+- `--pages` 仅抓取给定 URL。`--to <library>` 把给定 URL 精确抓取到已有网页库。指定页可超出收录路径，仍需满足同一 hostname 与排除规则。同 URL 的手工文档会保留正文和索引，抓取结果仍显示远端页面是否存在。
+- `--mode <mode>` 可选 `auto`、`http`、`browser`。普通网页在 `auto` 下优先利用本机已有能力，缺少浏览器时使用 HTTP。依赖客户端渲染时可先运行 `loci browser install` 再指定 `--mode browser`。
 
-## 理解同步结果
+## 内容从哪里发现
 
-同步会更新仍在范围内的已有页面，并收录新发现的页面。页面明确返回 404 或 410 时，Loci 会移除对应的旧文档。OpenAPI 同步结果中的“已处理页数”表示生成的 Markdown 文档数量，不是请求的规范 JSON 数量。图片、视频和字体等二进制资源不会作为独立文档保存。
+| 来源 | 行为 |
+| --- | --- |
+| 公开 GitHub 仓库 | 从默认分支的提交归档中获取 Markdown/MDX，保留仓库路径；提交未变化时可复用快照。 |
+| `llms.txt` | 先检查站点根目录的有效清单，按范围读取列出的页面。 |
+| OpenAPI / Swagger | 带接口文档特征的入口可发现同站 JSON 规范，按概览、接口与数据模型生成 Markdown。 |
+| 普通站点 | 使用有效 Sitemap 发现页面；缺少可用清单时从入口跟随同站链接。 |
 
-需要创建文档源或调整页面上限时，请查看[本地文档库](/cli/commands/local-library)。需要了解共享默认值和 GitHub 容量设置时，请查看[基础命令与运行设置](/cli/commands/basics)。
+GitHub 直接走仓库流程。GitHub/GitLab Pages 静态站点在检查 `llms.txt` 后使用网页流程。网页发现遵守 hostname、路径范围、排除规则和页数上限。旧版审查库的普通更新仅刷新已收录的 URL 和已登记的指定页面，不发现新链接。需要添加页面时可明确指定 URL。
+
+## 刷新和诊断
+
+```bash
+loci update rspress --json
+loci update rspress --pages https://rspress.rs/guide/introduction.html --json
+loci status rspress --json
+loci status --json
+loci cancel rspress --json
+```
+
+`loci update [libraries...]` 接受一个或多个库，或单独用 `--all` 更新所有可写库。可显式修改 `--name`、`--scope`、`--exclude`、`--page-limit` 和 `--mode`。收窄路径或新增和更改排除规则时，CLI 会在保存配置前请求确认，因为保存可能立即清理旧正文、索引和指定页面。`fetch` 复用已有库时同样适用。已核对影响的非交互脚本可以传 `--yes`。
+
+`status` 每次返回一份快照，轮询直到状态变为 `completed`、`completed_with_errors`、`failed` 或 `cancelled`。指定库会得到该库最近一次记录，尚未抓取时为 `null`；省略库会列出有记录的库。`progress` 包含发现数、处理数、成功数、失败数与当前 URL。`error` 给出运行错误，`failures` 最多列出 20 个失败页的 `url` 和 `message`。`loci cancel <library>` 等待目标抓取释放库锁后返回；抓取已经结束时返回 `cancelled: false` 和当前状态，库尚无抓取记录时状态为 `idle`。部分成功为 `completed_with_errors`，可读已成功提交的内容并按需重试失败页。

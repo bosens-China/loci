@@ -1,41 +1,25 @@
 import { useEffect, useState } from 'react'
 import {
-  CloudOutlined,
-  ControlOutlined,
   DatabaseOutlined,
+  GlobalOutlined,
   SaveOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Form,
-  Input,
-  InputNumber,
-  Segmented,
-  Space,
-  Tabs,
-  Typography
-} from 'antd'
+import { Alert, App, Button, Card, Form, InputNumber, Segmented, Space, Tabs } from 'antd'
 import { APP_SETTINGS_LIMITS, type AppSettings } from '@loci/shared'
 import { getSettings, saveSettings } from '@/api/settings'
 import { AsyncState } from '@/components/AsyncState'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTransferPanel } from '@/components/DataTransferPanel'
-import {
-  ADMIN_JOBS_KEY,
-  ADMIN_LIBRARIES_KEY,
-  ADMIN_SESSION_KEY
-} from '@/pages/admin/admin-query-keys'
+import { ClearDataPanel } from '@/components/ClearDataPanel'
+import { HostnamePoliciesPanel } from '@/pages/settings/HostnamePoliciesPanel'
 
-/** 系统设置页面：集中管理连接、主题、GitHub 容量保护和数据备份 */
+/** 系统设置页面：管理本地抓取并发、容量保护、域名策略与数据备份。 */
 export function SettingsPage(): React.JSX.Element {
   const { message } = App.useApp()
   const client = useQueryClient()
-  const [activeTab, setActiveTab] = useState('basic')
+  const [activeTab, setActiveTab] = useState('concurrency')
   const [form] = Form.useForm<AppSettings>()
   const query = useQuery({ queryKey: ['settings'], queryFn: getSettings })
 
@@ -46,35 +30,26 @@ export function SettingsPage(): React.JSX.Element {
   const save = useMutation({
     mutationFn: saveSettings,
     onSuccess: (settings) => {
-      const changedServer = settings.serverUrl !== query.data?.serverUrl
-      const hadAdminSession = Boolean(client.getQueryData(ADMIN_SESSION_KEY))
       form.setFieldsValue(settings)
       client.setQueryData(['settings'], settings)
-      if (changedServer) {
-        client.setQueryData(ADMIN_SESSION_KEY, null)
-        client.removeQueries({ queryKey: ADMIN_LIBRARIES_KEY })
-        client.removeQueries({ queryKey: ADMIN_JOBS_KEY })
-      }
-      void message.success(
-        changedServer && hadAdminSession ? '设置已保存，管理员会话已重置' : '设置已保存'
-      )
+      void message.success('设置已保存')
     },
     onError: (error: Error) => void message.error(error.message)
   })
 
   const tabItems = [
     {
-      key: 'basic',
+      key: 'concurrency',
       label: (
         <span className="flex items-center gap-2">
-          <ControlOutlined />
-          <span>基础与连接</span>
+          <ThunderboltOutlined />
+          <span>抓取与并发</span>
         </span>
       ),
       children: (
-        <div className="w-full space-y-6 pt-2">
-          <Card title="界面与外观">
-            <Form.Item name="theme" label="界面主题" className="mb-0">
+        <div className="w-full space-y-5 pt-2">
+          <Card title="界面外观">
+            <Form.Item name="theme" label="色彩主题" className="mb-0">
               <Segmented
                 options={[
                   { label: '跟随系统', value: 'auto' },
@@ -85,66 +60,40 @@ export function SettingsPage(): React.JSX.Element {
             </Form.Item>
           </Card>
 
-          <Card
-            title="云服务连接"
-            extra={
-              <Typography.Text type="secondary" className="text-sm">
-                用于云端文档库发现、快照拉取与管理员登录
-              </Typography.Text>
-            }
-          >
-            <Form.Item
-              name="serverUrl"
-              label="Loci 云服务地址"
-              rules={[
-                { required: true, message: '请输入云服务地址' },
-                { type: 'url', message: '请输入完整的 HTTP 或 HTTPS 地址' }
-              ]}
-              className="mb-2"
-            >
-              <Input
-                prefix={<CloudOutlined className="text-[var(--ant-color-text-secondary)]" />}
-                placeholder="https://loci.example.com"
+          <Card title="全局抓取并发与间隔">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <NumberField
+                name="httpConcurrency"
+                label="HTTP 请求并发数"
+                min={APP_SETTINGS_LIMITS.concurrency.min}
+                max={APP_SETTINGS_LIMITS.concurrency.max}
               />
-            </Form.Item>
-            <Typography.Text type="secondary" className="text-sm">
-              修改云服务地址后，当前的管理员登录会话将自动重置。
-            </Typography.Text>
+              <NumberField name="browserConcurrency" label="浏览器渲染并发数" min={1} max={10} />
+              <NumberField
+                name="maxRetries"
+                label="请求失败重试次数"
+                min={APP_SETTINGS_LIMITS.maxRetries.min}
+                max={APP_SETTINGS_LIMITS.maxRetries.max}
+              />
+              <NumberField
+                name="batchIntervalSeconds"
+                label="批次最小间隔（0 为禁用）"
+                unit="秒"
+                min={0}
+                max={3000}
+              />
+              <NumberField
+                name="batchIntervalMaxSeconds"
+                label="批次最大间隔（0 为禁用）"
+                unit="秒"
+                min={0}
+                max={3000}
+              />
+            </div>
           </Card>
 
-          <Alert
-            type="info"
-            showIcon
-            message="本地服务运行安全说明"
-            description="Loci 默认仅监听本机 127.0.0.1 端口，所有文档索引与抓取数据均保存在本地 SQLite 数据库中，保障代码与知识资产隐私。"
-            className="text-sm"
-          />
-
-          <div className="flex justify-end pt-2">
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              htmlType="submit"
-              loading={save.isPending}
-            >
-              保存基础设置
-            </Button>
-          </div>
-        </div>
-      )
-    },
-    {
-      key: 'crawl',
-      label: (
-        <span className="flex items-center gap-2">
-          <ThunderboltOutlined />
-          <span>容量保护</span>
-        </span>
-      ),
-      children: (
-        <div className="w-full space-y-6 pt-2">
-          <Card title="GitHub 仓库抓取上限">
-            <div className="flex flex-wrap gap-6 items-start">
+          <Card title="GitHub 保护上限">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <NumberField
                 name="githubArchiveLimitMb"
                 label="仓库压缩包体积上限"
@@ -160,6 +109,13 @@ export function SettingsPage(): React.JSX.Element {
             </div>
           </Card>
 
+          <Alert
+            type="info"
+            showIcon
+            message="本地隐私与服务安全"
+            description="Loci 仅监听本机 127.0.0.1 回环地址，所有文档与向量检索索引均保存在本地 SQLite 数据库中，完全离线可用且不外泄数据。"
+          />
+
           <div className="flex justify-end pt-2">
             <Button
               type="primary"
@@ -167,9 +123,23 @@ export function SettingsPage(): React.JSX.Element {
               htmlType="submit"
               loading={save.isPending}
             >
-              保存容量保护
+              保存配置
             </Button>
           </div>
+        </div>
+      )
+    },
+    {
+      key: 'hostname',
+      label: (
+        <span className="flex items-center gap-2">
+          <GlobalOutlined />
+          <span>域名策略</span>
+        </span>
+      ),
+      children: (
+        <div className="w-full pt-2">
+          <HostnamePoliciesPanel />
         </div>
       )
     },
@@ -178,12 +148,13 @@ export function SettingsPage(): React.JSX.Element {
       label: (
         <span className="flex items-center gap-2">
           <DatabaseOutlined />
-          <span>数据备份与迁移</span>
+          <span>数据备份与恢复</span>
         </span>
       ),
       children: (
-        <div className="w-full pt-2">
+        <div className="w-full space-y-4 pt-2">
           <DataTransferPanel />
+          <ClearDataPanel />
         </div>
       )
     }
@@ -191,7 +162,7 @@ export function SettingsPage(): React.JSX.Element {
 
   return (
     <div className="w-full px-6 py-6 sm:px-8 sm:py-8">
-      <PageHeader title="系统设置" description="管理连接、容量保护与本地数据备份。" />
+      <PageHeader title="设置与数据" description="管理本地抓取并发、域名策略与数据备份。" />
       <AsyncState
         loading={query.isLoading}
         error={query.error}
@@ -216,20 +187,18 @@ function NumberField({
   label,
   min,
   max,
-  unit,
-  className = 'w-64'
+  unit
 }: {
   name: keyof AppSettings
   label: string
   min: number
   max: number
   unit?: string
-  className?: string
 }): React.JSX.Element {
   return (
-    <Form.Item label={<span className="text-sm">{label}</span>} className={`mb-0 ${className}`}>
+    <Form.Item label={<span className="text-xs font-medium">{label}</span>} className="mb-0">
       <Space.Compact block>
-        <Form.Item name={name} rules={[{ required: true }]} noStyle>
+        <Form.Item name={name} rules={[{ required: true, message: '请输入数值' }]} noStyle>
           <InputNumber min={min} max={max} className="w-full" />
         </Form.Item>
         {unit ? (

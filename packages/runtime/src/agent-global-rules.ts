@@ -2,7 +2,7 @@ import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import {
-  getMcpClientDefinition,
+  getAgentClientDefinition,
   hasContext7Compatibility,
   hasLociAgentInstructions,
   isAgentGlobalRulesClient,
@@ -63,7 +63,7 @@ export function installAgentGlobalRules(
     const hasContext7 = hasContext7Compatibility(next)
     const changed = current !== next
     if (changed) writeFileAtomically(path, next)
-    const label = getMcpClientDefinition(client).label
+    const label = getAgentClientDefinition(client).label
     return {
       client,
       path,
@@ -189,7 +189,7 @@ export function resolveAgentGlobalRulesPath(
     const overridePath = resolve(homeDir, '.codex', 'AGENTS.override.md')
     if (existsSync(overridePath)) return overridePath
   }
-  const configured = getMcpClientDefinition(client).globalRulesPath
+  const configured = getAgentClientDefinition(client).globalRulesPath
   if (!configured.startsWith('~/')) throw new Error('Agent 全局规则路径无效')
   return resolve(homeDir, configured.slice(2))
 }

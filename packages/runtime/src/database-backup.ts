@@ -1,84 +1,51 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { parseGithubRepositoryUrl } from '@loci/core'
-import { DEFAULT_APP_SETTINGS, normalizeServerUrl } from '@loci/shared'
-import { lociBackupSchema, parseLociBackup, type LociBackup } from './database-backup-schema.js'
+import { DEFAULT_APP_SETTINGS, type BackupImportSummary } from '@loci/shared'
+import { parseLociBackup, type LociBackup } from './database-backup-schema.js'
+import { lt } from 'drizzle-orm'
+import { backupImportReceipts } from './drizzle-schema.js'
+import { createDrizzleDatabase } from './drizzle-database.js'
+import { prepareBackupImport } from './database-backup-import.js'
+export { exportDatabaseBackup, type BackupExportOptions } from './database-backup-export.js'
 
 export { lociBackupSchema, parseLociBackup, type LociBackup } from './database-backup-schema.js'
 
-export interface BackupImportSummary {
-  sources: number
-  documents: number
+export interface BackupImportOptions {
+  replaceAll?: boolean
 }
 
-export function exportDatabaseBackup(database: DatabaseSync): LociBackup {
-  return lociBackupSchema.parse({
-    format: 'loci-backup',
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    data: {
-      sources: database
-        .prepare(
-          `SELECT id, name, first_url, hostname, fetch_mode, page_limit, scope_path, exclude_path_pattern, schedule,
-             http_concurrency, browser_concurrency, icon_url, source_type, cloud_server_url,
-             cloud_library_id, cloud_revision, cloud_auto_sync, created_at, updated_at
-             , document_kind, source_identity, github_archive_limit_mb, github_markdown_limit_mb,
-             github_default_branch, github_revision, github_blocked_revision,
-             github_blocked_limit_kind, github_blocked_limit_bytes, discovery_mode,
-             resolved_discovery, review_goal
-           FROM document_sources ORDER BY created_at`
-        )
-        .all(),
-      documents: database.prepare('SELECT * FROM documents ORDER BY crawled_at').all(),
-      explicitPageTargets: database
-        .prepare('SELECT * FROM explicit_page_targets ORDER BY created_at, url')
-        .all(),
-      crawlRuns: database
-        .prepare(
-          `SELECT id, source_id, status, started_at, finished_at, discovered_count,
-             success_count, failure_count, error_message FROM crawl_runs ORDER BY rowid`
-        )
-        .all(),
-      crawlFailures: database.prepare('SELECT * FROM crawl_failures ORDER BY rowid').all(),
-      hostnameCrawlPolicies: database
-        .prepare('SELECT * FROM hostname_crawl_policies ORDER BY hostname')
-        .all(),
-      operationLogs: database.prepare('SELECT * FROM operation_logs ORDER BY id').all(),
-      settings: database
-        .prepare(
-          `SELECT theme, http_concurrency, browser_concurrency, max_retries,
-             batch_interval_seconds, batch_interval_max_seconds, server_url, github_archive_limit_mb,
-             github_markdown_limit_mb FROM app_settings WHERE id = 1`
-        )
-        .get()
-    }
-  })
+export type { BackupImportSummary } from '@loci/shared'
+
+export function importDatabaseBackup(
+  database: DatabaseSync,
+  input: unknown,
+  options?: BackupImportOptions
+): BackupImportSummary {
+  return restoreDatabaseBackup(database, parseLociBackup(input), options)
 }
 
-export function importDatabaseBackup(database: DatabaseSync, input: unknown): BackupImportSummary {
-  const backup = parseLociBackup(input)
+/** 已校验的 ZIP 与 JSON 共用一次原子恢复。 */
+export function restoreDatabaseBackup(
+  database: DatabaseSync,
+  backup: LociBackup,
+  { replaceAll = false }: BackupImportOptions = {},
+  operationId?: string
+): BackupImportSummary {
   const {
-    sources,
     documents,
     explicitPageTargets = [],
     crawlRuns,
     crawlFailures = [],
     hostnameCrawlPolicies = [],
-    operationLogs = [],
     settings
   } = backup.data
 
   database.exec('BEGIN IMMEDIATE')
   try {
-    database.exec(`
-      DELETE FROM documents_fts;
-      DELETE FROM crawl_failures;
-      DELETE FROM crawl_runs;
-      DELETE FROM documents;
-      DELETE FROM explicit_page_targets;
-      DELETE FROM document_sources;
-      DELETE FROM hostname_crawl_policies;
-      DELETE FROM operation_logs;
-    `)
+    const { sources, replacedLibraries, categoriesCreated } = prepareBackupImport(
+      database,
+      backup,
+      replaceAll
+    )
 
     const insertSource = database.prepare(
       `INSERT INTO document_sources
@@ -88,8 +55,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         github_markdown_limit_mb, github_default_branch, github_revision, github_blocked_revision,
         github_blocked_limit_kind, github_blocked_limit_bytes, discovery_mode, resolved_discovery,
         review_goal,
-        created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        category, version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     for (const source of sources) {
       const sourceType = source.source_type ?? 'local'
@@ -99,8 +66,6 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
       ) {
         throw new Error(`云文档来源信息不完整：${source.name}`)
       }
-      const repository = parseGithubRepositoryUrl(source.first_url)
-      const documentKind = source.document_kind ?? (repository ? 'github' : 'web')
       insertSource.run(
         source.id,
         source.name,
@@ -115,12 +80,12 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         source.browser_concurrency ?? source.concurrency ?? null,
         source.icon_url,
         sourceType,
-        sourceType === 'cloud' ? normalizeServerUrl(source.cloud_server_url ?? '') : null,
+        sourceType === 'cloud' ? (source.cloud_server_url ?? null) : null,
         sourceType === 'cloud' ? (source.cloud_library_id ?? null) : null,
         sourceType === 'cloud' ? (source.cloud_revision ?? null) : null,
         sourceType === 'cloud' ? (source.cloud_auto_sync ?? 0) : 0,
-        documentKind,
-        source.source_identity ?? repository?.identity ?? source.hostname,
+        source.document_kind,
+        source.source_identity,
         source.github_archive_limit_mb ?? null,
         source.github_markdown_limit_mb ?? null,
         source.github_default_branch ?? null,
@@ -131,6 +96,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         source.discovery_mode ?? 'site',
         source.resolved_discovery ?? null,
         source.review_goal ?? null,
+        source.category,
+        source.version,
         source.created_at,
         source.updated_at
       )
@@ -138,8 +105,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
 
     const insertDocument = database.prepare(
       `INSERT INTO documents
-       (id, source_id, title, url, crawled_at, markdown, language, fetch_mode, relative_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, source_id, title, url, crawled_at, markdown, language, fetch_mode, relative_path, manual)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     const insertSearch = database.prepare(
       'INSERT INTO documents_fts (document_id, source_id, title, markdown) VALUES (?, ?, ?, ?)'
@@ -154,7 +121,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         document.markdown,
         document.language,
         document.fetch_mode,
-        document.relative_path ?? null
+        document.relative_path ?? null,
+        document.manual ?? 0
       )
       insertSearch.run(document.id, document.source_id, document.title, document.markdown)
     }
@@ -178,8 +146,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
 
     const insertRun = database.prepare(
       `INSERT INTO crawl_runs
-       (id, source_id, status, started_at, finished_at, discovered_count, success_count, failure_count, error_message)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, source_id, status, started_at, finished_at, discovered_count, success_count, failure_count, error_message, progress_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     for (const run of crawlRuns) {
       insertRun.run(
@@ -191,7 +159,8 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
         run.discovered_count,
         run.success_count,
         run.failure_count,
-        run.error_message
+        run.error_message,
+        run.progress_json ?? null
       )
     }
 
@@ -218,7 +187,7 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
        (hostname, http_concurrency, browser_concurrency, batch_interval_min_seconds,
         batch_interval_max_seconds, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
     )
-    for (const policy of hostnameCrawlPolicies) {
+    for (const policy of replaceAll ? hostnameCrawlPolicies : []) {
       insertPolicy.run(
         policy.hostname,
         policy.http_concurrency,
@@ -229,50 +198,46 @@ export function importDatabaseBackup(database: DatabaseSync, input: unknown): Ba
       )
     }
 
-    const insertLog = database.prepare(
-      `INSERT INTO operation_logs
-       (id, category, action, level, resource_type, resource_id, hostname, message, details_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    for (const log of operationLogs) {
-      insertLog.run(
-        log.id,
-        log.category,
-        log.action,
-        log.level,
-        log.resource_type,
-        log.resource_id,
-        log.hostname,
-        log.message,
-        log.details_json,
-        log.created_at
-      )
-    }
-
-    database
-      .prepare(
-        `UPDATE app_settings
+    if (replaceAll && settings)
+      database
+        .prepare(
+          `UPDATE app_settings
          SET theme = ?, http_concurrency = ?, browser_concurrency = ?,
              max_retries = ?, batch_interval_seconds = ?, batch_interval_max_seconds = ?,
-             server_url = ?,
-             server_url_customized = ?, github_archive_limit_mb = ?,
+             github_archive_limit_mb = ?,
              github_markdown_limit_mb = ?
          WHERE id = 1`
-      )
-      .run(
-        settings.theme,
-        settings.http_concurrency,
-        settings.browser_concurrency,
-        settings.max_retries ?? DEFAULT_APP_SETTINGS.maxRetries,
-        settings.batch_interval_seconds ?? DEFAULT_APP_SETTINGS.batchIntervalSeconds,
-        settings.batch_interval_max_seconds ?? DEFAULT_APP_SETTINGS.batchIntervalMaxSeconds,
-        normalizeServerUrl(settings.server_url ?? DEFAULT_APP_SETTINGS.serverUrl),
-        settings.server_url ? 1 : 0,
-        settings.github_archive_limit_mb ?? DEFAULT_APP_SETTINGS.githubArchiveLimitMb,
-        settings.github_markdown_limit_mb ?? DEFAULT_APP_SETTINGS.githubMarkdownLimitMb
-      )
+        )
+        .run(
+          settings.theme,
+          settings.http_concurrency,
+          settings.browser_concurrency,
+          settings.max_retries ?? DEFAULT_APP_SETTINGS.maxRetries,
+          settings.batch_interval_seconds ?? DEFAULT_APP_SETTINGS.batchIntervalSeconds,
+          settings.batch_interval_max_seconds ?? DEFAULT_APP_SETTINGS.batchIntervalMaxSeconds,
+          settings.github_archive_limit_mb ?? DEFAULT_APP_SETTINGS.githubArchiveLimitMb,
+          settings.github_markdown_limit_mb ?? DEFAULT_APP_SETTINGS.githubMarkdownLimitMb
+        )
+    const summary: BackupImportSummary = {
+      mode: replaceAll ? 'replace' : 'merge',
+      importedLibraries: sources.length,
+      replacedLibraries,
+      importedDocuments: documents.length,
+      categoriesCreated,
+      sources: sources.length,
+      documents: documents.length
+    }
+    // 回执与业务数据一起提交，持锁进程意外退出后，跟随者仍能读取同一结果。
+    if (operationId) {
+      const db = createDrizzleDatabase(database)
+      const now = Date.now()
+      db.delete(backupImportReceipts)
+        .where(lt(backupImportReceipts.createdAt, now - 86_400_000))
+        .run()
+      db.insert(backupImportReceipts).values({ operationId, summary, createdAt: now }).run()
+    }
     database.exec('COMMIT')
-    return { sources: sources.length, documents: documents.length }
+    return summary
   } catch (error) {
     database.exec('ROLLBACK')
     throw error

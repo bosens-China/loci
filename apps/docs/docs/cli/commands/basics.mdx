@@ -1,166 +1,44 @@
 # 基础命令与运行设置
 
-本页介绍通用命令、浏览器运行时、共享设置和脚本运行环境。日常使用可以保留默认设置；遇到网站限流、抓取量较大或需要隔离数据时，再按需调整。
+## 终端与 Web UI
 
-## 参数约定
+| 命令 | 用途 |
+| --- | --- |
+| `loci --help` | 列出命令。用 `loci read --help` 等子命令帮助查看参数。 |
+| `loci --version` | 打印当前 CLI 版本。 |
+| `loci upgrade --json` | 检查 npm 上的 CLI 版本。省略 `--json` 时，有更新会显示升级命令。 |
+| `loci ui --port 0 --no-open` | 在本机回环地址启动 Web UI，自动选端口并打印地址。默认端口为 4520。 |
+| `loci cancel <library> --json` | 取消指定库正在运行的抓取。 |
+| `loci status [library] --json` | 查询指定库或各库的最近抓取记录。 |
 
-命令用法中的 `<参数>` 为必填参数，`[参数]` 为可选参数。例如，`loci source sync [source]` 可以指定文档源，也可以省略后在终端中选择。
+库参数支持完整 ID、唯一 ID 前缀或唯一的名称。供脚本使用的 `--json` 放在相应子命令之后；默认异步抓取的退出码 `0` 表示已启动或复用，轮询 `status` 获取最终结果。加 `--wait` 时进度写入 stderr。前台抓取全部成功时退出码为 `0`，有失败时为 `1`，抓取被信号取消时为 `130`。命令行参数解析错误为 `2`。
 
-`[source]` 可以使用文档源名称、完整 ID 或唯一的短 ID。`[document]` 还可以使用文档标题或文档 URL。涉及删除、导入或清空数据的命令会要求确认；仅在自动化脚本中确认目标无误后，才使用 `--yes` 跳过确认。
-
-## 基础命令
-
-### `loci --help`
-
-显示 CLI 的总帮助和可用命令分类。要查看某个子命令的参数，可在命令后追加 `--help`。
-
-示例：
-
-```bash
-loci source add --help
-```
-
-### `loci --version`
-
-显示当前安装的 CLI 版本。`-V` 是它的简写。
-
-示例：
+## 浏览器
 
 ```bash
-loci --version
-```
-
-### `loci status`
-
-汇总本地文档源、云端副本、已收录文档、最近一次同步、后台服务状态和 Loci Server 地址。
-
-示例：
-
-```bash
-loci status
-```
-
-### `loci update`
-
-立即检查 npm 上是否存在更新的 Loci CLI 稳定版本，并显示当前版本和最新版本。
-
-示例：
-
-```bash
-loci update
-```
-
-### `loci doctor`
-
-检查 Loci 运行环境，并在发现问题时给出修复建议。
-
-示例：
-
-```bash
-loci doctor
-```
-
-## 无头浏览器
-
-`auto` 模式只在 Chromium headless shell 已安装时比较 HTTP 与浏览器结果；未安装时直接使用 HTTP，不触发安装提示。显式选择 `browser` 时，交互终端可以确认并自动安装，非交互环境需要提前运行安装命令。CLI 不在选择 `auto` 时额外执行浏览器状态命令。`loci ui` 的“无头浏览器”页面复用同一 Runtime 和缓存目录，可以查看真实版本、启动能力和安装路径，并在操作期间持续显示下载或卸载进度。
-
-### `loci browser status`
-
-检查无头浏览器是否已安装且可以启动，并输出当前 Playwright 版本实际使用的 Chromium headless shell 路径。只安装 headless shell 时不会误判为缺少完整 Chromium。
-
-示例：
-
-```bash
-loci browser status
-```
-
-### `loci browser install`
-
-安装与当前 CLI 版本匹配的 Chromium headless shell。CLI 和 Web 对同一个缓存目录执行 single-flight；重复安装会复用当前操作，另一个进程正在安装或卸载时会拒绝并发修改。
-
-示例：
-
-```bash
-loci browser install
-```
-
-### `loci browser uninstall`
-
-删除由 Loci 管理的无头浏览器。默认会要求确认；`--yes` 可跳过确认。存在活动抓取任务或其他安装、卸载操作时不会删除运行文件。
-
-示例：
-
-```bash
+loci browser status --json
+loci browser install --json
 loci browser uninstall
 ```
 
-## 管理运行设置
+依赖客户端渲染的网页可使用与当前 Playwright 版本匹配的 Chromium headless shell。`status` 会检查安装路径和启动能力，无法启动时返回退出码 `3`。卸载会要求确认，非交互执行可在确认目标后传 `--yes`。
 
-设置保存在 Loci 本地数据目录中。CLI、Web UI、后台任务和 stdio MCP 都会读取这些设置。
-
-### `loci config list`
-
-显示当前设置，包括云端文档库地址和抓取资源限制。
-
-示例：
+## 共享设置
 
 ```bash
-loci config list
+loci config list --json
+loci config set theme dark
+loci config set github-archive-limit-mb 250
+loci config domain set docs.example.org --http-concurrency 2
+loci config domain set docs.example.org --http-concurrency inherit
+loci config domain list --json
+loci config domain remove docs.example.org
 ```
 
-### `loci config set [key] [value]`
+`loci config` 和 `loci config list` 均显示当前设置。`loci config set <key> <value>` 接受主题 `theme`（`auto`、`light`、`dark`），以及 `http-concurrency`、`browser-concurrency`、`max-retries`、`batch-interval-seconds`、`batch-interval-max-seconds`、`github-archive-limit-mb` 和 `github-markdown-limit-mb`。
 
-修改一个设置。省略参数时，CLI 会在交互终端中选择设置项，并要求输入新值。
+`loci config domain set <hostname>` 支持 `--http-concurrency`、`--browser-concurrency`、`--batch-interval-min-seconds` 和 `--batch-interval-max-seconds`。每项可填整数或 `inherit`，后者清除该项覆盖。
 
-```bash
-loci config set server-url https://your-loci.example.com
-```
+移除域名策略需要确认。已核对目标的非交互脚本可用 `loci config domain remove <hostname> --yes`。
 
-常用设置如下：
-
-| 设置项                     | 用途                                      |
-| -------------------------- | ----------------------------------------- |
-| `server-url`               | 指定云端文档库和 Admin API 的 Server。    |
-| `github-archive-limit-mb`  | 调整 GitHub 仓库下载大小上限。            |
-| `github-markdown-limit-mb` | 调整 GitHub Markdown/MDX 文件的总量上限。 |
-
-页面并发、重试和超时由共享抓取执行层管理，不需要在 CLI 或 Web 中配置。HTTP 与浏览器并发上限分别为 9 和 5，Crawlee 按运行资源调节实际并发；单次请求超时 30 秒，临时失败最多重试 3 次，遵守有界的 `Retry-After`。同一 hostname 的后台任务仍串行执行。
-
-旧数据库和备份中的并发、重试、批次间隔及域名覆盖字段保留兼容读取，但不再影响抓取。旧版相应 CLI 参数、MCP 工具和域名策略 HTTP 路由已移除。
-
-云端文档库地址的作用范围请查看[云端文档库](/cli/commands/cloud-library)。Agent 的 stdio MCP 配置请查看[通过 MCP 接入](/agent/mcp)。
-
-`LOCI_SERVER_URL` 的优先级高于数据目录中保存的 `server-url`。环境变量存在时，`config list` 会标出覆盖来源，`config set server-url` 会拒绝保存，避免把未生效的值误报为成功。需要修改持久设置时，先取消该环境变量，再运行 `config set`。
-
-## 隔离数据目录
-
-测试、演示或自动化任务可以设置 `LOCI_DATA_DIR`，让当前命令使用独立的数据目录：
-
-```bash
-LOCI_DATA_DIR=./.loci-test loci status
-```
-
-日常使用不建议设置此变量，否则 CLI 与 MCP 可能读取不同的文档库。同一套自动化流程需要在每条相关命令中使用相同的数据目录。
-
-自定义数据目录与默认用户级登录服务隔离。开启计划任务或云端每日同步时，Loci 只为该目录启动当前登录会话中的 detached worker；它可以在终端退出后继续运行，但不保证进程退出、注销或机器重启后自动恢复。长期运行应由容器或系统进程管理器设置相同的 `LOCI_DATA_DIR`，并执行 `loci service run`。
-
-## 覆盖缓存目录
-
-`LOCI_CACHE_DIR` 覆盖 Loci 缓存目录，包括 Chromium headless shell 的安装和查找位置。它是进程级环境变量，不是 `loci config set` 的持久设置；只在单条命令前临时设置，不会改写共享配置。所有可能安装、查找或使用浏览器的 CLI、MCP 和 worker 进程必须使用同一个值，否则可能出现一个进程已安装、另一个进程仍找不到浏览器的情况。长期 worker 应由其服务或进程管理器显式设置该变量。
-
-```bash
-LOCI_CACHE_DIR=./.loci-cache loci browser install
-```
-
-## 处理脚本退出码
-
-自动化脚本可以根据退出码判断结果：
-
-| 退出码 | 含义                                 |
-| ------ | ------------------------------------ |
-| `0`    | 操作成功或用户主动取消。             |
-| `1`    | 认证、网络或运行时错误。             |
-| `2`    | 参数或用户输入错误。                 |
-| `3`    | 操作完成，但存在页面失败或诊断异常。 |
-
-涉及删除、导入或清空数据的非交互命令还必须显式传入 `--yes`。具体数据维护命令请查看[数据备份与清理](/cli/commands/data)。
+`LOCI_DATA_DIR` 可为当前进程选择数据目录，`LOCI_CACHE_DIR` 可选择缓存目录（含受管浏览器）。希望 CLI 与 Web UI 共享数据和浏览器时，对相关命令使用相同的目录。备份操作见 [数据备份与恢复](/cli/commands/data)。

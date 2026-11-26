@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  getCloudLibraryContentRemovalRisk,
-  getDocumentContentRemovalRisk
-} from '../content-removal-risk.js'
+import { getDocumentContentRemovalRisk } from '../content-removal-risk.js'
 
 const documentLocation = {
   kind: 'web' as const,
@@ -41,16 +38,5 @@ describe('正文删除风险', () => {
         documentLocation
       )
     ).toBeNull()
-  })
-
-  it('Server 文档库仅在入口或范围收窄时报告风险', () => {
-    const library = { url: 'https://example.com/docs', scopePath: '/docs' }
-    expect(getCloudLibraryContentRemovalRisk(library, { ...library, scopePath: '/' })).toBeNull()
-    expect(getCloudLibraryContentRemovalRisk(library, { ...library, scopePath: '/docs/api' })).toBe(
-      'scope_narrowed'
-    )
-    expect(
-      getCloudLibraryContentRemovalRisk(library, { ...library, url: 'https://example.com/guide' })
-    ).toBe('url_changed')
   })
 })

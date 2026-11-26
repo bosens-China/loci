@@ -4,8 +4,9 @@ import { CLI_VERSION } from './update.js'
 
 export type CliRuntime = LocalRuntime
 
-export function createCliRuntime(): CliRuntime {
+export function createCliRuntime(detachedCrawl = false): CliRuntime {
   return createLocalRuntime({
+    detachedCrawl,
     owner: 'CLI',
     agentIntegration: {
       packageVersion: CLI_VERSION,

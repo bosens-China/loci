@@ -56,7 +56,9 @@ describe('SkillManager', () => {
       { action: 'unchanged', name: 'use-loci', targetPath: target }
     ])
     expect(readFileSync(join(target, 'SKILL.md'), 'utf8')).toContain('name: use-loci')
-    expect(readFileSync(join(target, 'references/cli.md'), 'utf8')).toContain('loci mcp call')
+    expect(readFileSync(join(target, 'references/cli.md'))).toEqual(
+      readFileSync(join(skillResourceDir, 'references/cli.md'))
+    )
     expect(manager.list()).toMatchObject([{ targetPath: target, status: 'current' }])
   })
 

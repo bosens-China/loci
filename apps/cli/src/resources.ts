@@ -1,75 +1,38 @@
-import type { DocumentRecord, DocumentSource } from '@loci/shared'
-import type { CliRuntime } from './runtime.js'
+import type { DocumentSummary, DocumentSource } from '@loci/shared'
+import { documentPath } from '@loci/shared'
 import { CliError } from './errors.js'
-import { readRecentResource } from './preferences.js'
-import { askSearch, askSelect } from './ui.js'
+import type { CliRuntime } from './runtime.js'
 
-export async function resolveSource(
-  runtime: CliRuntime,
-  reference: string | undefined,
-  options: { localOnly?: boolean; message?: string; preferenceKey?: string } = {}
-): Promise<DocumentSource> {
-  const sources = runtime.database
-    .listSources()
-    .filter((source) => !options.localOnly || source.cloud === null)
-  if (sources.length === 0)
-    throw new CliError(options.localOnly ? '还没有本地文档源' : '还没有文档源')
-  if (reference) {
-    const matches = sources.filter(
-      (source) =>
-        source.id === reference || source.id.startsWith(reference) || source.name === reference
-    )
-    if (matches.length === 1) return matches[0]!
-    if (matches.length === 0) throw new CliError(`找不到文档源：${reference}`, 2)
-  }
-  if (sources.length === 1) return sources[0]!
-  const remembered = options.preferenceKey
-    ? readRecentResource(runtime.database, options.preferenceKey)
-    : undefined
-  const initialValue = sources.some((source) => source.id === remembered) ? remembered : undefined
-  const id = await askSelect(
-    options.message ?? '请选择文档源',
-    sources.map((source) => ({
-      value: source.id,
-      label: `${source.name}（${source.pages} 页）`,
-      hint: source.cloud ? '云端副本' : source.url
-    })),
-    initialValue
+/** 短 ID 或同名结果必须唯一，防止有歧义的选择进入写操作。 */
+export function library(runtime: CliRuntime, reference: string): DocumentSource {
+  if (!reference.trim()) throw new CliError('文档库名称或 ID 不能为空', 2)
+  const sources = runtime.listLibraries()
+  const exact = sources.find((source) => source.id === reference)
+  if (exact) return exact
+  const matches = sources.filter(
+    (source) => source.name === reference || source.id.startsWith(reference)
   )
-  return sources.find((source) => source.id === id)!
+  if (matches.length !== 1)
+    throw new CliError(
+      `${matches.length ? '文档库名称或短 ID 不唯一' : '未找到文档库'}：${reference}`,
+      2
+    )
+  return matches[0]!
 }
 
-export async function resolveDocument(
-  runtime: CliRuntime,
-  reference: string | undefined
-): Promise<DocumentRecord> {
-  const documents = runtime.database.listDocuments()
-  if (documents.length === 0) throw new CliError('知识库中还没有文档')
-  if (reference) {
-    const matches = documents.filter(
-      (document) =>
-        document.id === reference ||
-        document.id.startsWith(reference) ||
-        document.url === reference ||
-        document.title === reference
-    )
-    if (matches.length === 1) return matches[0]!
-    if (matches.length === 0) throw new CliError(`找不到文档：${reference}`, 2)
-  }
-  if (documents.length === 1) return documents[0]!
-  const remembered = readRecentResource(runtime.database, 'document-read')
-  const initialValue = documents.some((document) => document.id === remembered)
-    ? remembered
-    : undefined
-  const id = await askSearch(
-    '搜索并选择文档',
-    documents.map((document) => ({
-      value: document.id,
-      label: document.title,
-      hint: `${document.sourceName} · ${new URL(document.url).pathname}`
-    })),
-    '输入标题、文档源或路径',
-    initialValue
-  )
-  return documents.find((document) => document.id === id)!
+export function libraryId(runtime: CliRuntime, reference?: string): string | undefined {
+  return reference === undefined ? undefined : library(runtime, reference).id
+}
+
+export function documentId(runtime: CliRuntime, reference: string, source?: string): string {
+  if (reference.startsWith('/')) throw new CliError('请指定单篇文档的 ID 或短 ID', 2)
+  return runtime.readDocuments({
+    libraryId: libraryId(runtime, source),
+    targets: reference,
+    maxCharsPerFile: 1
+  })[0]!.id
+}
+
+export function documentSummary(doc: DocumentSummary) {
+  return { id: doc.id, title: doc.title, path: documentPath(doc), language: doc.language }
 }

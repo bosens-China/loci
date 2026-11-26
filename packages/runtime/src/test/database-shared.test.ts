@@ -16,7 +16,6 @@ describe('shared database', () => {
         url: 'https://react.dev/learn',
         mode: 'http',
         pageLimit: 10,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })

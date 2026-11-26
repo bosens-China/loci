@@ -11,7 +11,7 @@ describe('buildUrlTree', () => {
         ],
         'docs'
       )
-    ).toEqual([
+    ).toMatchObject([
       {
         id: 'folder:docs:guide',
         title: 'guide',
@@ -29,10 +29,10 @@ describe('buildUrlTree', () => {
       [{ id: 'file-1', title: '开始', url: 'https://example.com/guide/basic/start' }],
       'docs'
     )
-    expect(getUrlTreeSlice(tree, undefined, 1)).toEqual([
+    expect(getUrlTreeSlice(tree, undefined, 1)).toMatchObject([
       { id: 'folder:docs:guide', title: 'guide', readable: false }
     ])
-    expect(getUrlTreeSlice(tree, 'folder:docs:guide', 1)).toEqual([
+    expect(getUrlTreeSlice(tree, 'folder:docs:guide', 1)).toMatchObject([
       { id: 'folder:docs:guide/basic', title: 'basic', readable: false }
     ])
   })
@@ -56,7 +56,7 @@ describe('buildUrlTree', () => {
         ],
         'openapi'
       )
-    ).toEqual([
+    ).toMatchObject([
       {
         id: 'folder:openapi:all',
         title: 'all',
@@ -98,7 +98,7 @@ describe('buildUrlTree', () => {
         ],
         'repository'
       )
-    ).toEqual([
+    ).toMatchObject([
       {
         id: 'folder:repository:docs',
         title: 'docs',

@@ -20,7 +20,6 @@ jobs:
     outputs:
       code: ${{ steps.scopes.outputs.code }}
       cli: ${{ steps.scopes.outputs.cli }}
-      server: ${{ steps.scopes.outputs.server }}
       web: ${{ steps.scopes.outputs.web }}
       quality_scopes: ${{ steps.scopes.outputs.quality_scopes }}
     steps:
@@ -83,59 +82,9 @@ jobs:
       # CLI 构建会先完整构建并嵌入 Web UI，无需再启动独立的 Web build job。
       - run: pnpm cli:build
 
-  build-server:
-    name: Build server image
-    needs: changes
-    if: ${{ needs.changes.outputs.server == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/server/Dockerfile
-          platforms: linux/amd64
-          load: true
-          tags: loci-server-ci
-          cache-from: type=gha,scope=loci-server-amd64
-          cache-to: type=gha,scope=loci-server-amd64,mode=min
-          provenance: false
-          sbom: false
-      - name: Smoke-test server image
-        shell: bash
-        run: |
-          container_id=$(docker run --detach \
-            --env LOCI_ADMIN_PASSWORD=ci \
-            loci-server-ci)
-          cleanup() {
-            docker rm --force "$container_id" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-
-          ready=false
-          for _ in {1..20}; do
-            if docker exec "$container_id" node -e \
-              "fetch('http://127.0.0.1:7001/health').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
-              ready=true
-              break
-            fi
-            if [[ "$(docker inspect --format '{{.State.Running}}' "$container_id")" != true ]]; then
-              break
-            fi
-            sleep 0.25
-          done
-
-          docker logs "$container_id"
-          if [[ "$ready" != true ]]; then
-            echo "Server container did not become healthy"
-            exit 1
-          fi
-
   verify:
     name: Verify
-    needs: [changes, quality, build-cli, build-server]
+    needs: [changes, quality, build-cli]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -144,13 +93,11 @@ jobs:
           CHANGES_RESULT: ${{ needs.changes.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           CLI_RESULT: ${{ needs.build-cli.result }}
-          SERVER_RESULT: ${{ needs.build-server.result }}
         run: |
           for result in \
             "$CHANGES_RESULT" \
             "$QUALITY_RESULT" \
-            "$CLI_RESULT" \
-            "$SERVER_RESULT"; do
+            "$CLI_RESULT"; do
             if [[ "$result" != success && "$result" != skipped ]]; then
               echo "Required CI job finished with: $result"
               exit 1

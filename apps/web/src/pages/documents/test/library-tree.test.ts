@@ -1,62 +1,91 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { UrlTreeNode } from '@loci/shared'
-import { getLibraryTree } from '@/api/library-browser'
-import { filterLibraryTree, libraryFolderKeys, loadLibraryTree } from '../library-tree'
+import {
+  collectReadableDocIds,
+  DEFAULT_TREE_DEPTH,
+  libraryFolderKeys,
+  parseTreeQueries,
+  resolveReadTargets
+} from '../library-tree'
 
-vi.mock('@/api/library-browser', () => ({ getLibraryTree: vi.fn() }))
-
-const tree: UrlTreeNode[] = [
+const mockTree: UrlTreeNode[] = [
   {
     id: 'reference',
     title: 'reference',
     readable: false,
+    totalCount: 2,
+    matchedCount: 1,
     children: [
       {
         id: 'react',
         title: 'react',
         readable: false,
+        totalCount: 2,
+        matchedCount: 1,
         children: [
-          { id: 'state', title: 'useState', readable: true },
-          { id: 'effect', title: 'useEffect', readable: true }
+          { id: 'doc-state', title: 'useState', readable: true, totalCount: 1, matchedCount: 1 },
+          { id: 'doc-effect', title: 'useEffect', readable: true, totalCount: 1, matchedCount: 0 }
         ]
       }
     ]
   }
 ]
 
-describe('文档库目录搜索', () => {
-  it('保留深层匹配页的祖先，忽略大小写和首尾空白', () => {
-    const result = filterLibraryTree(tree, '  USESTATE  ')
-    expect(result[0]?.children?.[0]?.children?.map((node) => node.id)).toEqual(['state'])
-    expect(libraryFolderKeys(result)).toEqual(['reference', 'react'])
-    expect(filterLibraryTree(tree, 'missing')).toEqual([])
-    expect(filterLibraryTree(tree, 'reference')).toEqual(tree)
-    expect(tree[0]?.children?.[0]?.children).toHaveLength(2)
+describe('文档库目录工具函数', () => {
+  it('正确解析单/多关键词字符串', () => {
+    expect(parseTreeQueries('router navigation')).toEqual(['router', 'navigation'])
+    expect(parseTreeQueries('state, effect, memo')).toEqual(['state', 'effect', 'memo'])
+    expect(parseTreeQueries('  hook   ')).toEqual(['hook'])
+    expect(parseTreeQueries('')).toEqual([])
   })
 
-  it('完整搜索继续获取 API 深度边界外的目录，包含尚未展开的页面', async () => {
-    vi.mocked(getLibraryTree).mockImplementation(async (_location, _library, parent) => ({
-      libraryId: 'library',
-      title: 'Docs',
-      parentId: parent ?? null,
-      nodes:
-        parent === 'deep'
-          ? [{ id: 'state', title: 'useState', readable: true }]
-          : [
-              {
-                id: 'root',
-                title: 'root',
-                readable: false,
-                children: [{ id: 'deep', title: 'deep', readable: false }]
-              }
-            ]
-    }))
-    const result = filterLibraryTree(await loadLibraryTree('local', 'library'), 'useState')
-    expect(result[0]?.children?.[0]?.children?.[0]?.id).toBe('state')
+  it('提取全部目录节点 Key', () => {
+    expect(libraryFolderKeys(mockTree)).toEqual(['reference', 'react'])
   })
 
-  it('目录读取失败必须向上抛出，不能当作搜索无结果', async () => {
-    vi.mocked(getLibraryTree).mockRejectedValueOnce(new Error('offline'))
-    await expect(loadLibraryTree('cloud', 'library')).rejects.toThrow('offline')
+  it('收集树下所有可读叶子文档 ID', () => {
+    expect(collectReadableDocIds(mockTree)).toEqual(['doc-state', 'doc-effect'])
+  })
+
+  it('P1-4: 勾选目录节点时解析为可读叶子 ID，且 targets 绝不含 folder: 内部键', () => {
+    const treeWithFolderKey: UrlTreeNode[] = [
+      {
+        id: 'folder:react:guide',
+        title: 'guide',
+        readable: false,
+        children: [
+          { id: 'doc-intro', title: 'Intro', readable: true },
+          { id: 'doc-quickstart', title: 'Quickstart', readable: true }
+        ]
+      },
+      {
+        id: 'folder:react:api',
+        title: 'api',
+        readable: false,
+        children: [{ id: 'doc-hooks', title: 'Hooks', readable: true }]
+      }
+    ]
+
+    // 勾选单个目录节点
+    const targetsFromFolder = resolveReadTargets(['folder:react:guide'], treeWithFolderKey)
+    expect(targetsFromFolder).toEqual(['doc-intro', 'doc-quickstart'])
+    expect(targetsFromFolder.some((t) => t.startsWith('folder:'))).toBe(false)
+
+    // 混合勾选：目录节点 + 单独文档节点 + 重复文档节点
+    const mixedTargets = resolveReadTargets(
+      ['folder:react:guide', 'doc-intro', 'doc-hooks'],
+      treeWithFolderKey
+    )
+    expect(mixedTargets).toEqual(['doc-intro', 'doc-quickstart', 'doc-hooks'])
+    expect(mixedTargets.some((t) => t.startsWith('folder:'))).toBe(false)
+
+    // 勾选不存在或空的目录节点
+    const emptyTargets = resolveReadTargets(['folder:react:unknown'], treeWithFolderKey)
+    expect(emptyTargets).toEqual([])
+    expect(emptyTargets.some((t) => t.startsWith('folder:'))).toBe(false)
+  })
+
+  it('深层目录默认深度配置大于浅层限制', () => {
+    expect(DEFAULT_TREE_DEPTH).toBeGreaterThanOrEqual(100)
   })
 })

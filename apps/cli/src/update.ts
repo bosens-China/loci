@@ -29,7 +29,7 @@ export const CLI_VERSION = readCliVersion()
 
 /** 每天仅派生一次独立检查进程，避免网络请求阻塞用户命令。 */
 export function startDailyUpdateCheck(args: readonly string[]): void {
-  if (!process.stdout.isTTY || isMcpMachineCommand(args) || args[0] === 'update') return
+  if (!process.stdout.isTTY || args.includes('--json') || args[0] === 'upgrade') return
   if (!claimDailyUpdateCheck()) return
 
   const entry = process.argv[1]
@@ -97,10 +97,6 @@ function readCliVersion(): string {
   const version = (packageJson as { version?: unknown }).version
   if (typeof version !== 'string') throw new Error('无法读取 CLI 版本')
   return version
-}
-
-function isMcpMachineCommand(args: readonly string[]): boolean {
-  return args[0] === 'mcp' && (args[1] === 'stdio' || args[1] === 'call')
 }
 
 function cachePath(): string {

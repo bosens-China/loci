@@ -9,7 +9,6 @@ describe('database GitHub sources', () => {
         mode: 'auto' as const,
         pageLimit: 1000,
         scopePath: '/',
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null,
         githubArchiveLimitMb: null,

@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import type { CrawlFailure, CrawlProgress } from '@loci/shared'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import type { CrawlFailure, CrawlProgress, LibraryCrawlStatus } from '@loci/shared'
+import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import type { LociDrizzleDatabase } from './drizzle-database.js'
 import { crawlFailures, crawlRuns, documentSources } from './drizzle-schema.js'
-import { addColumn, withImmediateTransaction, withTransaction } from './sqlite.js'
+import { addColumn, withImmediateTransaction } from './sqlite.js'
 
 export interface CrawlHistoryRecord {
   id: string
@@ -24,6 +24,12 @@ export interface CrawlFailureRecord extends CrawlFailure {
 }
 
 export interface CrawlRunSnapshot {
+  finishedAt: string | null
+  currentUrl: string | null
+  kind: LibraryCrawlStatus['kind']
+  requestKey?: string
+  cancelled: boolean
+  startedAt: string | null
   id: string
   sourceId: string
   status: CrawlHistoryRecord['status']
@@ -32,18 +38,26 @@ export interface CrawlRunSnapshot {
 }
 
 export interface CrawlHistoryDatabase {
-  startCrawlRun: (sourceId: string) => string
+  startCrawlRun: (
+    sourceId: string,
+    kind?: LibraryCrawlStatus['kind'],
+    runId?: string,
+    requestKey?: string
+  ) => string
+  listCrawledSourceIds: () => string[]
+  interruptCrawlRun: (id: string) => void
   updateCrawlRunProgress: (id: string, progress: CrawlProgress) => void
+  getLatestCrawlRun: (sourceId: string) => CrawlRunSnapshot | undefined
   getActiveCrawlRun: (sourceId: string) => CrawlRunSnapshot | undefined
   getCrawlRun: (id: string) => CrawlRunSnapshot | undefined
   finishCrawlRun: (
     id: string,
-    status: 'completed' | 'failed',
+    status: 'completed' | 'failed' | 'cancelled',
     progress: CrawlProgress | undefined,
     error: string | null
   ) => void
   listCrawlHistory: (sourceId?: string) => CrawlHistoryRecord[]
-  listCrawlFailures: (runId: string) => CrawlFailureRecord[]
+  listCrawlFailures: (runId: string, limit?: number) => CrawlFailureRecord[]
 }
 
 export function initializeCrawlHistoryDatabase(database: DatabaseSync): void {
@@ -87,6 +101,7 @@ export function initializeCrawlHistoryDatabase(database: DatabaseSync): void {
      ON crawl_runs(source_id) WHERE status = 'running'`
   )
   migrateCrawlFailureReasons(database)
+  database.exec('CREATE INDEX IF NOT EXISTS crawl_failures_by_run ON crawl_failures(run_id)')
 }
 
 function migrateCrawlFailureReasons(database: DatabaseSync): void {
@@ -94,8 +109,7 @@ function migrateCrawlFailureReasons(database: DatabaseSync): void {
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'crawl_failures'")
     .get() as unknown as { sql: string } | undefined
   if (!row || row.sql.includes('git_lfs_unsupported')) return
-  withImmediateTransaction(database, () => {
-    database.exec(`
+  database.exec(`
     CREATE TABLE crawl_failures_next (
       id TEXT PRIMARY KEY,
       run_id TEXT NOT NULL REFERENCES crawl_runs(id) ON DELETE CASCADE,
@@ -112,7 +126,6 @@ function migrateCrawlFailureReasons(database: DatabaseSync): void {
     DROP TABLE crawl_failures;
     ALTER TABLE crawl_failures_next RENAME TO crawl_failures;
     `)
-  })
 }
 
 export function createCrawlHistoryDatabase(
@@ -120,8 +133,27 @@ export function createCrawlHistoryDatabase(
   drizzleDatabase: LociDrizzleDatabase
 ): CrawlHistoryDatabase {
   return {
-    startCrawlRun: (sourceId) => {
-      const id = randomUUID()
+    listCrawledSourceIds: () =>
+      drizzleDatabase
+        .selectDistinct({ id: crawlRuns.sourceId })
+        .from(crawlRuns)
+        .orderBy(crawlRuns.sourceId)
+        .all()
+        .map((row) => row.id),
+    interruptCrawlRun: (id) => {
+      const now = new Date().toISOString()
+      drizzleDatabase
+        .update(crawlRuns)
+        .set({
+          status: 'failed',
+          finishedAt: now,
+          updatedAt: now,
+          errorMessage: '抓取中断：原进程已退出'
+        })
+        .where(and(eq(crawlRuns.id, id), eq(crawlRuns.status, 'running')))
+        .run()
+    },
+    startCrawlRun: (sourceId, kind = 'sync', id = randomUUID(), requestKey) => {
       withImmediateTransaction(database, () => {
         const now = new Date().toISOString()
         database
@@ -133,21 +165,22 @@ export function createCrawlHistoryDatabase(
           .run(now, now, sourceId)
         database
           .prepare(
-            `INSERT INTO crawl_runs (id, source_id, status, started_at, updated_at)
-             VALUES (?, ?, 'running', ?, ?)`
+            `INSERT INTO crawl_runs (id, source_id, status, started_at, updated_at, progress_json)
+             VALUES (?, ?, 'running', ?, ?, ?)`
           )
-          .run(id, sourceId, now, now)
+          .run(id, sourceId, now, now, JSON.stringify({ kind, requestKey }))
       })
       return id
     },
     updateCrawlRunProgress: (id, progress) => {
       database
         .prepare(
-          `UPDATE crawl_runs SET progress_json = ?, discovered_count = ?, success_count = ?,
+          `UPDATE crawl_runs SET progress_json = ${progressExpression}, discovered_count = ?, success_count = ?,
              failure_count = ?, updated_at = ? WHERE id = ? AND status = 'running'`
         )
         .run(
-          JSON.stringify(withoutNode(progress)),
+          JSON.stringify(progress),
+          progress.node?.url ?? null,
           progress.queued,
           progress.succeeded,
           progress.failed,
@@ -155,9 +188,19 @@ export function createCrawlHistoryDatabase(
           id
         )
     },
+    getLatestCrawlRun: (sourceId) => {
+      const row = drizzleDatabase
+        .select()
+        .from(crawlRuns)
+        .where(and(eq(crawlRuns.sourceId, sourceId), ne(crawlRuns.status, 'queued')))
+        .orderBy(desc(crawlRuns.startedAt), sql`rowid DESC`)
+        .limit(1)
+        .get()
+      return row ? toRunSnapshot(row) : undefined
+    },
     getActiveCrawlRun: (sourceId) => {
       const row = drizzleDatabase
-        .select(runSelection)
+        .select()
         .from(crawlRuns)
         .where(and(eq(crawlRuns.sourceId, sourceId), eq(crawlRuns.status, 'running')))
         .limit(1)
@@ -165,16 +208,22 @@ export function createCrawlHistoryDatabase(
       return row ? toRunSnapshot(row) : undefined
     },
     getCrawlRun: (id) => {
-      const row = drizzleDatabase
-        .select(runSelection)
-        .from(crawlRuns)
-        .where(eq(crawlRuns.id, id))
-        .get()
+      const row = drizzleDatabase.select().from(crawlRuns).where(eq(crawlRuns.id, id)).get()
       return row ? toRunSnapshot(row) : undefined
     },
     finishCrawlRun: (id, status, progress, error) => {
-      withTransaction(database, () => {
-        finishCrawlRunRecord(database, id, status, progress, error)
+      withImmediateTransaction(database, () => {
+        const last =
+          progress === undefined
+            ? drizzleDatabase.select().from(crawlRuns).where(eq(crawlRuns.id, id)).get()
+            : undefined
+        finishCrawlRunRecord(
+          database,
+          id,
+          status,
+          progress ?? (last && toRunSnapshot(last).progress),
+          error
+        )
       })
     },
     listCrawlHistory: (sourceId) => {
@@ -188,12 +237,13 @@ export function createCrawlHistoryDatabase(
         .all()
       return rows.map(toCrawlHistoryRecord)
     },
-    listCrawlFailures: (runId) => {
+    listCrawlFailures: (runId, limit = -1) => {
       const rows = drizzleDatabase
         .select(failureSelection)
         .from(crawlFailures)
         .where(eq(crawlFailures.runId, runId))
         .orderBy(sql`rowid`)
+        .limit(limit)
         .all()
       return rows.map((row) => ({
         runId: row.runId,
@@ -208,10 +258,16 @@ export function createCrawlHistoryDatabase(
   }
 }
 
+// 保留 v19 的状态 CHECK 和进度结构，扩展字段随原子进度更新一起落盘。
+const previousJson = 'CASE WHEN json_valid(progress_json) THEN progress_json END'
+const progressExpression = `json_set(?, '$.kind', COALESCE(json_extract(${previousJson}, '$.kind'), 'sync'),
+  '$.currentUrl', COALESCE(?, json_extract(${previousJson}, '$.currentUrl')),
+  '$.requestKey', json_extract(${previousJson}, '$.requestKey'))`
+
 export function finishCrawlRunRecord(
   database: DatabaseSync,
   id: string,
-  status: 'completed' | 'failed',
+  status: 'completed' | 'failed' | 'cancelled',
   progress: CrawlProgress | undefined,
   error: string | null
 ): boolean {
@@ -220,17 +276,22 @@ export function finishCrawlRunRecord(
     .prepare(
       `UPDATE crawl_runs
        SET status = ?, finished_at = ?, discovered_count = ?, success_count = ?, failure_count = ?,
-           progress_json = ?, error_message = ?, updated_at = ?
+           progress_json = ${progressExpression}, error_message = ?, updated_at = ?
        WHERE id = ? AND status = 'running'`
     )
     .run(
-      status,
+      status === 'cancelled' || (status === 'completed' && progress?.failed && !progress.succeeded)
+        ? 'failed'
+        : status,
       now,
       progress?.queued ?? 0,
       progress?.succeeded ?? 0,
       progress?.failed ?? 0,
-      progress ? JSON.stringify(withoutNode(progress)) : null,
-      error,
+      JSON.stringify({ ...progress, cancelled: status === 'cancelled' }),
+      progress?.node?.url ?? null,
+      error ??
+        progress?.failures?.[0]?.message ??
+        (progress?.failed ? `${progress.failed} 个页面抓取失败` : null),
       now,
       id
     )
@@ -269,17 +330,8 @@ const historySelection = {
   errorMessage: crawlRuns.errorMessage
 }
 
-interface CrawlHistoryRow {
-  id: string
-  sourceId: string
+type CrawlHistoryRow = Omit<typeof crawlRuns.$inferSelect, 'progressJson' | 'updatedAt'> & {
   sourceName: string
-  status: CrawlHistoryRecord['status']
-  startedAt: string | null
-  finishedAt: string | null
-  discoveredCount: number
-  successCount: number
-  failureCount: number
-  errorMessage: string | null
 }
 
 const failureSelection = {
@@ -290,28 +342,6 @@ const failureSelection = {
   retryable: crawlFailures.retryable,
   statusCode: crawlFailures.statusCode,
   redirectUrl: crawlFailures.redirectUrl
-}
-
-const runSelection = {
-  id: crawlRuns.id,
-  sourceId: crawlRuns.sourceId,
-  status: crawlRuns.status,
-  progressJson: crawlRuns.progressJson,
-  discoveredCount: crawlRuns.discoveredCount,
-  successCount: crawlRuns.successCount,
-  failureCount: crawlRuns.failureCount,
-  errorMessage: crawlRuns.errorMessage
-}
-
-interface CrawlRunSnapshotRow {
-  id: string
-  sourceId: string
-  status: CrawlHistoryRecord['status']
-  progressJson: string | null
-  discoveredCount: number
-  successCount: number
-  failureCount: number
-  errorMessage: string | null
 }
 
 function toCrawlHistoryRecord(row: CrawlHistoryRow): CrawlHistoryRecord {
@@ -329,30 +359,37 @@ function toCrawlHistoryRecord(row: CrawlHistoryRow): CrawlHistoryRecord {
   }
 }
 
-function toRunSnapshot(row: CrawlRunSnapshotRow): CrawlRunSnapshot {
-  let progress: CrawlProgress | undefined
+function toRunSnapshot(row: typeof crawlRuns.$inferSelect): CrawlRunSnapshot {
+  let stored: Partial<CrawlProgress> & {
+    currentUrl?: string
+    kind?: string
+    requestKey?: string
+    cancelled?: boolean
+  } = {}
   try {
-    progress = row.progressJson ? (JSON.parse(row.progressJson) as CrawlProgress) : undefined
+    stored = JSON.parse(row.progressJson ?? '{}') ?? {}
   } catch {
-    progress = undefined
+    /* 旧记录使用列中的计数。 */
   }
+  const { currentUrl, kind, requestKey, cancelled, ...progress } = stored
   return {
+    finishedAt: row.finishedAt,
+    currentUrl: currentUrl ?? progress.node?.url ?? null,
+    kind: kind === 'pages' ? 'pages' : 'sync',
+    ...(typeof requestKey === 'string' && { requestKey }),
+    cancelled: cancelled === true,
     id: row.id,
     sourceId: row.sourceId,
     status: row.status,
-    progress: progress ?? {
+    startedAt: row.startedAt,
+    progress: {
       queued: row.discoveredCount,
       processed: row.successCount + row.failureCount,
       succeeded: row.successCount,
       failed: row.failureCount,
-      limitReached: false
+      limitReached: false,
+      ...progress
     },
     error: row.errorMessage
   }
-}
-
-function withoutNode(progress: CrawlProgress): CrawlProgress {
-  const snapshot = { ...progress }
-  delete snapshot.node
-  return snapshot
 }

@@ -1,4 +1,7 @@
-export interface UrlTreeItem {
+import type { DocumentSummary } from './api.js'
+import type { SearchPassage } from './document-query.js'
+
+export interface UrlTreeItem extends Partial<DocumentSummary>, Partial<SearchPassage> {
   id: string
   title: string
   url: string
@@ -6,7 +9,9 @@ export interface UrlTreeItem {
   path?: string
 }
 
-export interface UrlTreeNode {
+export interface UrlTreeNode extends Partial<UrlTreeItem> {
+  matchedCount?: number
+  totalCount?: number
   id: string
   title: string
   readable: boolean
@@ -31,9 +36,53 @@ export function buildUrlTree(items: readonly UrlTreeItem[], namespace: string): 
       }
       children = folder.children ?? []
     }
-    children.push({ id: item.id, title: item.title, readable: true })
+    children.push({ ...item, path: documentPath(item), readable: true })
   }
   return sortTree(roots)
+}
+
+export function documentPath(item: Pick<UrlTreeItem, 'relativePath' | 'path' | 'url'>): string {
+  return (
+    '/' +
+    (item.relativePath ?? item.path ?? new URL(item.url).pathname)
+      .split(/[\\/]/u)
+      .filter(Boolean)
+      .join('/')
+  )
+}
+
+/** 先统计完整子树，再裁剪无命中的分支，目录分页仍能展示完整命中比例。 */
+export function filterUrlTree(
+  roots: readonly UrlTreeNode[],
+  matchedIds: ReadonlySet<string>
+): UrlTreeNode[] {
+  function visit(nodes: readonly UrlTreeNode[]) {
+    const result: UrlTreeNode[] = []
+    let total = 0
+    let matched = 0
+    for (const node of nodes) {
+      if (node.readable) {
+        total++
+        if (matchedIds.has(node.id)) {
+          matched++
+          result.push(node)
+        }
+      } else {
+        const branch = visit(node.children ?? [])
+        total += branch.total
+        matched += branch.matched
+        if (branch.matched)
+          result.push({
+            ...node,
+            children: branch.result,
+            totalCount: branch.total,
+            matchedCount: branch.matched
+          })
+      }
+    }
+    return { total, matched, result }
+  }
+  return visit(roots).result
 }
 
 export function getUrlTreeSlice(
@@ -55,14 +104,10 @@ function findNode(nodes: readonly UrlTreeNode[], id: string): UrlTreeNode | unde
 }
 
 function limitDepth(node: UrlTreeNode, depth: number): UrlTreeNode {
-  const children =
-    depth > 1 ? node.children?.map((child) => limitDepth(child, depth - 1)) : undefined
-  return {
-    id: node.id,
-    title: node.title,
-    readable: node.readable,
-    ...(children ? { children } : {})
-  }
+  const { children: nested, ...metadata } = node
+  return depth > 1 && nested
+    ? { ...metadata, children: nested.map((child) => limitDepth(child, depth - 1)) }
+    : metadata
 }
 
 function sortTree(nodes: UrlTreeNode[]): UrlTreeNode[] {

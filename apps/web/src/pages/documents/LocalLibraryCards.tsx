@@ -1,28 +1,30 @@
 import { useMemo, useState } from 'react'
-import type { DocumentSource, LocalJob } from '@loci/shared'
+import type { LibraryCrawlStatus, LibrarySummary } from '@loci/shared'
 import {
+  BookOutlined,
   CheckSquareOutlined,
-  CloudOutlined,
   DeleteOutlined,
+  FileTextOutlined,
   GithubOutlined,
-  GlobalOutlined,
   PlusOutlined,
-  SearchOutlined
+  SearchOutlined,
+  SyncOutlined
 } from '@ant-design/icons'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   App,
   Button,
   Card,
-  Checkbox,
   Empty,
   Input,
   Pagination,
   Segmented,
+  Select,
   Space,
-  Typography
+  Statistic
 } from 'antd'
-import { deleteSource } from '@/api/sources'
+import { listCategories } from '@/api/categories'
+import { deleteLibrary, syncLibrary } from '@/api/libraries'
 import { PageHeader } from '@/components/PageHeader'
 import {
   countLocalLibrarySources,
@@ -32,52 +34,61 @@ import {
 import { LocalLibraryCardItem } from '@/pages/documents/LocalLibraryCardItem'
 import { BatchDeleteError, deleteLibrarySources } from '@/pages/documents/library-batch-delete'
 import { SourceFormModal } from '@/pages/documents/SourceFormModal'
-import { getLatestActiveJobsBySource } from '@/pages/jobs/job-state'
 import { PAGE_SIZE_OPTIONS } from '@/utils/pagination'
 
-/** 本地文档库卡片列表：包含类型筛选、关键字搜索、多选批量删除、弹窗编辑、分页及进入目录阅读。 */
-export function LocalLibraryCards(props: {
-  sources: DocumentSource[]
-  jobs: LocalJob[]
+export interface LocalLibraryCardsProps {
+  libraries: LibrarySummary[]
+  crawlStatuses: LibraryCrawlStatus[]
   onSelect: (id: string) => void
-  onPublish: (source: DocumentSource) => void
-  canPublish: boolean
+}
+
+/** 本地文档库主工作台：概览统计指标、关键词搜索过滤、实时抓取状态、批量操作与进入目录阅读。 */
+export function LocalLibraryCards(props: {
+  libraries: LibrarySummary[]
+  crawlStatuses: LibraryCrawlStatus[]
+  onSelect: (id: string) => void
 }): React.JSX.Element {
   const { message, modal } = App.useApp()
   const client = useQueryClient()
 
+  const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories })
+  const [category, setCategory] = useState('')
   const [kindFilter, setKindFilter] = useState<LibraryKindFilter>('all')
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(12)
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [editingSource, setEditingSource] = useState<DocumentSource | 'new' | null>(null)
-  const activeJobs = useMemo(() => getLatestActiveJobsBySource(props.jobs), [props.jobs])
+  const [editingSource, setEditingSource] = useState<LibrarySummary | 'new' | null>(null)
 
-  // 统计各类来源数量
-  const counts = useMemo(() => countLocalLibrarySources(props.sources), [props.sources])
+  // 抓取状态映射字典
+  const crawlMap = useMemo(() => {
+    const map = new Map<string, LibraryCrawlStatus>()
+    for (const item of props.crawlStatuses) {
+      map.set(item.libraryId, item)
+    }
+    return map
+  }, [props.crawlStatuses])
 
-  // 类型与关键词组合过滤
+  const counts = useMemo(() => countLocalLibrarySources(props.libraries), [props.libraries])
   const filtered = useMemo(
-    () => filterLocalLibrarySources(props.sources, { kind: kindFilter, keyword }),
-    [kindFilter, keyword, props.sources]
+    () => filterLocalLibrarySources(props.libraries, { kind: kindFilter, keyword, category }),
+    [kindFilter, keyword, category, props.libraries]
+  )
+
+  const totalPages = useMemo(
+    () => props.libraries.reduce((sum, lib) => sum + (lib.pageCount ?? 0), 0),
+    [props.libraries]
+  )
+  const runningCrawls = useMemo(
+    () => props.crawlStatuses.filter((s) => s.status === 'running').length,
+    [props.crawlStatuses]
   )
 
   const pagedSources = useMemo(() => {
     const start = (page - 1) * pageSize
     return filtered.slice(start, start + pageSize)
   }, [filtered, page, pageSize])
-
-  const handleKindFilterChange = (val: LibraryKindFilter): void => {
-    setKindFilter(val)
-    setPage(1)
-  }
-
-  const handleSearchChange = (val: string): void => {
-    setKeyword(val)
-    setPage(1)
-  }
 
   const toggleSelect = (id: string): void => {
     setSelectedIds((prev) =>
@@ -87,10 +98,6 @@ export function LocalLibraryCards(props: {
 
   const isAllSelected =
     filtered.length > 0 && filtered.every((item) => selectedIds.includes(item.id))
-  const isIndeterminate =
-    selectedIds.length > 0 &&
-    !isAllSelected &&
-    filtered.some((item) => selectedIds.includes(item.id))
 
   const toggleSelectAll = (): void => {
     if (isAllSelected) {
@@ -100,225 +107,276 @@ export function LocalLibraryCards(props: {
     }
   }
 
-  const singleDelete = useMutation({
-    mutationFn: deleteSource,
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ['sources'] })
-      void client.invalidateQueries({ queryKey: ['jobs'] })
-      void message.success('文档源已成功删除')
+  // 批量更新
+  const batchSyncMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.allSettled(ids.map((id) => syncLibrary(id)))
     },
-    onError: (err: Error) => void message.error(`删除失败: ${err.message}`)
-  })
-
-  const batchDelete = useMutation({
-    mutationFn: (ids: string[]) => deleteLibrarySources(ids, deleteSource),
-    onSuccess: (deletedIds) => {
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['libraries'] })
+      void client.invalidateQueries({ queryKey: ['library-crawl-statuses'] })
+      void message.success(`已为选中的 ${selectedIds.length} 个文档库触发更新`)
       setSelectedIds([])
       setSelectMode(false)
-      void message.success(`已成功批量删除 ${deletedIds.length} 个文档源`)
+    }
+  })
+
+  // 批量删除
+  const batchDeleteMutation = useMutation({
+    mutationFn: (ids: string[]) => deleteLibrarySources(ids, deleteLibrary),
+    onSuccess: (deleted) => {
+      void client.invalidateQueries({ queryKey: ['libraries'] })
+      void client.invalidateQueries({ queryKey: ['library-crawl-statuses'] })
+      void message.success(`已删除 ${deleted.length} 个文档库`)
+      setSelectedIds([])
+      setSelectMode(false)
     },
-    onError: (error: Error) => {
-      if (error instanceof BatchDeleteError) {
-        setSelectedIds(error.failedIds)
-        void message.error(
-          `已删除 ${error.succeededIds.length} 个文档源，${error.failedIds.length} 个删除失败，请重试`
+    onError: (err: unknown) => {
+      void client.invalidateQueries({ queryKey: ['libraries'] })
+      if (err instanceof BatchDeleteError) {
+        setSelectedIds(err.failedIds)
+        void message.warning(
+          `已删除 ${err.succeededIds.length} 个文档库，${err.failedIds.length} 个删除失败`
         )
-        return
+      } else {
+        void message.error('批量删除失败')
       }
-      void message.error(`批量删除失败: ${error.message}`)
-    },
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: ['sources'] })
-      void client.invalidateQueries({ queryKey: ['jobs'] })
     }
   })
 
   const confirmBatchDelete = (): void => {
-    const ids = [...selectedIds]
-    if (!ids.length) return
     modal.confirm({
-      title: `确认批量删除选中的 ${ids.length} 个文档源？`,
-      content: (
-        <Typography.Text type="secondary">
-          删除后将一并移除已下载的离线文档与搜索索引，此操作无法撤销。
-        </Typography.Text>
-      ),
+      title: `确认删除选中的 ${selectedIds.length} 个文档库？`,
+      content: '删除后对应的全部文档与全文检索索引将从本机清除。',
       okText: '确认删除',
       cancelText: '取消',
       okButtonProps: { danger: true },
-      onOk: () => batchDelete.mutateAsync(ids)
-    })
-  }
-
-  const segmentedOptions: Array<{ value: LibraryKindFilter; label: React.ReactNode }> = [
-    {
-      value: 'all',
-      label: `全部 (${counts.total})`
-    },
-    {
-      value: 'web',
-      label: (
-        <span className="flex items-center gap-1.5 px-0.5">
-          <GlobalOutlined className="text-blue-500" />
-          普通站点 ({counts.web})
-        </span>
-      )
-    },
-    {
-      value: 'github',
-      label: (
-        <span className="flex items-center gap-1.5 px-0.5">
-          <GithubOutlined />
-          GitHub ({counts.github})
-        </span>
-      )
-    }
-  ]
-  if (counts.cloud > 0) {
-    segmentedOptions.push({
-      value: 'cloud',
-      label: (
-        <span className="flex items-center gap-1.5 px-0.5">
-          <CloudOutlined className="text-cyan-500" />
-          云端副本 ({counts.cloud})
-        </span>
-      )
+      onOk: () => batchDeleteMutation.mutateAsync(selectedIds)
     })
   }
 
   return (
-    <div className="px-6 py-6 sm:px-8 sm:py-8">
+    <div className="px-6 py-6 sm:px-8 sm:py-8 space-y-5">
       <PageHeader
-        title="本地文档库"
-        description="选择目标文档库进入层级目录与离线正文阅读。"
+        title="知识管理"
+        description="本地离线技术文档库管理工作台，一站式抓取、检索、阅读与小节编辑。"
         action={
-          <Space size={8}>
-            <Button
-              icon={<CheckSquareOutlined />}
-              type={selectMode ? 'primary' : 'default'}
-              ghost={selectMode}
-              onClick={() => {
-                if (selectMode) setSelectedIds([])
-                setSelectMode(!selectMode)
-              }}
-            >
-              {selectMode ? '退出多选' : '批量管理'}
-            </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditingSource('new')}>
-              新增文档源
-            </Button>
-          </Space>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditingSource('new')}>
+            添加文档库
+          </Button>
         }
       />
 
-      {/* 筛选与搜索工具栏 */}
-      <Card size="small" className="mb-5 shadow-xs border-[var(--ant-color-border-secondary)]">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
-          {/* 左侧类型过滤 */}
-          <div className="overflow-x-auto">
-            <Segmented<LibraryKindFilter>
-              value={kindFilter}
-              onChange={handleKindFilterChange}
-              options={segmentedOptions}
-            />
-          </div>
-
-          {/* 右侧搜索框与多选批量操作 */}
-          <div className="flex items-center gap-3 flex-1 md:justify-end">
-            <Input
-              allowClear
-              prefix={<SearchOutlined className="text-[var(--ant-color-text-secondary)]" />}
-              placeholder="搜索文档库名称、域名或路径..."
-              value={keyword}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full md:max-w-xs"
-            />
-
-            {selectMode && (
-              <Space size={10} className="items-center shrink-0">
-                <Checkbox
-                  checked={isAllSelected}
-                  indeterminate={isIndeterminate}
-                  onChange={toggleSelectAll}
-                >
-                  全选 ({selectedIds.length}/{filtered.length})
-                </Checkbox>
-                <Button
-                  danger
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  disabled={selectedIds.length === 0}
-                  loading={batchDelete.isPending}
-                  onClick={confirmBatchDelete}
-                >
-                  删除 ({selectedIds.length})
-                </Button>
-              </Space>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      {/* 卡片列表 */}
-      {pagedSources.length ? (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {pagedSources.map((source) => {
-              const isSelected = selectedIds.includes(source.id)
-              return (
-                <LocalLibraryCardItem
-                  key={source.id}
-                  source={source}
-                  activeJob={activeJobs.get(source.id)}
-                  isSelected={isSelected}
-                  selectMode={selectMode}
-                  onSelectCard={() => props.onSelect(source.id)}
-                  onToggleSelect={() => toggleSelect(source.id)}
-                  onEdit={() => setEditingSource(source)}
-                  onPublish={props.onPublish}
-                  canPublish={props.canPublish}
-                  onDelete={() => singleDelete.mutate(source.id)}
-                  isDeleting={singleDelete.isPending}
-                />
-              )
-            })}
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-            <Typography.Text type="secondary" className="text-xs">
-              当前展示{' '}
-              <span className="font-semibold text-[var(--ant-color-text)]">{filtered.length}</span>{' '}
-              个文档库
-            </Typography.Text>
-            <Pagination
-              current={page}
-              pageSize={pageSize}
-              total={filtered.length}
-              showSizeChanger
-              pageSizeOptions={PAGE_SIZE_OPTIONS}
-              showQuickJumper
-              onChange={(p, ps) => {
-                setPage(p)
-                setPageSize(ps)
-              }}
-            />
-          </div>
-        </>
-      ) : (
-        <Card className="py-16">
-          <Empty
-            description={
-              keyword || kindFilter !== 'all' ? '未找到匹配的文档库' : '还没有本地文档库'
+      {/* 整合概览看板指标 */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Card size="small" className="shadow-xs">
+          <Statistic
+            title="本地文档库"
+            value={counts.total}
+            prefix={<BookOutlined className="text-[var(--ant-color-primary)] text-sm mr-1" />}
+            suffix={
+              <span className="text-xs font-normal text-[var(--ant-color-text-secondary)]">个</span>
             }
           />
         </Card>
+        <Card size="small" className="shadow-xs">
+          <Statistic
+            title="已收录总页面"
+            value={totalPages}
+            prefix={<FileTextOutlined className="text-[var(--ant-color-success)] text-sm mr-1" />}
+            suffix={
+              <span className="text-xs font-normal text-[var(--ant-color-text-secondary)]">页</span>
+            }
+          />
+        </Card>
+        <Card size="small" className="shadow-xs">
+          <Statistic
+            title="进行中抓取"
+            value={runningCrawls}
+            prefix={
+              <SyncOutlined
+                spin={runningCrawls > 0}
+                className="text-[var(--ant-color-info)] text-sm mr-1"
+              />
+            }
+            suffix={
+              <span className="text-xs font-normal text-[var(--ant-color-text-secondary)]">个</span>
+            }
+          />
+        </Card>
+        <Card size="small" className="shadow-xs">
+          <Statistic
+            title="GitHub 仓库库"
+            value={counts.github}
+            prefix={
+              <GithubOutlined className="text-[var(--ant-color-text-tertiary)] text-sm mr-1" />
+            }
+            suffix={
+              <span className="text-xs font-normal text-[var(--ant-color-text-secondary)]">个</span>
+            }
+          />
+        </Card>
+      </div>
+
+      {/* 搜索与工具栏 */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Input
+            prefix={<SearchOutlined className="text-[var(--ant-color-text-tertiary)]" />}
+            placeholder="搜索库名称、URL 或 ID..."
+            allowClear
+            value={keyword}
+            onChange={(e) => {
+              setKeyword(e.target.value)
+              setPage(1)
+            }}
+            className="w-64"
+          />
+          <Select
+            aria-label="按分类筛选"
+            className="min-w-36"
+            value={category}
+            options={[
+              { label: '全部分类', value: '' },
+              ...(categories.data ?? []).map(({ name }) => ({ label: name, value: name }))
+            ]}
+            onChange={(name) => {
+              setCategory(name)
+              setPage(1)
+              setSelectedIds([])
+            }}
+          />
+          <Segmented
+            value={kindFilter}
+            onChange={(val) => {
+              setKindFilter(val as LibraryKindFilter)
+              setPage(1)
+            }}
+            options={[
+              { label: `全部 (${counts.total})`, value: 'all' },
+              { label: `文档站 (${counts.web})`, value: 'web' },
+              { label: `GitHub (${counts.github})`, value: 'github' }
+            ]}
+          />
+        </div>
+
+        <Space size={8}>
+          {selectMode ? (
+            <>
+              <Button size="small" onClick={toggleSelectAll}>
+                {isAllSelected ? '取消全选' : '全选'}
+              </Button>
+              <Button
+                size="small"
+                icon={<SyncOutlined />}
+                disabled={selectedIds.length === 0}
+                loading={batchSyncMutation.isPending}
+                onClick={() => batchSyncMutation.mutate(selectedIds)}
+              >
+                批量更新 ({selectedIds.length})
+              </Button>
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                disabled={selectedIds.length === 0}
+                loading={batchDeleteMutation.isPending}
+                onClick={confirmBatchDelete}
+              >
+                批量删除 ({selectedIds.length})
+              </Button>
+              <Button
+                size="small"
+                onClick={() => {
+                  setSelectMode(false)
+                  setSelectedIds([])
+                }}
+              >
+                完成
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="small"
+              icon={<CheckSquareOutlined />}
+              onClick={() => setSelectMode(true)}
+              disabled={props.libraries.length === 0}
+            >
+              批量管理
+            </Button>
+          )}
+        </Space>
+      </div>
+
+      {/* 库列表网格 */}
+      {pagedSources.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {pagedSources.map((lib) => (
+            <LocalLibraryCardItem
+              key={lib.id}
+              library={lib}
+              crawlStatus={crawlMap.get(lib.id)}
+              isSelected={selectedIds.includes(lib.id)}
+              selectMode={selectMode}
+              onSelectCard={() => props.onSelect(lib.id)}
+              onToggleSelect={() => toggleSelect(lib.id)}
+              onEdit={() => setEditingSource(lib)}
+            />
+          ))}
+        </div>
+      ) : (
+        <Card className="py-12 text-center shadow-xs">
+          <Empty
+            description={
+              keyword
+                ? `未找到匹配「${keyword}」的本地文档库`
+                : props.libraries.length
+                  ? '筛选条件下没有文档库'
+                  : '当前还没有本地文档库，点击上方按钮添加并抓取'
+            }
+          >
+            {!props.libraries.length && (
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => setEditingSource('new')}
+              >
+                立即添加第一个文档库
+              </Button>
+            )}
+          </Empty>
+        </Card>
+      )}
+
+      {/* 分页器 */}
+      {filtered.length > pageSize && (
+        <div className="flex justify-end pt-2">
+          <Pagination
+            current={page}
+            pageSize={pageSize}
+            total={filtered.length}
+            onChange={(p, ps) => {
+              setPage(p)
+              setPageSize(ps)
+            }}
+            showSizeChanger
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            size="small"
+          />
+        </div>
       )}
 
       {/* 新增/编辑弹窗 */}
       <SourceFormModal
+        key={typeof editingSource === 'object' ? editingSource?.id : editingSource}
+        categories={categories.data ?? []}
         editing={editingSource}
         onClose={() => setEditingSource(null)}
-        onSaved={() => setEditingSource(null)}
+        onSaved={() => {
+          setEditingSource(null)
+          void client.invalidateQueries({ queryKey: ['libraries'] })
+          void client.invalidateQueries({ queryKey: ['library-crawl-statuses'] })
+        }}
       />
     </div>
   )

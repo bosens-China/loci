@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { RuntimeLockedError } from './runtime-lock.js'
 
 export async function readJson(request: IncomingMessage, maxBytes = 1_048_576): Promise<unknown> {
   const buffer = await readBuffer(request, maxBytes)
@@ -41,7 +42,9 @@ export async function mutationJson(
   try {
     json(response, status, await action())
   } catch (error) {
-    json(response, 400, { error: safeClientError(error) })
+    json(response, error instanceof RuntimeLockedError ? 409 : 400, {
+      error: safeClientError(error)
+    })
   }
 }
 

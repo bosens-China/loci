@@ -1,9 +1,11 @@
+export const DEFAULT_LIBRARY_CATEGORY = '未分类'
+export const DEFAULT_LIBRARY_VERSION = 'latest'
+
 /** 文档源各入口共享的产品基础值；入口偏好只能覆盖这些值，不能重新定义它们。 */
 export const DOCUMENT_SOURCE_DEFAULTS = {
   mode: 'auto',
   pageLimit: 1000,
   scopePath: '/',
-  schedule: null,
   httpConcurrency: null,
   browserConcurrency: null,
   excludePathPattern: null,

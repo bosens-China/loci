@@ -55,7 +55,6 @@ function sourceInput(name: string, url: string) {
     mode: 'auto' as const,
     pageLimit: 100,
     scopePath: '/',
-    schedule: null,
     httpConcurrency: null,
     browserConcurrency: null
   }

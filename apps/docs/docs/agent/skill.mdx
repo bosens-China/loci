@@ -1,130 +1,31 @@
 # 使用 use-loci Skill
 
-`use-loci` Skill 按任务需要选择研究深度：轻量调研可以直接搜索，详细技术问题优先复用 Loci。进入 Loci 流程后，它会判断当前会话是否有 MCP 工具。普通读取可以直接调用；长时间抓取只有在 Agent 能同时使用 MCP 原生 Progress 和 Cancellation 时才走 MCP。缺少任一能力或完全没有工具时，Skill 会在任务启动前读取 CLI 参考，并在必要时取得安装授权，再通过 `loci mcp call` 调用同一批工具。
+`use-loci` 随 CLI 分发。Agent 可以按任务加载它，也可以在提问时指定“使用 use-loci，查找本项目依赖版本的路由配置并引用原文”。查询与抓取步骤见 [接入 Agent](/agent/overview)。
 
-## 适用场景
+## 为当前项目安装
 
-当问题依赖程序库、框架、SDK、API、CLI 或配置项的准确文档时，Skill 会指导 AI：
-
-- 先确认当前项目使用的技术和版本；
-- 优先查询已有本地文档库；
-- 先看目录和语言，再直接读取或搜索；
-- 本地缺失时，先查询只读的云端公开目录；
-- 缺少适合的云端快照时，核实官方入口，按证据深度、新鲜度、成本和复用价值选择指定页获取或更广抓取；
-- 回答时附上文档的来源 URL，并区分文档事实与推断。
-
-普通业务逻辑修改、通用编程概念和不依赖外部技术行为的代码审查，不需要触发该 Skill。新闻、价格、人物或公司信息、购物旅行、法律医疗和普通网页内容也不属于技术文档任务，应直接使用网页或对应领域来源。仅仅提到软件、公司或网页，不足以触发 Loci。
-
-新版亮点、产品动态和初步选型等轻量调研先搜索，优先官方发布说明；一次搜索足够就结束，需要时继续核验，不强制先查 Loci 或建库。具体 API、配置、错误和迁移影响等详细问题需要完整文档依据，不能只依赖搜索摘要。缺库本身不构成整站抓取理由。
-
-## MCP、CLI 与 Skill 的分工
-
-MCP 和 `loci mcp call` 提供两种调用方式，Skill 提供使用流程。只有 MCP 时，Agent 已经可以调用全部 Loci 工具；加入 Skill 后，Agent 会按任务需要选择获取范围，并遵守安装授权、破坏性操作授权、版本核对和来源判断等边界。
-
-Skill 会优先用当前会话中的 MCP 工具完成只读和短操作。长时间抓取还会检查 Agent 是否能同时接收原生 Progress 并发送 Cancellation；缺少任一能力时，从一开始改用 CLI 的逐页进度与任务取消流程。没有工具时，它才检查和安装 CLI，并在当前会话中继续完成查询。
-
-## 使用 CLI 管理 Skill
-
-Loci CLI 内置完整的 `use-loci`，无需额外下载。在交互终端中，可以直接进入 Skill 子菜单，再选择 Agent 目标和项目级/全局作用域：
+在项目根目录执行以下命令。默认客户端为 `universal`，默认项目为当前工作目录。安装和更新使用同一个 `add` 命令。
 
 ```bash
-loci agent skills add
+loci skills add use-loci
+loci skills list --json
 ```
 
-希望同时配置用户级 MCP、全局 Skill 和全局 Rules 时，使用 `loci agent setup <client>`；`loci agent remove <client>` 会通过台账和 `.loci-skill.json` 所有权标记安全移除对应全局 Skill。项目级 Skill 继续使用本页的 `skills` 子命令管理。
-
-`add` 同时负责安装和更新。Loci 只更新自己安装的 Skill，不会覆盖第三方 Skill。非交互命令必须显式提供 `--agent`、`--project` 或 `--global`；安装、删除和清理还必须提供 `--yes`。
-
-需要安装到用户级全局目录时，显式传入 `--global`：
+用 `--project <path>` 指定项目，用 `--global` 选择用户级目录，两者互斥。可选 `--agent` 值为 `universal`、`codex`、`cursor`、`claude-code`、`vscode`、`antigravity` 和 `all`。`all` 会合并相同的物理目标目录。
 
 ```bash
-loci agent skills add --agent universal --global --yes
+loci skills add --agent cursor --project ./ --yes
+loci skills list --agent cursor --project ./ --json
+loci skills add --agent codex --global --yes
 ```
 
-指定 Agent 客户端：
+## 移除与清理
+
+`remove` 接受可选名称，默认 `use-loci`。`clear` 清理所选范围内受管的安装。写操作会提示确认，非交互调用需要 `--yes`。
 
 ```bash
-loci agent skills add --agent cursor --project /absolute/path/to/project --yes
-loci agent skills add --agent claude-code --global --yes
-loci agent skills add --agent all --project /absolute/path/to/project --yes
+loci skills remove use-loci --agent cursor --project ./
+loci skills clear --agent all --global
 ```
 
-项目级安装使用 `--project <path>`：
-
-```bash
-loci agent skills add --agent universal --project ./ --yes
-loci agent skills add --agent all --project /absolute/path/to/project --yes
-```
-
-查看、删除和批量清理：
-
-```bash
-loci agent skills list --agent universal --project ./
-loci agent skills list --agent universal --project ./ --json
-loci agent skills remove --agent cursor --project /absolute/path/to/project --yes
-loci agent skills clear --agent all --project /absolute/path/to/project --yes
-loci agent skills list --agent universal --global
-loci agent skills remove --agent universal --global --yes
-```
-
-`--project <path>` 用于选择项目级安装，`--global` 用于选择用户级全局安装；两者不能同时使用。交互终端可以省略这些选择，Agent 和脚本则应传入完整参数。
-
-## Agent 与安装路径
-
-| Agent 参数    | 用户级全局目录            | 项目级目录                 |
-| ------------- | ------------------------- | -------------------------- |
-| `universal`   | `~/.agents/skills`        | `<project>/.agents/skills` |
-| `codex`       | `~/.agents/skills`        | `<project>/.agents/skills` |
-| `cursor`      | `~/.cursor/skills`        | `<project>/.cursor/skills` |
-| `claude-code` | `~/.claude/skills`        | `<project>/.claude/skills` |
-| `vscode`      | `~/.copilot/skills`       | `<project>/.github/skills` |
-| `antigravity` | `~/.gemini/config/skills` | `<project>/.agents/skills` |
-| `all`         | 上述目录去重后全部写入    | 上述目录去重后全部写入     |
-
-部分客户端可能使用同一目录，Loci 会自动避免重复安装。
-
-## 安装结果
-
-手工删除目录后，`loci agent skills list` 会显示缺失；再次执行删除命令可以清理该记录。Loci 不会扫描、接管或删除第三方 Skill。
-
-安装 Skill 后不强制配置 MCP。推荐为支持 MCP 的客户端配置名为 `loci` 的入口；未配置时，Skill 会在实际技术文档任务中先取得用户许可，再安装 npm CLI 并直接调用工具。具体连接方式请查看[通过 MCP 接入](/agent/mcp)。
-
-## 没有 MCP 时
-
-没有任何 `loci_*` MCP 工具时，Skill 会检查 CLI。CLI 缺失时，它会先询问是否安装；安装完成后，在当前会话继续查询，不要求配置 MCP 或重开会话。
-
-安装 CLI 仍需明确同意。任务所需的公开云端拉取、官方抓取和本地刷新默认允许；安装同意和资料获取许可都不扩展删除、覆盖或远端管理授权。
-
-## 如何触发
-
-支持自动匹配的客户端会根据 Skill 描述，在技术文档任务中加载它。也可以在请求中显式指定：
-
-```text
-请使用 use-loci 查询当前项目版本对应的路由配置。
-```
-
-Skill 只影响当前匹配的任务，不会自动成为所有会话的全局规则。如果希望每个项目都采用相同的按需研究流程，应继续[配置全局规则](/agent/global-rules)。
-
-## 检索与写操作
-
-详细技术问题优先复用已有库，通过目录、搜索和读取定位证据。以下获取操作会访问网络或修改本地数据库，但在当前任务确有需要时默认允许，无需逐次确认：
-
-- 从云端拉取公开文档库；
-- 添加并首次抓取官方文档源；
-- 向已有网页库插入或刷新指定 URL；
-- 必要时刷新已有本地文档库。
-
-较大获取前简要说明来源和范围，然后执行，遵守用户明确限制。少量已知页面使用 `loci_fetch_pages` 或 `selected` 建库，不跟随页面里的其他链接；正常刷新沿用 404/410 删除旧正文、临时失败保留正文的语义。
-
-删除、刻意覆盖、已有来源配置变更、跨库移动及远端管理或发布仍需明确授权；已有授权覆盖同一操作时不重复询问。收窄范围或修改排除规则会在保存时立即删除不匹配正文和搜索索引，必须说明影响。审查式抓取排除已存储页面也属于删除，需要相应授权。
-
-## 与全局规则配合
-
-Skill 适合封装详细工作流，全局规则适合声明长期优先级。两者可以同时存在：
-
-- 全局规则规定何时优先使用 Loci，以及何时切换到其他来源。
-- `use-loci` Skill 在具体任务中提供目录、搜索、阅读和同步步骤。
-
-第三方文档 Skill 被匹配或加载不改变来源编排。详细技术问题优先复用 Loci；Loci 不可用、获取失败、证据不足或获取成本不相称时，可以使用 Context7、官方网页或其他文档来源，并简要说明原因，无需先问是否抓取官网或抓完整站。轻量调研和非文档任务直接选择适合的网页来源；用户明确指定来源时遵循当前请求。
-
-Loci 不修改、删除或覆盖用户安装的第三方 Skill。两者出现冲突时，应由一套明确的全局规则统一编排来源优先级，避免让 Agent 同时执行互相矛盾的流程。具体路径和一键写入方式请查看[配置全局规则](/agent/global-rules)。
+Loci 用本地安装记录与目录中的 `.loci-skill.json` 核对所有权。手工删除、编辑或与已有目录冲突时，先查看 `list` 的 `status` 和 `targetPath`。需要同时同步全局 Skill 和 Rules 时使用 `loci setup <client>`。规则的目标位置见 [配置全局规则](/agent/global-rules)。

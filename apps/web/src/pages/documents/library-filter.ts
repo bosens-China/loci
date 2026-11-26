@@ -1,36 +1,36 @@
-import type { DocumentSource } from '@loci/shared'
+import type { DocumentSource, LibrarySummary } from '@loci/shared'
 
-export type LibraryKindFilter = 'all' | 'web' | 'github' | 'cloud'
+export type LibraryKindFilter = 'all' | 'web' | 'github'
 
 export interface LibraryFilterCounts {
   total: number
   web: number
   github: number
-  cloud: number
 }
 
 /** 统计各类本地文档库数量。 */
-export function countLocalLibrarySources(sources: DocumentSource[]): LibraryFilterCounts {
+export function countLocalLibrarySources(
+  sources: Array<LibrarySummary | DocumentSource>
+): LibraryFilterCounts {
   const total = sources.length
-  const web = sources.filter((s) => s.kind === 'web' && !s.cloud).length
+  const web = sources.filter((s) => s.kind === 'web').length
   const github = sources.filter((s) => s.kind === 'github').length
-  const cloud = sources.filter((s) => Boolean(s.cloud)).length
-  return { total, web, github, cloud }
+  return { total, web, github }
 }
 
 /** 根据来源类型和关键词组合过滤本地文档库列表。 */
-export function filterLocalLibrarySources(
-  sources: DocumentSource[],
-  filter: { kind: LibraryKindFilter; keyword: string }
-): DocumentSource[] {
-  let list = sources
+export function filterLocalLibrarySources<T extends LibrarySummary | DocumentSource>(
+  sources: T[],
+  filter: { kind: LibraryKindFilter; keyword: string; category?: string }
+): T[] {
+  let list = filter.category
+    ? sources.filter((source) => source.category === filter.category)
+    : sources
 
   if (filter.kind === 'web') {
-    list = list.filter((s) => s.kind === 'web' && !s.cloud)
+    list = list.filter((s) => s.kind === 'web')
   } else if (filter.kind === 'github') {
     list = list.filter((s) => s.kind === 'github')
-  } else if (filter.kind === 'cloud') {
-    list = list.filter((s) => Boolean(s.cloud))
   }
 
   const q = filter.keyword.trim().toLowerCase()

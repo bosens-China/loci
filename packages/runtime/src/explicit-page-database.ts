@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { ExplicitPageResult } from '@loci/core'
+import type { ExplicitPageWriteResult, ExplicitPageWriteStatus, CrawlProgress } from '@loci/shared'
+import { finishCrawlRunRecord } from './crawl-history-database.js'
 import { eq } from 'drizzle-orm'
 import {
   deleteStoredDocument,
@@ -11,7 +13,7 @@ import { explicitPageTargets } from './drizzle-schema.js'
 import { withImmediateTransaction as withTransaction } from './sqlite.js'
 
 export type ExplicitPageTargetStatus = 'pending' | 'current' | 'missing' | 'failed'
-export type ExplicitPageWriteStatus = 'inserted' | 'updated' | 'unchanged' | 'missing' | 'failed'
+export type { ExplicitPageWriteStatus, ExplicitPageWriteResult } from '@loci/shared'
 
 export interface ExplicitPageTarget {
   sourceId: string
@@ -19,12 +21,6 @@ export interface ExplicitPageTarget {
   status: ExplicitPageTargetStatus
   lastCrawledAt: string | null
   lastError: string | null
-}
-
-export interface ExplicitPageWriteResult {
-  url: string
-  status: ExplicitPageWriteStatus
-  message?: string
 }
 
 export interface ExplicitPageDatabase {
@@ -39,7 +35,8 @@ export interface ExplicitPageDatabase {
     sourceId: string,
     results: readonly ExplicitPageResult[],
     fetchMode: 'http' | 'browser',
-    iconUrl: string | null
+    iconUrl: string | null,
+    run?: { id: string; progress: CrawlProgress; error?: string }
   ) => ExplicitPageWriteResult[]
 }
 
@@ -58,22 +55,22 @@ export function initializeExplicitPageDatabase(database: DatabaseSync): void {
   `)
 }
 
+/** 调用方持有写事务，批量插入的目标与终态结果一并提交。 */
+function register(database: DatabaseSync, sourceId: string, urls: readonly string[]) {
+  const now = new Date().toISOString()
+  const insert = database.prepare(
+    `INSERT INTO explicit_page_targets (source_id,url,status,created_at,updated_at) VALUES (?,?,'pending',?,?) ON CONFLICT(source_id,url) DO NOTHING`
+  )
+  for (const url of new Set(urls)) insert.run(sourceId, url, now, now)
+}
+
 export function createExplicitPageDatabase(
   database: DatabaseSync,
   drizzleDatabase: LociDrizzleDatabase
 ): ExplicitPageDatabase {
   return {
-    registerExplicitPageTargets: (sourceId, urls) => {
-      const now = new Date().toISOString()
-      withTransaction(database, () => {
-        const insert = database.prepare(
-          `INSERT INTO explicit_page_targets
-           (source_id, url, status, created_at, updated_at) VALUES (?, ?, 'pending', ?, ?)
-           ON CONFLICT(source_id, url) DO UPDATE SET updated_at = excluded.updated_at`
-        )
-        for (const url of new Set(urls)) insert.run(sourceId, url, now, now)
-      })
-    },
+    registerExplicitPageTargets: (sourceId, urls) =>
+      withTransaction(database, () => register(database, sourceId, urls)),
     listExplicitPageTargets: (sourceId) =>
       drizzleDatabase
         .select({
@@ -90,6 +87,7 @@ export function createExplicitPageDatabase(
     markExplicitPageTargetsFailed: (sourceId, urls, message) => {
       const now = new Date().toISOString()
       withTransaction(database, () => {
+        register(database, sourceId, urls)
         const update = database.prepare(
           `UPDATE explicit_page_targets
            SET status = 'failed', last_crawled_at = ?, last_error = ?, updated_at = ?
@@ -98,7 +96,7 @@ export function createExplicitPageDatabase(
         for (const url of new Set(urls)) update.run(now, message, now, sourceId, url)
       })
     },
-    commitExplicitPageResults: (sourceId, results, fetchMode, iconUrl) =>
+    commitExplicitPageResults: (sourceId, results, fetchMode, iconUrl, run) =>
       withTransaction(database, () => {
         const written = commitExplicitPageResults(database, sourceId, results, fetchMode)
         database
@@ -107,6 +105,11 @@ export function createExplicitPageDatabase(
              WHERE id = ? AND source_type = 'local'`
           )
           .run(fetchMode, iconUrl, new Date().toISOString(), sourceId)
+        if (
+          run &&
+          !finishCrawlRunRecord(database, run.id, 'completed', run.progress, run.error ?? null)
+        )
+          throw new Error('抓取运行状态已变化')
         return written
       })
   }
@@ -118,8 +121,13 @@ export function commitExplicitPageResults(
   results: readonly ExplicitPageResult[],
   fetchMode: 'http' | 'browser'
 ): ExplicitPageWriteResult[] {
+  register(
+    database,
+    sourceId,
+    results.map((result) => result.url)
+  )
   const readDocument = database.prepare(
-    'SELECT title, markdown, language, fetch_mode FROM documents WHERE source_id = ? AND url = ?'
+    'SELECT title, markdown, language, fetch_mode, manual FROM documents WHERE source_id = ? AND url = ?'
   )
   const updateTarget = database.prepare(
     `UPDATE explicit_page_targets SET status = ?, last_crawled_at = ?, last_error = ?, updated_at = ?
@@ -127,16 +135,19 @@ export function commitExplicitPageResults(
   )
   return results.map((result) => {
     const now = new Date().toISOString()
+    const existing = readDocument.get(sourceId, result.url) as unknown as
+      DocumentSnapshot | undefined
     if (result.status === 'fetched' && result.document) {
-      const existing = readDocument.get(sourceId, result.url) as unknown as
-        DocumentSnapshot | undefined
-      const status = compareDocument(existing, result.document, fetchMode)
-      storeDocument(database, { ...result.document, sourceId, fetchMode })
+      const status = existing?.manual
+        ? 'unchanged'
+        : compareDocument(existing, result.document, fetchMode)
+      if (!existing?.manual) storeDocument(database, { ...result.document, sourceId, fetchMode })
       updateTarget.run('current', now, null, now, sourceId, result.url)
       return { url: result.url, status }
     }
     if (result.status === 'missing') {
-      deleteStoredDocument(database, sourceId, result.url)
+      // 远端状态仍可报告 404，手工正文和索引由用户管理。
+      if (!existing?.manual) deleteStoredDocument(database, sourceId, result.url)
       updateTarget.run('missing', now, result.failure?.message ?? null, now, sourceId, result.url)
       return { url: result.url, status: 'missing', message: result.failure?.message }
     }
@@ -151,6 +162,7 @@ interface DocumentSnapshot {
   markdown: string
   language: string
   fetch_mode: 'http' | 'browser'
+  manual: number
 }
 
 function compareDocument(

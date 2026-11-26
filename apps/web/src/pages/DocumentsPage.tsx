@@ -1,44 +1,39 @@
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
-import type { DocumentSource } from '@loci/shared'
-import { getAdminSession } from '@/api/admin'
-import { JOBS_QUERY_KEY, listJobs } from '@/api/jobs'
-import { listSources } from '@/api/sources'
+import { listLibraries, listLibraryCrawlStatuses } from '@/api/libraries'
 import { AsyncState } from '@/components/AsyncState'
-import { ADMIN_SESSION_KEY } from '@/pages/admin/admin-query-keys'
-import { isAdminSessionValid } from '@/pages/admin/admin-state'
 import { LibraryBrowserWorkspace } from '@/pages/documents/LibraryBrowserWorkspace'
 import { LocalLibraryCards } from '@/pages/documents/LocalLibraryCards'
 import { useDocumentRoute } from '@/pages/documents/use-document-route'
 
-/** 文档库卡片是一级入口；进入后才按需读取目录和正文。 */
+/** 知识管理主页面：文档库概览看板、卡片列表管理与目录阅读工作台。 */
 export function DocumentsPage(): React.JSX.Element {
   const { state, selectSource, selectDocument } = useDocumentRoute()
-  const navigate = useNavigate()
-  const sources = useQuery({ queryKey: ['sources'], queryFn: listSources })
-  const jobs = useQuery({ queryKey: JOBS_QUERY_KEY, queryFn: listJobs })
-  const adminSession = useQuery({
-    queryKey: ADMIN_SESSION_KEY,
-    queryFn: getAdminSession,
-    staleTime: 30_000
-  })
-  const selected = sources.data?.find((source) => source.id === state.sourceId)
-  const canPublish = isAdminSessionValid(adminSession.data ?? null)
 
-  const openPublish = (source: DocumentSource): void => {
-    void navigate({ to: '/admin/libraries/publish', search: { source: source.id } })
-  }
+  const libraries = useQuery({
+    queryKey: ['libraries'],
+    queryFn: () => listLibraries()
+  })
+
+  const crawlStatuses = useQuery({
+    queryKey: ['library-crawl-statuses'],
+    queryFn: listLibraryCrawlStatuses,
+    refetchInterval: (queryState) => {
+      const hasRunning = (queryState.state.data ?? []).some((item) => item.status === 'running')
+      return hasRunning ? 2000 : 10_000
+    }
+  })
+
+  const selected = libraries.data?.find((lib) => lib.id === state.sourceId)
 
   return (
     <AsyncState
-      loading={sources.isLoading}
-      error={sources.error}
-      onRetry={() => void sources.refetch()}
+      loading={libraries.isLoading}
+      error={libraries.error}
+      onRetry={() => void libraries.refetch()}
     >
       {selected ? (
         <LibraryBrowserWorkspace
           key={selected.id}
-          location="local"
           libraryId={selected.id}
           title={selected.name}
           fileId={state.documentId}
@@ -47,11 +42,9 @@ export function DocumentsPage(): React.JSX.Element {
         />
       ) : (
         <LocalLibraryCards
-          sources={sources.data ?? []}
-          jobs={jobs.data ?? []}
+          libraries={libraries.data ?? []}
+          crawlStatuses={crawlStatuses.data ?? []}
           onSelect={selectSource}
-          onPublish={openPublish}
-          canPublish={canPublish}
         />
       )}
     </AsyncState>

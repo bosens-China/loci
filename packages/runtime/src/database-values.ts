@@ -2,11 +2,10 @@ import type { DatabaseSync } from 'node:sqlite'
 import {
   APP_SETTINGS_LIMITS,
   DEFAULT_APP_SETTINGS,
+  DEFAULT_LIBRARY_CATEGORY,
+  DEFAULT_LIBRARY_VERSION,
   isValidBatchIntervalSeconds,
   isValidBatchIntervalRange,
-  normalizeCronSchedule,
-  normalizeServerUrl,
-  PRODUCTION_SERVER_URL,
   type AppSettings,
   type CreateSourceInput,
   type DocumentRecord,
@@ -20,36 +19,33 @@ import {
   normalizeExcludePathPattern,
   normalizeScopePath
 } from '@loci/core'
+import { CATEGORY_COLUMN, VERSION_COLUMN } from './database-schema.js'
 import { addColumn, hasColumn } from './sqlite.js'
 
 export interface SourceRow {
   id: string
   name: string
+  category: string
+  version: string
   first_url: string
   fetch_mode: 'auto' | 'http' | 'browser'
   page_limit: number
   scope_path: string
   exclude_path_pattern: string | null
-  schedule: string | null
   http_concurrency: number | null
   browser_concurrency: number | null
   icon_url: string | null
   page_count: number
   content_size: number
-  last_crawled_at: string | null
+  updated_at: string
   source_type: 'local' | 'cloud'
-  cloud_server_url: string | null
-  cloud_library_id: string | null
-  cloud_revision: string | null
-  cloud_auto_sync: number
+  last_crawled_at: string | null
   document_kind: 'web' | 'github'
   github_archive_limit_mb: number | null
   github_markdown_limit_mb: number | null
   github_default_branch: string | null
   github_revision: string | null
-  discovery_mode: 'site' | 'agent_review'
   resolved_discovery: ResolvedSourceDiscovery | null
-  review_goal: string | null
 }
 
 export interface DocumentRow {
@@ -89,10 +85,10 @@ export function validateSettings(settings: AppSettings): AppSettings {
   }
   validateMegabytes(settings.githubArchiveLimitMb, 'GitHub ZIP 默认上限')
   validateMegabytes(settings.githubMarkdownLimitMb, 'GitHub Markdown 默认上限')
-  return { ...settings, serverUrl: normalizeServerUrl(settings.serverUrl) }
+  return settings
 }
 
-export function validateSourceInput(input: CreateSourceInput): string | null {
+export function validateSourceInput(input: CreateSourceInput): void {
   const nameLength = input.name.trim().length
   if (nameLength < DOCUMENT_SOURCE_LIMITS.nameLength.min) throw new Error('文档源名称不能为空')
   if (nameLength > DOCUMENT_SOURCE_LIMITS.nameLength.max) {
@@ -121,16 +117,6 @@ export function validateSourceInput(input: CreateSourceInput): string | null {
   if (input.githubMarkdownLimitMb != null) {
     validateMegabytes(input.githubMarkdownLimitMb, 'GitHub Markdown 上限')
   }
-  if (input.discoveryMode && !['site', 'agent_review'].includes(input.discoveryMode)) {
-    throw new Error('不支持的 URL 发现模式')
-  }
-  if (input.discoveryMode === 'agent_review' && !input.reviewGoal?.trim()) {
-    throw new Error('Agent 审查模式需要说明收录目标')
-  }
-  if (input.reviewGoal && input.reviewGoal.trim().length > 2_000) {
-    throw new Error('Agent 审查目标不能超过 2000 个字符')
-  }
-  return normalizeCronSchedule(input.schedule)
 }
 
 export function formatDate(value: string): string {
@@ -143,6 +129,8 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
   return {
     id: row.id,
     name: row.name,
+    category: row.category,
+    version: row.version,
     url: row.first_url,
     mode: row.fetch_mode,
     status: Number(row.page_count) > 0 ? 'healthy' : 'attention',
@@ -151,23 +139,15 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
     pageLimit: Number(row.page_limit),
     scopePath: row.scope_path,
     excludePathPattern: row.exclude_path_pattern ?? null,
+    updatedAt:
+      row.last_crawled_at && row.last_crawled_at > row.updated_at
+        ? row.last_crawled_at
+        : row.updated_at,
+    readOnly: row.source_type !== 'local',
     lastUpdated: row.last_crawled_at ? formatDate(row.last_crawled_at) : '尚未更新',
-    schedule: row.schedule,
     httpConcurrency: row.http_concurrency === null ? null : Number(row.http_concurrency),
     browserConcurrency: row.browser_concurrency === null ? null : Number(row.browser_concurrency),
     iconUrl: row.icon_url,
-    cloud:
-      row.source_type === 'cloud' &&
-      row.cloud_server_url &&
-      row.cloud_library_id &&
-      row.cloud_revision
-        ? {
-            serverUrl: row.cloud_server_url,
-            libraryId: row.cloud_library_id,
-            revision: row.cloud_revision,
-            autoSync: Boolean(row.cloud_auto_sync)
-          }
-        : null,
     kind: row.document_kind,
     githubArchiveLimitMb:
       row.github_archive_limit_mb === null ? null : Number(row.github_archive_limit_mb),
@@ -175,9 +155,7 @@ export function toDocumentSource(row: SourceRow): DocumentSource {
       row.github_markdown_limit_mb === null ? null : Number(row.github_markdown_limit_mb),
     githubDefaultBranch: row.github_default_branch,
     githubRevision: row.github_revision,
-    discoveryMode: row.discovery_mode,
-    resolvedDiscovery: row.resolved_discovery,
-    reviewGoal: row.review_goal
+    resolvedDiscovery: row.resolved_discovery
   }
 }
 
@@ -206,6 +184,13 @@ export function migrateDatabase(database: DatabaseSync, previousVersion = 0): vo
   if (previousVersion < 12 && hasColumn(database, 'app_settings', 'mcp_port')) {
     database.exec('ALTER TABLE app_settings DROP COLUMN mcp_port')
   }
+  addColumn(
+    database,
+    'document_sources',
+    'category',
+    'TEXT REFERENCES categories(name) ON DELETE SET NULL'
+  )
+  addColumn(database, 'document_sources', 'version', 'TEXT')
   addColumn(database, 'document_sources', 'icon_url', 'TEXT')
   addColumn(
     database,
@@ -264,18 +249,6 @@ export function migrateDatabase(database: DatabaseSync, previousVersion = 0): vo
   }
   addColumn(
     database,
-    'app_settings',
-    'server_url',
-    `TEXT NOT NULL DEFAULT '${PRODUCTION_SERVER_URL}'`
-  )
-  addColumn(
-    database,
-    'app_settings',
-    'server_url_customized',
-    'INTEGER NOT NULL DEFAULT 0 CHECK (server_url_customized IN (0, 1))'
-  )
-  addColumn(
-    database,
     'document_sources',
     'source_type',
     "TEXT NOT NULL DEFAULT 'local' CHECK (source_type IN ('local', 'cloud'))"
@@ -317,6 +290,7 @@ export function migrateDatabase(database: DatabaseSync, previousVersion = 0): vo
   )
   addColumn(database, 'document_sources', 'review_goal', 'TEXT')
   addColumn(database, 'documents', 'relative_path', 'TEXT')
+  addColumn(database, 'documents', 'manual', 'INTEGER NOT NULL DEFAULT 0 CHECK (manual IN (0, 1))')
   addColumn(
     database,
     'app_settings',
@@ -345,9 +319,31 @@ export function migrateDatabase(database: DatabaseSync, previousVersion = 0): vo
      WHERE source_type = 'cloud'`
   )
   database.exec('DROP INDEX IF EXISTS document_sources_local_hostname')
+  database.exec('DROP INDEX IF EXISTS document_sources_local_identity')
+  // SQLite 更换列约束时保留原表与所有依赖其 ID 的旧版附加表。
+  if (
+    !database
+      .prepare(
+        "SELECT 1 FROM pragma_table_info('document_sources') WHERE name='category' AND [notnull]=1"
+      )
+      .get()
+  ) {
+    database.exec(`ALTER TABLE document_sources RENAME COLUMN category TO old_category;
+      ALTER TABLE document_sources RENAME COLUMN version TO old_version;
+      ALTER TABLE document_sources ADD COLUMN category ${CATEGORY_COLUMN};
+      ALTER TABLE document_sources ADD COLUMN version ${VERSION_COLUMN};`)
+    database
+      .prepare(
+        `UPDATE document_sources SET category=CASE WHEN old_category IS NULL OR trim(old_category) = '' THEN ? ELSE old_category END, version=coalesce(nullif(trim(old_version), ''), ?)`
+      )
+      .run(DEFAULT_LIBRARY_CATEGORY, DEFAULT_LIBRARY_VERSION)
+    database.exec(
+      'ALTER TABLE document_sources DROP COLUMN old_category; ALTER TABLE document_sources DROP COLUMN old_version'
+    )
+  }
   database.exec(
-    `CREATE UNIQUE INDEX IF NOT EXISTS document_sources_local_identity
-     ON document_sources(source_identity)
+    `CREATE UNIQUE INDEX document_sources_local_identity
+     ON document_sources(source_identity, version)
      WHERE source_type = 'local'`
   )
   database.exec(

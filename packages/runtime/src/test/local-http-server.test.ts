@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { CloudCatalogItem, CreateSourceInput, ResourceRevisions } from '@loci/shared'
+import { afterEach, describe, expect, it } from 'vitest'
 import { startLocalHttpServer } from '../local-http-server.js'
+import { acquireCrawlRuntimeLock } from '../runtime-lock.js'
 import { createLocalRuntime } from '../local-runtime.js'
 
 const cleanups: Array<() => Promise<void> | void> = []
@@ -17,228 +17,130 @@ afterEach(async () => {
 })
 
 describe('本机 HTTP 服务', () => {
-  it('通过 SSE 推送跨入口写入的资源 revision', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'loci-http-events-'))
-    const runtime = createLocalRuntime({
-      dataDir: join(root, 'data'),
-      cacheDir: join(root, 'cache')
-    })
-    const server = await startLocalHttpServer(runtime, { revisionEventIntervalMs: 10 })
+  it('POST 复用同身份库并只更新显式配置', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'loci-upsert-'))
+    const runtime = createLocalRuntime({ dataDir: dir, cacheDir: dir })
+    const server = await startLocalHttpServer(runtime)
     cleanups.push(async () => {
       await server.close()
       await runtime.close()
-      rmSync(root, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true })
     })
-
-    const response = await fetch(`${server.endpoint}/api/events`)
-    expect(response.headers.get('content-type')).toContain('text/event-stream')
-    const reader = response.body?.getReader()
-    if (!reader) throw new Error('未建立 SSE 响应体')
-    const initial = await readSseRevisions(reader)
-
-    runtime.createSource({
-      name: 'Vite',
-      url: 'https://vite.dev',
+    const first = runtime.createSource({
+      name: 'Original',
+      url: 'https://example.test/guide',
       mode: 'http',
-      pageLimit: 1,
-      schedule: null,
-      httpConcurrency: null,
-      browserConcurrency: null
+      browserConcurrency: 3,
+      pageLimit: 10
     })
-    const updated = await readSseRevisions(reader)
-    expect(updated.sources).toBeGreaterThan(initial.sources)
-    await reader.cancel()
-  })
-
-  it('文档列表只返回元数据，并在选中时按 ID 读取正文', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'loci-http-documents-'))
-    const runtime = createLocalRuntime({
-      dataDir: join(root, 'data'),
-      cacheDir: join(root, 'cache')
-    })
-    const firstSource = runtime.createSource({
-      name: 'First docs',
-      url: 'https://first.example.com',
-      mode: 'http',
-      pageLimit: 1,
-      schedule: null,
-      httpConcurrency: null,
-      browserConcurrency: null
-    })
-    const secondSource = runtime.createSource({
-      name: 'Second docs',
-      url: 'https://second.example.com',
-      mode: 'http',
-      pageLimit: 1,
-      schedule: null,
-      httpConcurrency: null,
-      browserConcurrency: null
-    })
-    runtime.database.saveDocument({
-      sourceId: firstSource.id,
-      url: 'https://first.example.com/guide',
-      title: 'First guide',
-      markdown: '# 第一篇正文',
-      language: 'en',
-      fetchMode: 'http',
-      crawledAt: '2026-08-22T00:00:00.000Z'
-    })
-    runtime.database.saveDocument({
-      sourceId: secondSource.id,
-      url: 'https://second.example.com/guide',
-      title: 'Second guide',
-      markdown: '# Second body',
-      language: 'en',
-      fetchMode: 'http',
-      crawledAt: '2026-08-22T00:00:00.000Z'
-    })
-    const server = await startLocalHttpServer(runtime, {})
-    cleanups.push(async () => {
-      await server.close()
-      await runtime.close()
-      rmSync(root, { recursive: true, force: true })
-    })
-
-    const list = await fetch(
-      `${server.endpoint}/api/documents?source=${encodeURIComponent(firstSource.id)}`
-    )
-    expect(list.status).toBe(200)
-    const summaries = (await list.json()) as Array<Record<string, unknown>>
-    expect(summaries).toEqual([
-      expect.objectContaining({ sourceId: firstSource.id, title: 'First guide' })
-    ])
-    expect(summaries[0]).not.toHaveProperty('content')
-
-    const documentId = summaries[0]?.id
-    expect(typeof documentId).toBe('string')
-    if (typeof documentId !== 'string') throw new Error('文档列表未返回文档 ID')
-    const document = await fetch(`${server.endpoint}/api/documents/${documentId}`)
-    expect(await document.json()).toMatchObject({
-      sourceId: firstSource.id,
-      content: '# 第一篇正文'
-    })
-    const file = await fetch(
-      `${server.endpoint}/api/libraries/${encodeURIComponent(firstSource.id)}/files/${encodeURIComponent(documentId)}`
-    )
-    expect(await file.json()).toMatchObject({
-      file: {
-        updatedAt: '2026-08-22T00:00:00.000Z',
-        content: '# 第一篇正文',
-        contentBytes: Buffer.byteLength('# 第一篇正文', 'utf8')
-      }
-    })
-    expect((await fetch(`${server.endpoint}/api/documents/missing`)).status).toBe(404)
-  })
-
-  it('直接开放回环 API，并继续保护跨来源写请求', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'loci-http-'))
-    const runtime = createLocalRuntime({
-      dataDir: join(root, 'data'),
-      cacheDir: join(root, 'cache')
-    })
-    const startJobWorker = vi.fn(async () => undefined)
-    const ensurePersistentBackground = vi.fn(async () => undefined)
-    const server = await startLocalHttpServer(runtime, {
-      startJobWorker,
-      ensurePersistentBackground
-    })
-    cleanups.push(async () => {
-      await server.close()
-      await runtime.close()
-      rmSync(root, { recursive: true, force: true })
-    })
-
-    const health = await fetch(`${server.endpoint}/health`)
-    expect(await health.json()).toEqual({ service: 'loci-local-web', pid: process.pid })
-    const sources = await fetch(`${server.endpoint}/api/sources`)
-    expect(sources.status).toBe(200)
-    expect(await sources.json()).toEqual([])
-    const initialRevisions = (await (
-      await fetch(`${server.endpoint}/api/revisions`)
-    ).json()) as ResourceRevisions
-
-    const input: CreateSourceInput = {
-      name: 'Example',
-      url: 'https://example.com/docs',
-      mode: 'auto',
-      pageLimit: 10,
-      scopePath: '/docs',
-      schedule: '0 2 * * *',
-      httpConcurrency: null,
-      browserConcurrency: null
+    const lock = acquireCrawlRuntimeLock(dir, first.id, '测试抓取')
+    try {
+      const locked = await fetch(`${server.endpoint}/api/libraries`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: '变更',
+          category: '事务测试',
+          version: 'latest',
+          url: first.url
+        })
+      })
+      expect(locked.status).toBe(409)
+      expect(runtime.listCategories().some((row) => row.name === '事务测试')).toBe(false)
+      expect(runtime.database.getSource(first.id)).toMatchObject({
+        name: 'Original',
+        version: 'latest'
+      })
+    } finally {
+      lock.release()
     }
-    const rejected = await fetch(`${server.endpoint}/api/sources?sync=true`, {
+    const result = await fetch(`${server.endpoint}/api/libraries`, {
       method: 'POST',
-      headers: { origin: 'https://example.com', 'content-type': 'application/json' },
-      body: JSON.stringify(input)
-    })
-    expect(rejected.status).toBe(403)
-
-    const created = await fetch(`${server.endpoint}/api/sources?sync=true`, {
-      method: 'POST',
-      headers: { origin: server.endpoint, 'content-type': 'application/json' },
-      body: JSON.stringify(input)
-    })
-    expect(created.status).toBe(201)
-    const result = (await created.json()) as {
-      source: { name: string }
-      sync: { reused: boolean }
-      workerError: string | null
-    }
-    expect(result.source.name).toBe('Example')
-    expect(result.sync.reused).toBe(false)
-    expect(result.workerError).toBeNull()
-    expect(startJobWorker).toHaveBeenCalledOnce()
-    expect(ensurePersistentBackground).toHaveBeenCalledOnce()
-    const revisions = (await (
-      await fetch(`${server.endpoint}/api/revisions`)
-    ).json()) as ResourceRevisions
-    expect(revisions.sources).toBeGreaterThan(initialRevisions.sources)
-    expect(revisions.jobs).toBeGreaterThan(initialRevisions.jobs)
-  })
-
-  it('worker 启动失败时仍确认来源和任务已保存', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'loci-http-worker-error-'))
-    const runtime = createLocalRuntime({
-      dataDir: join(root, 'data'),
-      cacheDir: join(root, 'cache')
-    })
-    const server = await startLocalHttpServer(runtime, {
-      startJobWorker: async () => {
-        throw new Error('worker unavailable')
-      }
-    })
-    cleanups.push(async () => {
-      await server.close()
-      await runtime.close()
-      rmSync(root, { recursive: true, force: true })
-    })
-    const response = await fetch(`${server.endpoint}/api/sources?sync=true`, {
-      method: 'POST',
-      headers: { origin: server.endpoint, 'content-type': 'application/json' },
       body: JSON.stringify({
-        name: 'Saved source',
-        url: 'https://example.com',
-        mode: 'http',
-        pageLimit: 1,
-        scopePath: '/',
-        schedule: null,
-        httpConcurrency: null,
-        browserConcurrency: null
-      } satisfies CreateSourceInput)
+        name: 'Second',
+        category: ' 工具/团队 ',
+        version: ' latest ',
+        url: 'https://example.test/api',
+        httpConcurrency: 4
+      })
     })
+    expect(result.status).toBe(201)
+    expect(await result.json()).toMatchObject({
+      id: first.id,
+      name: 'Second',
+      category: '工具/团队',
+      version: 'latest',
+      url: first.url,
+      httpConcurrency: 4,
+      browserConcurrency: 3,
+      mode: 'http',
+      pageLimit: 10
+    })
+    const endpoint = `${server.endpoint}/api/categories`
+    const categories = await (await fetch(endpoint)).json()
+    expect(categories).toContainEqual(
+      expect.objectContaining({ name: '工具/团队', libraryCount: 1 })
+    )
+    const created = await (
+      await fetch(endpoint, { method: 'POST', body: JSON.stringify({ name: '工具/团队' }) })
+    ).json()
+    expect(categories).toContainEqual(created)
+    const updated = await fetch(`${server.endpoint}/api/libraries/${first.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name: 'Second', url: first.url, category: '新/类别', version: 'v2' })
+    })
+    expect(await updated.json()).toMatchObject({ category: '新/类别', version: 'v2' })
+    const params = new URLSearchParams({ query: 'Second', category: '新/类别', version: 'v2' })
+    expect(await (await fetch(`${server.endpoint}/api/libraries?${params}`)).json()).toMatchObject([
+      { id: first.id }
+    ])
+    for (const deleted of [true, false]) {
+      const response = await fetch(`${endpoint}/${encodeURIComponent('新/类别')}`, {
+        method: 'DELETE'
+      })
+      expect(await response.json()).toEqual({ deleted })
+    }
+    expect(runtime.database.getSource(first.id)).toMatchObject({
+      category: '未分类',
+      version: 'v2'
+    })
+    const denied = await fetch(`${endpoint}/${encodeURIComponent('未分类')}`, { method: 'DELETE' })
+    expect(denied.status).toBe(400)
+    expect(await denied.json()).toMatchObject({ error: expect.stringContaining('未分类') })
+  })
 
+  it('修改已抓取 GitHub 库的分类时保留已解析的抓取方式和提交', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'loci-github-category-'))
+    const runtime = createLocalRuntime({ dataDir: dir, cacheDir: dir })
+    const server = await startLocalHttpServer(runtime)
+    cleanups.push(async () => {
+      await server.close()
+      await runtime.close()
+      rmSync(dir, { recursive: true, force: true })
+    })
+    const { id, name, url } = runtime.createSource({ url: 'https://github.com/owner/repo' })
+    runtime.database.updateResolvedSource(
+      id,
+      url,
+      'http',
+      null,
+      { defaultBranch: 'main', revision: 'resolved-commit' },
+      'github'
+    )
+    const response = await fetch(`${server.endpoint}/api/libraries`, {
+      method: 'POST',
+      body: JSON.stringify({ name, url, category: '工具与其他' })
+    })
     expect(response.status).toBe(201)
     expect(await response.json()).toMatchObject({
-      source: { name: 'Saved source' },
-      sync: { reused: false },
-      workerError: expect.any(String)
+      id,
+      category: '工具与其他',
+      resolvedDiscovery: 'github',
+      mode: 'http'
     })
-    expect(runtime.database.listSources()).toHaveLength(1)
-    expect(runtime.database.listLocalJobs()).toHaveLength(1)
+    expect(runtime.database.getSourceConfig(id).githubRevision).toBe('resolved-commit')
   })
 
-  it('提供云端目录并通过浏览器备份恢复本地库', async () => {
+  it('通过 ZIP 备份恢复本地库', async () => {
     const root = mkdtempSync(join(tmpdir(), 'loci-http-data-'))
     const runtime = createLocalRuntime({
       dataDir: join(root, 'data'),
@@ -249,31 +151,10 @@ describe('本机 HTTP 服务', () => {
       url: 'https://example.com/docs',
       mode: 'http',
       pageLimit: 10,
-      schedule: '0 2 * * *',
       httpConcurrency: null,
       browserConcurrency: null
     })
-    const cloudItem: CloudCatalogItem = {
-      id: 'cloud-docs',
-      name: 'Cloud docs',
-      url: 'https://example.com/cloud',
-      revision: 'rev-1',
-      pages: 2,
-      contentSize: 1024,
-      lastCrawledAt: null,
-      publishedAt: '2026-08-20T00:00:00.000Z',
-      localSourceId: null,
-      localRevision: null,
-      autoSync: false,
-      updateAvailable: false
-    }
-    vi.spyOn(runtime.cloud, 'listCatalog').mockResolvedValue([cloudItem])
-    const server = await startLocalHttpServer(runtime, {
-      runMaintenance: async (action) => action(),
-      ensurePersistentBackground: async () => {
-        throw new Error('persistent worker unavailable')
-      }
-    })
+    const server = await startLocalHttpServer(runtime)
     cleanups.push(async () => {
       await server.close()
       await runtime.close()
@@ -281,25 +162,30 @@ describe('本机 HTTP 服务', () => {
     })
     const headers = { origin: server.endpoint, 'content-type': 'application/zip' }
 
-    const catalog = await fetch(`${server.endpoint}/api/cloud/catalog`)
-    expect(await catalog.json()).toEqual([cloudItem])
-
-    const exported = await fetch(`${server.endpoint}/api/data/export`)
+    const exported = await fetch(
+      `${server.endpoint}/api/data/export?category=${encodeURIComponent('其他')}&category=${encodeURIComponent('未分类')}`
+    )
     expect(exported.headers.get('content-disposition')).toContain('loci-backup-')
     expect(exported.headers.get('content-type')).toBe('application/zip')
     const backup = Buffer.from(await exported.arrayBuffer())
-    runtime.deleteSource(source.id)
+    runtime.deleteLibrary(source.id)
     expect(runtime.database.listSources()).toHaveLength(0)
 
+    const invalid = await fetch(`${server.endpoint}/api/data/import?mode=typo`, {
+      method: 'POST',
+      headers,
+      body: backup
+    })
+    expect(invalid.status).toBe(400)
     const imported = await fetch(`${server.endpoint}/api/data/import`, {
       method: 'POST',
       headers,
       body: backup
     })
-    expect(await imported.json()).toEqual({
+    expect(await imported.json()).toMatchObject({
+      mode: 'merge',
       sources: 1,
-      documents: 0,
-      backgroundError: 'persistent worker unavailable'
+      documents: 0
     })
     expect(runtime.database.listSources()[0]?.name).toBe('Local docs')
   })
@@ -312,12 +198,7 @@ describe('本机 HTTP 服务', () => {
       agentIntegration: {
         homeDir: join(root, 'home'),
         packageVersion: '1.13.0',
-        skillResourceDir,
-        setupMcp: async (client, options) => {
-          const { writeAgentMcpConfigFile } = await import('../agent-mcp-config.js')
-          const { LOCI_CLI_STDIO_CONNECTION } = await import('../agent-import.js')
-          writeAgentMcpConfigFile(client, LOCI_CLI_STDIO_CONNECTION, options)
-        }
+        skillResourceDir
       }
     })
     const server = await startLocalHttpServer(runtime, {})
@@ -344,22 +225,3 @@ describe('本机 HTTP 服务', () => {
     expect(await setupResponse.json()).toMatchObject({ status: { overall: 'ready' } })
   })
 })
-
-async function readSseRevisions(
-  reader: ReadableStreamDefaultReader<Uint8Array>
-): Promise<ResourceRevisions> {
-  const decoder = new TextDecoder()
-  let body = ''
-  while (!body.includes('\n\n')) {
-    const chunk = await reader.read()
-    if (chunk.done) throw new Error('SSE 在收到 revision 前关闭')
-    body += decoder.decode(chunk.value, { stream: true })
-  }
-  const payload = body
-    .split(/\r?\n/u)
-    .find((line) => line.startsWith('data:'))
-    ?.slice('data:'.length)
-    .trim()
-  if (!payload) throw new Error('SSE 未返回 revision 数据')
-  return JSON.parse(payload) as ResourceRevisions
-}

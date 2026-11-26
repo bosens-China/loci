@@ -1,145 +1,116 @@
-import { readFile, writeFile } from 'node:fs/promises'
-import { existsSync, statSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { constants } from 'node:fs'
+import { copyFile, link, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import type { Command } from 'commander'
 import {
-  acquireMaintenanceRuntimeLock,
-  inspectPersistentBackgroundRequirements,
-  parseBackupArchive
-} from '@loci/runtime'
-import { ensurePersistentBackgroundService } from '../background-host.js'
-import { runWithRuntime } from '../command-runtime.js'
-import { CliCanceledError, CliError } from '../errors.js'
-import { readRecentResource, saveRecentResource } from '../preferences.js'
-import { askConfirm, askPath } from '../ui.js'
+  jsonOption,
+  output,
+  withCancellation,
+  withRuntime,
+  type OutputOptions
+} from '../command-runtime.js'
+import { library } from '../resources.js'
+import { confirmWrite } from '../ui.js'
 
-export function registerDataCommands(
-  program: Command,
-  ensureService?: () => Promise<unknown>
-): void {
-  const data = program.command('data').description('备份、恢复和清理本地数据')
-
-  data
-    .command('export [file]')
-    .description('导出 Loci 备份，省略路径时使用带时间的文件名')
-    .action((file: string | undefined) =>
-      runWithRuntime('导出 Loci 数据', async (runtime) => {
-        const directory = readRecentResource(runtime.database, 'data-directory') ?? process.cwd()
-        const target = resolve(file ?? join(directory, defaultBackupFilename()))
-        await writeFile(target, await runtime.database.exportBackupArchive(), {
-          flag: file ? 'w' : 'wx'
-        })
-        saveRecentResource(runtime.database, 'data-directory', dirname(target))
-        return `数据已导出到 ${target}`
-      })
-    )
-
-  data
-    .command('import [file]')
-    .description('使用备份覆盖当前本地数据，并恢复所需后台服务')
-    .option('--yes', '跳过确认')
-    .action((file: string | undefined, options: { yes?: boolean }) =>
-      runWithRuntime('导入 Loci 数据', async (runtime) => {
-        requireYesInNonInteractive(options)
-        const source = resolve(
-          file ??
-            (await askPath('选择 Loci 备份文件', {
-              root: readRecentResource(runtime.database, 'data-directory') ?? process.cwd(),
-              validate: validateBackupPath
-            }))
-        )
-        let archive: Buffer
-        let preview: Awaited<ReturnType<typeof parseBackupArchive>>
-        try {
-          archive = await readFile(source)
-          preview = await parseBackupArchive(archive)
-        } catch (error) {
-          throw new CliError(
-            error instanceof Error ? error.message : '备份 ZIP 无法读取，请确认文件来源',
-            2
-          )
-        }
-        if (
-          !options.yes &&
-          !(await askConfirm(
-            `备份包含 ${preview.sources} 个文档源和 ${preview.documents} 篇文档，将覆盖当前数据，是否继续？`
-          ))
-        ) {
-          throw new CliCanceledError()
-        }
-        const lock = acquireMaintenanceRuntimeLock(runtime.dataDir, 'CLI 数据导入')
-        let summary: Awaited<ReturnType<typeof runtime.database.importBackupArchive>>
-        try {
-          summary = await runtime.database.importBackupArchive(archive)
-          saveRecentResource(runtime.database, 'data-directory', dirname(source))
-        } finally {
-          lock.release()
-        }
-        const background = inspectPersistentBackgroundRequirements(runtime.database.listSources())
-        if (background.required) await ensurePersistentBackgroundService(ensureService)
-        return `已导入 ${summary.sources} 个文档源和 ${summary.documents} 篇文档${background.required ? '，后台服务已就绪' : ''}`
-      })
-    )
-
-  data
-    .command('clear-documents')
-    .description('清空全部文档和全文索引，保留文档源')
-    .option('--yes', '跳过确认')
-    .action((options: { yes?: boolean }) =>
-      runWithRuntime('清空本地文档', async (runtime) => {
-        requireYesInNonInteractive(options)
-        const count = runtime.database.listDocuments().length
-        if (!options.yes && !(await askConfirm(`确定清空全部 ${count} 篇文档吗？`))) {
-          throw new CliCanceledError()
-        }
-        const lock = acquireMaintenanceRuntimeLock(runtime.dataDir, 'CLI 数据清理')
-        try {
-          const removed = runtime.database.clearDocuments()
-          return `已清空 ${removed} 篇文档，文档源保留不变`
-        } finally {
-          lock.release()
-        }
-      })
-    )
-
-  data
-    .command('clear-sources')
-    .description('清空全部文档源及其文档、全文索引和抓取历史')
-    .option('--yes', '跳过确认')
-    .action((options: { yes?: boolean }) =>
-      runWithRuntime('清空本地文档源', async (runtime) => {
-        requireYesInNonInteractive(options)
-        const count = runtime.database.listSources().length
-        if (!options.yes && !(await askConfirm(`确定清空全部 ${count} 个文档源及其文档吗？`))) {
-          throw new CliCanceledError()
-        }
-        const lock = acquireMaintenanceRuntimeLock(runtime.dataDir, 'CLI 文档源清理')
-        try {
-          const removed = runtime.database.clearSources()
-          return `已清空 ${removed} 个文档源及其关联数据`
-        } finally {
-          lock.release()
-        }
-      })
-    )
-}
-
-function requireYesInNonInteractive(options: { yes?: boolean }): void {
-  if (!process.stdin.isTTY && !options.yes) {
-    throw new CliError('非交互终端请传入 --yes 跳过确认', 2)
-  }
-}
-
-function validateBackupPath(value: string | undefined): string | undefined {
-  const target = resolve(value ?? '')
-  if (!existsSync(target)) return '文件不存在，请重新选择'
+async function publishNewBackup(temp: string, path: string): Promise<void> {
   try {
-    return statSync(target).isFile() ? undefined : '请选择一个备份文件，而不是目录'
-  } catch {
-    return '无法读取这个文件，请检查权限'
+    await link(temp, path)
+  } catch (error) {
+    if (!(
+      error instanceof Error &&
+      'code' in error &&
+      ['ENOTSUP', 'EOPNOTSUPP', 'EPERM', 'ENOSYS'].includes(String(error.code))
+    ))
+      throw error
+    // 不支持硬链接的目标盘也要排他创建，避免覆盖后来出现的文件。
+    await copyFile(temp, path, constants.COPYFILE_EXCL)
   }
 }
 
-export function defaultBackupFilename(now: Date = new Date()): string {
-  return `loci-backup-${now.toISOString().replace(/[:.]/g, '-')}.zip`
+export function registerDataCommands(program: Command): void {
+  const data = program.command('data').description('备份、恢复与清空本地文档库')
+  jsonOption(
+    data
+      .command('export [file]')
+      .description('导出 ZIP 备份')
+      .option('--category <name...>', '按分类导出')
+      .option('--library <lib...>', '按库名或 ID 导出')
+      .option('--yes', '跳过覆盖同名备份的确认')
+  ).action(
+    async (
+      file: string | undefined,
+      opts: OutputOptions & { category?: string[]; library?: string[]; yes?: boolean }
+    ) => {
+      const path = resolve(
+        file ?? `loci-backup-${new Date().toISOString().replace(/[:.]/gu, '-')}.zip`
+      )
+      const bytes = await withRuntime((r) =>
+        r.exportBackupArchive({
+          categories: opts.category,
+          libraryIds: opts.library?.map((ref) => library(r, ref).id)
+        })
+      )
+      // 先完整写入临时文件，失败时保留原有备份。
+      const temp = `${path}.${randomUUID()}.tmp`
+      try {
+        await writeFile(temp, bytes, { flag: 'wx', mode: 0o600 })
+        try {
+          await publishNewBackup(temp, path)
+        } catch (error) {
+          if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
+          await confirmWrite(`覆盖已有备份 ${path}？`, opts.yes)
+          await rename(temp, path)
+        }
+      } finally {
+        await rm(temp, { force: true })
+      }
+      output(opts, { path, bytes: bytes.length })
+    }
+  )
+  jsonOption(data.command('import <file>').description('从 ZIP 合并导入文档库'))
+    .option('--replace-all', '清空全部本地库并恢复备份')
+    .option('--yes', '跳过确认')
+    .action(async (file: string, opts: OutputOptions & { yes?: boolean; replaceAll?: boolean }) => {
+      await confirmWrite(
+        opts.replaceAll
+          ? `清空全部本地文档库并从 ${file} 恢复？`
+          : `从 ${file} 合并导入，替换匹配库的全部内容，保留其他库？`,
+        opts.yes
+      )
+      const bytes = await readFile(file)
+      output(
+        opts,
+        await withRuntime((r) => r.importBackupArchive(bytes, { replaceAll: opts.replaceAll })),
+        (result) =>
+          `已新增 ${result.importedLibraries - result.replacedLibraries} 个库，覆盖 ${result.replacedLibraries} 个库，导入 ${result.importedDocuments} 篇文档。`
+      )
+    })
+  for (const scope of ['documents', 'sources'] as const) {
+    const documentsOnly = scope === 'documents'
+    jsonOption(
+      data
+        .command(`clear-${scope}`)
+        .description(
+          documentsOnly ? '清空全部文档和索引，保留文档库' : '清空全部文档库及文档、索引和抓取记录'
+        )
+    )
+      .option('--yes', '跳过确认')
+      .action(async (opts: OutputOptions & { yes?: boolean }) => {
+        await confirmWrite(async () => {
+          const { libraries, documents } = await withRuntime((r) => r.getClearDataCounts())
+          return documentsOnly
+            ? `清空 ${libraries} 个库中的 ${documents} 篇文档及索引，并保留库设置？手工文档和只读快照正文也会删除。`
+            : `删除全部 ${libraries} 个库、${documents} 篇文档及索引和抓取记录？`
+        }, opts.yes)
+        const summary = await withCancellation((signal) =>
+          withRuntime((r) => r.clearData(scope, signal))
+        )
+        output(opts, summary, (r) =>
+          documentsOnly
+            ? `已清空 ${r.documents} 篇文档。`
+            : `已删除 ${r.libraries} 个库及 ${r.documents} 篇文档。`
+        )
+      })
+  }
 }

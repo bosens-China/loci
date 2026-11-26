@@ -1,4 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { OverviewPage } from '@/pages/OverviewPage'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
-export const Route = createFileRoute('/_app/')({ component: OverviewPage })
+export const Route = createFileRoute('/_app/')({
+  beforeLoad: () => {
+    throw redirect({ to: '/documents' })
+  }
+})

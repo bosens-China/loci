@@ -1,30 +1,38 @@
 import {
+  classifyExplicitPageUrls,
   crawlSource,
   GithubLimitError,
+  type ExplicitPageResult,
   type CrawlNode,
   type CrawlProgress,
-  type SourceResolution
+  type SourceCrawlResult
 } from '@loci/core'
 import type { CrawlRunState } from '@loci/shared'
 import { LocalBrowserCrawler, type BrowserInstallPrompt } from './browser-crawler.js'
+import { crawlRequestKey } from './crawl-task-coordinator.js'
 import type { LociDatabase } from './database.js'
-import { assertLocalJobCanContinue, LocalJobControlError } from './local-job-control.js'
-import { createLocalJobProgressWriter } from './local-job-progress-writer.js'
+import type { StoredDocument } from './document-content-database.js'
 import { waitForCrawlLockRelease, waitForExternalCrawl } from './external-crawl.js'
 import {
+  explicitPageProgress,
   fetchSourceExplicitPages,
   mergeCrawlProgress,
-  mergeExplicitPageProgress
+  mergeExplicitPageProgress,
+  runExplicitPageFetch
 } from './explicit-page-service.js'
-import { refreshReviewedSource } from './reviewed-source-refresh.js'
-import { RuntimeLockedError, acquireCrawlRuntimeLock, readRuntimeLock } from './runtime-lock.js'
+import { CrawlCancelledError, RuntimeLockedError, acquireRunningCrawl } from './runtime-lock.js'
+
+export interface LocalCrawlState extends CrawlRunState {
+  runId: string
+}
 
 interface CrawlRunnerContext {
   dataDir: string
   owner: string
   database: LociDatabase
   browser: LocalBrowserCrawler
-  states: Map<string, CrawlRunState>
+  detached?: boolean
+  states: Map<string, LocalCrawlState>
 }
 
 export type RunLocalSourceCrawl = (
@@ -32,7 +40,7 @@ export type RunLocalSourceCrawl = (
   onProgress?: (progress: CrawlProgress) => void,
   onBrowserMissing?: BrowserInstallPrompt,
   signal?: AbortSignal,
-  localJob?: { id: string; owner: string }
+  additionalUrls?: readonly string[]
 ) => Promise<CrawlProgress>
 
 /** 单次文档库抓取与原子提交，入口运行时只负责调度和资源生命周期。 */
@@ -43,36 +51,50 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
     onProgress?: (progress: CrawlProgress) => void,
     onBrowserMissing?: BrowserInstallPrompt,
     signal?: AbortSignal,
-    localJob?: { id: string; owner: string }
+    additionalUrls?: readonly string[]
   ): Promise<CrawlProgress> => {
     let lock
     try {
-      lock = acquireCrawlRuntimeLock(dataDir, sourceId, owner)
+      lock = acquireRunningCrawl(dataDir, sourceId, owner, signal, context.detached)
+      signal = lock.signal
     } catch (error) {
-      if (!(error instanceof RuntimeLockedError)) throw error
-      if (!readRuntimeLock(dataDir, `crawl-${sourceId}`)) throw error
-      const pageFetchIsRunning = error.record?.owner.includes('指定页面抓取') === true
+      if (context.detached || !(error instanceof RuntimeLockedError)) throw error
+      const record = error.record
+      if (!record || error.key !== `crawl-${sourceId}`) throw error
+      const pageFetchIsRunning = record.owner.includes('指定页面抓取')
       try {
-        const progress = await waitForExternalCrawl(
-          database,
-          sourceId,
-          (current) => {
-            updateState(states, sourceId, current, null, true)
-            onProgress?.(current)
-          },
-          signal
-        )
-        if (!pageFetchIsRunning) return progress
+        const progress = await waitForExternalCrawl(database, sourceId, onProgress, signal, {
+          dataDir,
+          record
+        })
+        if (!pageFetchIsRunning) {
+          if (!additionalUrls?.length) return progress
+          // 前台跟随者可能带有原任务未请求的入口，等原库提交后只补齐缺失的页面。
+          const indexed = new Set(database.listDocumentUrls(sourceId))
+          const missing = additionalUrls.filter((url) => !indexed.has(url))
+          if (!missing.length) return progress
+          const extra = await runExplicitPageFetch(
+            context,
+            sourceId,
+            missing,
+            onBrowserMissing,
+            signal,
+            (p) => onProgress?.(mergeCrawlProgress(progress, p))
+          )
+          return mergeCrawlProgress(progress, extra.progress)
+        }
       } catch (waitError) {
-        if (!pageFetchIsRunning || signal?.aborted) throw waitError
+        if (!pageFetchIsRunning || signal?.aborted || waitError instanceof CrawlCancelledError)
+          throw waitError
       }
       await waitForCrawlLockRelease(dataDir, sourceId, signal)
-      return run(sourceId, onProgress, onBrowserMissing, signal, localJob)
+      return run(sourceId, onProgress, onBrowserMissing, signal, additionalUrls)
     }
     try {
+      signal?.throwIfAborted()
       const source = database.getSourceConfig(sourceId)
-      const activeReview = database.getActiveUrlReview(sourceId)
-      if (activeReview) throw new Error('文档库正在等待 Agent URL 审查，完成或取消后才能普通同步')
+      const settings = database.getSettings()
+      const policy = database.getHostnameCrawlPolicy(source.hostname)
       const initialNode: CrawlNode = {
         id: source.firstUrl,
         url: source.firstUrl,
@@ -87,7 +109,14 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
         limitReached: false,
         node: initialNode
       }
+      const runId = database.startCrawlRun(
+        sourceId,
+        'sync',
+        lock.runId,
+        crawlRequestKey('sync', additionalUrls)
+      )
       states.set(sourceId, {
+        runId,
         sourceId,
         progress: initialProgress,
         nodes: [initialNode],
@@ -95,48 +124,36 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
         running: true,
         paused: false
       })
-      const runId = database.startCrawlRun(sourceId)
-      const documents: Parameters<LociDatabase['saveDocument']>[0][] = []
+      const documents: StoredDocument[] = []
       const deletedUrls: string[] = []
       let replaceAll = false
-      let contentBytes = 0
-      let pendingUrls = localJob ? database.getLocalJobResumeUrls(localJob.id) : []
-      let resolution: SourceResolution | undefined
-      const localJobProgress = createLocalJobProgressWriter(database, localJob)
       try {
         const reportProgress = (progress: CrawlProgress): void => {
           updateState(states, sourceId, progress, null, true)
           database.updateCrawlRunProgress(runId, progress)
-          localJobProgress.report(progress, pendingUrls, contentBytes)
           onProgress?.(progress)
         }
-        // 先持久化未知总量的准备状态，避免 worker 探测期间任务卡一直显示空进度。
+        // 先持久化未知总量的准备状态，供其他进程复用探测进度。
         reportProgress(initialProgress)
-        const reviewed =
-          source.discoveryMode === 'agent_review'
-            ? await refreshReviewedSource(
+        const targets = new Set(
+          database.listExplicitPageTargets(sourceId).map((target) => target.url)
+        )
+        const storedUrls = database.listDocumentUrls(sourceId, false)
+        const reviewed = source.discoveryMode === 'agent_review'
+        const result = reviewed
+          ? await refreshStoredReviewPages(
+              {
                 database,
                 browser,
                 source,
-                onBrowserMissing,
+                urls: storedUrls.filter((url) => !targets.has(url)),
                 signal,
-                reportProgress
-              )
-            : undefined
-        if (reviewed) {
-          if (reviewed.progress.processed === 0) reportProgress(reviewed.progress)
-        }
-        const result = reviewed
-          ? {
-              progress: reviewed.progress,
-              resolution: {
-                firstUrl: reviewed.resolution.firstUrl,
-                hostname: source.hostname,
-                fetchMode: reviewed.resolution.fetchMode,
-                iconUrl: reviewed.resolution.iconUrl,
-                discovery: 'pages' as const
-              }
-            }
+                onBrowserMissing,
+                onProgress: reportProgress
+              },
+              documents,
+              deletedUrls
+            )
           : await crawlSource({
               kind: source.kind,
               firstUrl: source.firstUrl,
@@ -145,63 +162,33 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
               scopePath: source.scopePath,
               excludePathPattern: source.excludePathPattern,
               pageLimit: source.pageLimit,
-              initialUrls: pendingUrls.length ? pendingUrls : database.listDocumentUrls(sourceId),
+              initialUrls: storedUrls,
               fetchMode: source.fetchMode,
+              httpConcurrency:
+                source.httpConcurrency ?? policy?.httpConcurrency ?? settings.httpConcurrency,
+              browserConcurrency:
+                source.browserConcurrency ??
+                policy?.browserConcurrency ??
+                settings.browserConcurrency,
+              maxRetries: settings.maxRetries,
               githubArchiveLimitBytes:
-                (source.githubArchiveLimitMb ?? database.getSettings().githubArchiveLimitMb) *
-                1024 *
-                1024,
+                (source.githubArchiveLimitMb ?? settings.githubArchiveLimitMb) * 1024 * 1024,
               githubMarkdownLimitBytes:
-                (source.githubMarkdownLimitMb ?? database.getSettings().githubMarkdownLimitMb) *
-                1024 *
-                1024,
+                (source.githubMarkdownLimitMb ?? settings.githubMarkdownLimitMb) * 1024 * 1024,
               githubPreviousRevision: source.githubRevision,
               githubBlocked: source.githubBlocked,
               signal,
-              waitIfPaused: async () => {
-                if (localJob) assertLocalJobCanContinue(database, localJob.id)
-              },
-              onCheckpoint: ({ pendingUrls: remaining }) => {
-                pendingUrls = remaining
-                if (!localJob) return
-                const progress = states.get(sourceId)?.progress
-                if (progress) {
-                  localJobProgress.checkpoint(progress, pendingUrls, contentBytes)
-                }
-              },
-              onResolved: (resolved) => {
-                resolution = resolved
-              },
               crawler: { fetchPage: (url, request) => browser.fetchPage(url, request) },
               beforeBrowserCrawl: async () => {
                 if (source.fetchMode === 'auto') return browser.isInstalled()
                 await browser.ensureInstalled(onBrowserMissing)
               },
               onDocument: (document) => {
-                const doc = { ...document, sourceId }
-                documents.push(doc)
-                contentBytes += Buffer.byteLength(document.markdown, 'utf8')
-                try {
-                  // 本地任务逐页成功后立即可见，但不预删旧文档；完整成功时再统一清理过期页面。
-                  database.saveDocument(doc)
-                } catch {
-                  // 忽略并发写入重试，任务完成阶段有完整 commit 兜底
-                }
+                documents.push({ ...document, sourceId })
               },
               onSnapshot: (snapshot) => {
                 replaceAll = true
-                contentBytes = 0
-                const docs = snapshot.map((document) => ({ ...document, sourceId }))
-                documents.push(...docs)
-                for (const document of snapshot) {
-                  contentBytes += Buffer.byteLength(document.markdown, 'utf8')
-                }
-                try {
-                  // 快照同样只做实时 upsert，避免抓取失败时先清空已有知识库。
-                  for (const doc of docs) database.saveDocument(doc)
-                } catch {
-                  // 忽略
-                }
+                for (const document of snapshot) documents.push({ ...document, sourceId })
               },
               onError: ({ url, missing }) => {
                 if (missing) deletedUrls.push(url)
@@ -211,105 +198,74 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
               },
               onProgress: reportProgress
             })
-        const targets = database.listExplicitPageTargets(sourceId)
-        const targetUrls = new Set(targets.map((target) => target.url))
-        const reviewedUrls = new Set(reviewed?.pages.map((page) => page.url) ?? [])
-        const reviewedTargetPages = reviewed?.pages.filter((page) => targetUrls.has(page.url)) ?? []
-        if (reviewed) {
-          documents.push(...reviewed.documents.filter((document) => !targetUrls.has(document.url)))
-          deletedUrls.push(...reviewed.deletedUrls.filter((url) => !targetUrls.has(url)))
+        const rejected: ExplicitPageResult[] = []
+        if (additionalUrls?.length) {
+          // 同一库的其他入口也在本次运行内补抓，取消或查询始终对应同一把锁与运行记录。
+          const indexed = new Set(replaceAll ? [] : database.listDocumentUrls(sourceId))
+          for (const url of deletedUrls) indexed.delete(url)
+          for (const doc of documents) indexed.add(doc.url)
+          const missing = classifyExplicitPageUrls({
+            ...source,
+            urls: additionalUrls.filter((url) => !indexed.has(url))
+          })
+          for (const { url, error } of missing) {
+            if (error)
+              rejected.push({
+                url,
+                status: 'failed',
+                failure: { url, message: error, reason: 'request_error', retryable: false }
+              })
+            else targets.add(url)
+          }
         }
-        const remainingTargets = reviewed
-          ? targets.filter((target) => !reviewedUrls.has(target.url))
-          : targets
-        const explicit = remainingTargets.length
+        const explicit = targets.size
           ? await fetchSourceExplicitPages({
               database,
               browser,
               source,
-              urls: remainingTargets.map((target) => target.url),
-              fetchMode: result.resolution.fetchMode,
+              urls: [...targets],
+              fetchMode:
+                reviewed && !result.progress.queued
+                  ? source.fetchMode
+                  : result.resolution.fetchMode,
               signal,
               onBrowserMissing,
               onProgress: (progress) =>
                 reportProgress(mergeCrawlProgress(result.progress, progress))
             })
           : undefined
-        const progress = mergeExplicitPageProgress(result.progress, explicit?.items ?? [])
-        const explicitPages = [...reviewedTargetPages, ...(explicit?.items ?? [])]
+        const explicitPages = explicit?.items ?? []
+        const progress = mergeExplicitPageProgress(result.progress, [...explicitPages, ...rejected])
         if (!reviewed && progress.succeeded === 0 && progress.failed > 0) {
-          throw new Error(`抓取失败：${progress.failed} 个页面均未成功`)
+          updateState(states, sourceId, progress, null, true)
+          const reason = progress.failures?.[0]?.message
+          throw new Error(
+            `抓取失败：${progress.failed} 个页面均未成功${reason ? `（首个错误：${reason}）` : ''}`
+          )
         }
         signal?.throwIfAborted()
-        if (localJob) {
-          localJobProgress.checkpoint(progress, [], contentBytes)
-        }
         const committed = database.commitSourceCrawl(sourceId, {
           documents,
           deletedUrls,
           replaceAll,
+          run: { id: runId, progress },
           explicitPages: explicitPages.length ? explicitPages : undefined,
-          ...(localJob ? { localJob: { ...localJob, runId, result: progress } } : {}),
           resolution: {
             firstUrl: result.resolution.firstUrl,
-            mode: result.resolution.fetchMode,
-            iconUrl: result.resolution.iconUrl,
+            mode: reviewed
+              ? (explicit?.fetchMode ?? result.resolution.fetchMode)
+              : result.resolution.fetchMode,
+            iconUrl: reviewed
+              ? (result.resolution.iconUrl ?? explicit?.iconUrl ?? null)
+              : result.resolution.iconUrl,
             discovery: result.resolution.discovery,
             github: result.resolution.github
           }
         })
         if (!committed) throw new Error('任务已取消，未提交抓取结果')
         updateState(states, sourceId, progress, null, false)
-        if (!localJob) database.finishCrawlRun(runId, 'completed', progress, null)
         return progress
       } catch (error) {
-        if (error instanceof LocalJobControlError && localJob) {
-          const progress = states.get(sourceId)?.progress ?? {
-            queued: 0,
-            processed: 0,
-            succeeded: 0,
-            failed: 0,
-            limitReached: false
-          }
-          if (error.action === 'pause') {
-            const current = states.get(sourceId)
-            if (current) {
-              states.set(sourceId, { ...current, running: false, paused: true, error: null })
-            }
-            database.finishCrawlRun(runId, 'failed', progress, '任务已暂停')
-            throw error
-          }
-          const resolved = resolution ?? partialResolution(source, documents)
-          const committed = documents.length
-            ? database.commitSourceCrawl(sourceId, {
-                documents,
-                deletedUrls,
-                replaceAll,
-                localJob: {
-                  ...localJob,
-                  runId,
-                  result: progress,
-                  partial: true,
-                  contentBytes
-                },
-                resolution: {
-                  firstUrl: resolved.firstUrl,
-                  mode: resolved.fetchMode,
-                  iconUrl: resolved.iconUrl,
-                  discovery: resolved.discovery,
-                  github: resolved.github
-                }
-              })
-            : false
-          if (!committed) {
-            database.finishCrawlRun(runId, 'completed', progress, null)
-            database.completePartialLocalJob(localJob.id, localJob.owner, progress, contentBytes)
-          }
-          const current = states.get(sourceId)
-          if (current)
-            states.set(sourceId, { ...current, running: false, paused: false, error: null })
-          return progress
-        }
         if (error instanceof GithubLimitError) {
           database.updateGithubBlocked(sourceId, {
             revision: error.revision,
@@ -320,7 +276,13 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
         const message = error instanceof Error ? error.message : '更新失败'
         const current = states.get(sourceId)
         if (current) states.set(sourceId, { ...current, running: false, error: message })
-        database.finishCrawlRun(runId, 'failed', current?.progress, message)
+        database.finishCrawlRun(
+          runId,
+          signal?.aborted ? 'cancelled' : 'failed',
+          current?.progress,
+          message
+        )
+        signal?.throwIfAborted()
         throw error
       }
     } finally {
@@ -331,29 +293,31 @@ export function createLocalSourceCrawlRunner(context: CrawlRunnerContext): RunLo
   return run
 }
 
-function partialResolution(
-  source: ReturnType<LociDatabase['getSourceConfig']>,
-  documents: Parameters<LociDatabase['saveDocument']>[0][]
-): SourceResolution {
+/** 旧审查库沿用本地的收录决定，普通更新只取已保存的页面。 */
+async function refreshStoredReviewPages(
+  options: Parameters<typeof fetchSourceExplicitPages>[0],
+  documents: StoredDocument[],
+  deletedUrls: string[]
+): Promise<SourceCrawlResult> {
+  const result = options.urls.length ? await fetchSourceExplicitPages(options) : undefined
+  for (const item of result?.items ?? []) {
+    if (item.document) documents.push({ ...item.document, sourceId: options.source.id })
+    if (item.status === 'missing') deletedUrls.push(item.url)
+  }
   return {
-    firstUrl: source.firstUrl,
-    hostname: source.hostname,
-    fetchMode: source.fetchMode === 'auto' ? (documents[0]?.fetchMode ?? 'http') : source.fetchMode,
-    iconUrl: null,
-    discovery: source.kind === 'github' ? 'github' : 'pages',
-    ...(source.kind === 'github' && source.githubDefaultBranch && source.githubRevision
-      ? {
-          github: {
-            defaultBranch: source.githubDefaultBranch,
-            revision: source.githubRevision
-          }
-        }
-      : {})
+    progress: explicitPageProgress(result?.items ?? []),
+    resolution: {
+      firstUrl: options.source.firstUrl,
+      hostname: options.source.hostname,
+      discovery: 'pages',
+      fetchMode: result?.fetchMode ?? (options.source.fetchMode === 'browser' ? 'browser' : 'http'),
+      iconUrl: result?.iconUrl ?? null
+    }
   }
 }
 
 function updateState(
-  states: Map<string, CrawlRunState>,
+  states: Map<string, LocalCrawlState>,
   sourceId: string,
   progress: CrawlProgress,
   error: string | null,

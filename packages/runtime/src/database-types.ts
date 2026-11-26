@@ -1,40 +1,36 @@
 import type { CrawlProgress, ExplicitPageResult } from '@loci/core'
 import type {
-  CreateSourceInput,
+  AppSettings,
+  SaveHostnameCrawlPolicyInput,
   DocumentSource,
-  ResolvedSourceDiscovery,
-  UpdateSourceInput
+  LibraryFilters,
+  ResolvedSourceDiscovery
 } from '@loci/shared'
-import type { BackupImportSummary, LociBackup } from './database-backup.js'
-import type { CloudLibraryDatabase } from './cloud-library-database.js'
+import type { LocalSourceMutationDatabase } from './local-source-mutation-database.js'
+import type { CategoryDatabase } from './category-database.js'
+import type { ClearDataDatabase } from './clear-data-database.js'
+import type {
+  BackupExportOptions,
+  BackupImportOptions,
+  BackupImportSummary,
+  LociBackup
+} from './database-backup.js'
 import type { CrawlHistoryDatabase } from './crawl-history-database.js'
 import type { SourceConfig } from './database-local-source.js'
 import type { DocumentContentDatabase, StoredDocument } from './document-content-database.js'
+import type { MutationDatabase } from './document-mutation.js'
 import type { MoveDocumentsInput, MoveDocumentsResult } from './document-move-database.js'
 import type { ExplicitPageDatabase } from './explicit-page-database.js'
 import type { InteractionPreferencesDatabase } from './interaction-preferences.js'
 import type { HostnameCrawlPolicyDatabase } from './hostname-crawl-policy-database.js'
-import type { LocalJobDatabase } from './local-job-database.js'
-import type { LocalJobEventDatabase } from './local-job-event-database.js'
-import type { OperationLogDatabase } from './operation-log-database.js'
-import type { ResourceRevisionDatabase } from './resource-revision-database.js'
 import type { SettingsDatabase } from './settings-database.js'
 import type { SkillInstallationDatabase } from './skill-database.js'
-import type { UrlReviewDatabase } from './url-review-database.js'
 
 export interface SourceCrawlCommit {
   documents: StoredDocument[]
   deletedUrls: string[]
   replaceAll: boolean
-  urlReview?: { runId: string; limitReached: boolean }
-  localJob?: {
-    id: string
-    owner: string
-    runId: string
-    result: CrawlProgress
-    partial?: boolean
-    contentBytes?: number
-  }
+  run?: { id: string; progress: CrawlProgress }
   explicitPages?: readonly ExplicitPageResult[]
   resolution: {
     firstUrl: string
@@ -47,23 +43,29 @@ export interface SourceCrawlCommit {
 
 export interface LociDatabase
   extends
-    CloudLibraryDatabase,
+    LocalSourceMutationDatabase,
+    CategoryDatabase,
+    ClearDataDatabase,
     SettingsDatabase,
     InteractionPreferencesDatabase,
     HostnameCrawlPolicyDatabase,
     CrawlHistoryDatabase,
+    MutationDatabase,
     DocumentContentDatabase,
     SkillInstallationDatabase,
-    LocalJobDatabase,
-    LocalJobEventDatabase,
-    OperationLogDatabase,
-    ResourceRevisionDatabase,
-    ExplicitPageDatabase,
-    UrlReviewDatabase {
+    ExplicitPageDatabase {
+  patchAppSettings: (partial: Partial<AppSettings>) => AppSettings
+  patchHostnamePolicy: (
+    hostname: string,
+    partial: Partial<Omit<SaveHostnameCrawlPolicyInput, 'hostname'>>
+  ) => ReturnType<HostnameCrawlPolicyDatabase['saveHostnameCrawlPolicy']>
   schemaVersion: number
-  listSources: () => DocumentSource[]
-  createSource: (input: CreateSourceInput) => DocumentSource
-  updateSource: (id: string, input: UpdateSourceInput) => DocumentSource
+  clearDocuments: () => number
+  clearSources: () => number
+  hasSource: (id: string) => boolean
+  readSnapshot: <T>(read: () => T) => T
+  listSources: (filters?: LibraryFilters) => DocumentSource[]
+  getSource: (id: string) => DocumentSource
   updateResolvedSource: (
     id: string,
     firstUrl: string,
@@ -72,22 +74,22 @@ export interface LociDatabase
     github?: { defaultBranch: string; revision: string },
     discovery?: ResolvedSourceDiscovery
   ) => void
+  replaceSourceDocuments: (sourceId: string, documents: StoredDocument[]) => void
   commitSourceCrawl: (id: string, commit: SourceCrawlCommit) => boolean
   updateGithubBlocked: (
     id: string,
     blocked: { revision: string; kind: 'archive' | 'markdown'; limitBytes: number }
   ) => void
   getSourceConfig: (id: string) => SourceConfig
-  deleteSource: (id: string) => void
-  exportBackup: () => LociBackup
-  importBackup: (input: unknown) => BackupImportSummary
-  exportBackupArchive: () => Promise<Buffer>
-  importBackupArchive: (input: Buffer) => Promise<BackupImportSummary>
-  exportLibraryPublishArchive: (
-    sourceId: string,
-    mode: 'create' | 'replace',
-    targetLibraryId?: string
-  ) => Promise<Buffer>
+  exportBackup: (options?: BackupExportOptions) => LociBackup
+  importBackup: (input: unknown, options?: BackupImportOptions) => BackupImportSummary
+  exportBackupArchive: (options?: BackupExportOptions) => Promise<Buffer>
+  getBackupImportSummary: (operationId: string) => BackupImportSummary | undefined
+  importBackupArchive: (
+    input: Buffer,
+    options?: BackupImportOptions,
+    operationId?: string
+  ) => Promise<BackupImportSummary>
   moveDocumentsToNewSource: (input: MoveDocumentsInput) => MoveDocumentsResult
   close: () => void
 }

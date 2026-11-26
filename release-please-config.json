@@ -10,10 +10,6 @@
       "release-type": "node",
       "component": "cli"
     },
-    "apps/server": {
-      "release-type": "node",
-      "component": "server"
-    },
     "packages/core": {
       "release-type": "node",
       "component": "core",

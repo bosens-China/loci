@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import {
-  ApiOutlined,
   CheckCircleFilled,
   CopyOutlined,
   DeleteOutlined,
@@ -12,7 +11,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Avatar, Button, Card, Col, Row, Space, Tag, Tooltip, Typography } from 'antd'
 import type {
-  McpClient,
+  AgentClient,
   AgentIntegrationComponentState,
   AgentIntegrationStatus
 } from '@loci/shared'
@@ -29,10 +28,10 @@ const QUERY_KEY = ['agent-integrations'] as const
 
 interface MutationInput {
   action: AgentIntegrationActionIntent
-  client: McpClient
+  client: AgentClient
 }
 
-/** Agent 接入管理页：展示并管理各个 Agent 客户端的 MCP、Skill 和 Rules 接入状态。 */
+/** Agent 接入管理页：以 use-loci Skill 与 全局 Rules 两列展示并管理各个 Agent 客户端。 */
 export function AgentsPage(): React.JSX.Element {
   const { message, modal } = App.useApp()
   const queryClient = useQueryClient()
@@ -55,7 +54,7 @@ export function AgentsPage(): React.JSX.Element {
   const confirmRemove = (status: AgentIntegrationStatus): void => {
     modal.confirm({
       title: `移除 ${status.label} 的 Loci 全局接入？`,
-      content: '只移除能确认由 Loci 管理的 MCP、Skill 和 Rules；冲突内容会保留。',
+      content: '只移除能确认由 Loci 管理的 Skill 和 Rules；冲突内容会安全保留。',
       okText: '移除全局接入',
       cancelText: '取消',
       okButtonProps: { danger: true },
@@ -77,7 +76,7 @@ export function AgentsPage(): React.JSX.Element {
     <div className="px-6 py-6 sm:px-8 sm:py-8">
       <PageHeader
         title="Agent 接入"
-        description="把 Loci MCP、use-loci Skill 和全局 Rules 接到同一个 Agent。所有写入只发生在当前电脑。"
+        description="把 use-loci Skill 与全局 Rules 接入到主流 Agent。所有配置均只保存在当前电脑本地。"
         action={
           <Button
             icon={<ReloadOutlined />}
@@ -89,7 +88,6 @@ export function AgentsPage(): React.JSX.Element {
         }
       />
 
-      {/* 状态统计看板 */}
       <Card size="small" className="mb-5 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -110,7 +108,7 @@ export function AgentsPage(): React.JSX.Element {
             </div>
           </div>
           <Typography.Text type="secondary" className="text-xs">
-            自动管理 MCP 协议、Skill 指令与文档 Rules
+            自动部署 use-loci 技能与知识库检索全局规则
           </Typography.Text>
         </div>
       </Card>
@@ -196,7 +194,6 @@ function AgentCard(props: AgentCardProps): React.JSX.Element {
       className="shadow-xs overflow-hidden transition-all hover:border-[var(--ant-color-primary)]"
       styles={{ body: { padding: '16px 20px' } }}
     >
-      {/* 头部：Agent 身份、状态与操作按钮 */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--ant-color-border-secondary)] pb-3">
         <div className="flex items-center gap-3">
           <Avatar
@@ -213,7 +210,7 @@ function AgentCard(props: AgentCardProps): React.JSX.Element {
               <OverallTag status={props.status.overall} />
             </div>
             <Typography.Text type="secondary" className="block text-xs mt-0.5">
-              {ready ? '三项能力均已就绪并连接' : overallDescription(props.status)}
+              {ready ? 'Skill 与 Rules 均已就绪并连接' : overallDescription(props.status)}
             </Typography.Text>
           </div>
         </div>
@@ -240,11 +237,11 @@ function AgentCard(props: AgentCardProps): React.JSX.Element {
         </Space>
       </div>
 
-      {/* 核心路线：MCP · Skill · Rules 三项指标卡片 */}
+      {/* 两列布局：use-loci Skill 与 全局 Rules */}
       <div className="pt-4">
-        <Row gutter={[12, 12]}>
+        <Row gutter={[16, 16]}>
           {props.status.components.map((component) => (
-            <Col xs={24} sm={8} key={component.component}>
+            <Col xs={24} sm={12} key={component.component}>
               <ComponentTile component={component} onCopy={props.onCopy} />
             </Col>
           ))}
@@ -258,102 +255,83 @@ function ComponentTile(props: {
   component: AgentIntegrationComponentState
   onCopy: (content: string) => Promise<void>
 }): React.JSX.Element {
-  const { component } = props
-  const config = {
-    mcp: { title: 'MCP 服务', icon: <ApiOutlined />, subtitle: '@loci/server 工具协议' },
-    skill: { title: 'use-loci Skill', icon: <ToolOutlined />, subtitle: 'Prompt 技能指令' },
-    rules: { title: '全局 Rules', icon: <FileProtectOutlined />, subtitle: '文档查询指引规范' }
-  }[component.component]
-
-  const isCurrent = component.status === 'current'
+  const isSkill = props.component.component === 'skill'
+  const title = isSkill ? 'use-loci Skill' : '全局 Rules'
+  const icon = isSkill ? <ToolOutlined /> : <FileProtectOutlined />
 
   return (
-    <div className="flex h-full flex-col justify-between rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-tertiary)] p-3 transition-colors hover:bg-[var(--ant-color-fill-secondary)]">
+    <div className="h-full rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] p-3.5 flex flex-col justify-between">
       <div>
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span
-              className={`text-sm ${isCurrent ? 'text-[var(--ant-color-success)]' : 'text-[var(--ant-color-text-secondary)]'}`}
-            >
-              {isCurrent ? <CheckCircleFilled /> : config.icon}
-            </span>
-            <Typography.Text strong className="text-xs">
-              {config.title}
-            </Typography.Text>
+          <div className="flex items-center gap-2 text-xs font-semibold text-[var(--ant-color-text)]">
+            <span className="text-[var(--ant-color-primary)]">{icon}</span>
+            <span>{title}</span>
           </div>
-          <Tag color={statusTagColor(component.status)} className="m-0! text-[11px]">
-            {statusLabel(component.status)}
-          </Tag>
+          <ComponentStatusTag status={props.component.status} />
         </div>
-        <Typography.Text type="secondary" className="mt-1.5 block text-[11px]">
-          {config.subtitle}
-        </Typography.Text>
+
+        <div className="mt-2 text-xs text-[var(--ant-color-text-secondary)] leading-relaxed">
+          {props.component.message ?? defaultComponentDescription(props.component)}
+        </div>
       </div>
 
-      <div className="mt-2 pt-2 border-t border-[var(--ant-color-border-secondary)] flex items-center justify-between min-h-6">
-        {component.status === 'manual' && component.manualContent ? (
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--ant-color-split)] pt-2 text-[11px] text-[var(--ant-color-text-tertiary)] font-mono">
+        <span className="truncate flex-1" title={props.component.path}>
+          {props.component.path}
+        </span>
+        {props.component.manualContent && (
           <Button
             type="link"
             size="small"
             icon={<CopyOutlined />}
-            className="p-0! text-xs h-auto"
-            onClick={() => void props.onCopy(component.manualContent!)}
+            onClick={() => void props.onCopy(props.component.manualContent!)}
+            className="p-0! h-auto text-xs shrink-0"
           >
-            复制全局 Rules
+            复制规则
           </Button>
-        ) : component.message && component.status !== 'manual' ? (
-          <Tooltip title={component.message}>
-            <Typography.Text type="danger" ellipsis className="text-xs max-w-full cursor-help">
-              {component.message}
-            </Typography.Text>
-          </Tooltip>
-        ) : (
-          <Typography.Text type="secondary" className="text-[11px]">
-            {isCurrent ? '状态正常' : '点击上方一键接入'}
-          </Typography.Text>
         )}
       </div>
     </div>
   )
 }
 
-function OverallTag(props: { status: AgentIntegrationStatus['overall'] }): React.JSX.Element {
-  const values = {
-    ready: { color: 'success', text: '已接入' },
-    partial: { color: 'processing', text: '部分就绪' },
-    missing: { color: 'default', text: '未接入' },
-    attention: { color: 'error', text: '需处理' }
-  } as const
-  const value = values[props.status]
-  return (
-    <Tag color={value.color} className="m-0!">
-      {value.text}
-    </Tag>
-  )
+function OverallTag({ status }: { status: AgentIntegrationStatus['overall'] }): React.JSX.Element {
+  if (status === 'ready') return <Tag color="success">已就绪</Tag>
+  if (status === 'partial') return <Tag color="processing">部分接入</Tag>
+  if (status === 'attention') return <Tag color="warning">需处理</Tag>
+  return <Tag color="default">未接入</Tag>
+}
+
+function ComponentStatusTag({
+  status
+}: {
+  status: AgentIntegrationComponentState['status']
+}): React.JSX.Element {
+  if (status === 'current')
+    return (
+      <Tag color="success" icon={<CheckCircleFilled />}>
+        最新
+      </Tag>
+    )
+  if (status === 'outdated') return <Tag color="processing">可更新</Tag>
+  if (status === 'conflict') return <Tag color="error">存在冲突</Tag>
+  if (status === 'manual') return <Tag color="warning">需手动</Tag>
+  return <Tag color="default">未配置</Tag>
+}
+
+function defaultComponentDescription(component: AgentIntegrationComponentState): string {
+  if (component.component === 'skill') {
+    return component.status === 'current'
+      ? 'use-loci skill 指令已部署，支持智能查阅本地文档库'
+      : '未安装 use-loci skill，点击一键接入完成部署'
+  }
+  return component.status === 'current'
+    ? '全局 Rules 规则已配置，提示 Agent 优先通过 loci 查询本地文档'
+    : '未注入全局 Rules，点击一键接入自动写入'
 }
 
 function overallDescription(status: AgentIntegrationStatus): string {
-  if (status.overall === 'attention') return '存在冲突，请查看具体节点'
-  if (status.overall === 'partial') return '自动项与手动项尚未全部完成'
-  return '尚未写入 Loci 全局配置'
-}
-
-function statusLabel(status: AgentIntegrationComponentState['status']): string {
-  return {
-    missing: '未配置',
-    current: '已就绪',
-    outdated: '待更新',
-    conflict: '有冲突',
-    manual: '需手动'
-  }[status]
-}
-
-function statusTagColor(status: AgentIntegrationComponentState['status']): string | undefined {
-  return {
-    missing: undefined,
-    current: 'success',
-    outdated: 'warning',
-    conflict: 'error',
-    manual: 'processing'
-  }[status]
+  if (status.overall === 'attention') return '部分配置存在冲突或需手动确认'
+  if (status.overall === 'partial') return '已完成部分配置，可点击一键接入补全'
+  return '未接入 Loci，点击一键接入快速配置 Skill 与 Rules'
 }

@@ -1,15 +1,41 @@
 import { DOCUMENT_SOURCE_DEFAULTS, DOCUMENT_SOURCE_LIMITS } from '@loci/core'
-import { APP_SETTINGS_LIMITS, DEFAULT_APP_SETTINGS, PRODUCTION_SERVER_URL } from '@loci/shared'
+import {
+  APP_SETTINGS_LIMITS,
+  DEFAULT_APP_SETTINGS,
+  DEFAULT_LIBRARY_CATEGORY,
+  DEFAULT_LIBRARY_VERSION
+} from '@loci/shared'
 
-export const LOCI_SCHEMA_VERSION = 18
+export const LOCI_SCHEMA_VERSION = 22
+export const CATEGORY_COLUMN = `TEXT NOT NULL DEFAULT '${DEFAULT_LIBRARY_CATEGORY}' CHECK (trim(category) <> '') REFERENCES categories(name)`
+export const VERSION_COLUMN = `TEXT NOT NULL DEFAULT '${DEFAULT_LIBRARY_VERSION}' CHECK (trim(version) <> '')`
+
+// 附加幂等记录表，旧版数据库可继续访问原有业务表。
+export const ADDITIVE_SCHEMA_EXTENSIONS = `CREATE TABLE IF NOT EXISTS section_edit_receipts (
+  document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  operation_id TEXT NOT NULL, request_hash TEXT NOT NULL, result_hash TEXT NOT NULL,
+  PRIMARY KEY (document_id, operation_id)
+) STRICT;
+CREATE TABLE IF NOT EXISTS clear_data_receipts (
+  operation_id TEXT PRIMARY KEY, summary TEXT NOT NULL, created_at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS crawl_runs_source_started ON crawl_runs(source_id, started_at DESC)`
 
 // 基础表结构集中维护，具体子模块的增量表由各自初始化函数负责。
 export const LOCI_DATABASE_SCHEMA = `
   PRAGMA foreign_keys = ON;
 
+  CREATE TABLE IF NOT EXISTS categories (
+    name TEXT PRIMARY KEY,
+    sort_order INTEGER NOT NULL DEFAULT 100,
+    created_at TEXT NOT NULL
+  ) STRICT;
+
   CREATE TABLE IF NOT EXISTS document_sources (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    category ${CATEGORY_COLUMN},
+    version ${VERSION_COLUMN},
     first_url TEXT NOT NULL,
     hostname TEXT NOT NULL,
     fetch_mode TEXT NOT NULL CHECK (fetch_mode IN ('auto', 'http', 'browser')),
@@ -51,6 +77,7 @@ export const LOCI_DATABASE_SCHEMA = `
     language TEXT NOT NULL DEFAULT 'und',
     fetch_mode TEXT NOT NULL CHECK (fetch_mode IN ('http', 'browser')),
     relative_path TEXT,
+    manual INTEGER NOT NULL DEFAULT 0 CHECK (manual IN (0, 1)),
     UNIQUE(source_id, url)
   ) STRICT;
 
@@ -73,8 +100,6 @@ export const LOCI_DATABASE_SCHEMA = `
     batch_interval_max_seconds INTEGER NOT NULL DEFAULT ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled} CHECK (
       batch_interval_max_seconds = ${APP_SETTINGS_LIMITS.batchIntervalSeconds.disabled} OR batch_interval_max_seconds BETWEEN ${APP_SETTINGS_LIMITS.batchIntervalSeconds.min} AND ${APP_SETTINGS_LIMITS.batchIntervalSeconds.max}
     ),
-    server_url TEXT NOT NULL DEFAULT '${PRODUCTION_SERVER_URL}',
-    server_url_customized INTEGER NOT NULL DEFAULT 0 CHECK (server_url_customized IN (0, 1)),
     github_archive_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubArchiveLimitMb} CHECK (github_archive_limit_mb BETWEEN ${APP_SETTINGS_LIMITS.githubSizeMb.min} AND ${APP_SETTINGS_LIMITS.githubSizeMb.max}),
     github_markdown_limit_mb INTEGER NOT NULL DEFAULT ${DEFAULT_APP_SETTINGS.githubMarkdownLimitMb} CHECK (github_markdown_limit_mb BETWEEN ${APP_SETTINGS_LIMITS.githubSizeMb.min} AND ${APP_SETTINGS_LIMITS.githubSizeMb.max})
   ) STRICT;
@@ -88,22 +113,11 @@ export const LOCI_DATABASE_SCHEMA = `
     updated_at TEXT NOT NULL
   ) STRICT;
 
-  CREATE TABLE IF NOT EXISTS operation_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT NOT NULL CHECK (
-      category IN ('task', 'library', 'settings', 'cloud', 'maintenance', 'system')
-    ),
-    action TEXT NOT NULL,
-    level TEXT NOT NULL CHECK (level IN ('info', 'warning', 'error')),
-    resource_type TEXT,
-    resource_id TEXT,
-    hostname TEXT,
-    message TEXT NOT NULL,
-    details_json TEXT,
-    created_at TEXT NOT NULL
+  CREATE TABLE IF NOT EXISTS backup_import_receipts (
+    operation_id TEXT PRIMARY KEY,
+    summary TEXT NOT NULL,
+    created_at INTEGER NOT NULL
   ) STRICT;
-
-  CREATE INDEX IF NOT EXISTS operation_logs_created_at ON operation_logs(created_at DESC);
 
   CREATE TABLE IF NOT EXISTS document_move_operations (
     operation_id TEXT PRIMARY KEY,

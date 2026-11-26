@@ -1,15 +1,11 @@
 import { DatabaseSync } from 'node:sqlite'
-import { createLibraryPublishArchive } from '@loci/core'
-import { migrateDatabase } from './database-values.js'
-import { DEFAULT_APP_SETTINGS, normalizeServerUrl } from '@loci/shared'
 import { and, eq } from 'drizzle-orm'
-import { createCloudLibraryDatabase } from './cloud-library-database.js'
+import { createSettingsDatabase, initializeSettings } from './settings-database.js'
 import {
-  createSettingsDatabase,
-  initializeSettings,
-  type SettingsInitializationOptions
-} from './settings-database.js'
-import { exportDatabaseBackup, importDatabaseBackup } from './database-backup.js'
+  exportDatabaseBackup,
+  importDatabaseBackup,
+  restoreDatabaseBackup
+} from './database-backup.js'
 import { createBackupArchive, parseBackupArchive } from './database-backup-archive.js'
 import { createInteractionPreferencesDatabase } from './interaction-preferences.js'
 import { createHostnameCrawlPolicyDatabase } from './hostname-crawl-policy-database.js'
@@ -18,14 +14,14 @@ import {
   initializeCrawlHistoryDatabase
 } from './crawl-history-database.js'
 import { createDocumentContentDatabase } from './document-content-database.js'
-import { LOCI_DATABASE_SCHEMA, LOCI_SCHEMA_VERSION } from './database-schema.js'
-import { createSkillInstallationDatabase } from './skill-database.js'
-import { createLocalJobDatabase, initializeLocalJobDatabase } from './local-job-database.js'
-import { createLoggedLocalJobDatabase } from './logged-local-job-database.js'
+import { createClearDataDatabase } from './clear-data-database.js'
+import { createMutationDatabase } from './document-mutation.js'
 import {
-  createLocalJobEventDatabase,
-  initializeLocalJobEventDatabase
-} from './local-job-event-database.js'
+  LOCI_DATABASE_SCHEMA,
+  LOCI_SCHEMA_VERSION,
+  ADDITIVE_SCHEMA_EXTENSIONS
+} from './database-schema.js'
+import { createSkillInstallationDatabase } from './skill-database.js'
 import {
   listDocumentSources,
   readDocumentSource,
@@ -36,107 +32,112 @@ import {
   createExplicitPageDatabase,
   initializeExplicitPageDatabase
 } from './explicit-page-database.js'
-import { createUrlReviewDatabase, initializeUrlReviewDatabase } from './url-review-database.js'
 import type { LociDatabase } from './database-types.js'
-import { commitSourceCrawl } from './database-source-commit.js'
+import { commitSourceCrawl, writeCrawlDocuments } from './database-source-commit.js'
 import { createDrizzleDatabase } from './drizzle-database.js'
-import { createOperationLogDatabase } from './operation-log-database.js'
 import { moveDocumentsToNewSource } from './document-move-database.js'
+import { backupImportReceipts, documentSources } from './drizzle-schema.js'
+import { createCategoryDatabase, seedCategories } from './category-database.js'
 import {
-  createLoggedHostnamePolicyDatabase,
-  createLoggedSettingsDatabase
-} from './logged-settings-database.js'
-import { documentSources } from './drizzle-schema.js'
-import { createLocalSourceMutationDatabase } from './local-source-mutation-database.js'
-import {
-  createResourceRevisionDatabase,
-  initializeResourceRevisionDatabase
-} from './resource-revision-database.js'
+  createLocalSourceMutationDatabase,
+  createSourceInTransaction
+} from './local-source-mutation-database.js'
+import { migrateDatabase } from './database-values.js'
+import { withImmediateTransaction, withTransaction } from './sqlite.js'
 
 export { LOCI_SCHEMA_VERSION } from './database-schema.js'
 export { databaseNeedsMigration } from './database-lifecycle.js'
-
 export type { SourceConfig } from './database-local-source.js'
 export type { LociDatabase, SourceCrawlCommit } from './database-types.js'
 
-export type CreateDatabaseOptions = SettingsInitializationOptions
-
-export function createDatabase(
-  filename: string,
-  options: CreateDatabaseOptions = {}
-): LociDatabase {
-  const serverUrlOverride = options.overrideServerUrl
-    ? normalizeServerUrl(options.serverUrl ?? DEFAULT_APP_SETTINGS.serverUrl)
-    : undefined
-  const database = new DatabaseSync(filename, {
-    timeout: 5000,
-    enableForeignKeyConstraints: true
-  })
+/** 同一连接上的全部迁移原子提交，并保留旧版数据库中的附加表。 */
+export function createDatabase(filename: string): LociDatabase {
+  const database = new DatabaseSync(filename, { timeout: 5000, enableForeignKeyConstraints: true })
+  const drizzle = createDrizzleDatabase(database)
   try {
-    database.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;')
-    const row = database.prepare('PRAGMA user_version').get() as unknown as {
-      user_version: number
-    }
-    if (row.user_version > LOCI_SCHEMA_VERSION) {
-      throw new Error(
-        `数据库版本 ${row.user_version} 高于当前支持的 ${LOCI_SCHEMA_VERSION}，请升级 Loci 后重试`
-      )
-    }
-    database.exec(LOCI_DATABASE_SCHEMA)
-    initializeCrawlHistoryDatabase(database)
-    initializeLocalJobDatabase(database)
-    initializeResourceRevisionDatabase(database)
-    initializeLocalJobEventDatabase(database)
-    initializeExplicitPageDatabase(database)
-    initializeUrlReviewDatabase(database)
-    migrateDatabase(database, row.user_version)
-    initializeSettings(database, options)
-    database.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION}`)
+    // 迁移期间 SQLite 才允许在非空表追加带非空默认值的外键列。
+    database.exec(
+      'PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = OFF;'
+    )
+    withImmediateTransaction(database, () => {
+      const version = Number(database.prepare('PRAGMA user_version').get()?.user_version)
+      if (version > LOCI_SCHEMA_VERSION)
+        throw new Error(
+          `数据库版本 ${version} 高于当前支持的 ${LOCI_SCHEMA_VERSION}，请升级 Loci 后重试`
+        )
+      if (version < LOCI_SCHEMA_VERSION) {
+        database.exec(LOCI_DATABASE_SCHEMA)
+        initializeCrawlHistoryDatabase(database)
+        initializeExplicitPageDatabase(database)
+        migrateDatabase(database, version)
+        seedCategories(drizzle)
+        initializeSettings(drizzle)
+        if (database.prepare('PRAGMA foreign_key_check').get())
+          throw new Error('迁移后存在无效的外键引用')
+        database.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION}`)
+      }
+      database.exec(ADDITIVE_SCHEMA_EXTENSIONS)
+    })
+    database.exec('PRAGMA foreign_keys = ON')
   } catch (error) {
     database.close()
     throw error
   }
-
-  const drizzleDatabase = createDrizzleDatabase(database)
-  const operationLogs = createOperationLogDatabase(drizzleDatabase)
-  const localJobs = createLoggedLocalJobDatabase(createLocalJobDatabase(database), operationLogs)
-  const documentContent = createDocumentContentDatabase(database, drizzleDatabase)
-  const settings = createLoggedSettingsDatabase(
-    createSettingsDatabase(drizzleDatabase, serverUrlOverride),
-    operationLogs
-  )
-  const hostnamePolicies = createLoggedHostnamePolicyDatabase(
-    createHostnameCrawlPolicyDatabase(drizzleDatabase),
-    operationLogs
-  )
-  const sourceMutations = createLocalSourceMutationDatabase(
-    database,
-    drizzleDatabase,
-    operationLogs
-  )
-
-  const lociDatabase: LociDatabase = {
+  const settings = createSettingsDatabase(drizzle)
+  const policies = createHostnameCrawlPolicyDatabase(drizzle)
+  const sources = createLocalSourceMutationDatabase(database, drizzle)
+  const clear = createClearDataDatabase(database, drizzle)
+  return {
     schemaVersion: LOCI_SCHEMA_VERSION,
-    ...createCloudLibraryDatabase(database, drizzleDatabase),
     ...settings,
-    ...createInteractionPreferencesDatabase(drizzleDatabase),
-    ...hostnamePolicies,
-    ...createCrawlHistoryDatabase(database, drizzleDatabase),
-    ...documentContent,
-    ...createSkillInstallationDatabase(drizzleDatabase),
-    ...localJobs,
-    ...createLocalJobEventDatabase(database),
-    ...operationLogs,
-    ...createResourceRevisionDatabase(drizzleDatabase),
-    ...createExplicitPageDatabase(database, drizzleDatabase),
-    ...createUrlReviewDatabase(database),
-    listSources: () => listDocumentSources(drizzleDatabase),
-    ...sourceMutations,
+    ...policies,
+    patchAppSettings: (partial) =>
+      withImmediateTransaction(database, () =>
+        settings.saveSettings({ ...settings.getSettings(), ...partial })
+      ),
+    patchHostnamePolicy: (hostname, partial) =>
+      withImmediateTransaction(database, () =>
+        policies.saveHostnameCrawlPolicy({
+          httpConcurrency: null,
+          browserConcurrency: null,
+          batchIntervalMinSeconds: null,
+          batchIntervalMaxSeconds: null,
+          ...policies.getHostnameCrawlPolicy(hostname),
+          ...partial,
+          hostname
+        })
+      ),
+    ...createInteractionPreferencesDatabase(drizzle),
+    ...createCrawlHistoryDatabase(database, drizzle),
+    ...createMutationDatabase(database, drizzle),
+    ...createDocumentContentDatabase(database, drizzle),
+    ...clear,
+    clearDocuments: () => clear.clearData('documents').documents,
+    clearSources: () => clear.clearData('sources').libraries,
+    ...createSkillInstallationDatabase(drizzle),
+    ...createExplicitPageDatabase(database, drizzle),
+    ...createCategoryDatabase(database, drizzle),
+    ...sources,
+    hasSource: (id) =>
+      Boolean(
+        drizzle
+          .select({ id: documentSources.id })
+          .from(documentSources)
+          .where(eq(documentSources.id, id))
+          .get()
+      ),
+    readSnapshot: (read) => withTransaction(database, read),
+    getSource: (id) => readDocumentSource(drizzle, id),
+    listSources: (filters) => listDocumentSources(drizzle, filters),
     updateResolvedSource: (id, firstUrl, mode, iconUrl, github, discovery) =>
       updateResolvedSourceRecord(database, id, firstUrl, mode, iconUrl, github, discovery),
+    replaceSourceDocuments: (id, documents) =>
+      withImmediateTransaction(database, () => {
+        writeCrawlDocuments(database, id, { documents, deletedUrls: [], replaceAll: true })
+      }),
     commitSourceCrawl: (id, commit) => commitSourceCrawl(database, id, commit),
     updateGithubBlocked: (id, blocked) => {
-      drizzleDatabase
+      drizzle
         .update(documentSources)
         .set({
           githubBlockedRevision: blocked.revision,
@@ -147,69 +148,36 @@ export function createDatabase(
         .where(and(eq(documentSources.id, id), eq(documentSources.sourceType, 'local')))
         .run()
     },
-    getSourceConfig: (id) => readSourceConfig(drizzleDatabase, id),
-    exportBackup: () => exportDatabaseBackup(database),
-    importBackup: (input) => importDatabaseBackup(database, input),
-    exportBackupArchive: async () => {
-      const archive = await createBackupArchive(exportDatabaseBackup(database), LOCI_SCHEMA_VERSION)
-      operationLogs.recordOperationLog({
-        category: 'maintenance',
-        action: 'backup.export',
-        level: 'info',
-        message: '已导出 ZIP 备份',
-        details: { bytes: archive.length }
-      })
-      return archive
-    },
-    importBackupArchive: async (input) => {
-      const summary = importDatabaseBackup(database, (await parseBackupArchive(input)).backup)
-      operationLogs.recordOperationLog({
-        category: 'maintenance',
-        action: 'backup.import',
-        level: 'warning',
-        message: '已从 ZIP 备份恢复数据',
-        details: { sources: summary.sources, documents: summary.documents }
-      })
-      return summary
-    },
-    exportLibraryPublishArchive: async (sourceId, mode, targetLibraryId) => {
-      const source = readDocumentSource(drizzleDatabase, sourceId)
-      if (source.cloud) throw new Error('只能发布本地文档库')
-      const documents = documentContent
-        .listDocuments()
-        .filter((item) => item.sourceId === sourceId)
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          url: item.url,
-          language: item.language,
-          markdown: item.content,
-          crawledAt: item.updatedAt,
-          relativePath: new URL(item.url).pathname
-        }))
-      if (!documents.length) throw new Error('文档库没有可发布内容')
-      return createLibraryPublishArchive({
-        mode,
-        targetLibraryId: mode === 'replace' ? (targetLibraryId ?? null) : null,
-        source: {
-          name: source.name,
-          url: source.url,
-          scopePath: source.scopePath,
-          pageLimit: source.pageLimit
-        },
-        documents
-      })
-    },
+    getSourceConfig: (id) => readSourceConfig(drizzle, id),
+    exportBackup: (options) =>
+      withTransaction(database, () => exportDatabaseBackup(database, options)),
+    importBackup: (input, options) => importDatabaseBackup(database, input, options),
+    exportBackupArchive: (options) =>
+      createBackupArchive(
+        withTransaction(database, () => exportDatabaseBackup(database, options)),
+        LOCI_SCHEMA_VERSION
+      ),
+    getBackupImportSummary: (id) =>
+      drizzle
+        .select({ summary: backupImportReceipts.summary })
+        .from(backupImportReceipts)
+        .where(eq(backupImportReceipts.operationId, id))
+        .get()?.summary,
+    importBackupArchive: async (input, options, operationId) =>
+      restoreDatabaseBackup(
+        database,
+        (await parseBackupArchive(input)).backup,
+        options,
+        operationId
+      ),
     moveDocumentsToNewSource: (input) =>
       moveDocumentsToNewSource(
         database,
-        drizzleDatabase,
+        drizzle,
         input,
-        lociDatabase.createSource,
-        (id) => readDocumentSource(drizzleDatabase, id),
-        operationLogs
+        (source) => createSourceInTransaction(database, drizzle, source),
+        (id) => readDocumentSource(drizzle, id)
       ),
     close: () => database.close()
   }
-  return lociDatabase
 }

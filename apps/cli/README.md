@@ -1,37 +1,29 @@
-# Loci CLI 开发说明
+# Loci CLI
 
-面向用户的安装、使用和命令参考由 Rspress 站点维护，源文件位于 [`apps/docs/docs/cli`](../docs/docs/cli)。
+Loci 将网页、GitHub 仓库和 Markdown 文档保存在本机，可从命令行和 Web 界面使用同一份文档库。
+
+```bash
+loci fetch https://example.org/docs --scope /docs --wait
+loci list --json
+loci tree <library> --query hooks --all
+loci search hooks --library <library> --json
+loci read /guide /reference/hooks --library <library>
+loci ui --no-open
+```
+
+`loci fetch` 和 `loci update` 默认异步启动，`--wait` 在前台显示进度并等待完成。用 `loci cancel <library>` 取消当前抓取。两条抓取命令均支持 `--http-concurrency <n>` 和 `--browser-concurrency <n>`（1–32）。复用已有库时可显式更新配置，省略的字段沿用已有值。
+
+`fetch` 和 `update` 可用 `--category <name>` 与 `--version <ver>` 标注文档库，新的分类名自动创建。`loci list --category 前端 --version v19 --json` 可组合筛选，`loci category --json` 列出分类及库数。用 `loci category add <name>` 创建空分类，`loci category delete <name>` 删除分类并保留关联库。
+
+`loci status [library]` 可轮询至终态并查询抓取进度、错误原因及最多 20 个失败页面的 URL 和消息，`--json` 通过 `failures` 返回这些明细。`loci setup` 引导安装 Agent 的 Skill 和全局 Rules。运行 `loci --help` 或 `loci <command> --help` 可查看完整选项。
 
 ## 本地开发
 
 ```bash
-pnpm dev
-pnpm dev:user
-pnpm --filter @boses/cli build
-pnpm --filter @boses/cli test
 pnpm --filter @boses/cli typecheck
+pnpm --filter @boses/cli test
+pnpm --filter @boses/cli build
+node apps/cli/dist/index.js ui --no-open
 ```
 
-`pnpm dev` 默认使用仓库内的 `.loci-dev` 隔离数据与缓存，适合日常开发。需要直接复现正式 `loci ui` 中的数据问题时，显式运行 `pnpm dev:user`；它遵循 Runtime 的正式数据目录规则以及 `LOCI_DATA_DIR`、`LOCI_CACHE_DIR` 覆盖，并且 Web 中的写操作会直接修改对应数据。`LOCI_CACHE_DIR` 是进程级的浏览器缓存目录覆盖，不会自动变成持久配置；联调 CLI 与 worker 时必须为所有进程传入同一个值。
-
-CLI 构建会先构建 `@loci/web`，再把产物复制到 npm 包的 `dist/resources/ui`。本地验证前台 Web 会话：
-
-```bash
-node dist/index.js ui --no-open
-```
-
-命令会先打印访问地址并保持运行；验证完成后按 `Ctrl+C` 关闭本地服务。
-
-构建后可直接运行：
-
-```bash
-node dist/index.js --help
-```
-
-正式版默认连接 `https://loci.xiaowo.live`。联调本地 Server 时显式覆盖地址。`LOCI_SERVER_URL` 高于持久 `server-url`；变量存在时，`loci config set server-url` 会拒绝保存，避免误报成功：
-
-```bash
-LOCI_SERVER_URL=http://localhost:7001 node dist/index.js doctor
-```
-
-CLI 入口为 `src/index.ts`。发布前由根目录的 Release 工作流创建版本和发布 npm 包；`prepack` 会自动执行构建。
+`LOCI_DATA_DIR` 和 `LOCI_CACHE_DIR` 可覆盖本地数据和缓存目录。构建脚本先构建 Web，再将静态资源和 `use-loci` Skill 复制到发布包。`ui` 默认监听 `127.0.0.1:4520`，按 Ctrl+C 关闭。

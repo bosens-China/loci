@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { GithubBlockedState } from '@loci/core'
 import { getHostname, normalizeScopePath, normalizeUrl } from '@loci/core'
-import type { DocumentSource, ResolvedSourceDiscovery } from '@loci/shared'
+import type { DocumentSource, LibraryFilters, ResolvedSourceDiscovery } from '@loci/shared'
 import { and, count, desc, eq, max, ne, sql } from 'drizzle-orm'
 import { toDocumentSource } from './database-values.js'
 import type { LociDrizzleDatabase } from './drizzle-database.js'
@@ -20,13 +20,12 @@ export interface SourceConfig {
   httpConcurrency: number | null
   browserConcurrency: number | null
   kind: 'web' | 'github'
+  discoveryMode: 'site' | 'agent_review'
   githubArchiveLimitMb: number | null
   githubMarkdownLimitMb: number | null
   githubDefaultBranch: string | null
   githubRevision: string | null
   githubBlocked: GithubBlockedState | null
-  discoveryMode: 'site' | 'agent_review'
-  reviewGoal: string | null
 }
 
 export function createWebSourceIdentity(hostname: string, scopePath: string): string {
@@ -36,7 +35,7 @@ export function createWebSourceIdentity(hostname: string, scopePath: string): st
 export function readSourceConfig(database: LociDrizzleDatabase, id: string): SourceConfig {
   const source = database.select().from(documentSources).where(eq(documentSources.id, id)).get()
   if (!source) throw new Error('文档源不存在')
-  if (source.sourceType !== 'local') throw new Error('云文档只能从来源服务器更新')
+  if (source.sourceType !== 'local') throw new Error('旧版本地快照为只读文档库')
   return {
     id: source.id,
     firstUrl: source.firstUrl,
@@ -49,12 +48,11 @@ export function readSourceConfig(database: LociDrizzleDatabase, id: string): Sou
     browserConcurrency:
       source.browserConcurrency === null ? null : Number(source.browserConcurrency),
     kind: source.documentKind,
+    discoveryMode: source.discoveryMode,
     githubArchiveLimitMb: source.githubArchiveLimitMb,
     githubMarkdownLimitMb: source.githubMarkdownLimitMb,
     githubDefaultBranch: source.githubDefaultBranch,
     githubRevision: source.githubRevision,
-    discoveryMode: source.discoveryMode,
-    reviewGoal: source.reviewGoal,
     githubBlocked:
       source.githubBlockedRevision &&
       source.githubBlockedLimitKind &&
@@ -71,11 +69,13 @@ export function readSourceConfig(database: LociDrizzleDatabase, id: string): Sou
 export function assertLocalSourceIdentityAvailable(
   database: LociDrizzleDatabase,
   identity: string,
+  version: string,
   github: boolean,
   excludedId?: string
 ): void {
   const conditions = [
     eq(documentSources.sourceIdentity, identity),
+    eq(documentSources.version, version),
     eq(documentSources.sourceType, 'local')
   ]
   if (excludedId) conditions.push(ne(documentSources.id, excludedId))
@@ -96,6 +96,7 @@ export function throwLocalHostnameConflict(error: unknown): never {
     error instanceof Error &&
     (error.message.includes('document_sources_local_hostname') ||
       error.message.includes('document_sources_local_identity') ||
+      error.message.includes('UNIQUE constraint failed: document_sources.source_identity') ||
       error.message.includes('UNIQUE constraint failed: document_sources.hostname'))
   ) {
     throw new Error('这个域名和收录范围已经存在于文档源中')
@@ -146,13 +147,18 @@ export function updateResolvedSourceRecord(
 
 export function findLocalSourceId(
   database: LociDrizzleDatabase,
-  identity: string
+  identity: string,
+  version: string
 ): string | undefined {
   const row = database
     .select({ id: documentSources.id })
     .from(documentSources)
     .where(
-      and(eq(documentSources.sourceIdentity, identity), eq(documentSources.sourceType, 'local'))
+      and(
+        eq(documentSources.sourceIdentity, identity),
+        eq(documentSources.version, version),
+        eq(documentSources.sourceType, 'local')
+      )
     )
     .get()
   return row?.id
@@ -161,12 +167,13 @@ export function findLocalSourceId(
 const sourceSelection = {
   id: documentSources.id,
   name: documentSources.name,
+  category: documentSources.category,
+  version: documentSources.version,
   first_url: documentSources.firstUrl,
   fetch_mode: documentSources.fetchMode,
   page_limit: documentSources.pageLimit,
   scope_path: documentSources.scopePath,
   exclude_path_pattern: documentSources.excludePathPattern,
-  schedule: documentSources.schedule,
   http_concurrency: documentSources.httpConcurrency,
   browser_concurrency: documentSources.browserConcurrency,
   icon_url: documentSources.iconUrl,
@@ -174,27 +181,35 @@ const sourceSelection = {
   content_size: sql<number>`coalesce(sum(length(cast(${documents.markdown} as blob))), 0)`.mapWith(
     Number
   ),
-  last_crawled_at: max(documents.crawledAt),
   source_type: documentSources.sourceType,
-  cloud_server_url: documentSources.cloudServerUrl,
-  cloud_library_id: documentSources.cloudLibraryId,
-  cloud_revision: documentSources.cloudRevision,
-  cloud_auto_sync: documentSources.cloudAutoSync,
+  updated_at: documentSources.updatedAt,
+  last_crawled_at: max(documents.crawledAt),
   document_kind: documentSources.documentKind,
   github_archive_limit_mb: documentSources.githubArchiveLimitMb,
   github_markdown_limit_mb: documentSources.githubMarkdownLimitMb,
   github_default_branch: documentSources.githubDefaultBranch,
   github_revision: documentSources.githubRevision,
-  discovery_mode: documentSources.discoveryMode,
-  resolved_discovery: documentSources.resolvedDiscovery,
-  review_goal: documentSources.reviewGoal
+  resolved_discovery: documentSources.resolvedDiscovery
 }
 
-export function listDocumentSources(database: LociDrizzleDatabase): DocumentSource[] {
+export function listDocumentSources(
+  database: LociDrizzleDatabase,
+  filters: LibraryFilters = {}
+): DocumentSource[] {
   const rows = database
     .select(sourceSelection)
     .from(documentSources)
     .leftJoin(documents, eq(documents.sourceId, documentSources.id))
+    .where(
+      and(
+        filters.category === undefined
+          ? undefined
+          : eq(documentSources.category, filters.category.trim()),
+        filters.version === undefined
+          ? undefined
+          : eq(documentSources.version, filters.version.trim())
+      )
+    )
     .groupBy(documentSources.id)
     .orderBy(desc(documentSources.updatedAt))
     .all()

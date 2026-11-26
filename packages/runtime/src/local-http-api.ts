@@ -1,317 +1,229 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type {
-  AppSettings,
-  CreateSourceInput,
-  CreateSourceResult,
-  UpdateSourceInput
-} from '@loci/shared'
+import { inspectSource } from '@loci/core'
+import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/shared'
+import { z } from 'zod'
 import type { LocalRuntime } from './local-runtime.js'
-import { handleLocalAdmin } from './local-http-admin.js'
 import { handleAgentIntegrations } from './local-http-agent.js'
-import { handleOperationLogs } from './local-http-logs.js'
-import { handleLibraryBrowser } from './local-http-library-browser.js'
 import { handleLocalBrowser } from './local-http-browser.js'
 import { handleDataTransfer } from './local-http-data-transfer.js'
-import { json, mutationJson, readJson, safeClientError } from './local-http-response.js'
+import type { createForegroundCrawls } from './local-http-crawls.js'
+import { DocumentVersionConflict } from './document-mutation.js'
+import { RuntimeLockedError } from './runtime-lock.js'
+import { json, readJson, safeClientError } from './local-http-response.js'
 
-export interface LocalApiOptions {
-  runMaintenance?: <T>(action: () => T | Promise<T>) => Promise<T>
-  startJobWorker?: () => Promise<void>
-  ensurePersistentBackground?: () => Promise<void>
-}
+const text = z.string().trim().min(1)
+const strings = z.union([text, z.array(text).min(1)])
+const number = z.number().int()
+const optionalNumber = number.nullable().optional()
+const documentFields = { title: text, content: z.string(), language: text.optional() }
+const createDocument = z.strictObject({
+  ...documentFields,
+  path: text.optional(),
+  url: z.httpUrl().optional()
+})
+const updateDocument = z.strictObject({ ...documentFields, expectedUpdatedAt: text }).partial()
+const editSection = z.strictObject({
+  action: z.enum(['add', 'update', 'delete']),
+  sectionId: text.optional(),
+  heading: text.optional(),
+  level: number.min(1).max(6).optional(),
+  content: z.string().optional(),
+  expectedUpdatedAt: text.optional(),
+  operationId: text.optional()
+})
+const source = z.strictObject({
+  name: text,
+  category: z.string().nullable().optional(),
+  version: z.string().nullable().optional(),
+  url: z.httpUrl(),
+  kind: z.enum(['web', 'github']).optional(),
+  mode: z.enum(['auto', 'http', 'browser']).optional(),
+  pageLimit: number.optional(),
+  scopePath: z.string().optional(),
+  excludePathPattern: z.string().nullable().optional(),
+  httpConcurrency: optionalNumber,
+  browserConcurrency: optionalNumber,
+  githubArchiveLimitMb: optionalNumber,
+  githubMarkdownLimitMb: optionalNumber
+})
+const search = z.strictObject({
+  queries: strings,
+  libraryIds: z.array(text).optional(),
+  pathPrefix: text.optional(),
+  offset: number.optional(),
+  limit: number.optional(),
+  tree: z.boolean().optional()
+})
+const read = z.strictObject({
+  libraryId: text.optional(),
+  targets: strings,
+  sectionId: text.optional(),
+  offset: number.optional(),
+  maxCharsPerFile: number.optional()
+})
+const settings = z.strictObject({
+  theme: z.enum(['auto', 'light', 'dark']),
+  httpConcurrency: number,
+  browserConcurrency: number,
+  maxRetries: number,
+  batchIntervalSeconds: number,
+  batchIntervalMaxSeconds: number,
+  githubArchiveLimitMb: number,
+  githubMarkdownLimitMb: number
+})
+const policy = z.strictObject({
+  httpConcurrency: number.nullable(),
+  browserConcurrency: number.nullable(),
+  batchIntervalMinSeconds: number.nullable(),
+  batchIntervalMaxSeconds: number.nullable()
+})
+const inspect = z.strictObject({
+  url: z.httpUrl(),
+  scopePath: text.optional(),
+  excludePathPattern: text.nullable().optional()
+})
 
+/** 前台 Web 与 CLI 直接调用相同的运行时方法，所有 JSON 输入首先经过边界校验。 */
 export async function handleLocalApi(
   runtime: LocalRuntime,
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  options: LocalApiOptions
+  crawls: ReturnType<typeof createForegroundCrawls>
 ): Promise<void> {
-  if (await handleLocalAdmin(runtime, request, response, url)) return
-  if (await handleLocalBrowser(runtime, request, response, url)) return
-  if (await handleAgentIntegrations(runtime, request, response, url)) return
-  if (handleOperationLogs(runtime, request, response, url)) return
-  if (handleLibraryBrowser(runtime, request, response, url)) return
-  if (handleResourceRevisions(runtime, request, response, url)) return
-  if (await handleSources(runtime, request, response, url, options)) return
-  if (await handleDocumentsAndJobs(runtime, request, response, url, options)) return
-  if (await handleSettings(runtime, request, response, url)) return
-  if (await handleCloud(runtime, request, response, url, options)) return
-  if (await handleDataTransfer(runtime, request, response, url, options)) return
-  response.writeHead(404).end()
-}
-
-function handleResourceRevisions(
-  runtime: LocalRuntime,
-  request: IncomingMessage,
-  response: ServerResponse,
-  url: URL
-): boolean {
-  if (request.method !== 'GET' || url.pathname !== '/api/revisions') return false
-  json(response, 200, runtime.database.getResourceRevisions())
-  return true
-}
-
-async function handleSources(
-  runtime: LocalRuntime,
-  request: IncomingMessage,
-  response: ServerResponse,
-  url: URL,
-  options: LocalApiOptions
-): Promise<boolean> {
-  if (request.method === 'GET' && url.pathname === '/api/sources') {
-    json(response, 200, runtime.database.listSources())
-    return true
-  }
-  if (request.method === 'POST' && url.pathname === '/api/sources') {
-    await mutationJson(response, 201, async () => {
-      const input = (await readJson(request)) as CreateSourceInput
-      if (input.schedule) await options.ensurePersistentBackground?.()
-      const sourceIds = new Set(runtime.database.listSources().map((item) => item.id))
-      const source = runtime.createSource(input)
-      const sync =
-        url.searchParams.get('sync') === 'true'
-          ? runtime.database.enqueueSourceSync(source.id, 'ui', undefined, {
-              deleteSourceOnCancel: !sourceIds.has(source.id)
-            })
-          : null
-      let workerError: string | null = null
-      if (sync) {
-        try {
-          await options.startJobWorker?.()
-        } catch (error) {
-          workerError = safeClientError(error)
-        }
+  const route = url.pathname
+  const method = request.method
+  const ok = (body: unknown, status = 200) => json(response, status, body)
+  try {
+    if (await handleLocalBrowser(runtime, request, response, url)) return
+    if (await handleAgentIntegrations(runtime, request, response, url)) return
+    if (await handleDataTransfer(runtime, request, response, url, () => crawls.clear())) return
+    if (route === '/api/categories') {
+      if (method === 'GET') return ok(runtime.listCategories())
+      if (method === 'POST') {
+        const { name } = z.strictObject({ name: text }).parse(await readJson(request))
+        return ok(runtime.createCategory(name), 201)
       }
-      return { source, sync, workerError } satisfies CreateSourceResult
-    })
-    return true
-  }
-  const match = /^\/api\/sources\/([^/]+)$/u.exec(url.pathname)
-  if (request.method === 'PUT' && match) {
-    const sourceId = decodeURIComponent(match[1]!)
-    const source = runtime.database.listSources().find((item) => item.id === sourceId)
-    if (!source) json(response, 404, { error: '文档源不存在' })
-    else {
-      await mutationJson(response, 200, async () => {
-        const input = (await readJson(request)) as UpdateSourceInput
-        if (input.schedule) await options.ensurePersistentBackground?.()
-        const updated = runtime.updateSourcePreservingSchedule(source, input)
-        return runtime.updateSourceSchedule(updated, input.schedule)
-      })
     }
-    return true
-  }
-  if (request.method === 'DELETE' && match) {
-    await mutationJson(response, 200, () => {
-      runtime.deleteSource(decodeURIComponent(match[1]!))
-      return { deleted: true }
-    })
-    return true
-  }
-  return false
-}
-
-async function handleDocumentsAndJobs(
-  runtime: LocalRuntime,
-  request: IncomingMessage,
-  response: ServerResponse,
-  url: URL,
-  options: LocalApiOptions
-): Promise<boolean> {
-  if (request.method === 'GET' && url.pathname === '/api/documents') {
-    const query = url.searchParams.get('query')?.trim()
-    const sourceId = url.searchParams.get('source')?.trim()
-    const documents = query
-      ? runtime.database.searchDocumentSummaries(query, sourceId)
-      : runtime.database.listDocumentSummaries(sourceId)
-    json(response, 200, documents)
-    return true
-  }
-  const documentMatch = /^\/api\/documents\/([^/]+)$/u.exec(url.pathname)
-  if (request.method === 'GET' && documentMatch) {
-    const document = runtime.database.getDocument(decodeURIComponent(documentMatch[1]!))
-    if (!document) json(response, 404, { error: '文档不存在' })
-    else json(response, 200, document)
-    return true
-  }
-  if (request.method === 'GET' && url.pathname === '/api/jobs') {
-    json(response, 200, runtime.database.listLocalJobs())
-    return true
-  }
-  if (request.method === 'POST' && url.pathname === '/api/jobs/source-sync') {
-    const body = await readJson(request)
-    if (!isStringField(body, 'sourceId')) json(response, 400, { error: '缺少文档源 ID' })
-    else {
-      const result = runtime.database.enqueueSourceSync(body.sourceId, 'ui')
-      await options.startJobWorker?.()
-      json(response, result.reused ? 200 : 202, result)
+    const category = /^\/api\/categories\/([^/]+)$/u.exec(route)
+    if (category && method === 'DELETE')
+      return ok({ deleted: runtime.deleteCategory(decodeURIComponent(category[1])) })
+    if (route === '/api/libraries') {
+      if (method === 'GET')
+        return ok(
+          runtime.listLibraries({
+            query: url.searchParams.get('query') ?? undefined,
+            category: url.searchParams.get('category') ?? undefined,
+            version: url.searchParams.get('version') ?? undefined
+          })
+        )
+      if (method === 'POST')
+        return ok(runtime.createSource(source.parse(await readJson(request))), 201)
     }
-    return true
-  }
-  const cancelMatch = /^\/api\/jobs\/([^/]+)\/cancel$/u.exec(url.pathname)
-  if (request.method === 'POST' && cancelMatch) {
-    const job = runtime.database.requestLocalJobCancellation(decodeURIComponent(cancelMatch[1]!))
-    if (!job) json(response, 404, { error: '任务不存在' })
-    else json(response, 200, job)
-    return true
-  }
-  const controlMatch = /^\/api\/jobs\/([^/]+)\/(pause|resume|stop)$/u.exec(url.pathname)
-  if (request.method === 'POST' && controlMatch) {
-    const id = decodeURIComponent(controlMatch[1]!)
-    const action = controlMatch[2]
-    const job =
-      action === 'pause'
-        ? runtime.database.requestLocalJobPause(id)
-        : action === 'resume'
-          ? runtime.database.resumeLocalJob(id)
-          : runtime.database.requestLocalJobStop(id)
-    if (!job) json(response, 404, { error: '任务不存在' })
-    else {
-      if (action === 'resume') await options.startJobWorker?.()
-      json(response, 200, job)
+    if (method === 'POST' && route === '/api/inspect')
+      return ok(await inspectSource(inspect.parse(await readJson(request))))
+    if (method === 'POST' && route === '/api/search')
+      return ok(runtime.searchDocuments(search.parse(await readJson(request))))
+    if (method === 'POST' && route === '/api/read')
+      return ok(runtime.readDocuments(read.parse(await readJson(request))))
+    if (method === 'GET' && route === '/api/libraries/crawl-status')
+      return ok(runtime.listLibraryCrawlStatuses())
+    const document = /^\/api\/documents\/([^/]+)(\/sections)?$/u.exec(route)
+    if (document) {
+      const id = decodeURIComponent(document[1])
+      if (!runtime.database.getDocumentSourceId(id)) return ok({ error: '文档不存在' }, 404)
+      if (!document[2] && method === 'GET') return ok(runtime.getDocument(id))
+      if (!document[2] && method === 'PUT')
+        return ok(runtime.updateDocument(id, updateDocument.parse(await readJson(request))))
+      if (document[2] && method === 'GET') return ok(runtime.listDocumentSections(id))
+      if (document[2] && method === 'POST')
+        return ok(runtime.editDocumentSection(id, editSection.parse(await readJson(request))))
     }
-    return true
-  }
-  const priorityMatch = /^\/api\/jobs\/([^/]+)\/priority$/u.exec(url.pathname)
-  if (request.method === 'PUT' && priorityMatch) {
-    const body = await readJson(request)
-    if (!isNumberField(body, 'priority')) json(response, 400, { error: '缺少任务优先级' })
-    else {
-      const job = runtime.database.setLocalJobPriority(
-        decodeURIComponent(priorityMatch[1]!),
-        body.priority
+    const library =
+      /^\/api\/libraries\/([^/]+)(?:\/(tree|documents|sync|pages|crawl|crawl-status|crawl\/cancel))?$/u.exec(
+        route
       )
-      if (!job) json(response, 404, { error: '任务不存在' })
-      else json(response, 200, job)
-    }
-    return true
-  }
-  if (request.method === 'POST' && /^\/api\/jobs\/(pause-all|resume-all)$/u.test(url.pathname)) {
-    const body = await readJson(request)
-    const hostname = isStringField(body, 'hostname')
-      ? body.hostname.trim().toLowerCase()
-      : undefined
-    const changed = url.pathname.endsWith('/pause-all')
-      ? runtime.database.pauseLocalJobs(hostname || undefined)
-      : runtime.database.resumeLocalJobs(hostname || undefined)
-    if (url.pathname.endsWith('/resume-all')) await options.startJobWorker?.()
-    json(response, 200, { changed })
-    return true
-  }
-  return false
-}
-
-async function handleSettings(
-  runtime: LocalRuntime,
-  request: IncomingMessage,
-  response: ServerResponse,
-  url: URL
-): Promise<boolean> {
-  if (request.method === 'GET' && url.pathname === '/api/settings') {
-    json(response, 200, runtime.database.getSettings())
-    return true
-  }
-  if (request.method === 'PUT' && url.pathname === '/api/settings') {
-    await mutationJson(response, 200, async () => {
-      const previous = runtime.database.getSettings()
-      const saved = runtime.database.saveSettings((await readJson(request)) as AppSettings)
-      if (saved.serverUrl !== previous.serverUrl) {
-        await runtime.admin.logout().catch(() => undefined)
+    if (library) {
+      const id = decodeURIComponent(library[1])
+      const action = library[2]
+      if (!action && method === 'DELETE') {
+        runtime.deleteLibrary(id)
+        return ok({ deleted: true })
       }
-      return saved
-    })
-    return true
-  }
-  return false
-}
-
-async function handleCloud(
-  runtime: LocalRuntime,
-  request: IncomingMessage,
-  response: ServerResponse,
-  url: URL,
-  options: LocalApiOptions
-): Promise<boolean> {
-  const serverUrl = runtime.database.getSettings().serverUrl
-  if (request.method === 'GET' && url.pathname === '/api/cloud/catalog') {
-    await mutationJson(response, 200, () => runtime.cloud.listCatalog(serverUrl))
-    return true
-  }
-  const cloudTree = /^\/api\/cloud\/libraries\/([^/]+)\/tree$/u.exec(url.pathname)
-  if (request.method === 'GET' && cloudTree) {
-    await mutationJson(response, 200, () =>
-      runtime.cloud.getLibraryTree(
-        serverUrl,
-        decodeURIComponent(cloudTree[1]!),
-        url.searchParams.get('parent_id') ?? undefined,
-        Number(url.searchParams.get('depth') ?? 1)
-      )
+      if (!runtime.database.hasSource(id)) return ok({ error: '文档库不存在' }, 404)
+      if (!action && method === 'GET')
+        return ok(runtime.listLibraries(id).find((item) => item.id === id))
+      if (!action && method === 'PUT')
+        return ok(
+          runtime.updateSource(id, {
+            ...DOCUMENT_SOURCE_DEFAULTS,
+            ...source.parse(await readJson(request))
+          })
+        )
+      if (action === 'tree' && method === 'GET') {
+        const queries = url.searchParams.getAll('queries')
+        return ok(
+          runtime.getLibraryTree(id, {
+            parent: url.searchParams.get('parent') ?? undefined,
+            depth: Number(url.searchParams.get('depth') ?? 1),
+            queries: queries.length ? queries : undefined
+          })
+        )
+      }
+      if (action === 'crawl-status' && method === 'GET')
+        return ok(runtime.getLibraryCrawlStatus(id))
+      if (action === 'documents' && method === 'POST')
+        return ok(runtime.createDocument(id, createDocument.parse(await readJson(request))), 201)
+      if (action === 'documents' && method === 'DELETE')
+        return ok(
+          runtime.deleteDocuments(
+            id,
+            z.strictObject({ targets: strings }).parse(await readJson(request)).targets
+          )
+        )
+      if (action === 'sync' && method === 'POST') return ok(crawls.start(id), 202)
+      if (action === 'pages' && method === 'POST')
+        return ok(
+          crawls.start(
+            id,
+            z.strictObject({ urls: z.array(z.httpUrl()).min(1) }).parse(await readJson(request))
+              .urls
+          ),
+          202
+        )
+      if (action === 'crawl' && method === 'GET') return ok(crawls.get(id))
+      if (action === 'crawl/cancel' && method === 'POST') return ok(crawls.cancel(id))
+    }
+    if (route === '/api/settings') {
+      if (method === 'GET') return ok(runtime.database.getSettings())
+      if (method === 'PUT') return ok(runtime.saveSettings(settings.parse(await readJson(request))))
+    }
+    if (route === '/api/hostname-policies' && method === 'GET')
+      return ok(runtime.database.listHostnameCrawlPolicies())
+    const hostname = /^\/api\/hostname-policies\/([^/]+)$/u.exec(route)?.[1]
+    if (hostname) {
+      if (method === 'DELETE')
+        return ok({
+          deleted: runtime.deleteHostnameCrawlPolicy(decodeURIComponent(hostname))
+        })
+      if (method === 'PUT')
+        return ok(
+          runtime.saveHostnameCrawlPolicy({
+            ...policy.parse(await readJson(request)),
+            hostname: decodeURIComponent(hostname)
+          })
+        )
+    }
+    ok({ error: '接口不存在' }, 404)
+  } catch (error) {
+    ok(
+      {
+        error:
+          error instanceof z.ZodError
+            ? error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ')
+            : safeClientError(error)
+      },
+      error instanceof RuntimeLockedError || error instanceof DocumentVersionConflict ? 409 : 400
     )
-    return true
   }
-  const cloudFile = /^\/api\/cloud\/libraries\/([^/]+)\/files\/([^/]+)$/u.exec(url.pathname)
-  if (request.method === 'GET' && cloudFile) {
-    await mutationJson(response, 200, () =>
-      runtime.cloud.readLibraryFile(
-        serverUrl,
-        decodeURIComponent(cloudFile[1]!),
-        decodeURIComponent(cloudFile[2]!),
-        Number(url.searchParams.get('offset') ?? 0),
-        Number(url.searchParams.get('max_chars') ?? 20_000)
-      )
-    )
-    return true
-  }
-  const pull = /^\/api\/cloud\/libraries\/([^/]+)\/pull$/u.exec(url.pathname)
-  if (request.method === 'POST' && pull) {
-    await mutationJson(response, 200, async () => {
-      const body = await readJson(request)
-      const enabled = readBooleanField(body, 'autoSync', false)
-      if (enabled) await options.ensurePersistentBackground?.()
-      runtime.assertWritable()
-      return runtime.cloud.importLibrary(serverUrl, decodeURIComponent(pull[1]!), enabled)
-    })
-    return true
-  }
-  const update = /^\/api\/cloud\/sources\/([^/]+)\/update$/u.exec(url.pathname)
-  if (request.method === 'POST' && update) {
-    await mutationJson(response, 200, () => {
-      runtime.assertWritable()
-      return runtime.cloud.updateLibrary(decodeURIComponent(update[1]!), serverUrl)
-    })
-    return true
-  }
-  const autoSync = /^\/api\/cloud\/sources\/([^/]+)\/auto-sync$/u.exec(url.pathname)
-  if (request.method === 'PUT' && autoSync) {
-    await mutationJson(response, 200, async () => {
-      const body = await readJson(request)
-      if (!isBooleanField(body, 'enabled')) throw new Error('缺少自动同步状态')
-      if (body.enabled) await options.ensurePersistentBackground?.()
-      runtime.assertWritable()
-      runtime.cloud.setAutoSync(decodeURIComponent(autoSync[1]!), serverUrl, body.enabled)
-      return { enabled: body.enabled }
-    })
-    return true
-  }
-  return false
-}
-
-function isStringField(value: unknown, key: string): value is Record<string, string> {
-  if (!value || typeof value !== 'object') return false
-  return typeof (value as Record<string, unknown>)[key] === 'string'
-}
-
-function isBooleanField(value: unknown, key: string): value is Record<string, boolean> {
-  if (!value || typeof value !== 'object') return false
-  return typeof (value as Record<string, unknown>)[key] === 'boolean'
-}
-
-function isNumberField(value: unknown, key: string): value is Record<string, number> {
-  if (!value || typeof value !== 'object') return false
-  return typeof (value as Record<string, unknown>)[key] === 'number'
-}
-
-function readBooleanField(value: unknown, key: string, fallback: boolean): boolean {
-  return isBooleanField(value, key) ? value[key]! : fallback
 }

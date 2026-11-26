@@ -11,7 +11,6 @@ describe('database source filters', () => {
         mode: 'http',
         pageLimit: 100,
         scopePath: '/',
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
@@ -35,7 +34,6 @@ describe('database source filters', () => {
         mode: source.mode,
         pageLimit: source.pageLimit,
         scopePath: '/guide',
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
@@ -57,7 +55,6 @@ describe('database source filters', () => {
         pageLimit: 100,
         scopePath: '/',
         excludePathPattern: null,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
@@ -83,7 +80,6 @@ describe('database source filters', () => {
         pageLimit: source.pageLimit,
         scopePath: source.scopePath,
         excludePathPattern: '^/zh(?:/|$)',
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
@@ -105,7 +101,6 @@ describe('database source filters', () => {
         url: 'https://docs.example.com/guide/start',
         mode: 'http' as const,
         pageLimit: 100,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       }

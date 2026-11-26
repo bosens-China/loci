@@ -11,7 +11,7 @@ import {
   toSearchTokens
 } from './database-values.js'
 import type { LociDrizzleDatabase } from './drizzle-database.js'
-import { documents, documentSources } from './drizzle-schema.js'
+import { documents, documentSources, explicitPageTargets } from './drizzle-schema.js'
 import { withTransaction } from './sqlite.js'
 
 export type DocumentSearchMode = 'all' | 'any' | 'fuzzy'
@@ -28,13 +28,12 @@ export interface StoredDocument {
 }
 
 export interface DocumentContentDatabase {
-  listDocumentUrls: (sourceId: string) => string[]
+  listLanguages: () => Array<{ sourceId: string; language: string }>
+  deleteDocumentUrls: (sourceId: string, urls: readonly string[]) => void
+  listDocumentUrls: (sourceId: string, includeManual?: boolean) => string[]
   listDocumentCandidates: (sourceId: string) => Array<{ url: string; title: string }>
   saveDocument: (document: StoredDocument) => void
-  replaceSourceDocuments: (sourceId: string, documents: StoredDocument[]) => void
   deleteDocument: (sourceId: string, url: string) => void
-  clearDocuments: () => number
-  clearSources: () => number
   listDocuments: () => DocumentRecord[]
   searchDocuments: (query: string, mode?: DocumentSearchMode) => DocumentRecord[]
   listDocumentSummaries: (sourceId?: string) => DocumentSummary[]
@@ -43,6 +42,7 @@ export interface DocumentContentDatabase {
     sourceId?: string,
     mode?: DocumentSearchMode
   ) => DocumentSummary[]
+  getDocumentSourceId: (id: string) => string | undefined
   getDocument: (id: string) => DocumentRecord | null
 }
 
@@ -54,11 +54,37 @@ export function createDocumentContentDatabase(
   drizzleDatabase: LociDrizzleDatabase
 ): DocumentContentDatabase {
   return {
-    listDocumentUrls: (sourceId) =>
+    listLanguages: () =>
+      drizzleDatabase
+        .selectDistinct({ sourceId: documents.sourceId, language: documents.language })
+        .from(documents)
+        .orderBy(documents.language)
+        .all(),
+    deleteDocumentUrls: (sourceId, urls) =>
+      withTransaction(database, () => {
+        if (urls.length)
+          drizzleDatabase
+            .update(documentSources)
+            .set({ updatedAt: new Date().toISOString() })
+            .where(eq(documentSources.id, sourceId))
+            .run()
+        for (const url of urls) {
+          deleteStoredDocument(database, sourceId, url)
+          drizzleDatabase
+            .delete(explicitPageTargets)
+            .where(
+              and(eq(explicitPageTargets.sourceId, sourceId), eq(explicitPageTargets.url, url))
+            )
+            .run()
+        }
+      }),
+    listDocumentUrls: (sourceId, includeManual = true) =>
       drizzleDatabase
         .select({ url: documents.url })
         .from(documents)
-        .where(eq(documents.sourceId, sourceId))
+        .where(
+          and(eq(documents.sourceId, sourceId), includeManual ? undefined : eq(documents.manual, 0))
+        )
         .orderBy(documents.crawledAt)
         .all()
         .map((row) => row.url),
@@ -73,24 +99,8 @@ export function createDocumentContentDatabase(
       withTransaction(database, () => {
         storeDocument(database, document)
       }),
-    replaceSourceDocuments: (sourceId, documents) =>
-      withTransaction(database, () => {
-        deleteSourceDocuments(database, sourceId)
-        for (const document of documents) storeDocument(database, document)
-      }),
-    deleteDocument: (sourceId, url) => {
-      deleteStoredDocument(database, sourceId, url)
-    },
-    clearDocuments: () =>
-      withTransaction(database, () => {
-        database.exec('DELETE FROM documents_fts')
-        return Number(database.prepare('DELETE FROM documents').run().changes)
-      }),
-    clearSources: () =>
-      withTransaction(database, () => {
-        database.exec('DELETE FROM documents_fts')
-        return Number(database.prepare('DELETE FROM document_sources').run().changes)
-      }),
+    deleteDocument: (sourceId, url) =>
+      withTransaction(database, () => deleteStoredDocument(database, sourceId, url)),
     listDocuments: () => selectDocumentRecords(drizzleDatabase).map(toDocumentRecord),
     searchDocuments: (query, mode = 'all') =>
       (mode === 'fuzzy'
@@ -103,6 +113,12 @@ export function createDocumentContentDatabase(
         ? searchDocumentMetadataSummaries(drizzleDatabase, query, sourceId)
         : searchFtsSummaries(database, query, mode, sourceId)
       ).map(toDocumentSummary),
+    getDocumentSourceId: (id) =>
+      drizzleDatabase
+        .select({ sourceId: documents.sourceId })
+        .from(documents)
+        .where(eq(documents.id, id))
+        .get()?.sourceId,
     getDocument: (id) => {
       const row = drizzleDatabase
         .select(documentRecordSelection)
@@ -221,7 +237,6 @@ function searchDocumentMetadataSummaries(
     .innerJoin(documentSources, eq(documentSources.id, documents.sourceId))
     .where(and(condition, sourceId ? eq(documents.sourceId, sourceId) : undefined))
     .orderBy(desc(documents.crawledAt))
-    .limit(500)
     .all()
 }
 
@@ -235,6 +250,7 @@ function metadataCondition(query: string): SQL | undefined {
       const pattern = `%${escapeLike(token)}%`
       return [
         sql`${documents.title} LIKE ${pattern} ESCAPE '\\'`,
+        sql`${documents.relativePath} LIKE ${pattern} ESCAPE '\\'`,
         sql`${documents.url} LIKE ${pattern} ESCAPE '\\'`
       ]
     })
@@ -254,7 +270,11 @@ export function storeDocument(database: DatabaseSync, document: StoredDocument):
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(source_id, url) DO UPDATE SET
          title = excluded.title,
-         crawled_at = excluded.crawled_at,
+         crawled_at = CASE WHEN excluded.crawled_at > documents.crawled_at THEN excluded.crawled_at
+           WHEN excluded.markdown != documents.markdown OR excluded.title != documents.title
+             OR excluded.language != documents.language OR excluded.relative_path IS NOT documents.relative_path
+           THEN strftime('%Y-%m-%dT%H:%M:%fZ', documents.crawled_at, '+0.001 seconds')
+           ELSE documents.crawled_at END,
          markdown = excluded.markdown,
          language = excluded.language,
          fetch_mode = excluded.fetch_mode,
@@ -274,12 +294,23 @@ export function storeDocument(database: DatabaseSync, document: StoredDocument):
   const saved = database
     .prepare('SELECT id FROM documents WHERE source_id = ? AND url = ?')
     .get(document.sourceId, document.url) as unknown as { id: string }
-  database.prepare('DELETE FROM documents_fts WHERE document_id = ?').run(saved.id)
+  replaceDocumentIndex(database, saved.id, document.sourceId, document.title, document.markdown)
+}
+
+/** 正文与 FTS 索引由调用方在同一个写事务内提交。 */
+export function replaceDocumentIndex(
+  database: DatabaseSync,
+  id: string,
+  sourceId: string,
+  title: string,
+  markdown: string
+): void {
+  database.prepare('DELETE FROM documents_fts WHERE document_id = ?').run(id)
   database
     .prepare(
       'INSERT INTO documents_fts (document_id, source_id, title, markdown) VALUES (?, ?, ?, ?)'
     )
-    .run(saved.id, document.sourceId, document.title, document.markdown)
+    .run(id, sourceId, title, markdown)
 }
 
 export function deleteStoredDocument(database: DatabaseSync, sourceId: string, url: string): void {

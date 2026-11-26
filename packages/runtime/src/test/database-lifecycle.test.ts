@@ -23,42 +23,62 @@ describe('database lifecycle', () => {
     rmSync(directory, { recursive: true, force: true })
   })
 
-  it('区分可编辑的环境默认、强制覆盖与用户自定义地址', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'loci-server-url-'))
-    const filename = join(directory, 'loci.sqlite')
-    const development = createDatabase(filename, {
-      serverUrl: 'http://localhost:7001'
-    })
-    expect(development.getSettings().serverUrl).toBe('http://localhost:7001')
-    development.close()
-
-    const production = createDatabase(filename)
-    expect(production.getSettings().serverUrl).toBe('https://loci.xiaowo.live')
-    production.close()
-
-    const developmentAgain = createDatabase(filename, {
-      serverUrl: 'http://localhost:7001'
-    })
-    expect(developmentAgain.getSettings().serverUrl).toBe('http://localhost:7001')
-    developmentAgain.saveSettings({
-      ...developmentAgain.getSettings(),
-      serverUrl: 'https://custom.example.com'
-    })
-    developmentAgain.close()
-
-    const overridden = createDatabase(filename, {
-      serverUrl: 'http://localhost:7001',
-      overrideServerUrl: true
-    })
-    expect(overridden.getSettings().serverUrl).toBe('http://localhost:7001')
-    overridden.saveSettings({ ...overridden.getSettings(), theme: 'dark' })
-    overridden.close()
-
-    const reopened = createDatabase(filename)
-    expect(reopened.getSettings().serverUrl).toBe('https://custom.example.com')
-    expect(reopened.getSettings().theme).toBe('dark')
-    reopened.close()
-    rmSync(directory, { recursive: true, force: true })
+  it('保留旧版审查库的正文、ID、FTS 索引和附加表', () => {
+    const root = mkdtempSync(join(tmpdir(), 'loci-review-migration-'))
+    const filename = join(root, 'loci.sqlite')
+    try {
+      const original = createDatabase(filename)
+      const source = original.createSource({
+        name: 'Legacy',
+        url: 'https://legacy.test',
+        mode: 'http',
+        pageLimit: 1,
+        httpConcurrency: null,
+        browserConcurrency: null
+      })
+      original.saveDocument({
+        sourceId: source.id,
+        url: source.url,
+        title: 'Stored',
+        markdown: 'retained content',
+        fetchMode: 'http',
+        language: 'en',
+        crawledAt: new Date().toISOString()
+      })
+      const id = original.listDocumentSummaries(source.id)[0]!.id
+      original.close()
+      const old = new DatabaseSync(filename)
+      old.exec(
+        'ALTER TABLE documents DROP COLUMN manual; PRAGMA user_version = 19; CREATE TABLE url_review_runs (id TEXT PRIMARY KEY, source_id TEXT REFERENCES document_sources(id) ON DELETE CASCADE)'
+      )
+      old.prepare('INSERT INTO url_review_runs VALUES (?,?)').run('review', source.id)
+      old
+        .prepare(
+          "UPDATE document_sources SET discovery_mode='agent_review', review_goal='Legacy goal', schedule='0 1 * * *' WHERE id=?"
+        )
+        .run(source.id)
+      old.close()
+      const migrated = createDatabase(filename)
+      try {
+        expect(migrated.getDocument(id)?.content).toBe('retained content')
+        expect(migrated.searchDocumentSummaries('retained', source.id)[0]?.id).toBe(id)
+        expect(migrated.exportBackup().data.documents[0]).toMatchObject({ id, manual: 0 })
+        expect(migrated.exportBackup().data.sources[0]).toMatchObject({
+          discovery_mode: 'agent_review',
+          review_goal: 'Legacy goal'
+        })
+      } finally {
+        migrated.close()
+      }
+      const check = new DatabaseSync(filename, { readOnly: true })
+      try {
+        expect(check.prepare('SELECT id FROM url_review_runs').get()?.id).toBe('review')
+      } finally {
+        check.close()
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('清空全部文档源及其关联数据但保留设置', () => {
@@ -73,7 +93,6 @@ describe('database lifecycle', () => {
           url,
           mode: 'http',
           pageLimit: 100,
-          schedule: null,
           httpConcurrency: null,
           browserConcurrency: null
         })
@@ -129,8 +148,7 @@ describe('database lifecycle', () => {
         httpConcurrency: 9,
         browserConcurrency: 5,
         maxRetries: 3,
-        batchIntervalSeconds: 0,
-        serverUrl: 'https://loci.xiaowo.live'
+        batchIntervalSeconds: 0
       })
       expect(
         database.createSource({
@@ -138,7 +156,6 @@ describe('database lifecycle', () => {
           url: 'https://vuejs.org',
           mode: 'auto',
           pageLimit: 1000,
-          schedule: null,
           httpConcurrency: null,
           browserConcurrency: null
         })
@@ -165,7 +182,6 @@ describe('database lifecycle', () => {
       mode: 'http',
       pageLimit: 100,
       scopePath: '/',
-      schedule: null,
       httpConcurrency: null,
       browserConcurrency: null
     })
@@ -183,7 +199,6 @@ describe('database lifecycle', () => {
         mode: 'http',
         pageLimit: 100,
         scopePath: '/api',
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })
@@ -195,7 +210,6 @@ describe('database lifecycle', () => {
           mode: 'http',
           pageLimit: 100,
           scopePath: '/',
-          schedule: null,
           httpConcurrency: null,
           browserConcurrency: null
         }).id

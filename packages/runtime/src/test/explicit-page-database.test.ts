@@ -136,7 +136,6 @@ function sourceInput(
     pageLimit: 10,
     scopePath: '/guide',
     excludePathPattern,
-    schedule: null,
     httpConcurrency: null,
     browserConcurrency: null
   }

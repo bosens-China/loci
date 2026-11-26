@@ -1,10 +1,9 @@
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
-import { localhostHostValidation, localhostOriginValidation } from '@modelcontextprotocol/node'
 import type { LocalRuntime } from './local-runtime.js'
-import { handleLocalApi, type LocalApiOptions } from './local-http-api.js'
-import { createLocalHttpEvents } from './local-http-events.js'
+import { handleLocalApi } from './local-http-api.js'
+import { createForegroundCrawls } from './local-http-crawls.js'
 import { json } from './local-http-response.js'
 
 export interface LocalHttpServer {
@@ -13,21 +12,19 @@ export interface LocalHttpServer {
   close: () => Promise<void>
 }
 
-export interface LocalHttpServerOptions extends LocalApiOptions {
+export interface LocalHttpServerOptions {
   port?: number
   assetsDir?: string
-  /** 仅供集成测试缩短 SSE revision 的持久化检查间隔。 */
-  revisionEventIntervalMs?: number
+  /** 开发时由本机 Vite 代理转发的固定来源。 */
+  devOrigin?: string
 }
 
 /** 本机 Web transport：只绑定回环地址，写请求额外校验 Origin。 */
 export async function startLocalHttpServer(
   runtime: LocalRuntime,
-  options: LocalHttpServerOptions
+  options: LocalHttpServerOptions = {}
 ): Promise<LocalHttpServer> {
-  const validateHost = localhostHostValidation()
-  const validateOrigin = localhostOriginValidation()
-  const events = createLocalHttpEvents(runtime, options.revisionEventIntervalMs)
+  const crawls = createForegroundCrawls(runtime)
   const server = createServer((request, response) => {
     void handleRequest(request, response).catch((error: unknown) => {
       console.error('本地 Web 请求处理失败', error)
@@ -43,7 +40,12 @@ export async function startLocalHttpServer(
     request: IncomingMessage,
     response: ServerResponse
   ): Promise<void> => {
-    if (!validateHost(request, response)) return
+    const port = request.socket.localPort
+    const allowed = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`])
+    if (options.devOrigin && /^http:\/\/(127\.0\.0\.1|localhost):\d+$/u.test(options.devOrigin))
+      allowed.add(options.devOrigin)
+    if (!allowed.has(`http://${request.headers.host}`))
+      return json(response, 403, { error: '无效的 Host' })
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     if (request.method === 'GET' && url.pathname === '/health') {
       json(response, 200, {
@@ -53,9 +55,13 @@ export async function startLocalHttpServer(
       return
     }
     if (url.pathname.startsWith('/api/')) {
-      if (request.method !== 'GET' && !validateOrigin(request, response)) return
-      if (events.handle(request, response, url)) return
-      await handleLocalApi(runtime, request, response, url, options)
+      if (
+        request.method !== 'GET' &&
+        request.headers.origin !== undefined &&
+        !allowed.has(request.headers.origin)
+      )
+        return json(response, 403, { error: '无效的 Origin' })
+      await handleLocalApi(runtime, request, response, url, crawls)
       return
     }
     if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -72,8 +78,8 @@ export async function startLocalHttpServer(
     port,
     endpoint: `http://127.0.0.1:${port}`,
     close: async () => {
-      events.close()
       await close(server)
+      await crawls.close()
     }
   }
 }

@@ -2,89 +2,35 @@ export const LOCI_INSTRUCTIONS_START = '<!-- loci:start -->'
 export const LOCI_INSTRUCTIONS_END = '<!-- loci:end -->'
 export const LOCI_CONTEXT7_COMPATIBILITY = '<!-- loci:context7 -->'
 
-const LOCI_INSTRUCTIONS_BODY = `# Technical Documentation with Loci
+const LOCI_INSTRUCTIONS_BODY = `# Technical documentation with the local Loci CLI
 
-## Scope
+Use local documentation for questions about a library's API, configuration, version, or migration.
+Identify the project's version before choosing sources. For release highlights, consult official
+release notes directly. Use the relevant domain source for general research.
 
-Use the \`loci\` MCP server only when a task depends on developer documentation for a library,
-framework, SDK, API, CLI, configuration, version difference, migration, setup process, or
-technology-specific error. Do not rely only on model memory for these documentation facts.
+1. Run \`loci list --json\` to find a local library matching the technology and version.
+   List categories and counts with \`loci category --json\`. Filter by exact labels with \`loci list --category <name> --version <ver> --json\`.
+2. Browse with \`loci tree <lib> --json\` or filter with \`loci tree <lib> --query <kw...> --json\`.
+   Run \`loci search <queries...> --json\` across libraries, or \`loci search <queries...> --library <lib> --tree --json\` for a matching tree. Use identifiers and error messages verbatim.
+3. Read the matching document IDs or subtree paths with \`loci read <targets...> --library <lib> --json\`.
+   Cite the source URLs from the text you read.
+4. When the library is missing, identify the official documentation URL and confirm the source and scope
+   with the user before running \`loci fetch <url>\`. Existing authorization for the same fetch is sufficient.
+   If the local documentation is stale, refresh it with \`loci update <lib>\`.
+   Both commands accept \`--category <name>\` and \`--version <ver>\`. New categories are created automatically. New libraries default to 未分类 and latest. Existing libraries keep their labels unless explicitly changed. The same source can have independent libraries for different versions.
+   Both commands return asynchronously by default. If another crawl with different targets is running, wait for it to finish before resubmitting. Add \`--wait\` to wait in the foreground.
+5. Poll \`loci status <lib> --json\` until the crawl reaches a terminal status. Inspect \`error\` and the
+   page URLs and messages in \`failures\` for partial or failed crawls. Use \`loci cancel <lib>\` to cancel
+   a running crawl, or \`loci status --json\` to check all libraries with crawl records. Repeat the search and read after acquisition.
+6. When the user requests edits, inspect sections with \`loci doc sections <doc> --library <lib> --json\`.
+   Use \`loci doc update <doc> --library <lib> --file <file>\` to replace the document text or
+   \`loci delete <lib> --doc <targets...>\` to delete selected documents. \`loci delete <lib>\` deletes the entire library.
+7. For backups, run \`loci data export <file>\` for all data or select libraries with \`--category <name...>\` and \`--library <lib...>\`. Import merges by default: matching library IDs or source/version pairs are deleted and restored from the archive. Legacy read-only snapshots match by original server and remote library ID. Other libraries are retained. Use \`--replace-all\` only for an explicitly requested full replacement.
 
-Do not route general web research through Loci. News, current events, prices, people or company
-facts, shopping, travel, legal or medical information, and the contents of ordinary web pages
-should use the appropriate web or domain source directly. Merely mentioning software does not make
-a task a documentation question.
-
-Do not use this workflow for ordinary refactoring, business-logic debugging, general programming
-concepts, or code review that does not depend on an external technology's current behavior.
-
-## Choose the depth of research
-
-For lightweight research such as release highlights, product updates, or an initial comparison,
-start with a targeted web search, preferably official release notes. Do not require a Loci lookup
-or create a library first. One search may be enough; verify important claims or conflicting results
-as needed, then stop when the evidence is sufficient. Do not answer detailed API questions from
-search snippets alone.
-
-For implementation, configuration, debugging, or migration details, prefer matching Loci
-documentation. Choose the acquisition scope by evidence depth, freshness, cost, and likely reuse.
-A missing local library does not by itself justify crawling the whole site. A few known pages
-should use exact-page acquisition; broader crawling is appropriate for cross-topic work,
-systematic study, ongoing development, or an explicit collection request.
-
-## Loci workflow
-
-1. Identify the relevant technology and the version used by the current project.
-2. Call \`loci_list_libraries\` and use only a matching local library with \`pages > 0\`.
-3. Inspect one or two directory levels with \`loci_get_library_tree\`, then read clearly relevant
-   files or search with precise terms in the documented language.
-4. Answer from sufficient local evidence, include the relevant \`source_url\` values, and stop.
-5. If no usable local library exists, call \`loci_list_cloud_libraries\`.
-6. Pull a matching public snapshot with \`loci_pull_cloud_library\` when its scope and freshness
-   suit the task. Otherwise verify the official source and acquire only the needed documentation.
-7. After acquisition, repeat the local tree, search, and read steps. If acquisition is unnecessary
-   or disproportionate, use targeted official web pages or another documentation source directly.
-
-If an official page URL is known but missing from an existing local web library, use
-\`loci_fetch_pages\` for that page instead of expanding the whole crawl. Exact pages may be outside
-\`scope_path\`, but must keep the library hostname and cannot bypass \`exclude_path\`; the operation
-does not follow links. If no library exists, \`loci_add_library\` may use
-\`discovery_mode: "selected"\` with \`url\` and \`urls\` to ingest only those pages.
-
-A web library is reused for the same hostname and \`scope_path\` only when its persisted discovery
-mode also matches. Normal and \`selected\` acquisition use \`site\`; \`agent_review\` is separate.
-On a mode conflict, keep the existing mode or obtain separate permission to delete and recreate the
-library. Do not present the conflict as a successful conversion.
-
-When a crawl needs semantic filtering to meet the task's collection goal, use
-\`discovery_mode: "agent_review"\` and provide \`review_goal\`. For every returned batch, inspect
-each candidate's title and URL, pass only unwanted URLs to \`loci_submit_url_review\`, and set
-\`approve_remaining: true\`. Continue until completed. To recover interrupted work, call
-\`loci_get_url_review\`; if the status is \`discovering\`, call \`loci_start_url_review\` again with
-the same library ID, and if it is \`awaiting_review\`, submit the returned batch. A normal background
-sync of such a library refreshes stored URLs only and does not discover new ones. Excluding
-already stored pages deletes their content and search entries; obtain explicit authorization for
-that deletion before submitting those exclusions.
-
-## Source ordering and safety
-
-Public cloud pulls, official source additions, exact-page acquisition, and necessary local refreshes
-are allowed by default for the current task, without separate confirmation for each operation.
-Briefly explain the source and scope before a substantial acquisition, then proceed. Respect
-explicit user restrictions; permission to acquire is not a reason to acquire unnecessary content.
-Do not bypass login or access controls, install software, or publish remotely under this permission.
-
-Use other documentation sources when Loci is unavailable, acquisition fails, evidence remains
-insufficient, or acquisition would cost more than the task warrants. Explain the reason briefly;
-lightweight research can use web search from the start without exhausting Loci.
-
-Deletion, deliberate overwrites, existing source-configuration changes, cross-library moves, and
-remote management or publishing require explicit user authorization. Existing authorization for
-the same action is sufficient; do not ask again. Narrowing \`scope_path\` or adding or changing
-\`exclude_path\` immediately deletes nonmatching stored documents and search-index entries; include
-that effect in the confirmation. Routine refreshes retain their documented 404/410 removal behavior
-and preserve old content on temporary failures. Before a necessary sync, follow an existing task
-instead of launching a competing request.`
+Deletion, deliberate overwrites, and existing source configuration changes require explicit user authorization.
+Narrowing the source scope or changing exclusions can immediately remove stored documents and their search entries.
+For an authorized non-interactive deletion, overwrite, or content-pruning change, pass \`--yes\`.
+Use \`loci data clear-documents --yes\` only when authorized to empty the documents in every library, and \`loci data clear-sources --yes\` only when authorized to delete every library.`
 
 const CONTEXT7_FALLBACK = `${LOCI_CONTEXT7_COMPATIBILITY}
 ## Context7 fallback

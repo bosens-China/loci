@@ -12,7 +12,6 @@ describe('document source identity', () => {
         mode: 'browser',
         pageLimit: DOCUMENT_SOURCE_LIMITS.pageLimit.max,
         scopePath: '/src',
-        schedule: null,
         httpConcurrency: DOCUMENT_SOURCE_LIMITS.concurrency.max,
         browserConcurrency: DOCUMENT_SOURCE_LIMITS.concurrency.max,
         githubArchiveLimitMb: DOCUMENT_SOURCE_LIMITS.githubSizeMb.max,
@@ -29,7 +28,6 @@ describe('document source identity', () => {
           mode: 'http',
           pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
           scopePath: '/other',
-          schedule: null,
           httpConcurrency: null,
           browserConcurrency: null
         })
@@ -43,7 +41,6 @@ describe('document source identity', () => {
           url: 'https://example.com/docs',
           mode: DOCUMENT_SOURCE_DEFAULTS.mode,
           pageLimit: DOCUMENT_SOURCE_DEFAULTS.pageLimit,
-          schedule: null,
           httpConcurrency: null,
           browserConcurrency: null
         })
@@ -60,7 +57,6 @@ describe('document source identity', () => {
         mode: 'http' as const,
         pageLimit: 10,
         scopePath: '/',
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       }

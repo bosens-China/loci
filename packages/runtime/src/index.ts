@@ -1,32 +1,28 @@
-export * from './agent-import.js'
-export * from './agent-mcp-config.js'
 export * from './agent-global-rules.js'
 export * from './agent-integration.js'
 export * from './atomic-file.js'
-export * from './background-requirements.js'
-export * from './cloud-admin-client.js'
-export * from './cloud-library-service.js'
 export * from './browser-crawler.js'
 export * from './browser-manager.js'
 export * from './crawl-task-coordinator.js'
 export * from './data-path.js'
-export * from './database-backup.js'
+export {
+  exportDatabaseBackup,
+  importDatabaseBackup,
+  lociBackupSchema,
+  parseLociBackup,
+  type LociBackup,
+  type BackupExportOptions,
+  type BackupImportOptions,
+  type BackupImportSummary
+} from './database-backup.js'
 export * from './database-backup-archive.js'
 export * from './document-move-database.js'
 export * from './database.js'
 export * from './database-lifecycle.js'
 export * from './interaction-preferences.js'
 export * from './local-runtime.js'
-export * from './local-job-database.js'
-export * from './local-job-event-database.js'
-export * from './local-job-runner.js'
-export * from './operation-log-database.js'
 export * from './local-source-sync.js'
-export * from './local-mcp-services.js'
 export * from './local-http-server.js'
-export * from './local-service-state.js'
-export * from './local-service.js'
-export * from './local-worker.js'
 export * from './crawl-history-database.js'
 export * from './document-content-database.js'
 export * from './external-crawl.js'
@@ -36,5 +32,7 @@ export * from './runtime-lock.js'
 export * from './skill-database.js'
 export * from './skill-files.js'
 export * from './skill-manager.js'
-export * from './mcp/server.js'
-export * from './mcp/tool-registry.js'
+export * from './document-query.js'
+export * from './document-content-utils.js'
+export { DEFAULT_LIBRARY_CATEGORY, DEFAULT_LIBRARY_VERSION } from '@loci/shared'
+export { inspectSource, type SourceInspection, type InspectSourceOptions } from '@loci/core'

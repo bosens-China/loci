@@ -1,88 +1,67 @@
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createLocalJobRunner } from '../local-job-runner.js'
+import { expect, it } from 'vitest'
 import { createLocalRuntime } from '../local-runtime.js'
 
-const directories: string[] = []
-
-afterEach(() => {
-  vi.unstubAllGlobals()
-  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true })
-})
-
-describe('Agent Review 已收录页面刷新', () => {
-  it('逐页写入持久任务事件', async () => {
-    const fetchedUrls: string[] = []
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL | Request) => {
-        const url = input instanceof Request ? input.url : String(input)
-        fetchedUrls.push(url)
-        return new Response(`<html><title>${url}</title><main><h1>${url}</h1></main></html>`)
-      })
-    )
-    const directory = mkdtempSync(join(tmpdir(), 'loci-reviewed-progress-'))
-    directories.push(directory)
-    const runtime = createLocalRuntime({ dataDir: directory, cacheDir: join(directory, 'cache') })
-    const runner = createLocalJobRunner(runtime, { owner: 'reviewed-progress-test' })
-    try {
-      const source = runtime.createSource({
-        name: 'Docs',
-        url: 'https://docs.example.com/one',
-        mode: 'http',
-        pageLimit: 10,
-        schedule: null,
-        httpConcurrency: 1,
-        browserConcurrency: null,
-        discoveryMode: 'agent_review',
-        reviewGoal: '只收录参考文档'
-      })
-      for (const url of ['https://docs.example.com/one', 'https://docs.example.com/two']) {
-        runtime.database.saveDocument({
-          sourceId: source.id,
-          url,
-          title: url,
-          markdown: '# old',
-          language: 'en',
-          fetchMode: 'http',
-          crawledAt: '2026-01-01T00:00:00.000Z'
-        })
-      }
-      runtime.database.registerExplicitPageTargets(source.id, [
-        'https://docs.example.com/one',
-        'https://docs.example.com/target-only'
-      ])
-
-      const { job } = runtime.database.enqueueSourceSync(source.id, 'manual')
-      expect(await runner.runOnce()).toBe(1)
-      await vi.waitFor(
-        () => expect(runtime.database.getLocalJob(job.id)?.status).toBe('completed'),
-        { timeout: 10_000 }
-      )
-
-      const events = runtime.database.listLocalJobEvents(job.id)
-      const expectedUrls = [
-        'https://docs.example.com/one',
-        'https://docs.example.com/target-only',
-        'https://docs.example.com/two'
-      ]
-      expect(events.map((event) => event.node.url).sort()).toEqual(expectedUrls)
-      expect([...fetchedUrls].sort()).toEqual(expectedUrls)
-      expect(events.at(-1)?.progress).toMatchObject({
-        queued: 3,
-        processed: 3,
-        succeeded: 3,
-        failed: 0
-      })
-      expect(runtime.database.listExplicitPageTargets(source.id)).toMatchObject([
-        { url: 'https://docs.example.com/one', status: 'current' },
-        { url: 'https://docs.example.com/target-only', status: 'current' }
-      ])
-    } finally {
-      await runner.stop()
-      await runtime.close()
+it('从旧备份恢复审查库后只刷新已有 URL，并区分 404 和临时失败', async () => {
+  const visited: string[] = []
+  const server = createServer((request, response) => {
+    visited.push(request.url ?? '')
+    if (request.url === '/approved') {
+      response.end('<main><h1>Guide</h1><p>refreshed</p><a href="/new">New</a></main>')
+    } else {
+      response.writeHead(request.url === '/temporary' ? 503 : 404).end()
     }
   })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('测试监听失败')
+  const origin = `http://127.0.0.1:${address.port}`
+  const dir = mkdtempSync(join(tmpdir(), 'loci-reviewed-'))
+  const runtime = createLocalRuntime({ dataDir: dir, cacheDir: dir })
+  try {
+    const source = runtime.createSource({ url: origin, mode: 'http' })
+    runtime.patchAppSettings({ maxRetries: 0 })
+    for (const path of ['approved', 'missing', 'temporary']) {
+      runtime.database.saveDocument({
+        sourceId: source.id,
+        url: `${origin}/${path}`,
+        title: path,
+        markdown: 'oldcontent',
+        language: 'en',
+        fetchMode: 'http',
+        crawledAt: new Date().toISOString()
+      })
+    }
+    const backup = runtime.database.exportBackup({ libraryIds: [source.id] })
+    backup.data.sources[0]!.discovery_mode = 'agent_review'
+    runtime.database.importBackup(backup)
+
+    await expect(runtime.crawlSource(source.id)).resolves.toMatchObject({ succeeded: 1, failed: 2 })
+    expect([...visited].sort()).toEqual(['/approved', '/missing', '/temporary'])
+    expect(runtime.database.listDocumentUrls(source.id).sort()).toEqual([
+      origin + '/approved',
+      origin + '/temporary'
+    ])
+    expect(runtime.searchDocuments({ queries: 'refreshed' }).hits).toMatchObject([
+      { url: origin + '/approved' }
+    ])
+    expect(runtime.searchDocuments({ queries: 'oldcontent' }).hits).toMatchObject([
+      { url: origin + '/temporary' }
+    ])
+
+    await expect(runtime.clearData('documents')).resolves.toMatchObject({ documents: 2 })
+    visited.length = 0
+    await expect(runtime.crawlSource(source.id)).resolves.toMatchObject({ succeeded: 1, failed: 1 })
+    expect([...visited].sort()).toEqual(['/approved', '/temporary'])
+    expect(runtime.searchDocuments({ queries: 'refreshed' }).hits).toMatchObject([
+      { url: origin + '/approved' }
+    ])
+  } finally {
+    await runtime.close()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

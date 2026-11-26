@@ -1,7 +1,10 @@
 import {
   DOCUMENT_SOURCE_LIMITS,
   createPathExclusionMatcher,
-  parseGithubRepositoryUrl
+  parseGithubRepositoryUrl,
+  type SourceInspection,
+  type SourceInspectionDiscovery,
+  type SourcePathGroup
 } from '@loci/shared'
 import { readGithubRepositoryMetadata } from './github-download.js'
 import { discoverLlmsEntries } from './llms.js'
@@ -10,30 +13,12 @@ import { discoverSitemapUrls } from './sitemap.js'
 import { normalizeScopePath } from './scope.js'
 import { getHostname, normalizeUrl } from './url.js'
 
-export type SourceInspectionDiscovery = 'github' | 'llms' | 'openapi' | 'sitemap' | 'unknown'
-export type SourceEstimateKind = 'exact' | 'lower_bound' | 'unknown'
-
-export interface SourcePathGroup {
-  path: string
-  pages: number
-}
-
-export interface SourceInspection {
-  url: string
-  hostname: string
-  kind: 'web' | 'github'
-  scopePath: string
-  discovery: SourceInspectionDiscovery
-  estimateKind: SourceEstimateKind
-  estimatedPages: number | null
-  discoveredPages: number
-  excludedPages: number
-  exceedsHardLimit: boolean
-  hardPageLimit: number
-  pathGroups: SourcePathGroup[]
-  githubDefaultBranch?: string
-  githubRevision?: string
-}
+export type {
+  SourceEstimateKind,
+  SourceInspection,
+  SourceInspectionDiscovery,
+  SourcePathGroup
+} from '@loci/shared'
 
 export interface InspectSourceOptions {
   url: string

@@ -70,7 +70,6 @@ describe('explicit page service', () => {
         mode: 'http',
         pageLimit: 10,
         scopePath: '/guide',
-        schedule: null,
         httpConcurrency: 1,
         browserConcurrency: null
       })
@@ -103,6 +102,40 @@ describe('explicit page service', () => {
     }
   })
 
+  it('同 URL 的精确抓取成功或返回 404 时都保留手工正文和索引', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'loci-manual-page-'))
+    let missing = false
+    const runtime = createLocalRuntime({
+      dataDir,
+      cacheDir: dataDir,
+      browser: fakeBrowser(async (url) => (missing ? { url, status: 404 } : page(url)))
+    })
+    try {
+      const source = runtime.createSource(sourceInput())
+      const url = 'https://docs.example.com/guide/draft'
+      const document = runtime.createDocument(source.id, {
+        title: 'Draft',
+        url,
+        content: 'localnote'
+      })
+      expect((await runtime.fetchPages(source.id, [url])).items).toEqual([
+        { url, status: 'unchanged' }
+      ])
+      missing = true
+      expect((await runtime.fetchPages(source.id, [url])).items).toMatchObject([
+        { url, status: 'missing' }
+      ])
+      expect(runtime.getDocument(document.id)).toEqual(document)
+      expect(runtime.searchDocuments({ queries: 'localnote' }).hits).toMatchObject([
+        { id: document.id }
+      ])
+      expect(runtime.searchDocuments({ queries: 'Page' }).hits).toHaveLength(0)
+    } finally {
+      await runtime.close()
+      rmSync(dataDir, { recursive: true, force: true })
+    }
+  })
+
   it('逐页持久化混合有效与无效 URL 的聚合进度', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'loci-explicit-history-'))
     let releaseSecond: (() => void) | undefined
@@ -131,6 +164,15 @@ describe('explicit page service', () => {
 
       releaseSecond?.()
       const result = await running
+      expect(runtime.getLibraryCrawlStatus(source.id)).toMatchObject({
+        runId: result.runId,
+        kind: 'pages',
+        status: 'completed_with_errors',
+        failures: [
+          { url: invalid, message: result.items.find((item) => item.url === invalid)?.message }
+        ],
+        progress: { currentUrl: second, failed: 1, discovered: 3 }
+      })
       expect(runtime.database.getCrawlRun(result.runId ?? '')?.progress).toMatchObject({
         queued: 3,
         processed: 3,
@@ -177,6 +219,32 @@ describe('explicit page service', () => {
       release?.()
       await Promise.all([first.close(), second.close()])
       rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('没有有效页面时仍保存失败原因和最后一个 URL，不发起页面请求', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'loci-invalid-pages-'))
+    const fetchPage = vi.fn(async (url: string) => page(url))
+    const runtime = createLocalRuntime({
+      dataDir,
+      cacheDir: dataDir,
+      browser: fakeBrowser(fetchPage)
+    })
+    try {
+      const source = runtime.createSource(sourceInput())
+      const url = 'https://other.example.com/wrong'
+      const result = await runtime.fetchPages(source.id, [url])
+      expect(result.items).toMatchObject([{ url, status: 'failed' }])
+      expect(runtime.getLibraryCrawlStatus(source.id)).toMatchObject({
+        status: 'failed',
+        error: result.items[0]?.message,
+        failures: [{ url, message: result.items[0]?.message }],
+        progress: { discovered: 1, processed: 1, succeeded: 0, failed: 1, currentUrl: url }
+      })
+      expect(fetchPage).not.toHaveBeenCalled()
+    } finally {
+      await runtime.close()
+      rmSync(dataDir, { recursive: true, force: true })
     }
   })
 
@@ -239,7 +307,6 @@ function sourceInput() {
     mode: 'browser' as const,
     pageLimit: 10,
     scopePath: '/guide',
-    schedule: null,
     httpConcurrency: null,
     browserConcurrency: 1
   }

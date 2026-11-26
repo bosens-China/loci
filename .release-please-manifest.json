@@ -1,6 +1,5 @@
 {
   "apps/cli": "2.0.0",
-  "apps/server": "2.0.0",
   "packages/core": "2.0.0",
   "packages/shared": "2.0.0",
   "packages/runtime": "2.0.0"

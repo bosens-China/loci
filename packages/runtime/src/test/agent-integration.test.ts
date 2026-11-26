@@ -1,11 +1,9 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AgentIntegrationService, type AgentIntegrationOptions } from '../agent-integration.js'
-import { LOCI_CLI_STDIO_CONNECTION } from '../agent-import.js'
-import { writeAgentMcpConfigFile } from '../agent-mcp-config.js'
+import { AgentIntegrationService } from '../agent-integration.js'
 import {
   AGENT_INTEGRATION_LOCK_RETRY_INTERVAL_MS,
   AGENT_INTEGRATION_LOCK_WAIT_TIMEOUT_MS
@@ -23,11 +21,7 @@ afterEach(() => {
   cleanups.splice(0).forEach((path) => rmSync(path, { recursive: true, force: true }))
 })
 
-function setup(
-  setupMcp: NonNullable<AgentIntegrationOptions['setupMcp']> = async (client, options) => {
-    writeAgentMcpConfigFile(client, LOCI_CLI_STDIO_CONNECTION, options)
-  }
-): { root: string; service: AgentIntegrationService; close: () => void } {
+function setup(): { root: string; service: AgentIntegrationService; close: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'loci-agent-integration-'))
   cleanups.push(root)
   const dataDir = join(root, 'data')
@@ -39,8 +33,7 @@ function setup(
     dataDir,
     homeDir,
     packageVersion: '1.13.0',
-    skillResourceDir,
-    setupMcp
+    skillResourceDir
   })
   return { root, service, close: () => database.close() }
 }
@@ -63,13 +56,12 @@ describe('Agent 全局接入服务', () => {
     close()
   })
 
-  it('Cursor 自动完成 MCP、Skill 与本机 Rules', async () => {
+  it('Cursor 自动完成 Skill 与本机 Rules', async () => {
     const { service, close } = setup()
     const result = await service.setup('cursor')
 
     expect(result.status.overall).toBe('ready')
     expect(result.status.components).toMatchObject([
-      { component: 'mcp', status: 'current' },
       { component: 'skill', status: 'current' },
       {
         component: 'rules',
@@ -136,41 +128,6 @@ describe('Agent 全局接入服务', () => {
 
     await expect(service.setup('antigravity')).resolves.toMatchObject({
       status: { overall: 'ready' }
-    })
-    close()
-  })
-
-  it('组件执行异常会标记为需处理，避免报告假成功', async () => {
-    const { service, close } = setup(async () => {
-      throw new Error('模拟 MCP 写入失败')
-    })
-
-    const result = await service.setup('antigravity')
-    expect(result.status.overall).toBe('attention')
-    expect(result.status.components.find((item) => item.component === 'mcp')).toMatchObject({
-      status: 'conflict',
-      message: expect.any(String)
-    })
-    close()
-  })
-
-  it('MCP 被修改时拒绝删除该项并继续安全移除其他组件', async () => {
-    const { root, service, close } = setup()
-    await service.setup('antigravity')
-    const path = join(root, 'home/.gemini/config/mcp_config.json')
-    writeFileSync(
-      path,
-      readFileSync(path, 'utf8').replace('"command": "loci"', '"command": "custom"'),
-      'utf8'
-    )
-
-    const result = await service.remove('antigravity')
-    expect(result.status.overall).toBe('attention')
-    expect(result.status.components.find((item) => item.component === 'mcp')).toMatchObject({
-      status: 'conflict'
-    })
-    expect(result.status.components.find((item) => item.component === 'skill')).toMatchObject({
-      status: 'missing'
     })
     close()
   })

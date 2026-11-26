@@ -10,15 +10,24 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { setTimeout as delay } from 'node:timers/promises'
+
+export interface MaintenanceLockOperation {
+  id: string
+  hash: string
+}
 
 export interface LockRecord {
   pid: number
   owner: string
   startedAt: string
+  crawlRunId?: string
+  maintenanceOperation?: MaintenanceLockOperation
 }
 
 interface StoredLockRecord extends LockRecord {
   token?: string
+  backupImport?: MaintenanceLockOperation
 }
 
 export interface RuntimeLock {
@@ -26,18 +35,32 @@ export interface RuntimeLock {
   release: () => void
 }
 
+export class CrawlCancelledError extends Error {
+  constructor() {
+    super('抓取已取消')
+    this.name = 'CrawlCancelledError'
+  }
+}
+
 export class RuntimeLockedError extends Error {
   constructor(
     message: string,
-    readonly record: LockRecord | null
+    readonly record: LockRecord | null,
+    readonly key?: string
   ) {
     super(message)
     this.name = 'RuntimeLockedError'
   }
 }
 
-/** 文件锁让后台服务与 CLI 对抓取和 MCP 进行跨进程仲裁。 */
-export function acquireRuntimeLock(dataDir: string, key: string, owner: string): RuntimeLock {
+/** 文件锁让前台 Web 与 CLI 对同一资源的写入进行跨进程仲裁。 */
+export function acquireRuntimeLock(
+  dataDir: string,
+  key: string,
+  owner: string,
+  crawlRunId?: string,
+  maintenanceOperation?: MaintenanceLockOperation
+): RuntimeLock {
   const lockDir = join(dataDir, 'locks')
   mkdirSync(lockDir, { recursive: true })
   const path = join(lockDir, `${safeKey(key)}.lock`)
@@ -47,6 +70,8 @@ export function acquireRuntimeLock(dataDir: string, key: string, owner: string):
   const record: StoredLockRecord = {
     pid: process.pid,
     owner,
+    crawlRunId,
+    maintenanceOperation,
     startedAt: new Date().toISOString(),
     token
   }
@@ -55,13 +80,14 @@ export function acquireRuntimeLock(dataDir: string, key: string, owner: string):
     writeFileSync(temporaryPath, JSON.stringify(record), { flag: 'wx', mode: 0o600 })
     withLockMutation(path, () => {
       const current = readRuntimeLock(dataDir, key)
-      if (current) throw new RuntimeLockedError(`操作正在由${current.owner}执行`, current)
+      if (current) throw new RuntimeLockedError(`操作正在由${current.owner}执行`, current, key)
+      removeCancelRequest(path)
       if (existsSync(path)) unlinkSync(path)
       try {
         linkSync(temporaryPath, path)
       } catch (error) {
         if (!isExistingFileError(error)) throw error
-        throw new RuntimeLockedError('操作已被其他 Loci 进程占用', readLock(path))
+        throw new RuntimeLockedError('操作已被其他 Loci 进程占用', readLock(path), key)
       }
     })
   } finally {
@@ -73,7 +99,10 @@ export function acquireRuntimeLock(dataDir: string, key: string, owner: string):
     release: () => {
       if (released) return
       withLockMutation(path, () => {
-        if (readLock(path)?.token === token) unlinkSync(path)
+        if (readLock(path)?.token === token) {
+          removeCancelRequest(path)
+          unlinkSync(path)
+        }
       })
       released = true
     }
@@ -101,7 +130,8 @@ function withLockMutation<T>(path: string, action: () => T): T {
 export function acquireCrawlRuntimeLock(
   dataDir: string,
   sourceId: string,
-  owner: string
+  owner: string,
+  crawlRunId?: string
 ): RuntimeLock {
   const maintenance = readRuntimeLock(dataDir, 'maintenance')
   if (maintenance) throw new RuntimeLockedError(`数据库正在由${maintenance.owner}维护`, maintenance)
@@ -109,7 +139,7 @@ export function acquireCrawlRuntimeLock(
   if (browserUninstall) {
     throw new RuntimeLockedError(`操作正在由${browserUninstall.owner}执行`, browserUninstall)
   }
-  const lock = acquireRuntimeLock(dataDir, `crawl-${sourceId}`, owner)
+  const lock = acquireRuntimeLock(dataDir, `crawl-${sourceId}`, owner, crawlRunId)
   try {
     const currentMaintenance = readRuntimeLock(dataDir, 'maintenance')
     if (currentMaintenance) {
@@ -152,8 +182,12 @@ export function acquireDatabaseWriteRuntimeLock(
 }
 
 /** 获取全库维护锁；抓取锁若在竞争窗口中出现，维护操作会主动让出。 */
-export function acquireMaintenanceRuntimeLock(dataDir: string, owner: string): RuntimeLock {
-  const lock = acquireRuntimeLock(dataDir, 'maintenance', owner)
+export function acquireMaintenanceRuntimeLock(
+  dataDir: string,
+  owner: string,
+  maintenanceOperation?: MaintenanceLockOperation
+): RuntimeLock {
+  const lock = acquireRuntimeLock(dataDir, 'maintenance', owner, undefined, maintenanceOperation)
   try {
     if (!hasActiveDatabaseWriteLocks(dataDir)) return lock
     throw new RuntimeLockedError('仍有文档源或云端副本正在同步，请等待完成后重试', null)
@@ -179,7 +213,10 @@ export function hasActiveCrawlLocks(dataDir: string): boolean {
 }
 
 export function hasActiveDatabaseWriteLocks(dataDir: string): boolean {
-  return hasActiveLocks(dataDir, (file) => file.startsWith('crawl-') || file.startsWith('cloud-'))
+  return hasActiveLocks(
+    dataDir,
+    (file) => file.startsWith('crawl-') || file.startsWith('write-') || file.startsWith('cloud-')
+  )
 }
 
 function hasActiveLocks(dataDir: string, matches: (file: string) => boolean): boolean {
@@ -197,11 +234,97 @@ function readLock(path: string): StoredLockRecord | null {
   if (!existsSync(path)) return null
   try {
     const value = JSON.parse(readFileSync(path, 'utf8')) as Partial<StoredLockRecord>
+    const operation = value.maintenanceOperation ?? value.backupImport
     return typeof value.pid === 'number' && typeof value.owner === 'string'
-      ? { pid: value.pid, owner: value.owner, startedAt: value.startedAt ?? '', token: value.token }
+      ? {
+          pid: value.pid,
+          owner: value.owner,
+          startedAt: value.startedAt ?? '',
+          token: value.token,
+          crawlRunId: value.crawlRunId,
+          maintenanceOperation: operation?.id && operation.hash ? operation : undefined
+        }
       : null
   } catch {
     return null
+  }
+}
+
+function removeCancelRequest(path: string): void {
+  for (const suffix of ['.cancel', '.ack']) {
+    if (existsSync(path + suffix)) unlinkSync(path + suffix)
+  }
+}
+
+/** 将取消绑定到运行 ID。只有对本次随机请求给出回执的专属进程才接收 SIGTERM，避免旧锁指向系统复用的 PID。 */
+export async function requestCrawlCancellation(
+  dataDir: string,
+  sourceId: string,
+  runId: string
+): Promise<void> {
+  const key = `crawl-${sourceId}`
+  const path = join(dataDir, 'locks', `${safeKey(key)}.lock`)
+  const nonce = randomUUID()
+  withLockMutation(path, () => {
+    if (readRuntimeLock(dataDir, key)?.crawlRunId === runId)
+      writeFileSync(`${path}.cancel`, nonce, { mode: 0o600 })
+  })
+  const deadline = Date.now() + 15_000
+  let signalled = false
+  while (readRuntimeLock(dataDir, key)?.crawlRunId === runId) {
+    if (!signalled && existsSync(`${path}.ack`)) {
+      withLockMutation(path, () => {
+        const holder = readRuntimeLock(dataDir, key)
+        if (
+          holder?.crawlRunId !== runId ||
+          !existsSync(`${path}.ack`) ||
+          readFileSync(`${path}.ack`, 'utf8') !== nonce
+        )
+          return
+        try {
+          process.kill(holder.pid, 'SIGTERM')
+        } catch (error) {
+          if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error
+        }
+        signalled = true
+      })
+    }
+    if (Date.now() >= deadline) throw new Error('等待抓取取消并释放文档库锁超时')
+    await delay(40)
+  }
+}
+
+/** 共享宿主与 Windows 使用库级取消信号，专属 POSIX 进程通过回执确认自己的身份。 */
+export function acquireRunningCrawl(
+  dataDir: string,
+  sourceId: string,
+  owner: string,
+  signal?: AbortSignal,
+  detached = false
+) {
+  const runId = randomUUID()
+  const lock = acquireCrawlRuntimeLock(dataDir, sourceId, owner, runId)
+  const controller = new AbortController()
+  let fallback: NodeJS.Timeout | undefined
+  const cancel = () => controller.abort(new CrawlCancelledError())
+  const timer = setInterval(() => {
+    if (!existsSync(`${lock.path}.cancel`)) return
+    clearInterval(timer)
+    if (!detached || process.platform === 'win32') return cancel()
+    // 请求者在收到回执前退出时，仍然完成已接受的取消请求。
+    fallback = setTimeout(cancel, 500)
+    const nonce = readFileSync(`${lock.path}.cancel`, 'utf8')
+    writeFileSync(`${lock.path}.ack`, nonce, { mode: 0o600 })
+  }, 100)
+  timer.unref()
+  return {
+    runId,
+    signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+    release() {
+      clearInterval(timer)
+      clearTimeout(fallback)
+      lock.release()
+    }
   }
 }
 

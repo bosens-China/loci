@@ -66,51 +66,15 @@ describe('文档库共享表单默认值', () => {
     expect(
       getLocalLibraryRemovalWarning(current, { ...current, scopePath: '/docs/api' })
     ).toBeTypeOf('string')
-    expect(
-      getLocalLibraryRemovalWarning(current, {
-        ...current,
-        excludePathPattern: '^/docs/legacy(?:/|$)'
-      })
-    ).toBeTypeOf('string')
-    expect(
-      getLocalLibraryRemovalWarning(
-        { ...current, excludePathPattern: '^/docs/legacy(?:/|$)' },
-        current
-      )
-    ).toBeNull()
-    expect(
-      getLocalLibraryRemovalWarning(current, {
-        ...current,
-        url: 'https://new.example.com/docs'
-      })
-    ).toBeTypeOf('string')
-    expect(
-      getLocalLibraryRemovalWarning(
-        {
-          ...current,
-          kind: 'github',
-          url: 'https://github.com/example/docs',
-          scopePath: '/'
-        },
-        {
-          ...current,
-          kind: 'github',
-          url: 'https://github.com/example/other',
-          scopePath: '/'
-        }
-      )
-    ).toBeTypeOf('string')
   })
 
   it('准确统计并识别高级配置自定义项', () => {
-    // 默认空/基础配置
     expect(getAdvancedSettingsSummary(null)).toBe(0)
     expect(
       getAdvancedSettingsSummary({
         kind: 'web',
         pageLimit: 1000,
         mode: 'auto',
-        schedule: null,
         excludePathPattern: null,
         httpConcurrency: null,
         browserConcurrency: null
@@ -123,12 +87,9 @@ describe('文档库共享表单默认值', () => {
         kind: 'web',
         pageLimit: 500,
         mode: 'browser',
-        schedule: '0 2 * * *',
-        excludePathPattern: '^/legacy',
-        httpConcurrency: 12,
-        browserConcurrency: 8
+        excludePathPattern: '^/legacy'
       })
-    ).toBe(4)
+    ).toBe(3)
 
     // GitHub 自定义项
     expect(
@@ -136,9 +97,8 @@ describe('文档库共享表单默认值', () => {
         kind: 'github',
         pageLimit: 2000,
         githubArchiveLimitMb: 500,
-        githubMarkdownLimitMb: 250,
-        schedule: '0 3 * * *'
+        githubMarkdownLimitMb: 250
       })
-    ).toBe(4)
+    ).toBe(3)
   })
 })

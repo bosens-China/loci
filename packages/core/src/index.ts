@@ -18,25 +18,12 @@ export * from './source-inspection.js'
 export * from './types.js'
 export * from './zip-archive.js'
 export {
-  CUSTOM_SCHEDULE,
-  DEFAULT_SCHEDULE,
   DOCUMENT_SOURCE_DEFAULTS,
   DOCUMENT_SOURCE_LIMITS,
-  SCHEDULE_PRESETS,
   createPathExclusionMatcher,
-  getNextScheduledRun,
-  getSchedulePreset,
-  getUpcomingScheduleRuns,
   isGithubRepositoryUrl,
   isPathExcluded,
-  normalizeCronSchedule,
   normalizeExcludePathPattern,
   parseGithubRepositoryUrl
 } from '@loci/shared'
-export type {
-  CloudLibrary,
-  CloudLibraryInput,
-  CloudSyncJob,
-  CloudSyncJobStatus,
-  GithubRepository
-} from '@loci/shared'
+export type { GithubRepository } from '@loci/shared'

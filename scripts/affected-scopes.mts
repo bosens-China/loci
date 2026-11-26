@@ -10,7 +10,6 @@ export const qualityScopeNames = [
   'shared',
   'runtime',
   'cli',
-  'server',
   'web',
   'docs'
 ] as const
@@ -30,7 +29,6 @@ function createScopes(): AffectedScopes {
     shared: false,
     runtime: false,
     cli: false,
-    server: false,
     web: false,
     docs: false
   }
@@ -46,11 +44,11 @@ function markAll(scopes: AffectedScopes): void {
 }
 
 function markCore(scopes: AffectedScopes): void {
-  mark(scopes, 'core', 'shared', 'runtime', 'cli', 'server', 'web')
+  mark(scopes, 'core', 'shared', 'runtime', 'cli', 'web')
 }
 
 function markShared(scopes: AffectedScopes): void {
-  mark(scopes, 'core', 'shared', 'runtime', 'cli', 'server', 'web')
+  mark(scopes, 'core', 'shared', 'runtime', 'cli', 'web')
 }
 
 function markRuntime(scopes: AffectedScopes): void {
@@ -99,10 +97,6 @@ function applyPath(scopes: AffectedScopes, rawPath: string): void {
     mark(scopes, 'cli', 'web')
     return
   }
-  if (path.startsWith('apps/server/')) {
-    mark(scopes, 'server')
-    return
-  }
   if (path.startsWith('packages/core/')) {
     markCore(scopes)
     return
@@ -124,16 +118,6 @@ function applyPath(scopes: AffectedScopes, rawPath: string): void {
     path.startsWith('.github/actions/')
   ) {
     markAll(scopes)
-    return
-  }
-
-  if (
-    path === 'compose.yaml' ||
-    path === 'compose.local.yaml' ||
-    path === '.dockerignore' ||
-    path === '.env.example'
-  ) {
-    mark(scopes, 'server')
     return
   }
 

@@ -3,7 +3,6 @@ import {
   deriveSourceName,
   getDocumentContentRemovalRisk,
   getSourceScopeOptions,
-  getUpcomingScheduleRuns,
   parseGithubRepositoryUrl,
   type DocumentSource,
   type SourceKind
@@ -45,14 +44,6 @@ export function getLibraryUrlDefaults(input: LibraryUrlDefaultsInput): LibraryUr
   return defaults
 }
 
-export function getLibrarySchedulePreview(value: string | null | undefined): Date[] {
-  try {
-    return getUpcomingScheduleRuns(value, 2)
-  } catch {
-    return []
-  }
-}
-
 export function validateLibrarySourceKind(kind: SourceKind, url: string): string | null {
   const repository = parseGithubRepositoryUrl(url)
   if (kind === 'github' && !repository) return '请输入公开 GitHub 仓库首页 URL'
@@ -78,9 +69,6 @@ export function getAdvancedSettingsSummary(source?: Partial<DocumentSource> | nu
   let customCount = 0
 
   if (source.pageLimit != null && source.pageLimit !== DOCUMENT_SOURCE_DEFAULTS.pageLimit) {
-    customCount++
-  }
-  if (source.schedule && source.schedule.trim()) {
     customCount++
   }
   if (source.kind === 'github') {

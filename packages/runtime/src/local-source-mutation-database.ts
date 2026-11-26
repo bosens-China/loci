@@ -10,7 +10,14 @@ import {
   normalizeUrl,
   parseGithubRepositoryUrl
 } from '@loci/core'
-import type { CreateSourceInput, DocumentSource, SourceKind, UpdateSourceInput } from '@loci/shared'
+import {
+  DEFAULT_LIBRARY_CATEGORY,
+  DEFAULT_LIBRARY_VERSION,
+  type CreateSourceInput,
+  type DocumentSource,
+  type SourceKind,
+  type UpdateSourceInput
+} from '@loci/shared'
 import { and, eq } from 'drizzle-orm'
 import {
   assertLocalSourceIdentityAvailable,
@@ -20,41 +27,74 @@ import {
   throwLocalHostnameConflict,
   withTransaction
 } from './database-local-source.js'
+import { ensureCategory } from './category-database.js'
 import { deleteDocumentsOutsideScope } from './database-source-scope.js'
 import { validateSourceInput } from './database-values.js'
 import { deleteSourceDocuments } from './document-content-database.js'
 import type { LociDrizzleDatabase } from './drizzle-database.js'
 import { documentSources, explicitPageTargets } from './drizzle-schema.js'
-import type { OperationLogDatabase } from './operation-log-database.js'
+
+type ReuseSource = (
+  source: DocumentSource,
+  save: (input: UpdateSourceInput) => DocumentSource
+) => DocumentSource
 
 export interface LocalSourceMutationDatabase {
   createSource: (input: CreateSourceInput) => DocumentSource
+  upsertSource: (input: CreateSourceInput, reuse?: ReuseSource) => DocumentSource
   updateSource: (id: string, input: UpdateSourceInput) => DocumentSource
   deleteSource: (id: string) => void
 }
 
-/** 本地文档库的身份校验、事务写入和操作日志集中在同一边界。 */
+/** 本地文档库的身份校验、事务写入集中在同一边界。 */
 export function createLocalSourceMutationDatabase(
   database: DatabaseSync,
-  drizzle: LociDrizzleDatabase,
-  logs: OperationLogDatabase
+  drizzle: LociDrizzleDatabase
 ): LocalSourceMutationDatabase {
+  const upsertSource: LocalSourceMutationDatabase['upsertSource'] = (input, reuse) =>
+    withTransaction(database, () => createSourceInTransaction(database, drizzle, input, reuse))
   return {
-    createSource: (input) => createSource(drizzle, logs, input),
-    updateSource: (id, input) => updateSource(database, drizzle, logs, id, input),
-    deleteSource: (id) => deleteSource(database, drizzle, logs, id)
+    createSource: upsertSource,
+    upsertSource,
+    updateSource: (id, input) =>
+      withTransaction(database, () => updateSourceInTransaction(database, drizzle, id, input)),
+    deleteSource: (id) => deleteSource(database, drizzle, id)
   }
 }
 
-function createSource(
+function sourceMetadata(drizzle: LociDrizzleDatabase, input: CreateSourceInput) {
+  const category = input.category?.trim() || DEFAULT_LIBRARY_CATEGORY
+  ensureCategory(drizzle, category)
+  return { category, version: input.version?.trim() || DEFAULT_LIBRARY_VERSION }
+}
+
+/** 普通创建和移动文档共用调用方持有的写事务。 */
+export function createSourceInTransaction(
+  database: DatabaseSync,
   drizzle: LociDrizzleDatabase,
-  logs: OperationLogDatabase,
-  input: CreateSourceInput
+  input: CreateSourceInput,
+  reuse?: ReuseSource
 ): DocumentSource {
-  const schedule = validateSourceInput(input)
+  validateSourceInput(input)
   const resolved = resolveSourceInput(input)
-  const existingId = findLocalSourceId(drizzle, resolved.identity)
-  if (existingId) return readDocumentSource(drizzle, existingId)
+  const metadata = sourceMetadata(drizzle, input)
+  const existingId = findLocalSourceId(drizzle, resolved.identity, metadata.version)
+  if (existingId && reuse) {
+    // Runtime 可以在此处检查抓取锁，整次复用仍属于当前事务。
+    return reuse(readDocumentSource(drizzle, existingId), (value) =>
+      updateSourceInTransaction(database, drizzle, existingId, value)
+    )
+  }
+  if (existingId) {
+    const source = readDocumentSource(drizzle, existingId)
+    if (metadata.category === source.category) return source
+    drizzle
+      .update(documentSources)
+      .set({ ...metadata, updatedAt: new Date().toISOString() })
+      .where(eq(documentSources.id, existingId))
+      .run()
+    return readDocumentSource(drizzle, existingId)
+  }
   const now = new Date().toISOString()
   const id = randomUUID()
   try {
@@ -62,6 +102,7 @@ function createSource(
       .insert(documentSources)
       .values({
         id,
+        ...metadata,
         name: input.name.trim(),
         firstUrl: resolved.url,
         hostname: resolved.hostname,
@@ -69,16 +110,12 @@ function createSource(
         pageLimit: input.pageLimit,
         scopePath: resolved.scopePath,
         excludePathPattern: resolved.excludePathPattern,
-        schedule,
         httpConcurrency: input.httpConcurrency,
         browserConcurrency: input.browserConcurrency,
         documentKind: resolved.kind,
         sourceIdentity: resolved.identity,
         githubArchiveLimitMb: input.githubArchiveLimitMb ?? null,
         githubMarkdownLimitMb: input.githubMarkdownLimitMb ?? null,
-        discoveryMode: input.discoveryMode ?? 'site',
-        reviewGoal:
-          input.discoveryMode === 'agent_review' ? (input.reviewGoal?.trim() ?? null) : null,
         sourceType: 'local',
         cloudAutoSync: 0,
         createdAt: now,
@@ -86,23 +123,18 @@ function createSource(
       })
       .run()
   } catch (error) {
-    const duplicateId = findLocalSourceId(drizzle, resolved.identity)
-    if (duplicateId) return readDocumentSource(drizzle, duplicateId)
     throwLocalHostnameConflict(error)
   }
-  const source = readDocumentSource(drizzle, id)
-  recordSourceLog(logs, 'library.create', source, '已创建文档库')
-  return source
+  return readDocumentSource(drizzle, id)
 }
 
-function updateSource(
+function updateSourceInTransaction(
   database: DatabaseSync,
   drizzle: LociDrizzleDatabase,
-  logs: OperationLogDatabase,
   id: string,
   input: UpdateSourceInput
 ): DocumentSource {
-  const schedule = validateSourceInput(input)
+  validateSourceInput(input)
   const resolved = resolveSourceInput(input)
   const current = drizzle
     .select()
@@ -110,10 +142,6 @@ function updateSource(
     .where(and(eq(documentSources.id, id), eq(documentSources.sourceType, 'local')))
     .get()
   if (!current) throw new Error('文档源不存在')
-  const discoveryMode = input.discoveryMode ?? current.discoveryMode
-  const requestedReviewGoal = input.reviewGoal === undefined ? current.reviewGoal : input.reviewGoal
-  const reviewGoal = discoveryMode === 'agent_review' ? requestedReviewGoal : null
-  validateDiscovery(resolved.kind, discoveryMode, reviewGoal)
   const resetGithubState =
     current.firstUrl !== resolved.url ||
     current.pageLimit !== input.pageLimit ||
@@ -123,77 +151,80 @@ function updateSource(
     current.firstUrl !== resolved.url ||
     current.documentKind !== resolved.kind ||
     current.scopePath !== resolved.scopePath ||
-    current.excludePathPattern !== resolved.excludePathPattern ||
-    current.discoveryMode !== discoveryMode
+    current.excludePathPattern !== resolved.excludePathPattern
   const clearDocuments =
     current.documentKind !== resolved.kind ||
     getHostname(current.firstUrl) !== resolved.hostname ||
     (resolved.kind === 'github' && current.firstUrl !== resolved.url)
+  // 同一 GitHub 库只改配置时，保留上次抓取解析出的实际方式。
+  const fetchMode =
+    resolved.kind === 'github' && !clearDocuments ? current.fetchMode : resolved.mode
   try {
-    withTransaction(database, () => {
-      assertLocalSourceIdentityAvailable(drizzle, resolved.identity, resolved.kind === 'github', id)
-      const result = drizzle
-        .update(documentSources)
-        .set({
-          name: input.name.trim(),
-          firstUrl: resolved.url,
-          hostname: resolved.hostname,
-          fetchMode: resolved.mode,
-          pageLimit: input.pageLimit,
-          scopePath: resolved.scopePath,
-          excludePathPattern: resolved.excludePathPattern,
-          schedule,
-          httpConcurrency: input.httpConcurrency,
-          browserConcurrency: input.browserConcurrency,
-          documentKind: resolved.kind,
-          sourceIdentity: resolved.identity,
-          githubArchiveLimitMb: input.githubArchiveLimitMb ?? null,
-          githubMarkdownLimitMb: input.githubMarkdownLimitMb ?? null,
-          discoveryMode,
-          reviewGoal: reviewGoal?.trim() || null,
-          ...(resetResolvedDiscovery ? { resolvedDiscovery: null } : {}),
-          ...(resetGithubState
-            ? {
-                githubRevision: null,
-                githubBlockedRevision: null,
-                githubBlockedLimitKind: null,
-                githubBlockedLimitBytes: null
-              }
-            : {}),
-          updatedAt: new Date().toISOString()
-        })
-        .where(and(eq(documentSources.id, id), eq(documentSources.sourceType, 'local')))
-        .run()
-      if (Number(result.changes) !== 1) throw new Error('文档源不存在')
-      if (clearDocuments) {
-        deleteSourceDocuments(database, id)
-        drizzle.delete(explicitPageTargets).where(eq(explicitPageTargets.sourceId, id)).run()
-      } else if (resolved.kind === 'web') {
-        deleteDocumentsOutsideScope(
-          database,
-          id,
-          resolved.hostname,
-          resolved.scopePath,
-          resolved.excludePathPattern
-        )
-      } else {
-        drizzle.delete(explicitPageTargets).where(eq(explicitPageTargets.sourceId, id)).run()
-      }
-    })
+    const metadata = sourceMetadata(drizzle, input)
+    assertLocalSourceIdentityAvailable(
+      drizzle,
+      resolved.identity,
+      metadata.version,
+      resolved.kind === 'github',
+      id
+    )
+    const result = drizzle
+      .update(documentSources)
+      .set({
+        ...metadata,
+        name: input.name.trim(),
+        firstUrl: resolved.url,
+        hostname: resolved.hostname,
+        fetchMode,
+        pageLimit: input.pageLimit,
+        scopePath: resolved.scopePath,
+        excludePathPattern: resolved.excludePathPattern,
+        httpConcurrency: input.httpConcurrency,
+        browserConcurrency: input.browserConcurrency,
+        documentKind: resolved.kind,
+        sourceIdentity: resolved.identity,
+        githubArchiveLimitMb: input.githubArchiveLimitMb ?? null,
+        githubMarkdownLimitMb: input.githubMarkdownLimitMb ?? null,
+        ...(resetResolvedDiscovery ? { resolvedDiscovery: null } : {}),
+        ...(resetGithubState
+          ? {
+              githubRevision: null,
+              githubBlockedRevision: null,
+              githubBlockedLimitKind: null,
+              githubBlockedLimitBytes: null
+            }
+          : {}),
+        updatedAt: new Date().toISOString()
+      })
+      .where(and(eq(documentSources.id, id), eq(documentSources.sourceType, 'local')))
+      .run()
+    if (Number(result.changes) !== 1) throw new Error('文档源不存在')
+    if (clearDocuments) {
+      deleteSourceDocuments(database, id)
+      drizzle.delete(explicitPageTargets).where(eq(explicitPageTargets.sourceId, id)).run()
+    } else if (
+      resolved.kind === 'web' &&
+      (current.scopePath !== resolved.scopePath ||
+        current.excludePathPattern !== resolved.excludePathPattern)
+    ) {
+      deleteDocumentsOutsideScope(
+        database,
+        id,
+        resolved.hostname,
+        resolved.scopePath,
+        resolved.excludePathPattern
+      )
+    } else if (resolved.kind === 'github') {
+      drizzle.delete(explicitPageTargets).where(eq(explicitPageTargets.sourceId, id)).run()
+    }
   } catch (error) {
     throwLocalHostnameConflict(error)
   }
   const source = readDocumentSource(drizzle, id)
-  recordSourceLog(logs, 'library.update', source, '已更新文档库')
   return source
 }
 
-function deleteSource(
-  database: DatabaseSync,
-  drizzle: LociDrizzleDatabase,
-  logs: OperationLogDatabase,
-  id: string
-): void {
+function deleteSource(database: DatabaseSync, drizzle: LociDrizzleDatabase, id: string): void {
   const source = drizzle
     .select({
       id: documentSources.id,
@@ -209,7 +240,6 @@ function deleteSource(
     database.prepare('DELETE FROM documents_fts WHERE source_id = ?').run(id)
     drizzle.delete(documentSources).where(eq(documentSources.id, id)).run()
   })
-  recordSourceLog(logs, 'library.delete', source, '已删除文档库', 'warning')
 }
 
 interface ResolvedSourceInput {
@@ -225,7 +255,6 @@ interface ResolvedSourceInput {
 function resolveSourceInput(input: CreateSourceInput | UpdateSourceInput): ResolvedSourceInput {
   const repository = parseGithubRepositoryUrl(input.url)
   const kind = resolveSourceKind(input.kind, repository !== null)
-  validateDiscovery(kind, input.discoveryMode ?? 'site', input.reviewGoal)
   const url = kind === 'github' ? repository!.url : normalizeUrl(input.url)
   const hostname = getHostname(url)
   const mode = kind === 'github' ? DOCUMENT_SOURCE_DEFAULTS.mode : input.mode
@@ -249,41 +278,10 @@ function resolveSourceInput(input: CreateSourceInput | UpdateSourceInput): Resol
   }
 }
 
-function validateDiscovery(
-  kind: SourceKind,
-  discoveryMode: 'site' | 'agent_review',
-  reviewGoal?: string | null
-): void {
-  if (kind === 'github' && discoveryMode === 'agent_review') {
-    throw new Error('Agent URL 审查模式暂不支持 GitHub 仓库')
-  }
-  if (discoveryMode === 'agent_review' && !reviewGoal?.trim()) {
-    throw new Error('Agent 审查模式需要说明收录目标')
-  }
-}
-
 function resolveSourceKind(kind: SourceKind | undefined, githubUrl: boolean): SourceKind {
   const inferred = githubUrl ? 'github' : 'web'
   if (!kind) return inferred
   if (kind === 'github' && !githubUrl) throw new Error('GitHub 文档源必须使用公开仓库首页 URL')
   if (kind === 'web' && githubUrl) throw new Error('普通站点不能使用 GitHub 仓库首页 URL')
   return kind
-}
-
-function recordSourceLog(
-  logs: OperationLogDatabase,
-  action: string,
-  source: { id: string; name: string; hostname?: string; url?: string },
-  message: string,
-  level: 'info' | 'warning' = 'info'
-): void {
-  logs.recordOperationLog({
-    category: 'library',
-    action,
-    level,
-    resourceType: 'library',
-    resourceId: source.id,
-    hostname: source.hostname ?? (source.url ? getHostname(source.url) : undefined),
-    message: `${message}：${source.name}`
-  })
 }

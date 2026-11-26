@@ -1,202 +1,65 @@
 # 本地文档库
 
-本页介绍如何创建、同步和浏览本机文档库。`source` 命令管理公开网站或仓库，`document` 命令用于浏览已保存的 Markdown。
+以下示例中的尖括号需要替换为实际值。`<lib>` 可用库 ID、唯一短 ID 或名称。先用 `loci list --json` 找库，它会返回名称、ID、来源 URL、页数、语言和 `readOnly`。`loci list <lib> --json` 列出单库内的文档 ID、路径和标题。列表支持 `--offset <n>` 和 `--limit <n>`，查库时也可以用 `--query <kw>` 筛选。
 
-## 创建文档源
+## 分类与版本
 
-### `loci source add [url]`
-
-将任意公开文档页作为入口。只提供 URL 即可自动生成名称，以 `auto` 模式、1,000 页上限和整站范围开始，并立即执行首次同步。需要缩小范围时传入显式选项；不再读取最近一次创建的参数，也不逐项询问默认设置。省略 URL 时只询问入口 URL。
+`fetch`、`update` 支持 `--category <name>` 和 `--version <ver>`。新库默认使用 `未分类` 和 `latest`。更新已有库时保留未显式指定的分类和版本。同一来源的不同版本可以并存，相同来源与版本会复用。首次使用新分类名会自动创建分类。`list` 可组合使用名称搜索、分类和版本，后两项按标签精确匹配。
 
 ```bash
-loci source add https://rspress.rs/guide/introduction.html
+loci fetch https://react.dev --category 前端 --version v19
+loci list --query react --category 前端 --version v19 --json
+loci category list --json
+loci category add 团队资料 --json
+loci category delete 团队资料 --yes --json
 ```
 
-常用选项如下：
+`loci category` 默认列出分类和库数量。`未分类` 受保护。删除其他分类会将关联库设为 `未分类`，保留版本和正文。在 Web 工作台新建或编辑文档库时，可以选择已有分类、直接输入新分类名，并填写版本。卡片显示这两项信息，顶部分类筛选可与搜索词组合使用。
 
-| 参数                           | 用途                                           |
-| ------------------------------ | ---------------------------------------------- |
-| `--url <url>`                  | 覆盖位置参数中的入口 URL。                     |
-| `--name <name>`                | 指定文档源名称。                               |
-| `--scope <path>`               | 只收录指定路径，例如 `/guide`。                |
-| `--page-limit <number>`        | 限制最多收录的页面数。                         |
-| `--mode <auto\|http\|browser>` | 选择自动、HTTP 或浏览器抓取。                  |
-| `--exclude-path <regex>`       | 排除匹配的 URL 路径，例如不需要的语言目录。    |
-| `--archive-limit <size>`       | 覆盖这个 GitHub 仓库的 ZIP 上限。              |
-| `--markdown-limit <size>`      | 覆盖这个 GitHub 仓库的 Markdown/MDX 总量上限。 |
-| `--no-sync`                    | 只保存文档源，稍后再同步。                     |
-| `--background`                 | 提交持久后台任务，使当前终端立即返回。         |
-
-`--background` 与 `--no-sync` 不能同时使用。CLI 会在执行前直接拒绝这组冲突参数。
-
-例如，只收录指南并排除中文、德文和法文目录：
+## 定位文档和小节
 
 ```bash
-loci source add https://fastapi.tiangolo.com/ --scope /tutorial --exclude-path '^/(zh|de|fr)(?:/|$)'
+loci tree <lib> --json
+loci tree <lib> --parent /guide --depth 2 --json
+loci tree <lib> --query router navigation --all --json
+loci search "router navigation" --json
+loci search router navigation --library <lib> --path-prefix /guide --tree --json
 ```
 
-需要调整 GitHub 大小上限时，请查看[基础命令与运行设置](/cli/commands/basics)。
+`tree` 默认显示两层。`--parent <path|id>` 从指定目录展开，`--all` 显示完整深度。`--query <kw...>` 筛选关键词并保留命中文档的祖先目录。
 
-### GitHub 仓库
+`search <queries...>` 可输入多个查询，带空格的单组查询用引号括起。`--library <lib...>` 接受一个或多个库，省略时跨库搜索。普通结果提供 `hits`、文档 ID、小节 ID、匹配段落与可选 `nextOffset`，可用 `--offset <n>` 和 `--limit <n>` 分页。`--tree` 返回 `total` 与按库组织的命中树。
 
-公开 `github.com/<owner>/<repo>` 仓库可以直接作为文档源：
+## 阅读正文
 
 ```bash
-loci source add https://github.com/vuejs/docs
+loci read <targets...> --library <lib> --json
+loci read /guide /reference/hooks --library <lib> --max-chars 4000 --json
+loci read <doc> --library <lib> --section <id> --json
 ```
 
-Loci 会保留仓库 Markdown/MDX 的目录结构，并保持相对文档和图片链接可用。当前只支持公开仓库的默认分支；不支持私有仓库、Git LFS、Git clone 和子目录范围。
+每个位置参数都是文档完整 ID、唯一短 ID 或以 `/` 开始的文件或子树路径。`--library <lib>` 可限定解析范围。多个目标会去重并按目录树顺序返回。每篇默认最多读取 20,000 个 UTF-16 码元；需续读时将该条结果的 `nextOffset` 传给 `--offset <n>`，沿用文档 ID 及原小节。`url` 是可引用的原文地址。
 
-## 同步和更新文档源
-
-### `loci source sync [source]`
-
-同步一个本地文档源，并显示成功和失败的页面数：
+## 创建与编辑
 
 ```bash
-loci source sync rspress
+loci doc create <lib> --title "路由笔记" --path /notes/router --file ./router.md --json
+loci doc update <doc> --library <lib> --title "新版路由笔记" --json
+loci doc sections <doc> --library <lib> --json
+loci doc section <doc> --library <lib> --action add --heading "版本差异" --level 2 --file ./changes.md --operation-id notes-v2 --json
+loci doc section <doc> --library <lib> --action update --section <id> --content "更新说明" --json
+loci doc section <doc> --library <lib> --action delete --section <id> --json
 ```
 
-`auto` 模式在浏览器已安装时比较 HTTP 与浏览器结果；未安装时直接使用 HTTP，不执行浏览器页面探测，也不会提示安装。明确需要 JavaScript 渲染时可选择 `browser`，脚本环境请先执行：
+单篇编辑用文档 ID 或唯一短 ID。`create` 必须提供 `--title` 与 `--path`，`create` 和 `update` 可用 `--language <lang>` 标注语言。`--content <md>` 与 `--file <file>` 二选一。小节增删改后重新运行 `sections` 获取最新 ID；重试同一次小节操作时沿用 `--operation-id <id>` 和原始参数。
+
+覆盖整篇或小节正文、删除小节时，CLI 会请求确认。已核对目标的非交互脚本传 `--yes`。Web 中的上述操作同样在提交前确认。
+
+## 删除
 
 ```bash
-loci browser install
+loci delete <lib> --doc <targets...>
+loci delete <lib>
 ```
 
-前台同步也会先写入持久任务队列再等待结果。重复同步同一文档源时，Loci 会复用正在运行的任务；即使后台服务或另一个 MCP 入口先认领，CLI 也会读取同一份进度与最终结果。失败或取消后，可以再次执行同步。
-
-### `loci task`
-
-抓取任务具有稳定 ID，并持久保存每个页面的完成事件、正文大小和恢复检查点。可以在另一个终端筛选、跟随和控制：
-
-```bash
-loci task list --hostname docs.example.com --date 2026-08-27
-loci task status <任务 ID>
-loci task follow <任务 ID>
-loci task follow <任务 ID> --format jsonl
-loci task pause <任务 ID> --yes
-loci task resume <任务 ID> --yes
-loci task stop <任务 ID> --yes
-loci task cancel <任务 ID> --yes
-loci task priority 50 <任务 ID> --yes
-loci task pause-all docs.example.com --yes
-loci task resume-all --yes
-loci task logs --date 2026-08-27 --hostname docs.example.com
-```
-
-交互终端可以省略单任务命令的任务 ID，再从最近任务中选择；脚本、管道和 Agent 等非交互调用必须显式提供任务 ID 和 `--yes`。`task follow` 会从持久事件按序读取逐页进度，轮询较慢或重新运行命令不会影响后台抓取。跟随时按 `Ctrl+C` 只退出当前显示并保留任务。
-
-暂停停止领取新页面；恢复复用原任务 ID。结束会保留已经抓取的正文、保存剩余 URL 并允许下次继续；取消会停止后续抓取并清除检查点，已经实时写入的成功页面继续保留，首次任务取消且文档库仍为空时同时删库。`pause-all` 和 `resume-all` 省略 hostname 时作用于全部域名。`task logs` 查看按日期、类别、级别和 hostname 筛选的结构化操作记录。
-
-### `loci source list`
-
-列出本地文档源，包括页面数、内容大小、页面获取方式和收录范围：
-
-```bash
-loci source list
-```
-
-### `loci source update [source]`
-
-修改文档源名称、入口 URL、页面获取方式、页面上限或收录范围。完全省略修改选项时，CLI 会进入编辑向导：
-
-```bash
-loci source update rspress --page-limit 300
-```
-
-`update` 同样支持 `--archive-limit` 和 `--markdown-limit`。省略大小覆盖值时保留当前来源设置；创建时省略则继承共享设置。页面执行参数由底层管理。
-
-切换来源类型、把 URL 切换到其他 hostname，或把 GitHub 来源切换到另一仓库，会立即清空现有正文。收窄范围或新增、修改排除规则会在保存事务中立即删除不再匹配的正文和搜索索引，不会等到下次同步。交互向导会在保存前再次警告；显式传入更新选项表示脚本已经确认对应影响。保存后建议立即同步。
-
-### `loci source history [source]` 与 `loci source run-details [run]`
-
-使用 `source history` 查看最近的同步记录；使用 `source run-details` 排查某次同步的页面失败原因：
-
-```bash
-loci source history rspress
-loci source run-details a1b2c3d4
-```
-
-`source run-details` 中的 `[run]` 是 `source history` 输出的短 ID。如需查看所有文档源的记录，使用 `--all`：
-
-```bash
-loci source history --all
-```
-
-交互终端可以省略文档源并从列表中选择。非交互终端必须指定文档源，或显式传入 `--all` 查看全部记录。
-
-## 设置定时更新
-
-### `loci schedule set [source] [cron]`
-
-为本地文档源设置五段 Linux Cron 更新计划。传入 `off` 可以关闭计划：
-
-```bash
-loci schedule set rspress '0 2 * * *'
-loci schedule set rspress off
-loci schedule list
-```
-
-使用默认数据目录时，保存启用的计划会立即确保无 HTTP 的用户级常驻 worker 可用。Web 会话与 worker 可以同时运行，之后无需保持终端或浏览器打开；机器恢复或服务重新启用后，错过的多个时间点最多合并补跑一次。设置 `LOCI_DATA_DIR` 时只会为该目录启动当前登录会话中的独立 detached worker，不会安装对应的登录或重启自启动定义；需要长期运行时应由容器或进程管理器执行同一环境下的 `loci service run`。旧脚本中的 `manual` 仍可作为 `off` 的兼容别名。
-
-服务状态和停用方式请查看[后台服务与 Web UI](/cli/commands/service)。计划列表为空时，CLI 会提示先创建文档源或使用 `schedule set` 配置计划。
-
-## 删除文档源
-
-### `loci source delete [source]`
-
-删除一个本地文档源及其全部文档。CLI 默认会再次确认：
-
-```bash
-loci source delete rspress
-```
-
-## 浏览和读取文档
-
-### `loci document list [source]`
-
-列出已保存的文档：
-
-```bash
-loci document list rspress
-```
-
-### `loci document tree [source]`
-
-按 URL 路径显示文档库目录：
-
-```bash
-loci document tree rspress
-```
-
-### `loci document search [query]`
-
-在文档标题和正文中搜索关键词：
-
-```bash
-loci document search "部署配置"
-```
-
-### `loci document read [document]`
-
-读取一篇文档的 Markdown 内容和来源 URL。`[document]` 可以是短 ID、标题或完整 URL：
-
-```bash
-loci document read a1b2c3d4
-```
-
-### `loci document move <documents...>`
-
-把一篇或多篇本地文档移动到一个新文档库。目标名称、URL、范围和抓取参数都显式给出；默认会删除移动后已经为空的原文档库，使用 `--keep-empty-sources` 保留。操作会二次确认，脚本调用必须传 `--yes`：
-
-```bash
-loci document move <文档 ID> <文档 ID> \
-  --name "组合文档" \
-  --url https://combined.example.com/docs \
-  --scope /docs \
-  --yes
-```
-
-相同 `--operation-id` 和相同输入可以安全重试；同一操作 ID 对应不同输入会被拒绝。全文索引与正文归属在同一 SQLite 事务中更新。
-
-需要使用 Server 上预先发布的公开文档时，请查看[云端文档库](/cli/commands/cloud-library)。
+带 `--doc` 会删除指定文档或子树，省略时会删除整库。命令会请求确认；已核对目标的非交互调用使用 `--yes`。整库和指定页面的抓取见 [页面发现与抓取](/cli/crawling)，清库和覆盖恢复见 [数据备份与恢复](/cli/commands/data)。

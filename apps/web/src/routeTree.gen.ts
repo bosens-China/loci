@@ -11,29 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as AppRouteImport } from './routes/_app'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
-import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppAgentsRouteImport } from './routes/_app.agents'
 import { Route as AppBrowserRouteImport } from './routes/_app.browser'
-import { Route as AppCloudRouteImport } from './routes/_app.cloud'
 import { Route as AppDocumentsRouteImport } from './routes/_app.documents'
-import { Route as AppJobsRouteImport } from './routes/_app.jobs'
 import { Route as AppLibraryRouteImport } from './routes/_app.library'
-import { Route as AppLogsRouteImport } from './routes/_app.logs'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSourcesRouteImport } from './routes/_app.sources'
-import { Route as AppAdminIndexRouteImport } from './routes/_app.admin.index'
-import { Route as AppAdminAuditLogsRouteImport } from './routes/_app.admin.audit-logs'
-import { Route as AppAdminBrowserRouteImport } from './routes/_app.admin.browser'
-import { Route as AppAdminCatalogRouteImport } from './routes/_app.admin.catalog'
-import { Route as AppAdminHostnamePoliciesRouteImport } from './routes/_app.admin.hostname-policies'
-import { Route as AppAdminJobsRouteImport } from './routes/_app.admin.jobs'
-import { Route as AppAdminLibrariesRouteImport } from './routes/_app.admin.libraries'
-import { Route as AppJobsIndexRouteImport } from './routes/_app.jobs.index'
-import { Route as AppJobsHostnameRouteImport } from './routes/_app.jobs.$hostname'
-import { Route as AppAdminLibrariesIndexRouteImport } from './routes/_app.admin.libraries.index'
-import { Route as AppAdminLibrariesPublishRouteImport } from './routes/_app.admin.libraries.publish'
 
 const SplatRoute = SplatRouteImport.update({
   id: '/$',
@@ -44,19 +28,9 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppAdminRoute = AppAdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAgentsRoute = AppAgentsRouteImport.update({
@@ -69,29 +43,14 @@ const AppBrowserRoute = AppBrowserRouteImport.update({
   path: '/browser',
   getParentRoute: () => AppRoute,
 } as any)
-const AppCloudRoute = AppCloudRouteImport.update({
-  id: '/cloud',
-  path: '/cloud',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppDocumentsRoute = AppDocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
   getParentRoute: () => AppRoute,
 } as any)
-const AppJobsRoute = AppJobsRouteImport.update({
-  id: '/jobs',
-  path: '/jobs',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppLibraryRoute = AppLibraryRouteImport.update({
   id: '/library',
   path: '/library',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLogsRoute = AppLogsRouteImport.update({
-  id: '/logs',
-  path: '/logs',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -104,224 +63,76 @@ const AppSourcesRoute = AppSourcesRouteImport.update({
   path: '/sources',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminAuditLogsRoute = AppAdminAuditLogsRouteImport.update({
-  id: '/audit-logs',
-  path: '/audit-logs',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminBrowserRoute = AppAdminBrowserRouteImport.update({
-  id: '/browser',
-  path: '/browser',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminCatalogRoute = AppAdminCatalogRouteImport.update({
-  id: '/catalog',
-  path: '/catalog',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminHostnamePoliciesRoute =
-  AppAdminHostnamePoliciesRouteImport.update({
-    id: '/hostname-policies',
-    path: '/hostname-policies',
-    getParentRoute: () => AppAdminRoute,
-  } as any)
-const AppAdminJobsRoute = AppAdminJobsRouteImport.update({
-  id: '/jobs',
-  path: '/jobs',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppAdminLibrariesRoute = AppAdminLibrariesRouteImport.update({
-  id: '/libraries',
-  path: '/libraries',
-  getParentRoute: () => AppAdminRoute,
-} as any)
-const AppJobsIndexRoute = AppJobsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppJobsRoute,
-} as any)
-const AppJobsHostnameRoute = AppJobsHostnameRouteImport.update({
-  id: '/$hostname',
-  path: '/$hostname',
-  getParentRoute: () => AppJobsRoute,
-} as any)
-const AppAdminLibrariesIndexRoute = AppAdminLibrariesIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppAdminLibrariesRoute,
-} as any)
-const AppAdminLibrariesPublishRoute =
-  AppAdminLibrariesPublishRouteImport.update({
-    id: '/publish',
-    path: '/publish',
-    getParentRoute: () => AppAdminLibrariesRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/': typeof AppIndexRoute
-  '/login': typeof LoginRoute
-  '/admin': typeof AppAdminRouteWithChildren
   '/agents': typeof AppAgentsRoute
   '/browser': typeof AppBrowserRoute
-  '/cloud': typeof AppCloudRoute
   '/documents': typeof AppDocumentsRoute
-  '/jobs': typeof AppJobsRouteWithChildren
   '/library': typeof AppLibraryRoute
-  '/logs': typeof AppLogsRoute
   '/settings': typeof AppSettingsRoute
   '/sources': typeof AppSourcesRoute
-  '/admin/audit-logs': typeof AppAdminAuditLogsRoute
-  '/admin/browser': typeof AppAdminBrowserRoute
-  '/admin/catalog': typeof AppAdminCatalogRoute
-  '/admin/hostname-policies': typeof AppAdminHostnamePoliciesRoute
-  '/admin/jobs': typeof AppAdminJobsRoute
-  '/admin/libraries': typeof AppAdminLibrariesRouteWithChildren
-  '/jobs/$hostname': typeof AppJobsHostnameRoute
-  '/admin/': typeof AppAdminIndexRoute
-  '/jobs/': typeof AppJobsIndexRoute
-  '/admin/libraries/publish': typeof AppAdminLibrariesPublishRoute
-  '/admin/libraries/': typeof AppAdminLibrariesIndexRoute
 }
 export interface FileRoutesByTo {
   '/$': typeof SplatRoute
-  '/login': typeof LoginRoute
   '/agents': typeof AppAgentsRoute
   '/browser': typeof AppBrowserRoute
-  '/cloud': typeof AppCloudRoute
   '/documents': typeof AppDocumentsRoute
   '/library': typeof AppLibraryRoute
-  '/logs': typeof AppLogsRoute
   '/settings': typeof AppSettingsRoute
   '/sources': typeof AppSourcesRoute
   '/': typeof AppIndexRoute
-  '/admin/audit-logs': typeof AppAdminAuditLogsRoute
-  '/admin/browser': typeof AppAdminBrowserRoute
-  '/admin/catalog': typeof AppAdminCatalogRoute
-  '/admin/hostname-policies': typeof AppAdminHostnamePoliciesRoute
-  '/admin/jobs': typeof AppAdminJobsRoute
-  '/jobs/$hostname': typeof AppJobsHostnameRoute
-  '/admin': typeof AppAdminIndexRoute
-  '/jobs': typeof AppJobsIndexRoute
-  '/admin/libraries/publish': typeof AppAdminLibrariesPublishRoute
-  '/admin/libraries': typeof AppAdminLibrariesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/$': typeof SplatRoute
   '/_app': typeof AppRouteWithChildren
-  '/login': typeof LoginRoute
-  '/_app/admin': typeof AppAdminRouteWithChildren
   '/_app/agents': typeof AppAgentsRoute
   '/_app/browser': typeof AppBrowserRoute
-  '/_app/cloud': typeof AppCloudRoute
   '/_app/documents': typeof AppDocumentsRoute
-  '/_app/jobs': typeof AppJobsRouteWithChildren
   '/_app/library': typeof AppLibraryRoute
-  '/_app/logs': typeof AppLogsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/sources': typeof AppSourcesRoute
   '/_app/': typeof AppIndexRoute
-  '/_app/admin/audit-logs': typeof AppAdminAuditLogsRoute
-  '/_app/admin/browser': typeof AppAdminBrowserRoute
-  '/_app/admin/catalog': typeof AppAdminCatalogRoute
-  '/_app/admin/hostname-policies': typeof AppAdminHostnamePoliciesRoute
-  '/_app/admin/jobs': typeof AppAdminJobsRoute
-  '/_app/admin/libraries': typeof AppAdminLibrariesRouteWithChildren
-  '/_app/jobs/$hostname': typeof AppJobsHostnameRoute
-  '/_app/admin/': typeof AppAdminIndexRoute
-  '/_app/jobs/': typeof AppJobsIndexRoute
-  '/_app/admin/libraries/publish': typeof AppAdminLibrariesPublishRoute
-  '/_app/admin/libraries/': typeof AppAdminLibrariesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/$'
     | '/'
-    | '/login'
-    | '/admin'
     | '/agents'
     | '/browser'
-    | '/cloud'
     | '/documents'
-    | '/jobs'
     | '/library'
-    | '/logs'
     | '/settings'
     | '/sources'
-    | '/admin/audit-logs'
-    | '/admin/browser'
-    | '/admin/catalog'
-    | '/admin/hostname-policies'
-    | '/admin/jobs'
-    | '/admin/libraries'
-    | '/jobs/$hostname'
-    | '/admin/'
-    | '/jobs/'
-    | '/admin/libraries/publish'
-    | '/admin/libraries/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/$'
-    | '/login'
     | '/agents'
     | '/browser'
-    | '/cloud'
     | '/documents'
     | '/library'
-    | '/logs'
     | '/settings'
     | '/sources'
     | '/'
-    | '/admin/audit-logs'
-    | '/admin/browser'
-    | '/admin/catalog'
-    | '/admin/hostname-policies'
-    | '/admin/jobs'
-    | '/jobs/$hostname'
-    | '/admin'
-    | '/jobs'
-    | '/admin/libraries/publish'
-    | '/admin/libraries'
   id:
     | '__root__'
     | '/$'
     | '/_app'
-    | '/login'
-    | '/_app/admin'
     | '/_app/agents'
     | '/_app/browser'
-    | '/_app/cloud'
     | '/_app/documents'
-    | '/_app/jobs'
     | '/_app/library'
-    | '/_app/logs'
     | '/_app/settings'
     | '/_app/sources'
     | '/_app/'
-    | '/_app/admin/audit-logs'
-    | '/_app/admin/browser'
-    | '/_app/admin/catalog'
-    | '/_app/admin/hostname-policies'
-    | '/_app/admin/jobs'
-    | '/_app/admin/libraries'
-    | '/_app/jobs/$hostname'
-    | '/_app/admin/'
-    | '/_app/jobs/'
-    | '/_app/admin/libraries/publish'
-    | '/_app/admin/libraries/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   AppRoute: typeof AppRouteWithChildren
-  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -340,25 +151,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_app/': {
       id: '/_app/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/admin': {
-      id: '/_app/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AppAdminRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/agents': {
@@ -375,13 +172,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBrowserRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/cloud': {
-      id: '/_app/cloud'
-      path: '/cloud'
-      fullPath: '/cloud'
-      preLoaderRoute: typeof AppCloudRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/documents': {
       id: '/_app/documents'
       path: '/documents'
@@ -389,25 +179,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDocumentsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/jobs': {
-      id: '/_app/jobs'
-      path: '/jobs'
-      fullPath: '/jobs'
-      preLoaderRoute: typeof AppJobsRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/library': {
       id: '/_app/library'
       path: '/library'
       fullPath: '/library'
       preLoaderRoute: typeof AppLibraryRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/logs': {
-      id: '/_app/logs'
-      path: '/logs'
-      fullPath: '/logs'
-      preLoaderRoute: typeof AppLogsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/settings': {
@@ -424,159 +200,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSourcesRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/admin/': {
-      id: '/_app/admin/'
-      path: '/'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AppAdminIndexRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/audit-logs': {
-      id: '/_app/admin/audit-logs'
-      path: '/audit-logs'
-      fullPath: '/admin/audit-logs'
-      preLoaderRoute: typeof AppAdminAuditLogsRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/browser': {
-      id: '/_app/admin/browser'
-      path: '/browser'
-      fullPath: '/admin/browser'
-      preLoaderRoute: typeof AppAdminBrowserRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/catalog': {
-      id: '/_app/admin/catalog'
-      path: '/catalog'
-      fullPath: '/admin/catalog'
-      preLoaderRoute: typeof AppAdminCatalogRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/hostname-policies': {
-      id: '/_app/admin/hostname-policies'
-      path: '/hostname-policies'
-      fullPath: '/admin/hostname-policies'
-      preLoaderRoute: typeof AppAdminHostnamePoliciesRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/jobs': {
-      id: '/_app/admin/jobs'
-      path: '/jobs'
-      fullPath: '/admin/jobs'
-      preLoaderRoute: typeof AppAdminJobsRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/admin/libraries': {
-      id: '/_app/admin/libraries'
-      path: '/libraries'
-      fullPath: '/admin/libraries'
-      preLoaderRoute: typeof AppAdminLibrariesRouteImport
-      parentRoute: typeof AppAdminRoute
-    }
-    '/_app/jobs/': {
-      id: '/_app/jobs/'
-      path: '/'
-      fullPath: '/jobs/'
-      preLoaderRoute: typeof AppJobsIndexRouteImport
-      parentRoute: typeof AppJobsRoute
-    }
-    '/_app/jobs/$hostname': {
-      id: '/_app/jobs/$hostname'
-      path: '/$hostname'
-      fullPath: '/jobs/$hostname'
-      preLoaderRoute: typeof AppJobsHostnameRouteImport
-      parentRoute: typeof AppJobsRoute
-    }
-    '/_app/admin/libraries/': {
-      id: '/_app/admin/libraries/'
-      path: '/'
-      fullPath: '/admin/libraries/'
-      preLoaderRoute: typeof AppAdminLibrariesIndexRouteImport
-      parentRoute: typeof AppAdminLibrariesRoute
-    }
-    '/_app/admin/libraries/publish': {
-      id: '/_app/admin/libraries/publish'
-      path: '/publish'
-      fullPath: '/admin/libraries/publish'
-      preLoaderRoute: typeof AppAdminLibrariesPublishRouteImport
-      parentRoute: typeof AppAdminLibrariesRoute
-    }
   }
 }
 
-interface AppAdminLibrariesRouteChildren {
-  AppAdminLibrariesPublishRoute: typeof AppAdminLibrariesPublishRoute
-  AppAdminLibrariesIndexRoute: typeof AppAdminLibrariesIndexRoute
-}
-
-const AppAdminLibrariesRouteChildren: AppAdminLibrariesRouteChildren = {
-  AppAdminLibrariesPublishRoute: AppAdminLibrariesPublishRoute,
-  AppAdminLibrariesIndexRoute: AppAdminLibrariesIndexRoute,
-}
-
-const AppAdminLibrariesRouteWithChildren =
-  AppAdminLibrariesRoute._addFileChildren(AppAdminLibrariesRouteChildren)
-
-interface AppAdminRouteChildren {
-  AppAdminAuditLogsRoute: typeof AppAdminAuditLogsRoute
-  AppAdminBrowserRoute: typeof AppAdminBrowserRoute
-  AppAdminCatalogRoute: typeof AppAdminCatalogRoute
-  AppAdminHostnamePoliciesRoute: typeof AppAdminHostnamePoliciesRoute
-  AppAdminJobsRoute: typeof AppAdminJobsRoute
-  AppAdminLibrariesRoute: typeof AppAdminLibrariesRouteWithChildren
-  AppAdminIndexRoute: typeof AppAdminIndexRoute
-}
-
-const AppAdminRouteChildren: AppAdminRouteChildren = {
-  AppAdminAuditLogsRoute: AppAdminAuditLogsRoute,
-  AppAdminBrowserRoute: AppAdminBrowserRoute,
-  AppAdminCatalogRoute: AppAdminCatalogRoute,
-  AppAdminHostnamePoliciesRoute: AppAdminHostnamePoliciesRoute,
-  AppAdminJobsRoute: AppAdminJobsRoute,
-  AppAdminLibrariesRoute: AppAdminLibrariesRouteWithChildren,
-  AppAdminIndexRoute: AppAdminIndexRoute,
-}
-
-const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
-  AppAdminRouteChildren,
-)
-
-interface AppJobsRouteChildren {
-  AppJobsHostnameRoute: typeof AppJobsHostnameRoute
-  AppJobsIndexRoute: typeof AppJobsIndexRoute
-}
-
-const AppJobsRouteChildren: AppJobsRouteChildren = {
-  AppJobsHostnameRoute: AppJobsHostnameRoute,
-  AppJobsIndexRoute: AppJobsIndexRoute,
-}
-
-const AppJobsRouteWithChildren =
-  AppJobsRoute._addFileChildren(AppJobsRouteChildren)
-
 interface AppRouteChildren {
-  AppAdminRoute: typeof AppAdminRouteWithChildren
   AppAgentsRoute: typeof AppAgentsRoute
   AppBrowserRoute: typeof AppBrowserRoute
-  AppCloudRoute: typeof AppCloudRoute
   AppDocumentsRoute: typeof AppDocumentsRoute
-  AppJobsRoute: typeof AppJobsRouteWithChildren
   AppLibraryRoute: typeof AppLibraryRoute
-  AppLogsRoute: typeof AppLogsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSourcesRoute: typeof AppSourcesRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAdminRoute: AppAdminRouteWithChildren,
   AppAgentsRoute: AppAgentsRoute,
   AppBrowserRoute: AppBrowserRoute,
-  AppCloudRoute: AppCloudRoute,
   AppDocumentsRoute: AppDocumentsRoute,
-  AppJobsRoute: AppJobsRouteWithChildren,
   AppLibraryRoute: AppLibraryRoute,
-  AppLogsRoute: AppLogsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSourcesRoute: AppSourcesRoute,
   AppIndexRoute: AppIndexRoute,
@@ -587,7 +228,6 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   AppRoute: AppRouteWithChildren,
-  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

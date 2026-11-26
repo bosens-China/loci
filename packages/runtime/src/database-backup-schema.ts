@@ -39,6 +39,8 @@ const sourceSchema = z
     // 兼容统一名称上限生效前导出的旧数据。
     name: z.string().min(DOCUMENT_SOURCE_LIMITS.nameLength.min),
     first_url: z.string().url(),
+    category: z.string().nullable().optional(),
+    version: z.string().nullable().optional(),
     hostname: z.string().min(1),
     fetch_mode: z.enum(['auto', 'http', 'browser']),
     page_limit: pageLimitSchema,
@@ -81,6 +83,7 @@ const documentSchema = z
     markdown: z.string(),
     language: z.string(),
     fetch_mode: z.enum(['http', 'browser']),
+    manual: z.number().int().min(0).max(1).optional(),
     relative_path: z.string().nullable().optional()
   })
   .strict()
@@ -97,6 +100,43 @@ const explicitPageTargetSchema = z
   })
   .strict()
 
+const count = z.number().int().nonnegative()
+const progressSchema = z
+  .object({
+    kind: z.enum(['sync', 'pages']),
+    currentUrl: z.string().nullable(),
+    cancelled: z.boolean(),
+    queued: count,
+    processed: count,
+    succeeded: count,
+    failed: count,
+    limitReached: z.boolean(),
+    node: z.object({
+      id: z.string(),
+      url: z.string(),
+      title: z.string(),
+      status: z.enum(['queued', 'running', 'success', 'failed']),
+      parentId: z.string().optional()
+    }),
+    failures: z.array(
+      z.object({
+        url: z.string(),
+        reason: z.enum([
+          'not_found',
+          'out_of_scope_redirect',
+          'http_error',
+          'request_error',
+          'git_lfs_unsupported'
+        ]),
+        message: z.string(),
+        retryable: z.boolean(),
+        statusCode: z.number().optional(),
+        redirectUrl: z.string().optional()
+      })
+    )
+  })
+  .partial()
+
 const crawlRunSchema = z
   .object({
     id: z.string().min(1),
@@ -107,7 +147,18 @@ const crawlRunSchema = z
     discovered_count: z.number().int().nonnegative(),
     success_count: z.number().int().nonnegative(),
     failure_count: z.number().int().nonnegative(),
-    error_message: z.string().nullable()
+    error_message: z.string().nullable(),
+    progress_json: z
+      .string()
+      .refine((value) => {
+        try {
+          return progressSchema.safeParse(JSON.parse(value)).success
+        } catch {
+          return false
+        }
+      }, '抓取进度无效')
+      .nullable()
+      .optional()
   })
   .strict()
 
@@ -197,9 +248,19 @@ export const lociBackupSchema = z
   .object({
     format: z.literal('loci-backup'),
     version: z.literal(1),
+    scope: z.enum(['all', 'filtered']).default('all'),
     exportedAt: z.string().datetime(),
     data: z
       .object({
+        categories: z
+          .array(
+            z.strictObject({
+              name: z.string().trim().min(1),
+              sort_order: z.number().int(),
+              created_at: z.string().datetime()
+            })
+          )
+          .optional(),
         sources: z.array(sourceSchema),
         documents: z.array(documentSchema),
         explicitPageTargets: z.array(explicitPageTargetSchema).optional(),
@@ -207,12 +268,26 @@ export const lociBackupSchema = z
         crawlFailures: z.array(crawlFailureSchema).optional(),
         hostnameCrawlPolicies: z.array(hostnameCrawlPolicySchema).optional(),
         operationLogs: z.array(operationLogSchema).optional(),
-        settings: settingsSchema
+        settings: settingsSchema.optional()
       })
       .strict()
   })
   .strict()
-  .superRefine(({ data }, context) => {
+  .superRefine(({ data, scope }, context) => {
+    if (scope === 'all' && !data.settings) {
+      context.addIssue({
+        code: 'custom',
+        path: ['data', 'settings'],
+        message: '完整备份缺少全局设置'
+      })
+    }
+    if (scope === 'filtered' && (data.settings || data.hostnameCrawlPolicies)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['data'],
+        message: '范围备份不能包含全局设置或域名策略'
+      })
+    }
     const sourceIds = new Set(data.sources.map((source) => source.id))
     const sourceTypes = new Map(
       data.sources.map((source) => [source.id, source.source_type ?? 'local'] as const)

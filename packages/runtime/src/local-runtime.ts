@@ -1,11 +1,23 @@
+import { createDocumentQuery } from './document-query.js'
+import { randomUUID } from 'node:crypto'
+import { clearWithMaintenanceLock, importWithMaintenanceLock } from './data-maintenance.js'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import type { CrawlProgress } from '@loci/core'
-import type { CrawlRunState, DocumentSource } from '@loci/shared'
-import { CloudAdminClient } from './cloud-admin-client.js'
+import {
+  DOCUMENT_SOURCE_DEFAULTS,
+  DEFAULT_LIBRARY_VERSION,
+  DEFAULT_LIBRARY_CATEGORY,
+  deriveSourceName,
+  getSourcePatchContentRemovalRisk,
+  parseGithubRepositoryUrl,
+  type CrawlProgress,
+  type ForegroundCrawlState,
+  type DocumentSource
+} from '@loci/shared'
+import { createDocumentMutation } from './document-mutation.js'
+import { createLibraryCrawlStatuses } from './library-crawl-status.js'
 import { AgentIntegrationService } from './agent-integration.js'
-import { CloudLibraryService, cloudLibraryLockKey } from './cloud-library-service.js'
-import { CrawlTaskCoordinator } from './crawl-task-coordinator.js'
+import { CrawlTaskCoordinator, crawlRequestKey } from './crawl-task-coordinator.js'
 import { createDatabase, databaseNeedsMigration, type LociDatabase } from './database.js'
 import { crawlRunState } from './external-crawl.js'
 import { runExplicitPageFetch } from './explicit-page-service.js'
@@ -19,11 +31,16 @@ import {
   hasActiveCrawlLocks,
   readRuntimeLock
 } from './runtime-lock.js'
-import { createLocalSourceCrawlRunner } from './local-source-crawl-runner.js'
-import { createUrlReviewService } from './url-review-service.js'
+import { createLocalSourceCrawlRunner, type LocalCrawlState } from './local-source-crawl-runner.js'
 import type { LocalRuntime, LocalRuntimeOptions } from './local-runtime-types.js'
 
 export type { LocalRuntime, LocalRuntimeOptions } from './local-runtime-types.js'
+
+export class SourceContentRemovalRequired extends Error {
+  constructor(libraryName: string) {
+    super(`更改「${libraryName}」的收录范围或排除规则可能清理已有文档和指定页面`)
+  }
+}
 
 /** 所有本机入口共用的应用运行时，入口层只负责交互和 transport。 */
 export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRuntime {
@@ -38,15 +55,7 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     : undefined
   let database: LociDatabase
   try {
-    const serverUrlOverride = process.env.LOCI_SERVER_URL?.trim()
-    database = createDatabase(
-      databasePath,
-      serverUrlOverride
-        ? { serverUrl: serverUrlOverride, overrideServerUrl: true }
-        : options.defaultServerUrl
-          ? { serverUrl: options.defaultServerUrl }
-          : {}
-    )
+    database = createDatabase(databasePath)
   } finally {
     migrationLock?.release()
   }
@@ -75,7 +84,8 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
         dataDir
       })
     : undefined
-  const states = new Map<string, CrawlRunState>()
+  const activePages = new Map<string, ForegroundCrawlState & { runId: string }>()
+  const states = new Map<string, LocalCrawlState>()
   const crawlTasks = new CrawlTaskCoordinator()
   const assertWritable = (): void => {
     const maintenance = readRuntimeLock(dataDir, 'maintenance')
@@ -90,127 +100,195 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     }
   }
 
-  const runOnce = createLocalSourceCrawlRunner({ dataDir, owner, database, browser, states })
+  function writeMetadata<T>(action: () => T): T {
+    // 同一行的幂等约束落在 SQLite，独立写入锁只负责与备份恢复互斥。
+    const lock = acquireDatabaseWriteRuntimeLock(dataDir, `write-${randomUUID()}`, owner)
+    try {
+      return action()
+    } finally {
+      lock.release()
+    }
+  }
+  async function maintenance<T>(action: () => Promise<T>): Promise<T> {
+    const lock = acquireMaintenanceRuntimeLock(dataDir, `${owner} 数据维护`)
+    try {
+      return await action()
+    } finally {
+      lock.release()
+    }
+  }
+  function applySourceConfig(
+    source: DocumentSource,
+    patch: Parameters<LocalRuntime['patchSource']>[1],
+    allowContentRemoval: boolean,
+    save = (input: Parameters<LociDatabase['updateSource']>[1]) =>
+      database.updateSource(source.id, input)
+  ) {
+    if (patch.category !== undefined)
+      patch = { ...patch, category: patch.category?.trim() || DEFAULT_LIBRARY_CATEGORY }
+    if (patch.version !== undefined)
+      patch = { ...patch, version: patch.version?.trim() || DEFAULT_LIBRARY_VERSION }
+    if (
+      !Object.entries(patch).some(([key, value]) => source[key as keyof DocumentSource] !== value)
+    )
+      return source
+    return mutateSource(source.id, '编辑文档库', () => {
+      const current = database.getSource(source.id)
+      // 持有库锁后再判断，防止其他进程在预览与保存之间改变可裁剪范围。
+      if (!allowContentRemoval && getSourcePatchContentRemovalRisk(current, patch))
+        throw new SourceContentRemovalRequired(current.name)
+      return save({ ...current, ...patch })
+    })
+  }
+
+  const upsertSource: LocalRuntime['createSource'] = (
+    { url, kind, ...patch },
+    allowContentRemoval = true
+  ) =>
+    writeMetadata(() =>
+      database.upsertSource(
+        {
+          ...DOCUMENT_SOURCE_DEFAULTS,
+          url,
+          kind,
+          name: parseGithubRepositoryUrl(url)?.repo ?? deriveSourceName(url),
+          ...patch
+        },
+        (source, save) => applySourceConfig(source, patch, allowContentRemoval, save)
+      )
+    )
+
+  const runOnce = createLocalSourceCrawlRunner({
+    dataDir,
+    owner,
+    database,
+    browser,
+    states,
+    detached: options.detachedCrawl
+  })
+  const shutdown = new AbortController()
+  const pending = new Set<Promise<unknown>>()
+  let closing: Promise<void> | undefined
+  function track<T>(operation: Promise<T>): Promise<T> {
+    pending.add(operation)
+    const release = () => {
+      pending.delete(operation)
+    }
+    void operation.then(release, release)
+    return operation
+  }
+  const importBackupArchive: LocalRuntime['importBackupArchive'] = (input, options) =>
+    track(
+      importWithMaintenanceLock(database, dataDir, owner, input, options, shutdown.signal).then(
+        (summary) => {
+          states.clear()
+          return summary
+        }
+      )
+    )
+
+  const lifetime = (signal?: AbortSignal) =>
+    signal ? AbortSignal.any([signal, shutdown.signal]) : shutdown.signal
 
   const run = (
     sourceId: string,
     onProgress?: (progress: CrawlProgress) => void,
     onBrowserMissing?: BrowserInstallPrompt,
     signal?: AbortSignal,
-    localJob?: { id: string; owner: string }
+    additionalUrls?: readonly string[]
   ): Promise<CrawlProgress> =>
-    crawlTasks.run(
-      sourceId,
-      (reportProgress) => runOnce(sourceId, reportProgress, onBrowserMissing, signal, localJob),
-      onProgress
+    track(
+      crawlTasks.run(
+        sourceId,
+        (reportProgress) =>
+          runOnce(sourceId, reportProgress, onBrowserMissing, lifetime(signal), additionalUrls),
+        onProgress,
+        lifetime(signal),
+        crawlRequestKey('sync', additionalUrls)
+      )
     )
 
   return {
     dataDir,
     cacheDir,
     database,
-    cloud: new CloudLibraryService(database, fetch, dataDir),
     browserManager,
-    admin: new CloudAdminClient(fetch, ({ method, path }) => {
-      database.recordOperationLog({
-        category: 'cloud',
-        action: `cloud.${method.toLowerCase()}`,
-        level: path.endsWith('/cancel') || method === 'DELETE' ? 'warning' : 'info',
-        resourceType: 'cloud_api',
-        resourceId: path,
-        message: `云端管理操作已完成：${method} ${path}`,
-        details: { method, path }
-      })
-    }),
+    ...createDocumentQuery(database, dataDir, owner),
+    ...createDocumentMutation(database, mutateSource),
+    ...createLibraryCrawlStatuses(database, dataDir, (id) => activePages.get(id) ?? states.get(id)),
     agentIntegration,
-    urlReviews: createUrlReviewService({ database, browser, dataDir, owner }),
     crawlSource: run,
     fetchPages: (sourceId, urls, onBrowserMissing, signal, onProgress) => {
       assertWritable()
-      return runExplicitPageFetch(
-        { database, browser, dataDir, owner },
-        sourceId,
-        urls,
-        onBrowserMissing,
-        signal,
-        onProgress
+      return track(
+        runExplicitPageFetch(
+          { database, browser, dataDir, owner, activePages, detached: options.detachedCrawl },
+          sourceId,
+          urls,
+          onBrowserMissing,
+          lifetime(signal),
+          onProgress
+        )
       )
     },
-    createSource: (input) => {
-      assertWritable()
-      return database.createSource(input)
-    },
-    deleteSource: (sourceId) => {
-      const source = requireSource(database, sourceId)
-      if (!source.cloud) {
-        mutateSource(sourceId, '删除文档源', () => database.deleteSource(sourceId))
-        return
-      }
-      const lock = acquireDatabaseWriteRuntimeLock(
-        dataDir,
-        cloudLibraryLockKey(source.cloud.serverUrl, source.cloud.libraryId),
-        `${owner} 删除云文档副本`
-      )
-      try {
-        database.deleteSource(sourceId)
-      } finally {
-        lock.release()
-      }
-    },
-    updateSourcePreservingSchedule: (source, input) =>
-      mutateSource(source.id, '编辑文档源', () => {
-        assertNoActiveUrlReview(database, source.id)
-        const current = requireSource(database, source.id)
-        return database.updateSource(source.id, { ...input, schedule: current.schedule })
-      }),
-    updateSourceSchedule: (source, schedule) =>
-      mutateSource(source.id, '修改定时计划', () => {
-        assertNoActiveUrlReview(database, source.id)
-        const current = requireSource(database, source.id)
-        return database.updateSource(source.id, {
-          name: current.name,
-          url: current.url,
-          mode: current.mode,
-          pageLimit: current.pageLimit,
-          scopePath: current.scopePath,
-          excludePathPattern: current.excludePathPattern ?? null,
-          schedule,
-          httpConcurrency: current.httpConcurrency,
-          browserConcurrency: current.browserConcurrency,
-          githubArchiveLimitMb: current.githubArchiveLimitMb,
-          githubMarkdownLimitMb: current.githubMarkdownLimitMb
-        })
-      }),
+    createSource: upsertSource,
+    upsertSource,
+    patchSource: (id, patch, allowContentRemoval = true) =>
+      applySourceConfig(database.getSource(id), patch, allowContentRemoval),
+    listCategories: database.listCategories,
+    createCategory: (name) => writeMetadata(() => database.createCategory(name)),
+    deleteCategory: (name) => writeMetadata(() => database.deleteCategory(name)),
+    patchAppSettings: (partial) => writeMetadata(() => database.patchAppSettings(partial)),
+    patchHostnamePolicy: (hostname, partial) =>
+      writeMetadata(() => database.patchHostnamePolicy(hostname, partial)),
+    saveSettings: (input) => writeMetadata(() => database.saveSettings(input)),
+    saveHostnameCrawlPolicy: (input) =>
+      writeMetadata(() => database.saveHostnameCrawlPolicy(input)),
+    deleteHostnameCrawlPolicy: (hostname) =>
+      writeMetadata(() => database.deleteHostnameCrawlPolicy(hostname)),
+    exportBackupArchive: (options) =>
+      track(maintenance(() => database.exportBackupArchive(options))),
+    importBackupArchive,
+    getClearDataCounts: database.getClearDataCounts,
+    clearData: (scope, signal) =>
+      track(
+        clearWithMaintenanceLock(database, dataDir, owner, scope, lifetime(signal)).then(
+          (summary) => {
+            states.clear()
+            activePages.clear()
+            return summary
+          }
+        )
+      ),
+    updateSource: (id, input) =>
+      mutateSource(id, '编辑文档库', () => database.updateSource(id, input)),
     isCrawling: (sourceId) =>
       Boolean(
         crawlTasks.isRunning(sourceId) ||
         states.get(sourceId)?.running ||
-        database.getActiveUrlReview(sourceId) ||
         readRuntimeLock(dataDir, `crawl-${sourceId}`)
       ),
     getCrawlState: (sourceId) => {
       const local = states.get(sourceId)
-      if (local) return local
+      if (local?.running) return local
+      if (!readRuntimeLock(dataDir, `crawl-${sourceId}`)) return local
       const active = database.getActiveCrawlRun(sourceId)
-      return active ? crawlRunState(active) : undefined
+      return active ? crawlRunState(active) : local
     },
     resetCrawlStates: () => states.clear(),
     assertWritable,
-    close: async () => {
-      await browser.close()
-      database.close()
+    close: () => {
+      closing ??= (async () => {
+        shutdown.abort()
+        await Promise.allSettled(pending)
+        try {
+          await browserManager.waitForCurrent()
+          await browser.close()
+        } finally {
+          database.close()
+        }
+      })()
+      return closing
     }
-  }
-}
-
-function requireSource(database: LociDatabase, sourceId: string): DocumentSource {
-  const source = database.listSources().find((item) => item.id === sourceId)
-  if (!source) throw new Error('文档源不存在')
-  return source
-}
-
-function assertNoActiveUrlReview(database: LociDatabase, sourceId: string): void {
-  if (database.getActiveUrlReview(sourceId)) {
-    throw new Error('文档库正在等待 Agent URL 审查，完成或取消后才能修改')
   }
 }

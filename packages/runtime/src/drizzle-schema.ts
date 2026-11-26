@@ -1,12 +1,13 @@
 import type {
+  BackupImportSummary,
+  ClearDataSummary,
   AppSettings,
   ConcreteSkillAgent,
   CrawlFailure,
   ResolvedSourceDiscovery,
-  ResourceRevisionKey,
-  OperationLog,
   SkillScope
 } from '@loci/shared'
+import { DEFAULT_LIBRARY_CATEGORY, DEFAULT_LIBRARY_VERSION } from '@loci/shared'
 import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 /**
@@ -15,9 +16,20 @@ import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
  * 数据库初始化和迁移仍由 database-schema.ts 与 user_version 体系负责；
  * FTS 虚拟表等 SQLite 特有结构不在这里重复表达。
  */
+export const categories = sqliteTable('categories', {
+  name: text('name').primaryKey(),
+  sortOrder: integer('sort_order').notNull().default(100),
+  createdAt: text('created_at').notNull()
+})
+
 export const documentSources = sqliteTable('document_sources', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  category: text('category')
+    .notNull()
+    .default(DEFAULT_LIBRARY_CATEGORY)
+    .references(() => categories.name),
+  version: text('version').notNull().default(DEFAULT_LIBRARY_VERSION),
   firstUrl: text('first_url').notNull(),
   hostname: text('hostname').notNull(),
   fetchMode: text('fetch_mode').$type<'auto' | 'http' | 'browser'>().notNull(),
@@ -37,7 +49,7 @@ export const documentSources = sqliteTable('document_sources', {
   githubBlockedRevision: text('github_blocked_revision'),
   githubBlockedLimitKind: text('github_blocked_limit_kind').$type<'archive' | 'markdown'>(),
   githubBlockedLimitBytes: integer('github_blocked_limit_bytes'),
-  discoveryMode: text('discovery_mode').$type<'site' | 'agent_review'>().notNull(),
+  discoveryMode: text('discovery_mode').$type<'site' | 'agent_review'>().notNull().default('site'),
   resolvedDiscovery: text('resolved_discovery').$type<ResolvedSourceDiscovery>(),
   reviewGoal: text('review_goal'),
   sourceType: text('source_type').$type<'local' | 'cloud'>().notNull(),
@@ -60,8 +72,22 @@ export const documents = sqliteTable('documents', {
   markdown: text('markdown').notNull(),
   language: text('language').notNull(),
   fetchMode: text('fetch_mode').$type<'http' | 'browser'>().notNull(),
+  manual: integer('manual').notNull().default(0),
   relativePath: text('relative_path')
 })
+
+export const sectionEditReceipts = sqliteTable(
+  'section_edit_receipts',
+  {
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    operationId: text('operation_id').notNull(),
+    requestHash: text('request_hash').notNull(),
+    resultHash: text('result_hash').notNull()
+  },
+  (table) => [primaryKey({ columns: [table.documentId, table.operationId] })]
+)
 
 export const crawlRuns = sqliteTable('crawl_runs', {
   id: text('id').primaryKey(),
@@ -116,8 +142,6 @@ export const appSettings = sqliteTable('app_settings', {
   maxRetries: integer('max_retries').notNull(),
   batchIntervalSeconds: integer('batch_interval_seconds').notNull(),
   batchIntervalMaxSeconds: integer('batch_interval_max_seconds').notNull(),
-  serverUrl: text('server_url').notNull(),
-  serverUrlCustomized: integer('server_url_customized').notNull(),
   githubArchiveLimitMb: integer('github_archive_limit_mb').notNull(),
   githubMarkdownLimitMb: integer('github_markdown_limit_mb').notNull()
 })
@@ -131,17 +155,16 @@ export const hostnameCrawlPolicies = sqliteTable('hostname_crawl_policies', {
   updatedAt: text('updated_at').notNull()
 })
 
-export const operationLogs = sqliteTable('operation_logs', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  category: text('category').$type<OperationLog['category']>().notNull(),
-  action: text('action').notNull(),
-  level: text('level').$type<OperationLog['level']>().notNull(),
-  resourceType: text('resource_type'),
-  resourceId: text('resource_id'),
-  hostname: text('hostname'),
-  message: text('message').notNull(),
-  detailsJson: text('details_json'),
-  createdAt: text('created_at').notNull()
+export const backupImportReceipts = sqliteTable('backup_import_receipts', {
+  operationId: text('operation_id').primaryKey(),
+  summary: text('summary', { mode: 'json' }).$type<BackupImportSummary>().notNull(),
+  createdAt: integer('created_at').notNull()
+})
+
+export const clearDataReceipts = sqliteTable('clear_data_receipts', {
+  operationId: text('operation_id').primaryKey(),
+  summary: text('summary', { mode: 'json' }).$type<ClearDataSummary>().notNull(),
+  createdAt: integer('created_at').notNull()
 })
 
 export const documentMoveOperations = sqliteTable('document_move_operations', {
@@ -175,9 +198,4 @@ export const skillInstallations = sqliteTable('skill_installations', {
   contentDigest: text('content_digest').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull()
-})
-
-export const resourceRevisions = sqliteTable('resource_revisions', {
-  resource: text('resource').$type<ResourceRevisionKey>().primaryKey(),
-  revision: integer('revision').notNull()
 })

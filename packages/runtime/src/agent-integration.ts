@@ -1,21 +1,16 @@
 import { homedir } from 'node:os'
 import {
-  getMcpClientDefinition,
-  isMcpClient,
+  getAgentClientDefinition,
+  isAgentClient,
   isAgentGlobalRulesClient,
-  listMcpClients,
+  listAgentClients,
   LOCI_AGENT_INSTRUCTIONS,
-  type McpClient,
+  type AgentClient,
   type AgentIntegrationActionResult,
   type AgentIntegrationComponent,
   type AgentIntegrationComponentState,
   type AgentIntegrationStatus
 } from '@loci/shared'
-import {
-  importAgentClient,
-  LOCI_CLI_STDIO_CONNECTION,
-  type ImportAgentClientOptions
-} from './agent-import.js'
 import {
   AGENT_INTEGRATION_LOCK_RETRY_INTERVAL_MS,
   AGENT_INTEGRATION_LOCK_WAIT_TIMEOUT_MS
@@ -25,22 +20,17 @@ import {
   installAgentGlobalRules,
   removeAgentGlobalRules
 } from './agent-global-rules.js'
-import {
-  inspectAgentMcpConfigFile,
-  removeAgentMcpConfigFile,
-  type AgentMcpConfigPathOptions
-} from './agent-mcp-config.js'
 import type { LociDatabase } from './database.js'
 import { RuntimeLockedError, acquireRuntimeLock, type RuntimeLock } from './runtime-lock.js'
 import { SkillManager } from './skill-manager.js'
 
-export interface AgentIntegrationOptions extends AgentMcpConfigPathOptions {
+export interface AgentIntegrationOptions {
   database: LociDatabase
   dataDir: string
   packageVersion: string
   skillResourceDir: string
+  homeDir?: string
   owner?: string
-  setupMcp?: (client: McpClient, options: ImportAgentClientOptions) => Promise<void>
 }
 
 interface ActiveOperation {
@@ -50,7 +40,7 @@ interface ActiveOperation {
 
 /** CLI 与本机 Web 共用的 Agent 全局接入编排。 */
 export class AgentIntegrationService {
-  private readonly active = new Map<McpClient, ActiveOperation>()
+  private readonly active = new Map<AgentClient, ActiveOperation>()
   private readonly skillManager: SkillManager
 
   constructor(private readonly options: AgentIntegrationOptions) {
@@ -64,46 +54,34 @@ export class AgentIntegrationService {
   }
 
   list(): AgentIntegrationStatus[] {
-    return listMcpClients().map((client) => this.inspect(client.id))
+    return listAgentClients().map((client) => this.inspect(client.id))
   }
 
   inspect(client: unknown): AgentIntegrationStatus {
-    const selected = requireMcpClient(client)
-    const components = [
-      this.inspectMcp(selected),
-      this.inspectSkill(selected),
-      this.inspectRules(selected)
-    ]
+    const selected = requireAgentClient(client)
+    const components = [this.inspectSkill(selected), this.inspectRules(selected)]
     return {
       client: selected,
-      label: getMcpClientDefinition(selected).label,
+      label: getAgentClientDefinition(selected).label,
       overall: overallStatus(components),
       components
     }
   }
 
   setup(client: unknown): Promise<AgentIntegrationActionResult> {
-    return this.enqueue(requireMcpClient(client), 'setup', (selected) =>
+    return this.enqueue(requireAgentClient(client), 'setup', (selected) =>
       this.performSetup(selected)
     )
   }
 
   remove(client: unknown): Promise<AgentIntegrationActionResult> {
-    return this.enqueue(requireMcpClient(client), 'remove', (selected) =>
+    return this.enqueue(requireAgentClient(client), 'remove', (selected) =>
       this.performRemove(selected)
     )
   }
 
-  setupMcp(client: unknown): Promise<AgentIntegrationComponentState> {
-    const selected = requireMcpClient(client)
-    return this.withClientLock(selected, async () => {
-      await this.applyMcpSetup(selected)
-      return this.inspectMcp(selected)
-    })
-  }
-
   setupRules(client: unknown): Promise<AgentIntegrationComponentState> {
-    const selected = requireMcpClient(client)
+    const selected = requireAgentClient(client)
     return this.withClientLock(selected, async () => {
       await this.applyRulesSetup(selected)
       return this.inspectRules(selected)
@@ -111,9 +89,9 @@ export class AgentIntegrationService {
   }
 
   private enqueue(
-    client: McpClient,
+    client: AgentClient,
     action: 'setup' | 'remove',
-    operation: (client: McpClient) => Promise<AgentIntegrationActionResult>
+    operation: (client: AgentClient) => Promise<AgentIntegrationActionResult>
   ): Promise<AgentIntegrationActionResult> {
     const current = this.active.get(client)
     if (current?.action === action) return current.promise
@@ -132,10 +110,9 @@ export class AgentIntegrationService {
     return promise
   }
 
-  private async performSetup(client: McpClient): Promise<AgentIntegrationActionResult> {
+  private async performSetup(client: AgentClient): Promise<AgentIntegrationActionResult> {
     let changed = false
     const messages = new Map<AgentIntegrationComponent, string>()
-    changed = (await this.tryApply('mcp', messages, () => this.applyMcpSetup(client))) || changed
     changed =
       (await this.tryApply('skill', messages, () => this.applySkillSetup(client))) || changed
     changed =
@@ -143,42 +120,17 @@ export class AgentIntegrationService {
     return { action: 'setup', changed, status: this.withMessages(this.inspect(client), messages) }
   }
 
-  private async performRemove(client: McpClient): Promise<AgentIntegrationActionResult> {
+  private async performRemove(client: AgentClient): Promise<AgentIntegrationActionResult> {
     let changed = false
     const messages = new Map<AgentIntegrationComponent, string>()
     changed =
       (await this.tryApply('rules', messages, () => this.applyRulesRemove(client))) || changed
     changed =
       (await this.tryApply('skill', messages, () => this.applySkillRemove(client))) || changed
-    changed = (await this.tryApply('mcp', messages, () => this.applyMcpRemove(client))) || changed
     return { action: 'remove', changed, status: this.withMessages(this.inspect(client), messages) }
   }
 
-  private async applyMcpSetup(client: McpClient): Promise<boolean> {
-    const state = this.inspectMcp(client)
-    if (state.status === 'current') return false
-    if (state.status === 'conflict') throw new Error(state.message ?? 'MCP 配置冲突')
-    const setup =
-      this.options.setupMcp ??
-      (async (selected: McpClient, options: ImportAgentClientOptions) => {
-        await importAgentClient(selected, LOCI_CLI_STDIO_CONNECTION, options)
-      })
-    await setup(client, this.pathOptions('Agent 全局接入 MCP'))
-    return true
-  }
-
-  private async applyMcpRemove(client: McpClient): Promise<boolean> {
-    const state = this.inspectMcp(client)
-    if (state.status === 'missing') return false
-    if (state.status === 'conflict') throw new Error(state.message ?? 'MCP 配置冲突')
-    return removeAgentMcpConfigFile(
-      client,
-      LOCI_CLI_STDIO_CONNECTION,
-      this.pathOptions('Agent 全局移除 MCP')
-    ).changed
-  }
-
-  private async applySkillSetup(client: McpClient): Promise<boolean> {
+  private async applySkillSetup(client: AgentClient): Promise<boolean> {
     const state = this.inspectSkill(client)
     if (state.status === 'current') return false
     if (state.status === 'conflict') throw new Error(state.message ?? 'Skill 目录冲突')
@@ -186,7 +138,7 @@ export class AgentIntegrationService {
     return result?.action !== 'unchanged'
   }
 
-  private async applySkillRemove(client: McpClient): Promise<boolean> {
+  private async applySkillRemove(client: AgentClient): Promise<boolean> {
     const state = this.inspectSkill(client)
     if (state.status === 'missing') return false
     if (state.status === 'conflict') throw new Error(state.message ?? 'Skill 目录冲突')
@@ -194,7 +146,7 @@ export class AgentIntegrationService {
     return result?.action === 'removed'
   }
 
-  private applyRulesSetup(client: McpClient): boolean {
+  private applyRulesSetup(client: AgentClient): boolean {
     const state = this.inspectRules(client)
     if (state.status === 'manual' || state.status === 'current') return false
     if (state.status === 'conflict') throw new Error(state.message ?? '全局规则冲突')
@@ -202,7 +154,7 @@ export class AgentIntegrationService {
     return installAgentGlobalRules(client, this.rulesOptions('Agent 全局接入 Rules')).changed
   }
 
-  private applyRulesRemove(client: McpClient): boolean {
+  private applyRulesRemove(client: AgentClient): boolean {
     const state = this.inspectRules(client)
     if (state.status === 'manual' || state.status === 'missing') return false
     if (state.status === 'conflict') throw new Error(state.message ?? '全局规则冲突')
@@ -210,16 +162,7 @@ export class AgentIntegrationService {
     return removeAgentGlobalRules(client, this.rulesOptions('Agent 全局移除 Rules')).changed
   }
 
-  private inspectMcp(client: McpClient): AgentIntegrationComponentState {
-    const state = inspectAgentMcpConfigFile(
-      client,
-      LOCI_CLI_STDIO_CONNECTION,
-      this.pathOptions('Agent MCP 状态')
-    )
-    return { component: 'mcp', ...state }
-  }
-
-  private inspectSkill(client: McpClient): AgentIntegrationComponentState {
+  private inspectSkill(client: AgentClient): AgentIntegrationComponentState {
     try {
       const [state] = this.skillManager.preview({ agent: client })
       if (!state) throw new Error('无法解析 Skill 目标')
@@ -245,8 +188,8 @@ export class AgentIntegrationService {
     }
   }
 
-  private inspectRules(client: McpClient): AgentIntegrationComponentState {
-    const definition = getMcpClientDefinition(client)
+  private inspectRules(client: AgentClient): AgentIntegrationComponentState {
+    const definition = getAgentClientDefinition(client)
     if (!isAgentGlobalRulesClient(client)) {
       return {
         component: 'rules',
@@ -288,16 +231,6 @@ export class AgentIntegrationService {
     return { ...status, overall: overallStatus(components), components }
   }
 
-  private pathOptions(owner: string): ImportAgentClientOptions {
-    return {
-      dataDir: this.options.dataDir,
-      owner,
-      homeDir: this.options.homeDir,
-      platform: this.options.platform,
-      environment: this.options.environment
-    }
-  }
-
   private rulesOptions(owner: string): {
     dataDir: string
     owner: string
@@ -306,7 +239,7 @@ export class AgentIntegrationService {
     return { dataDir: this.options.dataDir, owner, homeDir: this.options.homeDir }
   }
 
-  private async withClientLock<T>(client: McpClient, operation: () => Promise<T>): Promise<T> {
+  private async withClientLock<T>(client: AgentClient, operation: () => Promise<T>): Promise<T> {
     const lock = await acquireAgentLock(
       this.options.dataDir,
       `agent-integration-${client}`,
@@ -320,8 +253,8 @@ export class AgentIntegrationService {
   }
 }
 
-function requireMcpClient(client: unknown): McpClient {
-  if (!isMcpClient(client)) throw new Error(`不支持的 Agent 客户端：${String(client)}`)
+function requireAgentClient(client: unknown): AgentClient {
+  if (!isAgentClient(client)) throw new Error(`不支持的 Agent 客户端：${String(client)}`)
   return client
 }
 
@@ -339,8 +272,8 @@ function overallStatus(
   return 'partial'
 }
 
-function resolveFallbackSkillPath(client: McpClient, homeDir?: string): string {
-  return `${homeDir ?? homedir()}/${getMcpClientDefinition(client).label}/use-loci`
+function resolveFallbackSkillPath(client: AgentClient, homeDir?: string): string {
+  return `${homeDir ?? homedir()}/${getAgentClientDefinition(client).label}/use-loci`
 }
 
 async function acquireAgentLock(dataDir: string, key: string, owner: string): Promise<RuntimeLock> {

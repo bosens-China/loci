@@ -1,65 +1,68 @@
 # Loci
 
-> 为 AI Agent 准备的本地优先文档知识库。
-
-Loci 将公开技术文档收录为本地 Markdown，提供全文搜索，并通过 Web UI、CLI 和 MCP 供人与 Agent 使用。文档内容保留在本机，不会上传。
-
-## 特性
-
-- 收录网页、公开 GitHub 仓库中的 Markdown/MDX、`llms.txt` 和 OpenAPI 文档。
-- Web UI 的本机 HTTP 只在当前终端会话期间运行；抓取由独立的无 HTTP worker 执行。默认数据目录中的定时抓取或云端每日同步会自动准备用户级常驻 worker，普通后台任务使用空闲后退出的按需 worker。各入口共享同一份本地 SQLite 数据和全文索引。
-- Agent 可通过 MCP 按需搜索和读取文档；长时间抓取使用 SDK 原生逐页进度和取消，Host 不支持时由 Skill 降级到 CLI。
-- 已知页面不在自动抓取路径时，可通过 MCP 只插入或刷新指定 URL，而不扩大站点发现范围。
-- 同一文档源的重复同步会复用已有任务；同 hostname 文档库共享队列和实时限速，不同 hostname 可并行处理。Web、CLI 和 MCP 均可暂停、恢复、结束、取消和调整优先级。
-- 本地与云端先展示文档库卡片，再按需读取目录和正文；ZIP 备份使用带校验索引的拆分 JSON，管理员可用压缩二进制归档发布本地库到 Server。
+Loci 把公开技术文档收录为本地 Markdown。人可以在终端或 Web UI 查阅和编辑，Agent 可以用本机 CLI 搜索目录、读取命中小节并引用来源。三个入口共用本机文档库与 SQLite 全文索引。
 
 ## 快速开始
 
-### CLI 与 Web UI
-
-需要 Node.js 22.16 或更高版本：
+需要 Node.js 22.16 或更高版本。以下示例只收录 Rspress 的一个页面。
 
 ```bash
 npm install --global @boses/cli
-loci ui
-loci source add https://rspress.rs/guide/introduction.html
-loci source sync rspress
-loci task list
-loci document search "Quick start"
-loci agent setup codex
-# 无 MCP 连接时也可直接调用同一工具
-loci mcp call loci_list_libraries
+loci list --json
+loci fetch https://rspress.rs/guide/introduction.html --pages --name rspress --wait
+loci tree rspress --json
+loci search Rspress --library rspress --json
+loci read /guide/introduction.html --library rspress --json
 ```
 
-`loci agent setup <client>` 会一次配置用户级 MCP、`use-loci` Skill 和全局 Rules；`loci agent status` 检查状态，`loci agent remove <client>` 安全移除 Loci 管理的内容。`loci ui` 的“Agent”入口提供相同能力。
-
-`loci ui` 会先输出本机 Web 地址，再尝试打开浏览器，并在当前终端运行仅服务本次会话的回环 HTTP；按 `Ctrl+C` 会关闭 HTTP，但已经提交的后台任务继续由独立 worker 执行。浏览器无法自动打开时，复制终端中的地址手动访问即可。Web 的“管理”入口可以登录目标 Server，维护公开文档库和同步任务；远程 Admin Token 只保存在当前 Runtime 内存。在默认数据目录中开启定时抓取或云端每日同步后，Loci 会立即确保无 HTTP 的登录自启动 worker 可用；设置 `LOCI_DATA_DIR` 时只启动当前登录会话的 detached worker，长期运行需要由外部进程管理器托管 `loci service run`。`loci service start` 保留为默认用户级服务的手动恢复和治理入口。仓库的 `pnpm dev` 使用 `.loci-dev` 隔离数据、缓存和模拟用户目录来联调本机 Web 会话与 worker；需要复现正式数据问题时显式运行 `pnpm dev:user`，其 Web 写操作会直接修改正式 Loci 数据和真实 Agent 文件。两种开发命令均在同一个本地 Web 下提供 Admin 登录入口 `/admin`，并将未自定义的云服务地址默认为 `http://localhost:7001`；此时开发脚本会自动启动仓库内的 Hono Server，并将其 SQLite 数据隔离在 `.loci-dev/server-data`，不需要 Docker Compose。设置页保存的自定义地址优先，显式设置 `LOCI_SERVER_URL` 时则作为不可编辑的进程级覆盖。`pnpm build` 构建包含 Web UI 的 CLI 发布包。
-
-需要抓取依赖客户端渲染的网站时，再安装浏览器运行时。可以在本机 Web 的“无头浏览器”页面查看真实状态、安装或卸载，也可以使用 CLI：
+`read` 接受一个或多个文档 ID 或路径。遇到重定向时，可从 `tree` 的结果复制实际 ID。整库抓取会识别公开 GitHub 仓库、`llms.txt`、OpenAPI、Sitemap 或页面链接。`loci fetch` 和 `loci update` 默认异步返回。示例加 `--wait`，以便下一条命令立即读取已收录的内容。后台抓取可用 `loci status rspress --json` 轮询至终态，`error` 和 `failures` 提供具体失败原因。`loci cancel rspress` 取消该库正在进行的抓取。
 
 ```bash
-loci browser install
+loci ui
 ```
 
-## Server 部署安全
+Web UI 默认在 `127.0.0.1:4520` 打开。可在知识管理页查看目录、阅读正文和编辑小节，在设置页导出或恢复 ZIP。终端会保持前台运行，按 `Ctrl+C` 关闭。需要自动选择端口且只打印地址时，运行 `loci ui --port 0 --no-open`。
 
-Loci Server 会在应用层拒绝非公网目标，但 DNS 校验只属于纵深防御。生产部署必须通过主机防火墙、云网络策略或受控出口代理，在每个实际发起目标连接的执行环境阻断 RFC 1918、loopback、link-local、IPv6 本地地址和云元数据服务。默认本地 Chromium 需覆盖 Loci Server 容器；使用远程 Browserless 时还必须覆盖 Browserless 执行环境。不要只依赖应用层 URL 或 DNS 检查作为 SSRF 边界。
+## 分类与版本
 
-## 文档
+`fetch` 和 `update` 支持 `--category <name>` 与 `--version <ver>`。新库默认使用 `未分类` 和 `latest`。刷新已有库时保留未显式指定的分类和版本。同一来源按版本分别建库，重复抓取相同版本会复用该库。首次使用新分类时自动创建。用 `loci list --category 前端 --version v19 --json` 精确筛选。`loci category` 显示每个分类的库数量，`loci category add <name>` 创建空分类，`loci category delete <name>` 删除分类并将关联库设为不可删除的 `未分类`。
+
+## 备份与导入
+
+`loci data export backup.zip` 导出全部库、分类、设置与域名策略。添加 `--category 前端 后端` 或 `--library <库ID>` 可导出选定范围。`loci data import backup.zip` 默认合并，先删除 ID 相同或来源与版本均相同的旧库，再写入备份中的正文、索引、指定页面和抓取记录，其他库保留。旧版只读快照按原服务器地址和远端库 ID 匹配，可与同源可写库并存。使用 `--replace-all` 会清空全部本地库，导入完整备份时同时恢复设置与域名策略。
+
+设置页可以清空正文或删除全部文档库。CLI 使用 `loci data clear-documents` 或 `loci data clear-sources`。两者都要求确认，已获授权的脚本可以加 `--yes`。
+
+## Agent 接入
+
+```bash
+loci setup codex
+loci setup status codex --json
+```
+
+`setup` 同步该客户端的全局 `use-loci` Skill 和 Rules。Agent 先列库、定位并阅读正文。缺库时确认官方 URL 与范围后抓取，过时时刷新，通过 `status` 查看进度与失败原因。单独为项目安装 Skill 用 `loci skills add use-loci --project ./`。
 
 - [使用文档](https://bosens-china.github.io/loci/)
 - [CLI 快速开始](https://bosens-china.github.io/loci/cli/getting-started)
 - [接入 Agent](https://bosens-china.github.io/loci/agent/overview)
-- [通过 MCP 接入](https://bosens-china.github.io/loci/agent/mcp)
 
-## 参与贡献
+## 本地开发与贡献
 
-欢迎通过 [Issue](https://github.com/bosens-China/loci/issues) 提交问题或建议，也欢迎提交 Pull Request。提交前请运行：
+`pnpm dev` 使用 `.loci-dev` 隔离文档、浏览器缓存和 Agent 用户文件。`pnpm dev:user` 使用真实用户目录，Web 写操作会修改正式数据和 Agent 文件。`pnpm cli:build` 生成包含 Web UI 与 Skill 的 CLI 发布包。
 
 ```bash
-pnpm lint
+pnpm install
+pnpm dev
+```
+
+提交变更前可运行以下验证。欢迎提交 [Issue](https://github.com/bosens-China/loci/issues) 或 Pull Request。
+
+```bash
 pnpm typecheck
 pnpm test
+pnpm lint
+pnpm cli:build
+pnpm docs:build
 ```
 
 ## 许可证

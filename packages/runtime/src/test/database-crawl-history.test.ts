@@ -10,7 +10,6 @@ describe('database crawl history', () => {
         url: 'https://docs.example.com',
         mode: 'http',
         pageLimit: 10,
-        schedule: null,
         httpConcurrency: null,
         browserConcurrency: null
       })

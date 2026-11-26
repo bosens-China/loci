@@ -9,5 +9,5 @@
 - [项目说明](../README.md)
 - [CLI 安装与使用](../apps/cli/README.md)
 - [Agent 全局规则](../apps/docs/docs/agent/global-rules.mdx)
-- [Loci Server](../apps/server/README.md)
+- [本机 Runtime HTTP 契约](../packages/runtime/HTTP_API.md)
 - [Agent 使用 Skill](../.agents/skills/use-loci/SKILL.md)
