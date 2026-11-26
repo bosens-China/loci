@@ -38,6 +38,12 @@ export const AGENT_CLIENTS = [
     label: 'Google Antigravity',
     globalRulesPath: '~/.gemini/GEMINI.md',
     globalRulesWrite: true
+  },
+  {
+    id: 'pi',
+    label: 'Pi',
+    globalRulesPath: '~/.pi/agent/AGENTS.md',
+    globalRulesWrite: true
   }
 ] as const satisfies readonly AgentClientEntry[]
 

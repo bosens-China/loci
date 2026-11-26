@@ -21,7 +21,10 @@ import {
   LOCI_SCHEMA_VERSION,
   ADDITIVE_SCHEMA_EXTENSIONS
 } from './database-schema.js'
-import { createSkillInstallationDatabase } from './skill-database.js'
+import {
+  createSkillInstallationDatabase,
+  migrateSkillInstallationsForPi
+} from './skill-database.js'
 import {
   listDocumentSources,
   readDocumentSource,
@@ -66,12 +69,15 @@ export function createDatabase(filename: string): LociDatabase {
           `数据库版本 ${version} 高于当前支持的 ${LOCI_SCHEMA_VERSION}，请升级 Loci 后重试`
         )
       if (version < LOCI_SCHEMA_VERSION) {
-        database.exec(LOCI_DATABASE_SCHEMA)
-        initializeCrawlHistoryDatabase(database)
-        initializeExplicitPageDatabase(database)
-        migrateDatabase(database, version)
-        seedCategories(drizzle)
-        initializeSettings(drizzle)
+        if (version < 23) migrateSkillInstallationsForPi(database)
+        if (version < 22) {
+          database.exec(LOCI_DATABASE_SCHEMA)
+          initializeCrawlHistoryDatabase(database)
+          initializeExplicitPageDatabase(database)
+          migrateDatabase(database, version)
+          seedCategories(drizzle)
+          initializeSettings(drizzle)
+        }
         if (database.prepare('PRAGMA foreign_key_check').get())
           throw new Error('迁移后存在无效的外键引用')
         database.exec(`PRAGMA user_version = ${LOCI_SCHEMA_VERSION}`)

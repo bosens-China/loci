@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import type {
@@ -12,6 +12,12 @@ import type {
 } from '@loci/shared'
 import { acquireRuntimeLock, RuntimeLockedError, type RuntimeLock } from './runtime-lock.js'
 import type { LociDatabase } from './database.js'
+import {
+  beginSkillTransaction,
+  commitSkillTransaction,
+  hasSkillTransaction,
+  recoverSkillTransaction
+} from './skill-transaction.js'
 import {
   CONCRETE_SKILL_AGENTS,
   DEFAULT_SKILL,
@@ -138,6 +144,7 @@ export class SkillManager {
       'Skills 写入'
     )
     try {
+      recoverSkillTransaction(target.targetPath, this.options.database)
       const state = this.inspect(target)
       if (state.status === 'conflict')
         throw new Error(`目标不是 Loci 管理的目录：${target.targetPath}`)
@@ -145,21 +152,26 @@ export class SkillManager {
         return { action: 'unchanged', name: target.name, targetPath: target.targetPath }
       }
       mkdirSync(dirname(target.targetPath), { recursive: true })
-      const temp = transactionPath(target.targetPath, 'tmp', randomUUID())
-      const backup = transactionPath(target.targetPath, 'backup', randomUUID())
+      const id = randomUUID()
+      const temp = transactionPath(target.targetPath, 'tmp', id)
+      const backup = transactionPath(target.targetPath, 'backup', id)
       const digest = builtinSkillDigest(this.options.skillResourceDir)
       const previousRecord = this.options.database.getSkillInstallationRecord(target.targetPath)
-      let movedOld = false
-      let movedNew = false
+      const journal = {
+        id,
+        action: 'add' as const,
+        committed: false,
+        hadTarget: existsSync(target.targetPath),
+        previous: previousRecord ?? null
+      }
+      beginSkillTransaction(target.targetPath, journal)
       try {
         writeBuiltinSkill(this.options.skillResourceDir, temp, this.options.packageVersion, digest)
         if (digestSkillDirectory(temp) !== digest) throw new Error('内置 Skill 写入校验失败')
         if (existsSync(target.targetPath)) {
           renameSync(target.targetPath, backup)
-          movedOld = true
         }
         renameSync(temp, target.targetPath)
-        movedNew = true
         const now = new Date().toISOString()
         this.options.database.saveSkillInstallationRecord({
           id: previousRecord?.id ?? randomUUID(),
@@ -173,19 +185,15 @@ export class SkillManager {
           createdAt: previousRecord?.createdAt ?? now,
           updatedAt: now
         })
-        rmSync(backup, { recursive: true, force: true })
+        commitSkillTransaction(target.targetPath, journal)
+        recoverSkillTransaction(target.targetPath, this.options.database)
         return {
           action: state.status === 'absent' ? 'installed' : 'reinstalled',
           name: target.name,
           targetPath: target.targetPath
         }
       } catch (error) {
-        rmSync(temp, { recursive: true, force: true })
-        if (movedNew && existsSync(target.targetPath))
-          rmSync(target.targetPath, { recursive: true, force: true })
-        if (movedOld && existsSync(backup)) renameSync(backup, target.targetPath)
-        if (previousRecord) this.options.database.saveSkillInstallationRecord(previousRecord)
-        else this.options.database.deleteSkillInstallationRecord(target.targetPath)
+        recoverSkillTransaction(target.targetPath, this.options.database)
         throw error
       }
     } finally {
@@ -200,6 +208,7 @@ export class SkillManager {
       'Skills 删除'
     )
     try {
+      recoverSkillTransaction(target.targetPath, this.options.database)
       const record = this.options.database.getSkillInstallationRecord(target.targetPath)
       if (!record) {
         if (existsSync(target.targetPath)) {
@@ -214,15 +223,25 @@ export class SkillManager {
       if (!validSkillMarker(target.targetPath, target.name)) {
         throw new Error(`所有权标记无效，拒绝删除：${target.targetPath}`)
       }
-      const quarantine = transactionPath(target.targetPath, 'remove', randomUUID())
-      renameSync(target.targetPath, quarantine)
+      const id = randomUUID()
+      const quarantine = transactionPath(target.targetPath, 'remove', id)
+      const journal = {
+        id,
+        action: 'remove' as const,
+        committed: false,
+        hadTarget: true,
+        previous: record
+      }
+      beginSkillTransaction(target.targetPath, journal)
       try {
+        renameSync(target.targetPath, quarantine)
         this.options.database.deleteSkillInstallationRecord(target.targetPath)
+        commitSkillTransaction(target.targetPath, journal)
+        recoverSkillTransaction(target.targetPath, this.options.database)
       } catch (error) {
-        renameSync(quarantine, target.targetPath)
+        recoverSkillTransaction(target.targetPath, this.options.database)
         throw error
       }
-      rmSync(quarantine, { recursive: true, force: true })
       return { action: 'removed', name: target.name, targetPath: target.targetPath }
     } finally {
       lock.release()
@@ -233,6 +252,22 @@ export class SkillManager {
     status: SkillTargetPreview['status']
     modified: boolean
   } {
+    if (hasSkillTransaction(target.targetPath)) {
+      try {
+        const lock = acquireRuntimeLock(
+          this.options.dataDir,
+          skillLockKey(target.targetPath),
+          'Skill 事务恢复'
+        )
+        try {
+          recoverSkillTransaction(target.targetPath, this.options.database)
+        } finally {
+          lock.release()
+        }
+      } catch (error) {
+        if (!(error instanceof RuntimeLockedError)) throw error
+      }
+    }
     const record = this.options.database.getSkillInstallationRecord(target.targetPath)
     if (!existsSync(target.targetPath)) return { status: 'absent', modified: false }
     if (lstatSync(target.targetPath).isSymbolicLink() || !record) {
@@ -264,6 +299,15 @@ export class SkillManager {
       projectRoot,
       targetPath: resolveSkillPath(requestedAgent, name, projectRoot, home)
     }))
+    const [first] = targets
+    if (agent === 'pi' && first) {
+      const path = first.targetPath
+      if (compatibleAgents(path, projectRoot, home).some((other) => other !== agent)) {
+        throw new Error(
+          `Pi 的 Skill 目录与其他 Agent 共用：${path}。请使用对应的共享 Skill 入口管理。`
+        )
+      }
+    }
     const unique = new Map<string, ResolvedTarget>()
     for (const target of targets) {
       const existing = unique.get(target.targetPath)

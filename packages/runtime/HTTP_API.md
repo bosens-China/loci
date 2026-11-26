@@ -81,7 +81,7 @@
 | `PUT /api/hostname-policies/:hostname`    | `httpConcurrency`、`browserConcurrency`、`batchIntervalMinSeconds`、`batchIntervalMaxSeconds`，每项为整数或 `null` | `200 HostnameCrawlPolicy`                                                   |
 | `DELETE /api/hostname-policies/:hostname` | 无                                                                                                                 | `200 { deleted: boolean }`                                                  |
 | `GET /api/data/export`                    | 可重复的 `category`、`library`（库 ID），按并集筛选                                                                | `200 application/zip`，含文件名，维护冲突返回 `409`                         |
-| `POST /api/data/import`                   | 原始 ZIP，最多 512 MiB，可选 `mode=merge`（默认）或 `mode=replace`                                                 | `200 BackupImportSummary`                                                   |
+| `POST /api/data/import`                   | 原始 ZIP，可选 `mode=merge`（默认）或 `mode=replace`                                                               | `200 BackupImportSummary`                                                   |
 | `GET /api/data/counts`                    | 无                                                                                                                 | `200 { libraries, documents }`，用于显示确认前的当前数量                    |
 | `POST /api/data/clear`                    | `{ scope: 'documents' \| 'sources' }`                                                                              | `200 { scope, libraries, documents }`，返回实际删除数量，维护冲突返回 `409` |
 
@@ -89,6 +89,6 @@
 
 `documents` 清空文档正文与索引，保留库、分类、设置和抓取记录，并重置指定页面状态及 GitHub 快照版本。旧审查库保留已批准的 URL。`sources` 清空库及其关联数据，保留分类和设置。两种操作都包含旧只读快照的正文。同一范围的在途清空共用结果，数据库提交具有原子性。Web 在发出清空请求前单独向用户确认。
 
-`client` 取 `codex`、`cursor`、`vscode`、`claude-code` 或 `antigravity`。组件取 `skill` 或 `rules`，接入操作结束后读取结果中每个组件的 `status`。`AppSettings` 包含 `theme`、`httpConcurrency`、`browserConcurrency`、`maxRetries`、`batchIntervalSeconds`、`batchIntervalMaxSeconds`、`githubArchiveLimitMb` 和 `githubMarkdownLimitMb`。
+`client` 取 `codex`、`cursor`、`vscode`、`claude-code`、`antigravity` 或 `pi`。组件取 `skill` 或 `rules`，接入操作结束后读取结果中每个组件的 `status`。`AppSettings` 包含 `theme`、`httpConcurrency`、`browserConcurrency`、`maxRetries`、`batchIntervalSeconds`、`batchIntervalMaxSeconds`、`githubArchiveLimitMb` 和 `githubMarkdownLimitMb`。
 
 完整的 TypeScript 传输类型及来源探测结果 `SourceInspection` 由 `@loci/shared` 导出。`@loci/runtime` 也导出 `SourceInspection`，并提供精确抓取结果 `ExplicitPageFetchResult` 与 ZIP 导入结果 `BackupImportSummary`。

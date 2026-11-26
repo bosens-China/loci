@@ -4,7 +4,7 @@ Agent 通过终端运行本机 `loci`。`use-loci` Skill 在技术文档任务�
 
 ## 配置与检查
 
-安装 CLI 后，在运行 Agent 的同一用户环境中执行以下命令。示例为 Codex，也支持 `cursor`、`vscode`、`claude-code` 和 `antigravity`。
+安装 CLI 后，在运行 Agent 的同一用户环境中执行以下命令。示例为 Codex，也支持 `cursor`、`vscode`、`claude-code`、`antigravity` 和 `pi`。
 
 ```bash
 loci setup codex
@@ -13,6 +13,8 @@ loci list --json
 ```
 
 `loci setup [client]` 同步全局 Skill 和 Rules。在交互终端可省略客户端并从列表选择。`loci setup status --json` 查看所有支持的客户端及各组件状态。本机 Web UI 的“Agent 接入”页也可检查、同步和移除全局接入。
+
+Pi 用户执行 `loci setup pi`，也可以在“Agent 接入”页选择 Pi。重新打开 Pi 后，可输入 `/skill:use-loci` 加载 Skill。
 
 ## 从问题到原文
 

@@ -10,8 +10,8 @@ export interface ZipArchiveEntry {
 /** ZIP 格式共用的有界读写原语；具体文件清单和校验策略仍由各归档模块负责。 */
 export async function createZipArchive(
   entries: readonly ZipArchiveEntry[],
-  maxBytes: number,
-  tooLargeMessage: string
+  maxBytes = Number.POSITIVE_INFINITY,
+  tooLargeMessage = '归档过大'
 ): Promise<Buffer> {
   const zip = new OutputZip()
   const output = collectArchiveStream(zip.outputStream, maxBytes, tooLargeMessage)
@@ -25,8 +25,8 @@ export async function createZipArchive(
 
 export async function collectArchiveStream(
   stream: NodeJS.ReadableStream,
-  maxBytes: number,
-  tooLargeMessage: string
+  maxBytes = Number.POSITIVE_INFINITY,
+  tooLargeMessage = '归档过大'
 ): Promise<Buffer> {
   const chunks: Buffer[] = []
   let total = 0

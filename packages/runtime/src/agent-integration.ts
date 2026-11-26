@@ -23,6 +23,7 @@ import {
 import type { LociDatabase } from './database.js'
 import { RuntimeLockedError, acquireRuntimeLock, type RuntimeLock } from './runtime-lock.js'
 import { SkillManager } from './skill-manager.js'
+import { DEFAULT_SKILL, resolveSkillPath } from './skill-files.js'
 
 export interface AgentIntegrationOptions {
   database: LociDatabase
@@ -182,7 +183,7 @@ export class AgentIntegrationService {
       return {
         component: 'skill',
         status: 'conflict',
-        path: resolveFallbackSkillPath(client, this.options.homeDir),
+        path: resolveSkillPath(client, DEFAULT_SKILL, null, this.options.homeDir ?? homedir()),
         message: error instanceof Error ? error.message : 'Skill 状态无法识别'
       }
     }
@@ -270,10 +271,6 @@ function overallStatus(
   }
   if (automatic.every((item) => item.status === 'missing')) return 'missing'
   return 'partial'
-}
-
-function resolveFallbackSkillPath(client: AgentClient, homeDir?: string): string {
-  return `${homeDir ?? homedir()}/${getAgentClientDefinition(client).label}/use-loci`
 }
 
 async function acquireAgentLock(dataDir: string, key: string, owner: string): Promise<RuntimeLock> {

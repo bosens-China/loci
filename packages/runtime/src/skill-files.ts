@@ -13,18 +13,12 @@ import {
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { ConcreteSkillAgent, SkillAgent } from '@loci/shared'
-import { isSkillAgent } from '@loci/shared'
+import { isSkillAgent, SKILL_AGENTS } from '@loci/shared'
+import { resolvePiAgentDir } from './pi-agent-paths.js'
 
 export const DEFAULT_SKILL = 'use-loci'
 export const SKILL_MARKER = '.loci-skill.json'
-export const CONCRETE_SKILL_AGENTS: ConcreteSkillAgent[] = [
-  'universal',
-  'codex',
-  'cursor',
-  'claude-code',
-  'vscode',
-  'antigravity'
-]
+export const CONCRETE_SKILL_AGENTS = SKILL_AGENTS.filter((agent) => agent !== 'all')
 
 interface SkillMarker {
   schemaVersion: 1
@@ -40,8 +34,13 @@ export function resolveSkillPath(
   project: string | null,
   home: string
 ): string {
+  if (agent === 'pi') {
+    return project
+      ? resolve(project, '.pi/skills', name)
+      : resolve(resolvePiAgentDir(home), 'skills', name)
+  }
   const base = project ?? home
-  const paths: Record<ConcreteSkillAgent, [string, string]> = {
+  const paths: Record<Exclude<ConcreteSkillAgent, 'pi'>, [string, string]> = {
     universal: ['.agents/skills', '.agents/skills'],
     codex: ['.agents/skills', '.agents/skills'],
     cursor: ['.cursor/skills', '.cursor/skills'],
@@ -140,7 +139,7 @@ export function skillLockKey(path: string): string {
 
 export function transactionPath(
   target: string,
-  suffix: 'tmp' | 'backup' | 'remove',
+  suffix: 'tmp' | 'backup' | 'remove' | 'journal',
   id: string
 ): string {
   return join(dirname(target), `.${basename(target)}.${id}.${suffix}`)

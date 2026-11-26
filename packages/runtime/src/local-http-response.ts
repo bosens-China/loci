@@ -11,7 +11,10 @@ export async function readJson(request: IncomingMessage, maxBytes = 1_048_576): 
   }
 }
 
-export async function readBuffer(request: IncomingMessage, maxBytes = 1_048_576): Promise<Buffer> {
+export async function readBuffer(
+  request: IncomingMessage,
+  maxBytes = Number.POSITIVE_INFINITY
+): Promise<Buffer> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request) {

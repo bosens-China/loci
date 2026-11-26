@@ -38,7 +38,7 @@ CLI 是 npm 分发入口，包含本机 Web UI 和 `use-loci` Skill。CLI 直接
 5. 轮询 `loci status <lib> --json` 至终态，从 `error` 和 `failures` 查看具体原因，抓取完成后回到定位与阅读。省略库可查询所有有记录的库。
 6. 用户要求时编辑文档或小节；删除、刻意覆盖、可能裁剪已有内容的配置修改须明确授权。只需版本亮点时可查官方发布说明，资料不足时可选用其他合适的文档来源。
 
-`loci setup [client]` 与 Web 的 Agent 接入页同步用户级 Skill 和 Rules；Codex、Cursor、VS Code、Claude Code 和 Antigravity 使用各自的目标路径。规则可单独写入；重复同步保留个人内容，异常标记拒绝写入。Codex 和 Cursor 可按现有配置加入 Context7 兜底说明。
+`loci setup [client]` 与 Web 的 Agent 接入页同步用户级 Skill 和 Rules；Codex、Cursor、VS Code、Claude Code、Antigravity 和 Pi 使用各自的目标路径。规则可单独写入；重复同步保留个人内容，异常标记拒绝写入。Codex 和 Cursor 可按现有配置加入 Context7 兜底说明。Pi 接入遵循其配置目录和全局规则查找顺序，移除专用 Skill 时保留通用安装。
 
 `loci skills` 管理项目或全局的内置 Skill。默认 `universal`、当前项目，可显式选择客户端与作用域。安装记录和所有权标记确认目标，安装、替换与删除由文件锁和台账保护。`.agents/skills/use-loci` 是发布包复制的唯一内容源。参见 [使用 Skill](../apps/docs/docs/agent/skill.mdx) 和 [配置全局规则](../apps/docs/docs/agent/global-rules.mdx)。
 

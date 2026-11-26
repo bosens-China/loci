@@ -6,8 +6,6 @@ import type {
 } from '@loci/shared'
 import { request } from './client'
 
-export const BACKUP_FILE_LIMIT_BYTES = 512 * 1024 * 1024
-
 export interface BackupDownload {
   blob: Blob
   filename: string
@@ -59,7 +57,6 @@ export const importBackup = async (
 
 /** 校验并读取待导入的 ZIP 文件。 */
 export const readBackupFile = async (file: File): Promise<Blob> => {
-  if (file.size > BACKUP_FILE_LIMIT_BYTES) throw new Error('备份文件不能超过 512 MB')
   const signature = new Uint8Array(await file.slice(0, 4).arrayBuffer())
   if (signature[0] !== 0x50 || signature[1] !== 0x4b) throw new Error('请选择 Loci ZIP 备份文件')
   return file

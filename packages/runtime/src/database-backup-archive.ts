@@ -9,8 +9,6 @@ import { fromBufferPromise } from 'yauzl'
 import { z } from 'zod'
 import { parseLociBackup, type LociBackup } from './database-backup-schema.js'
 
-const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
-const MAX_ENTRY_BYTES = 256 * 1024 * 1024
 const DATA_FILES = [
   ['categories.json', 'categories'],
   ['sources.json', 'sources'],
@@ -83,41 +81,25 @@ export async function createBackupArchive(
     'utf8'
   )
   const mtime = new Date(backup.exportedAt)
-  return createZipArchive(
-    [
-      { path: 'index.json', buffer: index, mtime },
-      ...entries.map((entry) => ({ path: entry.path, buffer: entry.buffer, mtime }))
-    ],
-    MAX_ENTRY_BYTES,
-    '备份归档中的单个文件过大'
-  )
+  return createZipArchive([
+    { path: 'index.json', buffer: index, mtime },
+    ...entries.map((entry) => ({ path: entry.path, buffer: entry.buffer, mtime }))
+  ])
 }
 
 export async function parseBackupArchive(buffer: Buffer): Promise<BackupArchivePreview> {
-  if (buffer.length > MAX_ARCHIVE_BYTES) throw new Error('备份归档不能超过 512 MB')
   const zip = await fromBufferPromise(buffer, {
     lazyEntries: true,
     validateEntrySizes: true,
     strictFileNames: true
   })
   const files = new Map<string, Buffer>()
-  let expandedBytes = 0
   try {
     for await (const entry of zip.eachEntry()) {
       validateEntryName(entry.fileName)
       if (entry.fileName.endsWith('/')) continue
       if (files.has(entry.fileName)) throw new Error(`备份归档包含重复文件：${entry.fileName}`)
-      if (entry.uncompressedSize > MAX_ENTRY_BYTES) throw new Error('备份归档中的单个文件过大')
-      expandedBytes += entry.uncompressedSize
-      if (expandedBytes > MAX_ARCHIVE_BYTES) throw new Error('备份归档解压后超过 512 MB')
-      files.set(
-        entry.fileName,
-        await collectArchiveStream(
-          await zip.openReadStreamPromise(entry),
-          MAX_ENTRY_BYTES,
-          '备份归档中的单个文件过大'
-        )
-      )
+      files.set(entry.fileName, await collectArchiveStream(await zip.openReadStreamPromise(entry)))
     }
   } finally {
     if (zip.isOpen) zip.close()

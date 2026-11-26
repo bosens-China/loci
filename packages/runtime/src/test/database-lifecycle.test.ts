@@ -4,8 +4,63 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
 import { createDatabase, databaseNeedsMigration, LOCI_SCHEMA_VERSION } from '../database.js'
+import { SKILL_INSTALLATIONS_SCHEMA } from '../database-schema.js'
 
 describe('database lifecycle', () => {
+  it('升级 v22 时保留现有 Skill 安装记录并接受 Pi 安装', () => {
+    const root = mkdtempSync(join(tmpdir(), 'loci-pi-migration-'))
+    const filename = join(root, 'loci.sqlite')
+    const oldSkill = {
+      id: 'old-skill',
+      skillName: 'use-loci',
+      requestedAgent: 'universal' as const,
+      resolvedTarget: join(root, '.agents/skills/use-loci'),
+      scope: 'global' as const,
+      projectRoot: null,
+      packageVersion: '2.0.0',
+      contentDigest: 'sha256:old',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z'
+    }
+    try {
+      createDatabase(filename).close()
+      const old = new DatabaseSync(filename)
+      try {
+        old.exec('DROP TABLE skill_installations; PRAGMA user_version = 22')
+        old.exec(SKILL_INSTALLATIONS_SCHEMA.replace(", 'pi'", ''))
+        const insert = old.prepare(
+          'INSERT INTO skill_installations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        )
+        insert.run(...Object.values(oldSkill))
+        expect(() =>
+          insert.run(
+            ...Object.values({ ...oldSkill, id: 'pi', requestedAgent: 'pi', resolvedTarget: '/pi' })
+          )
+        ).toThrow(/CHECK/)
+      } finally {
+        old.close()
+      }
+
+      const migrated = createDatabase(filename)
+      try {
+        expect(migrated.listSkillInstallationRecords()).toEqual([oldSkill])
+        const piSkill = {
+          ...oldSkill,
+          id: 'pi-skill',
+          requestedAgent: 'pi' as const,
+          resolvedTarget: join(root, '.pi/agent/skills/use-loci')
+        }
+        migrated.saveSkillInstallationRecord(piSkill)
+        expect(migrated.getSkillInstallationRecord(piSkill.resolvedTarget)).toEqual(piSkill)
+      } finally {
+        migrated.close()
+      }
+      expect(databaseNeedsMigration(filename)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('records the schema version and rejects a database from a newer client', () => {
     const directory = mkdtempSync(join(tmpdir(), 'loci-version-'))
     const filename = join(directory, 'future.sqlite')

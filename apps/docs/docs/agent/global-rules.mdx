@@ -11,13 +11,16 @@ loci setup rules codex --yes
 loci setup status codex --json
 ```
 
-| 客户端 | 参数 | 全局规则文件 |
-| --- | --- | --- |
-| Codex | `codex` | `~/.codex/AGENTS.md`，已有 `AGENTS.override.md` 时优先写入后者 |
-| Cursor | `cursor` | `~/.cursor/rules/loci.mdc` |
-| VS Code | `vscode` | `~/.copilot/instructions/loci.instructions.md` |
-| Claude Code | `claude-code` | `~/.claude/CLAUDE.md` |
-| Google Antigravity | `antigravity` | `~/.gemini/GEMINI.md` |
+| 客户端             | 参数          | 全局规则文件                                                   |
+| ------------------ | ------------- | -------------------------------------------------------------- |
+| Codex              | `codex`       | `~/.codex/AGENTS.md`，已有 `AGENTS.override.md` 时优先写入后者 |
+| Cursor             | `cursor`      | `~/.cursor/rules/loci.mdc`                                     |
+| VS Code            | `vscode`      | `~/.copilot/instructions/loci.instructions.md`                 |
+| Claude Code        | `claude-code` | `~/.claude/CLAUDE.md`                                          |
+| Google Antigravity | `antigravity` | `~/.gemini/GEMINI.md`                                          |
+| Pi                 | `pi`          | 默认 `~/.pi/agent/AGENTS.md`，优先写入 Pi 当前使用的规则文件   |
+
+如用 `PI_CODING_AGENT_DIR` 指定了 Pi 的配置目录，请从设置了同一变量的环境启动 Loci CLI 或 Web。Loci 会按 Pi 的顺序选择已有的 `AGENTS.override.md`、`AGENTS.md`、`AGENTS.MD`、`CLAUDE.md` 或 `CLAUDE.MD`。找不到规则文件时创建 `AGENTS.md`。 [Pi 配置文档](https://docs.pi.dev/latest/configuration#context-files)
 
 ## 更新与移除
 

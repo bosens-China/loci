@@ -11,13 +11,15 @@ loci skills add use-loci
 loci skills list --json
 ```
 
-用 `--project <path>` 指定项目，用 `--global` 选择用户级目录，两者互斥。可选 `--agent` 值为 `universal`、`codex`、`cursor`、`claude-code`、`vscode`、`antigravity` 和 `all`。`all` 会合并相同的物理目标目录。
+用 `--project <path>` 指定项目，用 `--global` 选择用户级目录，两者互斥。可选 `--agent` 值为 `universal`、`codex`、`cursor`、`claude-code`、`vscode`、`antigravity`、`pi` 和 `all`。`all` 会合并相同的目标目录。
 
 ```bash
 loci skills add --agent cursor --project ./ --yes
 loci skills list --agent cursor --project ./ --json
 loci skills add --agent codex --global --yes
 ```
+
+Pi 的项目级 Skill 安装到 `.pi/skills/`，Pi 信任该项目后才会加载。全局 Skill 安装到 Pi 配置目录的 `skills/`，默认是 `~/.pi/agent/skills/`。Pi 也能读取 `universal` 的 `.agents/skills/`。卸载 Pi 专用安装会保留通用 Skill。 [Pi 技能文档](https://docs.pi.dev/latest/skills#add-it-to-pi)
 
 ## 移除与清理
 
@@ -29,3 +31,5 @@ loci skills clear --agent all --global
 ```
 
 Loci 用本地安装记录与目录中的 `.loci-skill.json` 核对所有权。手工删除、编辑或与已有目录冲突时，先查看 `list` 的 `status` 和 `targetPath`。需要同时同步全局 Skill 和 Rules 时使用 `loci setup <client>`。规则的目标位置见 [配置全局规则](/agent/global-rules)。
+
+Skill 安装、更新或移除中途被中断时，下次检查或操作该目标会先恢复未完成的事务，再继续执行。

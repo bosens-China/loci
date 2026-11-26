@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase } from '../database.js'
 import { SkillManager } from '../skill-manager.js'
 import { acquireRuntimeLock } from '../runtime-lock.js'
@@ -22,7 +22,10 @@ const skillResourceDir = fileURLToPath(
   new URL('../../../../.agents/skills/use-loci/', import.meta.url)
 )
 
+beforeEach(() => vi.stubEnv('PI_CODING_AGENT_DIR', undefined))
+
 afterEach(() => {
+  vi.unstubAllEnvs()
   closeDatabases.splice(0).forEach((close) => close())
   directories.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true }))
 })
@@ -93,10 +96,13 @@ describe('SkillManager', () => {
     mkdirSync(project)
 
     const results = await manager.add({ agent: 'all', project })
-    expect(results).toHaveLength(4)
-    expect(new Set(results.map((item) => item.targetPath)).size).toBe(4)
+    expect(results).toHaveLength(5)
+    expect(new Set(results.map((item) => item.targetPath)).size).toBe(5)
     expect(results.every((item) => item.targetPath.startsWith(realpathSync(project)))).toBe(true)
-    expect(manager.list({ project })).toHaveLength(4)
+    expect(manager.list({ project, agent: 'pi' })).toMatchObject([
+      { targetPath: join(realpathSync(project), '.pi', 'skills', 'use-loci'), status: 'current' }
+    ])
+    expect(manager.list({ project })).toHaveLength(5)
   })
 
   it('remove 清理目录和台账，缺失目录也能清理记录', async () => {
@@ -121,12 +127,12 @@ describe('SkillManager', () => {
 
   it('clear 只清理筛选范围内的记录', async () => {
     const { root, manager } = setup()
-    await manager.add({ agent: 'all' })
+    const global = await manager.add({ agent: 'all' })
     const project = join(root, 'project')
     mkdirSync(project)
     await manager.add({ project })
     const result = await manager.clear({ agent: 'all' })
-    expect(result).toMatchObject({ removed: 5, missing: 0, failures: [] })
+    expect(result).toEqual({ removed: global.length, missing: 0, failures: [] })
     expect(manager.list()).toMatchObject([{ scope: 'project', projectRoot: realpathSync(project) }])
   })
 

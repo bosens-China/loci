@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/shared'
 import { expect, it } from 'vitest'
-import { createDatabase } from '../database.js'
+import { createDatabase, LOCI_SCHEMA_VERSION } from '../database.js'
 
 it('独立进程同时创建和编辑不同库时复用同一新分类', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'loci-category-writers-'))
@@ -124,7 +124,7 @@ it('从 v20 升级时保留原库并有序预置分类，重启尊重用户删�
     sqlite.close()
     const db = createDatabase(file)
     try {
-      expect(db.schemaVersion).toBe(22)
+      expect(db.schemaVersion).toBe(LOCI_SCHEMA_VERSION)
       expect(db.getSource(id)).toMatchObject({
         name: '旧库',
         category: '未分类',

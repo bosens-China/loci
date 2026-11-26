@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { startLocalHttpServer } from '../local-http-server.js'
 import { acquireCrawlRuntimeLock } from '../runtime-lock.js'
 import { createLocalRuntime } from '../local-runtime.js'
@@ -14,6 +14,7 @@ const skillResourceDir = fileURLToPath(
 
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.()
+  vi.unstubAllEnvs()
 })
 
 describe('本机 HTTP 服务', () => {
@@ -192,6 +193,7 @@ describe('本机 HTTP 服务', () => {
 
   it('通过受 Origin 保护的本机接口管理 Agent 全局接入', async () => {
     const root = mkdtempSync(join(tmpdir(), 'loci-http-agent-'))
+    vi.stubEnv('PI_CODING_AGENT_DIR', undefined)
     const runtime = createLocalRuntime({
       dataDir: join(root, 'data'),
       cacheDir: join(root, 'cache'),
@@ -210,18 +212,18 @@ describe('本机 HTTP 服务', () => {
 
     const listed = await fetch(`${server.endpoint}/api/agents`)
     expect(listed.status).toBe(200)
-    expect(await listed.json()).toHaveLength(5)
+    expect(await listed.json()).toContainEqual(expect.objectContaining({ client: 'pi' }))
 
-    const rejected = await fetch(`${server.endpoint}/api/agents/antigravity/setup`, {
+    const rejected = await fetch(`${server.endpoint}/api/agents/pi/setup`, {
       method: 'POST',
       headers: { origin: 'https://example.com' }
     })
     expect(rejected.status).toBe(403)
 
-    const setupResponse = await fetch(`${server.endpoint}/api/agents/antigravity/setup`, {
+    const setupResponse = await fetch(`${server.endpoint}/api/agents/pi/setup`, {
       method: 'POST',
       headers: { origin: server.endpoint }
     })
-    expect(await setupResponse.json()).toMatchObject({ status: { overall: 'ready' } })
+    expect(await setupResponse.json()).toMatchObject({ status: { client: 'pi', overall: 'ready' } })
   })
 })

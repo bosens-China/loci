@@ -12,6 +12,7 @@ import {
   type AgentGlobalRulesResult
 } from '@loci/shared'
 import { writeFileAtomically } from './atomic-file.js'
+import { resolvePiRulesPath } from './pi-agent-paths.js'
 import { acquireRuntimeLock } from './runtime-lock.js'
 
 export interface InstallAgentGlobalRulesOptions {
@@ -90,10 +91,11 @@ export function inspectAgentGlobalRules(
   options: Pick<InstallAgentGlobalRulesOptions, 'homeDir'>
 ): AgentGlobalRulesState {
   const homeDir = options.homeDir ?? homedir()
-  const path = resolveAgentGlobalRulesPath(client, homeDir)
-  if (!existsSync(path)) return { path, status: 'missing', message: null }
-  const current = readFileSync(path, 'utf8')
+  let path: string = getAgentClientDefinition(client).globalRulesPath
   try {
+    path = resolveAgentGlobalRulesPath(client, homeDir)
+    if (!existsSync(path)) return { path, status: 'missing', message: null }
+    const current = readFileSync(path, 'utf8')
     if (client === 'cursor') assertCursorRulesFile(current)
     if (!hasLociAgentInstructions(current)) return { path, status: 'missing', message: null }
     const expected = mergeLociAgentInstructions(current, {
@@ -185,6 +187,7 @@ export function resolveAgentGlobalRulesPath(
   client: AgentGlobalRulesClient,
   homeDir: string
 ): string {
+  if (client === 'pi') return resolvePiRulesPath(homeDir)
   if (client === 'codex') {
     const overridePath = resolve(homeDir, '.codex', 'AGENTS.override.md')
     if (existsSync(overridePath)) return overridePath

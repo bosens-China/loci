@@ -27,7 +27,7 @@ loci data import ./loci-backup.zip --replace-all --yes --json
 
 交互终端会请求确认，已确认的脚本可加 `--yes`。摘要返回 `mode`、导入库总数 `importedLibraries`、其中覆盖的库数 `replacedLibraries`、文档数 `importedDocuments` 和新增分类数 `categoriesCreated`。
 
-运行时校验归档路径、文件大小、校验和及数据引用，在维护锁和单个 SQLite 事务中恢复。相同文件和模式的并发导入共用一次恢复结果。如果其他抓取或维护正在占用数据库，等待其结束后重试。ZIP 及解压内容各限 512 MiB。
+运行时校验归档路径、校验和及数据引用，在维护锁和单个 SQLite 事务中恢复。相同文件和模式的并发导入共用一次恢复结果。如果其他抓取或维护正在占用数据库，等待其结束后重试。备份不设固定大小上限，实际处理能力受可用内存限制。
 
 ## 清空本地数据
 

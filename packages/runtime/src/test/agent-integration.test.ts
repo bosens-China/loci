@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +18,7 @@ const skillResourceDir = fileURLToPath(
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   cleanups.splice(0).forEach((path) => rmSync(path, { recursive: true, force: true }))
 })
 
@@ -39,6 +40,50 @@ function setup(): { root: string; service: AgentIntegrationService; close: () =>
 }
 
 describe('Agent 全局接入服务', () => {
+  it('Pi 使用自定义目录和覆盖规则，重复接入与移除保留个人规则和通用 Skill', async () => {
+    const { root, service, close } = setup()
+    try {
+      const piDir = join(root, 'home', 'pi-profile')
+      const piSkill = join(piDir, 'skills', 'use-loci')
+      const sharedSkill = join(root, 'home', '.agents', 'skills', 'use-loci')
+      const override = join(piDir, 'AGENTS.override.md')
+      const fallback = join(piDir, 'AGENTS.md')
+      vi.stubEnv('PI_CODING_AGENT_DIR', '~/pi-profile')
+      mkdirSync(piDir, { recursive: true })
+      writeFileSync(override, '# Personal override\n')
+      writeFileSync(fallback, '# Personal default\n')
+      await service.setup('codex')
+      const sharedBefore = readFileSync(join(sharedSkill, 'SKILL.md'))
+
+      const [first, duplicate] = await Promise.all([service.setup('pi'), service.setup('pi')])
+      expect(duplicate).toEqual(first)
+      expect(first).toMatchObject({
+        changed: true,
+        status: {
+          overall: 'ready',
+          components: [
+            { component: 'skill', status: 'current', path: piSkill },
+            { component: 'rules', status: 'current', path: override }
+          ]
+        }
+      })
+      expect((await service.setup('pi')).changed).toBe(false)
+      expect(readFileSync(override, 'utf8')).toContain('<!-- loci:start -->')
+      expect((await service.remove('pi')).status.overall).toBe('missing')
+      expect((await service.remove('pi')).changed).toBe(false)
+      expect(existsSync(piSkill)).toBe(false)
+      expect(readFileSync(override, 'utf8')).toBe('# Personal override\n')
+      expect(readFileSync(fallback, 'utf8')).toBe('# Personal default\n')
+      expect(readFileSync(join(sharedSkill, 'SKILL.md'))).toEqual(sharedBefore)
+
+      vi.stubEnv('PI_CODING_AGENT_DIR', '~/.agents')
+      expect((await service.remove('pi')).status.overall).toBe('attention')
+      expect(readFileSync(join(sharedSkill, 'SKILL.md'))).toEqual(sharedBefore)
+    } finally {
+      close()
+    }
+  })
+
   it('完整接入、重复调用和安全移除 Antigravity', async () => {
     const { service, close } = setup()
     expect(service.inspect('antigravity').overall).toBe('missing')

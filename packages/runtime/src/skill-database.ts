@@ -1,7 +1,24 @@
+import type { DatabaseSync } from 'node:sqlite'
 import type { ConcreteSkillAgent, SkillScope } from '@loci/shared'
 import { asc, desc, eq } from 'drizzle-orm'
+import { SKILL_INSTALLATIONS_SCHEMA } from './database-schema.js'
 import type { LociDrizzleDatabase } from './drizzle-database.js'
 import { skillInstallations } from './drizzle-schema.js'
+import { hasColumn } from './sqlite.js'
+
+/** SQLite 需在数据库迁移事务中重建安装台账，才能扩展 Agent 的 CHECK 约束。 */
+export function migrateSkillInstallationsForPi(database: DatabaseSync): void {
+  if (!hasColumn(database, 'skill_installations', 'requested_agent')) return
+  const columns = `id, skill_name, requested_agent, resolved_target, scope, project_root,
+    package_version, content_digest, created_at, updated_at`
+  database.exec(`
+    ALTER TABLE skill_installations RENAME TO skill_installations_before_pi;
+    ${SKILL_INSTALLATIONS_SCHEMA}
+    INSERT INTO skill_installations (${columns})
+      SELECT ${columns} FROM skill_installations_before_pi;
+    DROP TABLE skill_installations_before_pi;
+  `)
+}
 
 export interface SkillInstallationRecord {
   id: string

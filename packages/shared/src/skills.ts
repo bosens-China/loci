@@ -5,6 +5,7 @@ export const SKILL_AGENTS = [
   'claude-code',
   'vscode',
   'antigravity',
+  'pi',
   'all'
 ] as const
 

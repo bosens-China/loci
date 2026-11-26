@@ -6,7 +6,7 @@ import {
   DEFAULT_LIBRARY_VERSION
 } from '@loci/shared'
 
-export const LOCI_SCHEMA_VERSION = 22
+export const LOCI_SCHEMA_VERSION = 23
 export const CATEGORY_COLUMN = `TEXT NOT NULL DEFAULT '${DEFAULT_LIBRARY_CATEGORY}' CHECK (trim(category) <> '') REFERENCES categories(name)`
 export const VERSION_COLUMN = `TEXT NOT NULL DEFAULT '${DEFAULT_LIBRARY_VERSION}' CHECK (trim(version) <> '')`
 
@@ -20,6 +20,25 @@ CREATE TABLE IF NOT EXISTS clear_data_receipts (
   operation_id TEXT PRIMARY KEY, summary TEXT NOT NULL, created_at INTEGER NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS crawl_runs_source_started ON crawl_runs(source_id, started_at DESC)`
+
+export const SKILL_INSTALLATIONS_SCHEMA = `CREATE TABLE IF NOT EXISTS skill_installations (
+  id TEXT PRIMARY KEY,
+  skill_name TEXT NOT NULL,
+  requested_agent TEXT NOT NULL CHECK (
+    requested_agent IN ('universal', 'codex', 'cursor', 'claude-code', 'vscode', 'antigravity', 'pi')
+  ),
+  resolved_target TEXT NOT NULL UNIQUE,
+  scope TEXT NOT NULL CHECK (scope IN ('global', 'project')),
+  project_root TEXT,
+  package_version TEXT NOT NULL,
+  content_digest TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  CHECK (
+    (scope = 'global' AND project_root IS NULL) OR
+    (scope = 'project' AND project_root IS NOT NULL)
+  )
+) STRICT;`
 
 // 基础表结构集中维护，具体子模块的增量表由各自初始化函数负责。
 export const LOCI_DATABASE_SCHEMA = `
@@ -136,22 +155,5 @@ export const LOCI_DATABASE_SCHEMA = `
     PRIMARY KEY(scope, preference_key)
   ) STRICT;
 
-  CREATE TABLE IF NOT EXISTS skill_installations (
-    id TEXT PRIMARY KEY,
-    skill_name TEXT NOT NULL,
-    requested_agent TEXT NOT NULL CHECK (
-      requested_agent IN ('universal', 'codex', 'cursor', 'claude-code', 'vscode', 'antigravity')
-    ),
-    resolved_target TEXT NOT NULL UNIQUE,
-    scope TEXT NOT NULL CHECK (scope IN ('global', 'project')),
-    project_root TEXT,
-    package_version TEXT NOT NULL,
-    content_digest TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    CHECK (
-      (scope = 'global' AND project_root IS NULL) OR
-      (scope = 'project' AND project_root IS NOT NULL)
-    )
-  ) STRICT;
+  ${SKILL_INSTALLATIONS_SCHEMA}
 `
