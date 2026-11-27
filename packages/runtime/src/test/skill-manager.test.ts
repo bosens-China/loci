@@ -58,9 +58,8 @@ describe('SkillManager', () => {
     await expect(manager.add()).resolves.toEqual([
       { action: 'unchanged', name: 'use-loci', targetPath: target }
     ])
-    expect(readFileSync(join(target, 'SKILL.md'), 'utf8')).toContain('name: use-loci')
-    expect(readFileSync(join(target, 'references/cli.md'))).toEqual(
-      readFileSync(join(skillResourceDir, 'references/cli.md'))
+    expect(readFileSync(join(target, 'SKILL.md'))).toEqual(
+      readFileSync(join(skillResourceDir, 'SKILL.md'))
     )
     expect(manager.list()).toMatchObject([{ targetPath: target, status: 'current' }])
   })
@@ -70,13 +69,15 @@ describe('SkillManager', () => {
     const target = join(root, 'home/.cursor/skills/use-loci')
     await manager.add({ agent: 'cursor' })
     writeFileSync(join(target, 'SKILL.md'), '# local edit\n')
-    writeFileSync(join(target, 'stale.txt'), 'stale')
+    const oldReference = join(target, 'references/cli.md')
+    mkdirSync(join(target, 'references'))
+    writeFileSync(oldReference, '# old CLI reference')
 
     expect(manager.preview({ agent: 'cursor' })[0]).toMatchObject({ status: 'modified' })
     await expect(manager.add({ agent: 'cursor' })).resolves.toMatchObject([
       { action: 'reinstalled' }
     ])
-    expect(existsSync(join(target, 'stale.txt'))).toBe(false)
+    expect(existsSync(oldReference)).toBe(false)
     expect(manager.list({ agent: 'cursor' })[0]?.status).toBe('current')
   })
 

@@ -42,7 +42,7 @@ CLI 是 npm 分发入口，包含本机 Web UI 和 `use-loci` Skill。CLI 直接
 
 Codex、Cursor、VS Code、Claude Code、Antigravity 和 Pi 使用各自的目标路径。规则可单独写入，Codex 和 Cursor 可按现有配置加入 Context7 兜底说明。Pi 接入遵循其配置目录和全局规则查找顺序，移除专用 Skill 时保留通用安装。
 
-`loci skills` 管理项目或全局的内置 Skill。默认 `universal`、当前项目，可显式选择客户端与作用域。安装记录和所有权标记确认目标，安装、替换与删除由文件锁和台账保护。`.agents/skills/use-loci` 是发布包复制的唯一内容源。参见 [使用 Skill](../apps/docs/docs/agent/skill.mdx) 和 [配置全局规则](../apps/docs/docs/agent/global-rules.mdx)。
+`loci skills` 管理项目或全局的内置 Skill。默认 `universal`、当前项目，可显式选择客户端与作用域。安装记录和所有权标记确认目标，安装、替换与删除由文件锁和台账保护。`.agents/skills/use-loci` 是发布包复制的唯一内容源。Skill 保留查询流程和授权边界，CLI 参数与示例由官网维护。站点构建生成 `llms.txt` 和逐页 Markdown 供 Agent 按需读取。参见 [使用 Skill](../apps/docs/docs/agent/skill.mdx) 和 [配置全局规则](../apps/docs/docs/agent/global-rules.mdx)。
 
 ## 配置、浏览器与备份
 

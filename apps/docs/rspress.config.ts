@@ -9,6 +9,8 @@ export default defineConfig({
   logoText: 'Loci',
   lang: 'zh',
   base: '/loci/',
+  siteOrigin: 'https://bosens-china.github.io',
+  llms: true,
   i18nSource: {
     editLinkText: {
       zh: '在 GitHub 上编辑此页',
