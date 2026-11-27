@@ -11,6 +11,7 @@ import {
   withRuntime,
   type OutputOptions
 } from './command-runtime.js'
+import { CLI_VERSION } from './update.js'
 
 function assetsDir() {
   return ['./resources/ui/', './resources/ui/dist/', '../../web/dist/']
@@ -41,7 +42,8 @@ export function registerWebCommand(program: Command): void {
         withRuntime(async (runtime) => {
           const server = await startLocalHttpServer(runtime, {
             port: opts.port,
-            assetsDir: assetsDir()
+            assetsDir: assetsDir(),
+            currentVersion: CLI_VERSION
           })
           try {
             output(opts, { url: server.endpoint }, (r) => r.url)

@@ -41,4 +41,4 @@ loci config domain remove docs.example.org
 
 移除域名策略需要确认。已核对目标的非交互脚本可用 `loci config domain remove <hostname> --yes`。
 
-`LOCI_DATA_DIR` 可为当前进程选择数据目录，`LOCI_CACHE_DIR` 可选择缓存目录（含受管浏览器）。希望 CLI 与 Web UI 共享数据和浏览器时，对相关命令使用相同的目录。备份操作见 [数据备份与恢复](/cli/commands/data)。
+`LOCI_DATA_DIR` 可为当前进程选择数据目录，`LOCI_CACHE_DIR` 可选择缓存目录（含受管浏览器与更新检查缓存）。交互式终端执行 CLI 命令（含直接运行 `loci`）或打开 Web UI 时会在后台非阻塞检查新版本。共享缓存的 CLI 和 Web 会复用同一次在途检查，Web 顶栏会在检查完成后刷新。可设置 `LOCI_NO_UPDATE_CHECK=1`、`NO_UPDATE_NOTIFIER=1` 或 `CI=true` 关闭自动检查。希望 CLI 与 Web UI 共享数据和浏览器时，对相关命令使用相同的目录。备份操作见 [数据备份与恢复](/cli/commands/data)。

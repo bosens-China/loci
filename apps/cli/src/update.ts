@@ -1,90 +1,132 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
-import { resolveLociCacheDir } from '@loci/runtime'
-import { isNewerVersion } from '@loci/shared'
+import { createRequire } from 'node:module'
+import {
+  UPDATE_TIMEOUT_MS,
+  checkForCliUpdate,
+  isUpdateCheckDue,
+  fetchLatestCliVersion,
+  formatCliUpdateMessage,
+  isUpdateCheckDisabled,
+  readCachedUpdateStatus,
+  triggerBackgroundUpdateCheck,
+  type UpdateCheckStatus
+} from '@loci/runtime'
 
 export { isNewerVersion } from '@loci/shared'
+export { UPDATE_TIMEOUT_MS }
 
-const UPDATE_CACHE_FILE = 'cli-update.json'
-const NPM_LATEST_URL = 'https://registry.npmjs.org/@boses%2fcli/latest'
 export const UPDATE_CHECK_ARGUMENT = '--internal-check-update'
-export const UPDATE_TIMEOUT_MS = 5_000
 
-interface UpdateCache {
-  checkedOn?: string
-  latestVersion?: string
-}
-
-interface NpmPackageMetadata {
-  version?: unknown
-}
+const SKIPPED_FIRST_ARGS = new Set([
+  'upgrade',
+  '__crawl',
+  UPDATE_CHECK_ARGUMENT,
+  '--version',
+  '-V',
+  '-v'
+])
 
 export interface CliUpdate {
   currentVersion: string
   latestVersion: string
 }
 
+export interface UpdateNotifyOptions {
+  isTTY?: boolean
+  env?: NodeJS.ProcessEnv
+}
+
 export const CLI_VERSION = readCliVersion()
 
-/** 每天仅派生一次独立检查进程，避免网络请求阻塞用户命令。 */
-export function startDailyUpdateCheck(args: readonly string[]): void {
-  if (!process.stdout.isTTY || args.includes('--json') || args[0] === 'upgrade') return
-  if (!claimDailyUpdateCheck()) return
+/** 判断当前 CLI 调用是否应触发后台更新检查并展示更新提示（支持无参数裸敲 loci）。 */
+export function shouldNotifyUpdate(
+  args: readonly string[],
+  options: UpdateNotifyOptions = {}
+): boolean {
+  const isTTY = options.isTTY ?? Boolean(process.stderr.isTTY)
+  if (!isTTY) return false
+  if (isUpdateCheckDisabled(options.env)) return false
+  if (args.includes('--json')) return false
+  const first = args[0]
+  if (first && SKIPPED_FIRST_ARGS.has(first)) return false
+  return true
+}
+
+/** 按时间窗口派生独立后台检查进程，绝不阻塞当前命令或向外抛出异常。 */
+export function startDailyUpdateCheck(
+  args: readonly string[],
+  options: UpdateNotifyOptions & { cacheDir?: string; now?: number } = {}
+): void {
+  if (!shouldNotifyUpdate(args, options)) return
+  if (!isUpdateCheckDue(options)) return
 
   const entry = process.argv[1]
   if (!entry) return
-  const child = spawn(process.execPath, [entry, UPDATE_CHECK_ARGUMENT], {
-    detached: true,
-    stdio: 'ignore'
-  })
-  child.once('error', () => undefined)
-  child.unref()
+  try {
+    const loader = entry.endsWith('.ts')
+      ? ['--import', createRequire(import.meta.url).resolve('tsx')]
+      : []
+    const child = spawn(process.execPath, [...loader, entry, UPDATE_CHECK_ARGUMENT], {
+      detached: true,
+      env: options.cacheDir ? { ...process.env, LOCI_CACHE_DIR: options.cacheDir } : undefined,
+      stdio: 'ignore',
+      windowsHide: true
+    })
+    child.once('error', () => undefined)
+    child.unref()
+  } catch {
+    // 后台更新检查失败静默降级，避免影响主命令执行。
+  }
 }
 
 /** 后台检查入口：失败时静默，不能影响原始 CLI 命令。 */
 export async function runBackgroundUpdateCheck(): Promise<void> {
-  try {
-    await checkForUpdate()
-  } catch {
-    // 网络不可用时保留当天已检查标记，下一天再重试。
-  }
+  await triggerBackgroundUpdateCheck(CLI_VERSION)
 }
 
-export async function checkForUpdate(fetcher: typeof fetch = fetch): Promise<CliUpdate | null> {
-  const latestVersion = await fetchLatestVersion(fetcher)
-  const cache = { ...readCache(), checkedOn: today(), latestVersion }
-  writeCache(cache)
-  return isNewerVersion(latestVersion, CLI_VERSION)
-    ? { currentVersion: CLI_VERSION, latestVersion }
-    : null
+export async function checkForUpdate(
+  fetcher: typeof fetch = fetch,
+  options: { cacheDir?: string; now?: number } = {}
+): Promise<CliUpdate | null> {
+  const status = await checkForCliUpdate(CLI_VERSION, {
+    fetcher,
+    cacheDir: options.cacheDir,
+    now: options.now
+  })
+  return toCliUpdate(status)
 }
 
 export async function fetchLatestVersion(fetcher: typeof fetch = fetch): Promise<string> {
-  const response = await fetcher(NPM_LATEST_URL, { signal: AbortSignal.timeout(UPDATE_TIMEOUT_MS) })
-  if (!response.ok) throw new Error(`检查更新失败：npm 返回 ${response.status}`)
-
-  const payload = (await response.json()) as NpmPackageMetadata
-  if (typeof payload.version !== 'string') throw new Error('检查更新失败：npm 返回了无效版本')
-  return payload.version
+  return fetchLatestCliVersion(fetcher)
 }
 
-export function readCachedUpdate(): CliUpdate | null {
-  const latestVersion = readCache().latestVersion
-  return latestVersion && isNewerVersion(latestVersion, CLI_VERSION)
-    ? { currentVersion: CLI_VERSION, latestVersion }
-    : null
+export function readCachedUpdate(options: { cacheDir?: string } = {}): CliUpdate | null {
+  return toCliUpdate(readCachedUpdateStatus(CLI_VERSION, options))
 }
 
 export function formatUpdateMessage(update: CliUpdate): string {
-  return `发现 Loci CLI v${update.latestVersion}，当前为 v${update.currentVersion}；运行 npm install --global @boses/cli@latest 更新。`
+  return formatCliUpdateMessage({
+    currentVersion: update.currentVersion,
+    latestVersion: update.latestVersion,
+    updateAvailable: true,
+    checkedAt: null,
+    checking: false,
+    checkFailed: false,
+    upgradeCommand: 'npm install --global @boses/cli@latest'
+  })
 }
 
-function claimDailyUpdateCheck(): boolean {
-  const cache = readCache()
-  if (cache.checkedOn === today()) return false
-  writeCache({ ...cache, checkedOn: today() })
-  return true
+/** 在命令执行完毕后向 stderr 输出缓存中的更新提示，避免被长输出冲走。 */
+export function printCachedUpdateNotice(options: { cacheDir?: string } = {}): void {
+  const update = readCachedUpdate(options)
+  if (update) process.stderr.write(`\n${formatUpdateMessage(update)}\n`)
+}
+
+function toCliUpdate(status: UpdateCheckStatus): CliUpdate | null {
+  return status.updateAvailable
+    ? { currentVersion: status.currentVersion, latestVersion: status.latestVersion }
+    : null
 }
 
 function readCliVersion(): string {
@@ -97,28 +139,4 @@ function readCliVersion(): string {
   const version = (packageJson as { version?: unknown }).version
   if (typeof version !== 'string') throw new Error('无法读取 CLI 版本')
   return version
-}
-
-function cachePath(): string {
-  return join(resolveLociCacheDir(), UPDATE_CACHE_FILE)
-}
-
-function readCache(): UpdateCache {
-  try {
-    const value = JSON.parse(readFileSync(cachePath(), 'utf8')) as unknown
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as UpdateCache) : {}
-  } catch {
-    return {}
-  }
-}
-
-function writeCache(cache: UpdateCache): void {
-  const path = cachePath()
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(cache)}\n`)
-}
-
-function today(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }

@@ -13,6 +13,7 @@ import { ActiveTaskIndicator } from '@/components/shell/ActiveTaskIndicator'
 import { resolveActiveMenuKey } from '@/components/shell/navigation-utils'
 import { ShellLayoutContext } from '@/components/shell/ShellLayoutContext'
 import { ThemeSwitcher } from '@/components/shell/ThemeSwitcher'
+import { UpdateIndicator } from '@/components/shell/UpdateIndicator'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -101,6 +102,7 @@ export function AppShell({ children }: AppShellProps): React.JSX.Element {
 
             <Space size={12} className="items-center">
               <ActiveTaskIndicator />
+              <UpdateIndicator />
               <div className="h-4 w-px bg-[var(--ant-color-border-secondary)]" />
               <ThemeSwitcher />
             </Space>

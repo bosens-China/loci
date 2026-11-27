@@ -6,6 +6,7 @@ import type { LocalRuntime } from './local-runtime.js'
 import { handleAgentIntegrations } from './local-http-agent.js'
 import { handleLocalBrowser } from './local-http-browser.js'
 import { handleDataTransfer } from './local-http-data-transfer.js'
+import { handleUpdateApi, type UpdateApiOptions } from './local-http-update.js'
 import type { createForegroundCrawls } from './local-http-crawls.js'
 import { DocumentVersionConflict } from './document-mutation.js'
 import { RuntimeLockedError } from './runtime-lock.js'
@@ -89,12 +90,14 @@ export async function handleLocalApi(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  crawls: ReturnType<typeof createForegroundCrawls>
+  crawls: ReturnType<typeof createForegroundCrawls>,
+  updateOptions?: UpdateApiOptions
 ): Promise<void> {
   const route = url.pathname
   const method = request.method
   const ok = (body: unknown, status = 200) => json(response, status, body)
   try {
+    if (await handleUpdateApi(request, response, url, updateOptions)) return
     if (await handleLocalBrowser(runtime, request, response, url)) return
     if (await handleAgentIntegrations(runtime, request, response, url)) return
     if (await handleDataTransfer(runtime, request, response, url, () => crawls.clear())) return

@@ -13,8 +13,8 @@ import { registerUpgradeCommand } from './commands/upgrade.js'
 import { registerWebCommand } from './web.js'
 import {
   CLI_VERSION,
-  formatUpdateMessage,
-  readCachedUpdate,
+  printCachedUpdateNotice,
+  shouldNotifyUpdate,
   startDailyUpdateCheck
 } from './update.js'
 
@@ -45,20 +45,25 @@ export function createProgram(json = false): Command {
 }
 
 export async function runCli(args: readonly string[]): Promise<void> {
-  if (process.stdout.isTTY && args.length && !args.includes('--json') && args[0] !== 'upgrade') {
-    const update = readCachedUpdate()
-    if (update) process.stderr.write(`${formatUpdateMessage(update)}\n`)
-    startDailyUpdateCheck(args)
-  }
+  const notifyUpdate = shouldNotifyUpdate(args)
+  if (notifyUpdate) startDailyUpdateCheck(args)
   const program = createProgram(args.includes('--json'))
-  if (!args.length) return void program.outputHelp()
+  if (!args.length) {
+    program.outputHelp()
+    if (notifyUpdate) printCachedUpdateNotice()
+    return
+  }
   try {
     await program.parseAsync([...args], { from: 'user' })
   } catch (error) {
     if (error instanceof CommanderError) {
-      if (!error.exitCode) return
+      if (!error.exitCode) {
+        if (notifyUpdate) printCachedUpdateNotice()
+        return
+      }
       throw new CliError(error.message, 2)
     }
     throw error
   }
+  if (notifyUpdate) printCachedUpdateNotice()
 }

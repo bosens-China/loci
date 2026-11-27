@@ -17,6 +17,12 @@ export interface LocalHttpServerOptions {
   assetsDir?: string
   /** 开发时由本机 Vite 代理转发的固定来源。 */
   devOrigin?: string
+  /** 当前应用版本号，用于更新检查接口与缓存比对。 */
+  currentVersion?: string
+  /** 覆盖更新检查缓存目录（主要用于测试隔离）。 */
+  updateCacheDir?: string
+  /** 覆盖更新检查请求实现（主要用于测试注入）。 */
+  updateFetcher?: typeof fetch
 }
 
 /** 本机 Web transport：只绑定回环地址，写请求额外校验 Origin。 */
@@ -61,7 +67,11 @@ export async function startLocalHttpServer(
         !allowed.has(request.headers.origin)
       )
         return json(response, 403, { error: '无效的 Origin' })
-      await handleLocalApi(runtime, request, response, url, crawls)
+      await handleLocalApi(runtime, request, response, url, crawls, {
+        currentVersion: options.currentVersion,
+        cacheDir: options.updateCacheDir ?? runtime.cacheDir,
+        fetcher: options.updateFetcher
+      })
       return
     }
     if (request.method !== 'GET' && request.method !== 'HEAD') {
