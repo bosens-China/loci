@@ -73,16 +73,20 @@ interface ManagedRange {
 
 /** 只替换 Loci 管理的区块；Codex 可同时迁移有明确边界的 Context7 规则。 */
 export function mergeLociAgentInstructions(
-  content: string,
+  current: string,
   options: MergeLociAgentInstructionsOptions = {}
 ): string {
-  const lociRange = findLociRange(content)
+  const ranges = findLociRanges(current)
+  const [lociRange, ...duplicates] = ranges
+  // 只合并完整成对的 Loci 区块，保留区块之间的个人规则。
+  const content = duplicates.reduceRight((text, range) => replaceRange(text, range, ''), current)
   const context7Range = options.migrateContext7 ? findContext7Range(content, lociRange) : undefined
   const useContext7 =
     options.context7Available === true ||
     context7Range !== undefined ||
-    (lociRange !== undefined &&
-      content.slice(lociRange.start, lociRange.end).includes(LOCI_CONTEXT7_COMPATIBILITY))
+    ranges.some((range) =>
+      current.slice(range.start, range.end).includes(LOCI_CONTEXT7_COMPATIBILITY)
+    )
   const newline = content.includes('\r\n') ? '\r\n' : '\n'
   const block = (
     useContext7 ? LOCI_CONTEXT7_AGENT_INSTRUCTIONS : LOCI_AGENT_INSTRUCTIONS
@@ -97,16 +101,14 @@ export function mergeLociAgentInstructions(
 }
 
 export function hasContext7Compatibility(content: string): boolean {
-  const range = findLociRange(content)
-  return (
-    range !== undefined &&
+  return findLociRanges(content).some((range) =>
     content.slice(range.start, range.end).includes(LOCI_CONTEXT7_COMPATIBILITY)
   )
 }
 
 /** 检查 Loci 受管区块；异常边界继续抛错，避免把冲突误报为缺失。 */
 export function hasLociAgentInstructions(content: string): boolean {
-  return findLociRange(content) !== undefined
+  return findLociRanges(content).length > 0
 }
 
 /** 只移除 Loci 受管区块，保留同一文件中的其他用户规则。 */
@@ -114,9 +116,10 @@ export function removeLociAgentInstructions(content: string): {
   content: string
   removed: boolean
 } {
-  const range = findLociRange(content)
-  if (!range) return { content, removed: false }
-  const next = replaceRange(content, range, '')
+  const ranges = findLociRanges(content)
+  if (!ranges.length) return { content, removed: false }
+  const next = ranges
+    .reduceRight((text, range) => replaceRange(text, range, ''), content)
     .replace(/^(?:\r?\n){2,}/, '')
     .replace(/(?:\r?\n){3,}/g, '\n\n')
   return {
@@ -129,14 +132,17 @@ function createManagedBlock(body: string): string {
   return `${LOCI_INSTRUCTIONS_START}\n${body}\n${LOCI_INSTRUCTIONS_END}`
 }
 
-function findLociRange(content: string): ManagedRange | undefined {
+function findLociRanges(content: string): ManagedRange[] {
   const starts = [...content.matchAll(/^<!-- loci:start -->(?=\r?$)/gm)]
   const ends = [...content.matchAll(/^<!-- loci:end -->(?=\r?$)/gm)]
-  if (starts.length !== ends.length || starts.length > 1) {
-    throw new Error('Loci 全局规则标记不完整或重复，请先手动修复')
+  if (starts.length !== ends.length) {
+    throw new Error('Loci 全局规则标记不完整，请先补齐成对的 loci:start 和 loci:end')
   }
-  if (starts.length === 0) return undefined
-  return toRange(starts[0], ends[0], 'Loci 全局规则')
+  const ranges = starts.map((start, index) => toRange(start, ends[index], 'Loci 全局规则'))
+  if (ranges.some((range, index) => index > 0 && ranges[index - 1].end > range.start)) {
+    throw new Error('Loci 全局规则标记相互嵌套，请先修复区块边界')
+  }
+  return ranges
 }
 
 function findContext7Range(
@@ -204,7 +210,7 @@ function replaceRange(content: string, range: ManagedRange, replacement: string)
 }
 
 function mergeManagedBlock(content: string, block: string, newline: string): string {
-  const range = findLociRange(content)
+  const [range] = findLociRanges(content)
   if (range) return replaceRange(content, range, block)
   if (!content) return `${block}${newline}`
   const separator = content.endsWith(`${newline}${newline}`)

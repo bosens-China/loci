@@ -1,7 +1,17 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parse as parseJsonc } from 'jsonc-parser'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentIntegrationService } from '../agent-integration.js'
 import {
@@ -40,6 +50,88 @@ function setup(): { root: string; service: AgentIntegrationService; close: () =>
 }
 
 describe('Agent 全局接入服务', () => {
+  it('更新手改的受管 Skill 和旧规则，清理 Codex MCP，重复接入无变化', async () => {
+    const { root, service, close } = setup()
+    try {
+      const rules = join(root, 'home/.codex/AGENTS.md')
+      const config = join(root, 'home/.codex/config.toml')
+      const skill = join(root, 'home/.agents/skills/use-loci/SKILL.md')
+      await service.setup('codex')
+      writeFileSync(skill, '# old version\n')
+      const oldRules = '<!-- loci:start -->\nUse loci MCP\n<!-- loci:end -->'
+      writeFileSync(rules, `${oldRules}\n\n# Personal\n\n${oldRules}\n`)
+      const unrelated = '[mcp_servers.keep]\ncommand = "keep"\n'
+      writeFileSync(
+        config,
+        `[mcp_servers.loci]\ncommand = "loci"\nargs = ["mcp", "stdio"]\n${unrelated}`
+      )
+      expect(service.inspect('codex').components).toMatchObject([
+        { component: 'skill', status: 'outdated' },
+        { component: 'rules', status: 'outdated' },
+        { component: 'legacy-mcp', status: 'outdated', path: config }
+      ])
+
+      const first = service.setup('codex')
+      expect(service.setup('codex')).toBe(first)
+      await expect(first).resolves.toMatchObject({ changed: true, status: { overall: 'ready' } })
+      const backup = (await first).status.components.find(
+        (item) => item.component === 'skill'
+      )?.backupPath
+      expect(readFileSync(join(backup!, 'SKILL.md'), 'utf8')).toBe('# old version\n')
+      expect(readFileSync(config, 'utf8')).toBe(unrelated)
+      expect(readFileSync(rules, 'utf8')).toContain('# Personal\n')
+      expect(readFileSync(rules, 'utf8')).not.toContain('Use loci MCP')
+      expect(readFileSync(rules, 'utf8').match(/<!-- loci:start -->/g)).toHaveLength(1)
+      expect(readFileSync(skill)).toEqual(readFileSync(join(skillResourceDir, 'SKILL.md')))
+      await expect(service.setup('codex')).resolves.toMatchObject({ changed: false })
+    } finally {
+      close()
+    }
+  })
+
+  it('一键备份外部 Skill 链接，同时保留原始目录和自定义 MCP', async () => {
+    const { root, service, close } = setup()
+    try {
+      const home = join(root, 'home')
+      const skills = join(home, '.cursor/skills')
+      const link = join(skills, 'use-loci')
+      const external = join(home, 'external-skill')
+      const config = join(home, '.cursor/mcp.json')
+      mkdirSync(skills, { recursive: true })
+      mkdirSync(external, { recursive: true })
+      writeFileSync(join(external, 'SKILL.md'), '# external\n')
+      symlinkSync(external, link, 'junction')
+      const custom = '{ "mcpServers": { "loci": { "command": "other" } } }\n'
+      writeFileSync(config, custom)
+      expect(service.inspect('cursor').components[0]).toMatchObject({
+        status: 'replaceable',
+        path: link
+      })
+
+      const { status } = await service.setup('cursor')
+      expect(status.overall).toBe('ready')
+      expect(status.components).toMatchObject([
+        { component: 'skill', status: 'current', path: link, backupPath: expect.any(String) },
+        { component: 'rules', status: 'current' }
+      ])
+      expect(lstatSync(link).isDirectory()).toBe(true)
+      expect(lstatSync(status.components[0].backupPath!).isSymbolicLink()).toBe(true)
+      expect(readFileSync(join(external, 'SKILL.md'), 'utf8')).toBe('# external\n')
+      expect(readFileSync(config, 'utf8')).toBe(custom)
+      await expect(service.setup('cursor')).resolves.toMatchObject({ changed: false })
+
+      const otherMcp =
+        '{\n  "mcpServers": {\n    // 保留此服务\n    "keep": { "command": "keep" },\n    "loci": { "type": "stdio", "command": "loci", "args": ["mcp", "stdio"] }\n  }\n}\n'
+      writeFileSync(config, otherMcp)
+      await expect(service.setup('cursor')).resolves.toMatchObject({ status: { overall: 'ready' } })
+      const migrated = readFileSync(config, 'utf8')
+      expect(migrated).toContain('// 保留此服务')
+      expect(parseJsonc(migrated)).toEqual({ mcpServers: { keep: { command: 'keep' } } })
+    } finally {
+      close()
+    }
+  })
+
   it('Pi 使用自定义目录和覆盖规则，重复接入与移除保留个人规则和通用 Skill', async () => {
     const { root, service, close } = setup()
     try {

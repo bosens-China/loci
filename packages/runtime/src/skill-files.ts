@@ -128,11 +128,6 @@ export function readSkillMarker(path: string): SkillMarker | undefined {
   }
 }
 
-export function validSkillMarker(path: string, name: string): boolean {
-  const marker = readSkillMarker(path)
-  return marker?.name === name && marker.provider === 'loci'
-}
-
 export function skillLockKey(path: string): string {
   return `skill-${createHash('sha256').update(path).digest('hex')}`
 }

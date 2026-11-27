@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, renameSync, rmSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, renameSync, rmSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { z } from 'zod'
 import { SKILL_AGENTS } from '@loci/shared'
 import { writeFileAtomically } from './atomic-file.js'
@@ -22,6 +23,7 @@ const journalSchema = z.object({
   action: z.enum(['add', 'remove']),
   committed: z.boolean(),
   hadTarget: z.boolean(),
+  keepBackup: z.boolean().optional(),
   previous: recordSchema.nullable()
 })
 type Journal = z.infer<typeof journalSchema>
@@ -43,6 +45,11 @@ export function commitSkillTransaction(target: string, journal: Journal): void {
   beginSkillTransaction(target, { ...journal, committed: true })
 }
 
+/** 保留的备份放在客户端的 Skill 扫描目录之外。 */
+export function skillBackupPath(target: string, id: string): string {
+  return join(dirname(dirname(target)), '.loci-skill-backups', `${basename(target)}.${id}`)
+}
+
 export function recoverSkillTransaction(target: string, database: SkillInstallationDatabase): void {
   const path = journalPath(target)
   if (!existsSync(path)) return
@@ -50,9 +57,11 @@ export function recoverSkillTransaction(target: string, database: SkillInstallat
   if (journal.previous && journal.previous.resolvedTarget !== target)
     throw new Error('Skill 事务记录路径不匹配')
   const temp = transactionPath(target, 'tmp', journal.id)
-  const backup = transactionPath(target, journal.action === 'add' ? 'backup' : 'remove', journal.id)
+  const backup = journal.keepBackup
+    ? skillBackupPath(target, journal.id)
+    : transactionPath(target, journal.action === 'add' ? 'backup' : 'remove', journal.id)
   if (!journal.committed) {
-    if (existsSync(backup)) {
+    if (lstatSync(backup, { throwIfNoEntry: false })) {
       rmSync(target, { recursive: true, force: true })
       renameSync(backup, target)
     } else if (!journal.hadTarget && journal.action === 'add' && !existsSync(temp)) {
@@ -62,6 +71,6 @@ export function recoverSkillTransaction(target: string, database: SkillInstallat
     else database.deleteSkillInstallationRecord(target)
   }
   rmSync(temp, { recursive: true, force: true })
-  rmSync(backup, { recursive: true, force: true })
+  if (!journal.keepBackup) rmSync(backup, { recursive: true, force: true })
   rmSync(path, { force: true })
 }

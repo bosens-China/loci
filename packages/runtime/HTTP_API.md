@@ -85,6 +85,8 @@
 | `GET /api/data/counts`                    | 无                                                                                                                 | `200 { libraries, documents }`，用于显示确认前的当前数量                    |
 | `POST /api/data/clear`                    | `{ scope: 'documents' \| 'sources' }`                                                                              | `200 { scope, libraries, documents }`，返回实际删除数量，维护冲突返回 `409` |
 
+Agent 状态中的 `legacy-mcp` 组件仅在发现待清理或无法读取的旧版配置时出现。外部安装占用 Skill 目标时返回 `replaceable`，`setup` 会备份并替换。备份有本地修改或外部安装的 Skill 后，操作结果中的 Skill 组件会附带 `backupPath`。`setup` 与 `remove` 均清理可确认的旧版 Loci MCP 条目。
+
 完整 ZIP 的 `scope` 为 `all`，包含所有分类、库及关联数据、设置和域名策略。范围 ZIP 的 `scope` 为 `filtered`，包含命中库、文档、抓取记录、显式页和相关分类。合并导入按库 ID 或 `(source_identity, version)` 匹配，在维护锁和单个写事务中先删旧库再恢复文档与 FTS，保留其他库和全局设置。`replace` 清空全部本地库，完整备份还会恢复全局设置与域名策略。并发导入相同 ZIP 和模式时，CLI 与 Web 共用持锁者的事务结果。不同操作争用维护锁时返回 `409`。摘要包含 `mode`、`importedLibraries`（总数）、`replacedLibraries`（其中覆盖数）、`importedDocuments`、`categoriesCreated`，兼容字段 `sources` 和 `documents`。
 
 `documents` 清空文档正文与索引，保留库、分类、设置和抓取记录，并重置指定页面状态及 GitHub 快照版本。旧审查库保留已批准的 URL。`sources` 清空库及其关联数据，保留分类和设置。两种操作都包含旧只读快照的正文。同一范围的在途清空共用结果，数据库提交具有原子性。Web 在发出清空请求前单独向用户确认。

@@ -51,6 +51,7 @@ export interface SkillOperationResult {
   action: 'installed' | 'reinstalled' | 'unchanged' | 'removed' | 'missing'
   name: string
   targetPath: string
+  backupPath?: string
 }
 
 export interface SkillClearResult {

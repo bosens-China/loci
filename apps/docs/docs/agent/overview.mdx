@@ -16,6 +16,14 @@ loci list --json
 
 Pi 用户执行 `loci setup pi`，也可以在“Agent 接入”页选择 Pi。重新打开 Pi 后，可输入 `/skill:use-loci` 加载 Skill。
 
+## 升级旧接入
+
+点击“一键接入”或运行 `loci setup <client>` 即可升级旧接入。已有本地修改的 Skill、外部安装目录或链接会先移到 `.loci-skill-backups`，再安装当前版本。Web 可复制备份路径，CLI 会输出 `backupPath`。如果原安装是 Skillshare 链接，备份的是链接，原始 Skill 仍保存在 Skillshare 源目录中。
+
+同步还会合并完整成对的 Loci 规则区块，并清理旧版写入客户端的标准 `loci mcp stdio` 条目。个人规则和其他 MCP 服务会保留。
+
+如果配置文件无法读取、格式无效或规则区块边界不完整，页面和 CLI 会提供文件路径及具体原因。按提示修复后可直接重试。[配置全局规则](/agent/global-rules#更新与移除)
+
 ## 从问题到原文
 
 1. 从项目依赖确定版本，运行 `loci list --json` 找到相应库。

@@ -21,7 +21,7 @@ export default defineConfig({
   sourcemap: true,
   deps: {
     // 私有 workspace 包必须连同子路径一起打入 CLI，不能留给全局安装解析。
-    alwaysBundle: [/^@loci\/(?:core|runtime|shared)(?:\/.*)?$/, 'semver'],
+    alwaysBundle: [/^@loci\/(?:core|runtime|shared)(?:\/.*)?$/, 'semver', 'smol-toml'],
     // 构建期阻止新的 @loci/* 外部引用混入发布产物。
     onlyImport: [/^(?!@loci\/)/]
   }

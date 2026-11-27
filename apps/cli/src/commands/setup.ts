@@ -15,11 +15,12 @@ function summary({ client, overall, components }: AgentIntegrationStatus) {
   return {
     client,
     overall,
-    components: components.map(({ component, status, path, message }) => ({
+    components: components.map(({ component, status, path, message, backupPath }) => ({
       component,
       status,
       path,
-      ...(message && { message })
+      ...(message && { message }),
+      ...(backupPath && { backupPath })
     }))
   }
 }
@@ -58,7 +59,8 @@ export function registerSetupCommand(program: Command): void {
         const result = await withRuntime(async (r) => {
           if (action === 'rules') return service(r).setupRules(target)
           const result = await service(r).remove(target)
-          if (result.status.overall === 'attention') process.exitCode = 1
+          if (result.status.components.some((item) => item.status === 'conflict'))
+            process.exitCode = 1
           return { changed: result.changed, ...summary(result.status) }
         })
         output(opts, result)

@@ -8,33 +8,35 @@ import { expect, it } from 'vitest'
 import { createDatabase } from '../database.js'
 import { SkillManager } from '../skill-manager.js'
 
-it('跨进程中断替换后恢复旧目录和台账，并允许重试', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'loci-skill-recovery-'))
-  const dataDir = join(root, 'data')
-  const homeDir = join(root, 'home')
-  const databasePath = join(root, 'loci.sqlite')
-  const skillResourceDir = resolve('../../.agents/skills/use-loci')
-  const target = join(homeDir, '.agents/skills/use-loci')
-  const database = createDatabase(databasePath)
-  const manager = new SkillManager({
-    database,
-    dataDir,
-    homeDir,
-    skillResourceDir,
-    packageVersion: '1'
-  })
-  let child: ReturnType<typeof spawn> | undefined
-  try {
-    await manager.add()
-    writeFileSync(join(target, 'SKILL.md'), '# 用户修改\n')
-    const ready = join(root, 'ready')
-    const script = `
+it.each([false, true])(
+  '跨进程中断替换后恢复旧目录和台账，并允许重试（保留备份: %s）',
+  async (keepBackup) => {
+    const root = mkdtempSync(join(tmpdir(), 'loci-skill-recovery-'))
+    const dataDir = join(root, 'data')
+    const homeDir = join(root, 'home')
+    const databasePath = join(root, 'loci.sqlite')
+    const skillResourceDir = resolve('../../.agents/skills/use-loci')
+    const target = join(homeDir, '.agents/skills/use-loci')
+    const database = createDatabase(databasePath)
+    const manager = new SkillManager({
+      database,
+      dataDir,
+      homeDir,
+      skillResourceDir,
+      packageVersion: '1'
+    })
+    let child: ReturnType<typeof spawn> | undefined
+    try {
+      await manager.add()
+      writeFileSync(join(target, 'SKILL.md'), '# 用户修改\n')
+      const ready = join(root, 'ready')
+      const script = `
       import fs from 'node:fs'
       import { syncBuiltinESMExports } from 'node:module'
       const rename = fs.renameSync
       fs.renameSync = (from, to) => {
         rename(from, to)
-        if (String(to).endsWith('.backup')) {
+        if (String(to).endsWith('.backup') || String(to).includes('.loci-skill-backups')) {
           fs.writeFileSync(${JSON.stringify(ready)}, 'ready')
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30000)
         }
@@ -44,35 +46,45 @@ it('跨进程中断替换后恢复旧目录和台账，并允许重试', async (
       const { SkillManager } = await import(${JSON.stringify(pathToFileURL(resolve('src/skill-manager.ts')).href)})
       const database = createDatabase(${JSON.stringify(databasePath)})
       const manager = new SkillManager({ database, dataDir: ${JSON.stringify(dataDir)}, homeDir: ${JSON.stringify(homeDir)}, skillResourceDir: ${JSON.stringify(skillResourceDir)}, packageVersion: '2' })
-      await manager.add()
+      await manager.add({}, { backupLocalChanges: ${keepBackup} })
     `
-    child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], {
-      stdio: ['ignore', 'ignore', 'pipe']
-    })
-    const exited = once(child, 'exit')
-    const errors: Buffer[] = []
-    child.stderr?.on('data', (data: Buffer) => errors.push(data))
-    const deadline = Date.now() + 10000
-    while (!existsSync(ready) && child.exitCode === null && Date.now() < deadline)
-      await new Promise((done) => setTimeout(done, 25))
-    expect(existsSync(ready), Buffer.concat(errors).toString()).toBe(true)
-    child.kill('SIGKILL')
-    await exited
-    expect(manager.preview()[0]?.status).toBe('modified')
-    expect(readFileSync(join(target, 'SKILL.md'), 'utf8')).toBe('# 用户修改\n')
-    expect(manager.list()).toMatchObject([{ targetPath: target, packageVersion: '1' }])
-    await expect(manager.add()).resolves.toMatchObject([{ action: 'reinstalled' }])
-    expect(manager.preview()[0]?.status).toBe('current')
-  } finally {
-    if (child && child.exitCode === null && child.signalCode === null) {
+      child = spawn(
+        process.execPath,
+        ['--import', 'tsx', '--input-type=module', '--eval', script],
+        {
+          stdio: ['ignore', 'ignore', 'pipe']
+        }
+      )
       const exited = once(child, 'exit')
+      const errors: Buffer[] = []
+      child.stderr?.on('data', (data: Buffer) => errors.push(data))
+      const deadline = Date.now() + 10000
+      while (!existsSync(ready) && child.exitCode === null && Date.now() < deadline)
+        await new Promise((done) => setTimeout(done, 25))
+      expect(existsSync(ready), Buffer.concat(errors).toString()).toBe(true)
       child.kill('SIGKILL')
       await exited
+      expect(manager.preview()[0]?.status).toBe('modified')
+      expect(readFileSync(join(target, 'SKILL.md'), 'utf8')).toBe('# 用户修改\n')
+      expect(manager.list()).toMatchObject([{ targetPath: target, packageVersion: '1' }])
+      const [result] = await manager.add({}, { backupLocalChanges: keepBackup })
+      expect(result.action).toBe('reinstalled')
+      if (keepBackup) {
+        expect(readFileSync(join(result.backupPath!, 'SKILL.md'), 'utf8')).toBe('# 用户修改\n')
+      }
+      expect(manager.preview()[0]?.status).toBe('current')
+    } finally {
+      if (child && child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, 'exit')
+        child.kill('SIGKILL')
+        await exited
+      }
+      database.close()
+      rmSync(root, { recursive: true, force: true })
     }
-    database.close()
-    rmSync(root, { recursive: true, force: true })
-  }
-}, 20000)
+  },
+  20000
+)
 
 it('中断的删除回滚文件与台账，已提交的删除只完成清理', async () => {
   const { randomUUID } = await import('node:crypto')

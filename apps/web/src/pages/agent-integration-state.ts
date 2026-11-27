@@ -22,8 +22,11 @@ export function resolveAgentIntegrationFeedback(
   result: AgentIntegrationActionResult,
   intent: AgentIntegrationActionIntent
 ): AgentIntegrationFeedback {
+  if (result.action === 'remove') {
+    if (result.status.components.some((item) => item.status === 'conflict')) return 'attention'
+    return result.changed ? 'removed' : 'remove-unchanged'
+  }
   if (result.status.overall === 'attention') return 'attention'
-  if (result.action === 'remove') return result.changed ? 'removed' : 'remove-unchanged'
 
   const manual = result.status.components.some((item) => item.status === 'manual')
   if (manual) return result.changed ? 'manual-completed' : 'manual-unchanged'

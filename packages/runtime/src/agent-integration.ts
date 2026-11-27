@@ -21,6 +21,7 @@ import {
   removeAgentGlobalRules
 } from './agent-global-rules.js'
 import type { LociDatabase } from './database.js'
+import { cleanupLegacyMcp, inspectLegacyMcp } from './legacy-agent-mcp.js'
 import { RuntimeLockedError, acquireRuntimeLock, type RuntimeLock } from './runtime-lock.js'
 import { SkillManager } from './skill-manager.js'
 import { DEFAULT_SKILL, resolveSkillPath } from './skill-files.js'
@@ -61,6 +62,8 @@ export class AgentIntegrationService {
   inspect(client: unknown): AgentIntegrationStatus {
     const selected = requireAgentClient(client)
     const components = [this.inspectSkill(selected), this.inspectRules(selected)]
+    const legacyMcp = this.inspectLegacyMcp(selected)
+    if (legacyMcp) components.push(legacyMcp)
     return {
       client: selected,
       label: getAgentClientDefinition(selected).label,
@@ -113,12 +116,22 @@ export class AgentIntegrationService {
 
   private async performSetup(client: AgentClient): Promise<AgentIntegrationActionResult> {
     let changed = false
+    let skillBackupPath: string | undefined
     const messages = new Map<AgentIntegrationComponent, string>()
-    changed =
-      (await this.tryApply('skill', messages, () => this.applySkillSetup(client))) || changed
+    changed = await this.tryApply('skill', messages, async () => {
+      const [result] = await this.skillManager.add({ agent: client }, { backupLocalChanges: true })
+      skillBackupPath = result?.backupPath
+      return result !== undefined && result.action !== 'unchanged'
+    })
     changed =
       (await this.tryApply('rules', messages, () => this.applyRulesSetup(client))) || changed
-    return { action: 'setup', changed, status: this.withMessages(this.inspect(client), messages) }
+    changed =
+      (await this.tryApply('legacy-mcp', messages, () => this.applyLegacyMcpCleanup(client))) ||
+      changed
+    const status = this.withMessages(this.inspect(client), messages)
+    const skill = status.components.find((component) => component.component === 'skill')
+    if (skill && skillBackupPath) skill.backupPath = skillBackupPath
+    return { action: 'setup', changed, status }
   }
 
   private async performRemove(client: AgentClient): Promise<AgentIntegrationActionResult> {
@@ -128,20 +141,15 @@ export class AgentIntegrationService {
       (await this.tryApply('rules', messages, () => this.applyRulesRemove(client))) || changed
     changed =
       (await this.tryApply('skill', messages, () => this.applySkillRemove(client))) || changed
+    changed =
+      (await this.tryApply('legacy-mcp', messages, () => this.applyLegacyMcpCleanup(client))) ||
+      changed
     return { action: 'remove', changed, status: this.withMessages(this.inspect(client), messages) }
-  }
-
-  private async applySkillSetup(client: AgentClient): Promise<boolean> {
-    const state = this.inspectSkill(client)
-    if (state.status === 'current') return false
-    if (state.status === 'conflict') throw new Error(state.message ?? 'Skill 目录冲突')
-    const [result] = await this.skillManager.add({ agent: client })
-    return result?.action !== 'unchanged'
   }
 
   private async applySkillRemove(client: AgentClient): Promise<boolean> {
     const state = this.inspectSkill(client)
-    if (state.status === 'missing') return false
+    if (state.status === 'missing' || state.status === 'replaceable') return false
     if (state.status === 'conflict') throw new Error(state.message ?? 'Skill 目录冲突')
     const [result] = await this.skillManager.remove({ agent: client })
     return result?.action === 'removed'
@@ -170,14 +178,21 @@ export class AgentIntegrationService {
       const status =
         state.status === 'absent'
           ? 'missing'
-          : state.status === 'modified' || state.status === 'conflict'
-            ? 'conflict'
-            : state.status
+          : state.status === 'modified'
+            ? 'outdated'
+            : state.status === 'conflict'
+              ? 'replaceable'
+              : state.status
       return {
         component: 'skill',
         status,
         path: state.targetPath,
-        message: status === 'conflict' ? 'Skill 已被修改或不属于 Loci' : null
+        message:
+          status === 'replaceable'
+            ? '这个位置已有其他来源的 Skill 或链接。一键接入会先备份，再安装最新版。'
+            : status === 'outdated'
+              ? '点击接入即可安装当前版本的 Skill。'
+              : null
       }
     } catch (error) {
       return {
@@ -202,6 +217,31 @@ export class AgentIntegrationService {
     }
     const state = inspectAgentGlobalRules(client, { homeDir: this.options.homeDir })
     return { component: 'rules', ...state }
+  }
+
+  private inspectLegacyMcp(client: AgentClient): AgentIntegrationComponentState | null {
+    const state = inspectLegacyMcp(client, this.options.homeDir ?? homedir())
+    if (!state) return null
+    return {
+      component: 'legacy-mcp',
+      status: state.next === undefined ? 'conflict' : 'outdated',
+      path: state.path,
+      message: state.message ?? '同步接入时会移除此条旧版 Loci MCP 配置。'
+    }
+  }
+
+  private async applyLegacyMcpCleanup(client: AgentClient): Promise<boolean> {
+    if (!this.inspectLegacyMcp(client)) return false
+    const lock = await acquireAgentLock(
+      this.options.dataDir,
+      `agent-mcp-config-${client}`,
+      '旧版 Loci MCP 清理'
+    )
+    try {
+      return cleanupLegacyMcp(client, this.options.homeDir ?? homedir())
+    } finally {
+      lock.release()
+    }
   }
 
   private async tryApply(
@@ -263,7 +303,7 @@ function overallStatus(
   components: readonly AgentIntegrationComponentState[]
 ): AgentIntegrationStatus['overall'] {
   const automatic = components.filter((item) => item.status !== 'manual')
-  if (automatic.some((item) => item.status === 'conflict' || item.status === 'outdated')) {
+  if (automatic.some((item) => ['conflict', 'outdated', 'replaceable'].includes(item.status))) {
     return 'attention'
   }
   if (automatic.every((item) => item.status === 'current')) {

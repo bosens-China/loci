@@ -31,7 +31,7 @@ interface MutationInput {
   client: AgentClient
 }
 
-/** Agent 接入管理页：以 use-loci Skill 与 全局 Rules 两列展示并管理各个 Agent 客户端。 */
+/** 展示各客户端的全局接入状态和待处理的旧版配置。 */
 export function AgentsPage(): React.JSX.Element {
   const { message, modal } = App.useApp()
   const queryClient = useQueryClient()
@@ -54,7 +54,7 @@ export function AgentsPage(): React.JSX.Element {
   const confirmRemove = (status: AgentIntegrationStatus): void => {
     modal.confirm({
       title: `移除 ${status.label} 的 Loci 全局接入？`,
-      content: '只移除能确认由 Loci 管理的 Skill 和 Rules；冲突内容会安全保留。',
+      content: '移除受管 Skill、Rules 和可识别的旧版 Loci MCP 条目。',
       okText: '移除全局接入',
       cancelText: '取消',
       okButtonProps: { danger: true },
@@ -158,7 +158,7 @@ function showAgentIntegrationFeedback(
   message: ReturnType<typeof App.useApp>['message']
 ): void {
   if (feedback === 'attention') {
-    void message.warning('操作未完全完成，请处理标记为冲突的配置')
+    void message.warning('操作未完成，请按客户端卡片中的说明处理后重试')
   } else if (feedback === 'unchanged') {
     void message.info('当前接入已是最新')
   } else if (feedback === 'update-completed') {
@@ -186,6 +186,7 @@ interface AgentCardProps {
 
 function AgentCard(props: AgentCardProps): React.JSX.Element {
   const ready = props.status.overall === 'ready'
+  const hasConflict = props.status.components.some((component) => component.status === 'conflict')
   const hasAutomatic = canRemoveAgentIntegration(props.status.components)
 
   return (
@@ -207,10 +208,12 @@ function AgentCard(props: AgentCardProps): React.JSX.Element {
               <Typography.Text strong className="text-base">
                 {props.status.label}
               </Typography.Text>
-              <OverallTag status={props.status.overall} />
+              <OverallTag status={props.status.overall} hasConflict={hasConflict} />
             </div>
             <Typography.Text type="secondary" className="block text-xs mt-0.5">
-              {ready ? 'Skill 与 Rules 均已就绪并连接' : overallDescription(props.status)}
+              {ready
+                ? 'Skill 与 Rules 均已就绪并连接'
+                : overallDescription(props.status.overall, hasConflict)}
             </Typography.Text>
           </div>
         </div>
@@ -237,7 +240,6 @@ function AgentCard(props: AgentCardProps): React.JSX.Element {
         </Space>
       </div>
 
-      {/* 两列布局：use-loci Skill 与 全局 Rules */}
       <div className="pt-4">
         <Row gutter={[16, 16]}>
           {props.status.components.map((component) => (
@@ -256,8 +258,9 @@ function ComponentTile(props: {
   onCopy: (content: string) => Promise<void>
 }): React.JSX.Element {
   const isSkill = props.component.component === 'skill'
-  const title = isSkill ? 'use-loci Skill' : '全局 Rules'
-  const icon = isSkill ? <ToolOutlined /> : <FileProtectOutlined />
+  const isLegacyMcp = props.component.component === 'legacy-mcp'
+  const title = isSkill ? 'use-loci Skill' : isLegacyMcp ? '旧版 Loci MCP' : '全局 Rules'
+  const icon = isSkill || isLegacyMcp ? <ToolOutlined /> : <FileProtectOutlined />
 
   return (
     <div className="h-full rounded-lg border border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-fill-quaternary)] p-3.5 flex flex-col justify-between">
@@ -267,18 +270,38 @@ function ComponentTile(props: {
             <span className="text-[var(--ant-color-primary)]">{icon}</span>
             <span>{title}</span>
           </div>
-          <ComponentStatusTag status={props.component.status} />
+          <ComponentStatusTag status={props.component.status} legacy={isLegacyMcp} />
         </div>
 
         <div className="mt-2 text-xs text-[var(--ant-color-text-secondary)] leading-relaxed">
           {props.component.message ?? defaultComponentDescription(props.component)}
         </div>
+        {props.component.backupPath && (
+          <Typography.Text
+            type="secondary"
+            className="text-xs!"
+            copyable={{
+              text: props.component.backupPath,
+              tooltips: ['复制备份路径', '已复制路径']
+            }}
+          >
+            已备份旧 Skill
+          </Typography.Text>
+        )}
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--ant-color-split)] pt-2 text-[11px] text-[var(--ant-color-text-tertiary)] font-mono">
-        <span className="truncate flex-1" title={props.component.path}>
+        <Typography.Text
+          className="min-w-0 flex-1 text-[11px]!"
+          ellipsis={{ tooltip: props.component.path }}
+          copyable={
+            props.component.status === 'conflict'
+              ? { text: props.component.path, tooltips: ['复制路径', '已复制路径'] }
+              : false
+          }
+        >
           {props.component.path}
-        </span>
+        </Typography.Text>
         {props.component.manualContent && (
           <Button
             type="link"
@@ -295,17 +318,26 @@ function ComponentTile(props: {
   )
 }
 
-function OverallTag({ status }: { status: AgentIntegrationStatus['overall'] }): React.JSX.Element {
+function OverallTag({
+  status,
+  hasConflict
+}: {
+  status: AgentIntegrationStatus['overall']
+  hasConflict: boolean
+}): React.JSX.Element {
   if (status === 'ready') return <Tag color="success">已就绪</Tag>
   if (status === 'partial') return <Tag color="processing">部分接入</Tag>
-  if (status === 'attention') return <Tag color="warning">需处理</Tag>
+  if (status === 'attention')
+    return hasConflict ? <Tag color="warning">需处理</Tag> : <Tag color="processing">可更新</Tag>
   return <Tag color="default">未接入</Tag>
 }
 
 function ComponentStatusTag({
-  status
+  status,
+  legacy
 }: {
   status: AgentIntegrationComponentState['status']
+  legacy: boolean
 }): React.JSX.Element {
   if (status === 'current')
     return (
@@ -313,7 +345,8 @@ function ComponentStatusTag({
         最新
       </Tag>
     )
-  if (status === 'outdated') return <Tag color="processing">可更新</Tag>
+  if (status === 'outdated') return <Tag color="processing">{legacy ? '待清理' : '可更新'}</Tag>
+  if (status === 'replaceable') return <Tag color="processing">可迁移</Tag>
   if (status === 'conflict') return <Tag color="error">存在冲突</Tag>
   if (status === 'manual') return <Tag color="warning">需手动</Tag>
   return <Tag color="default">未配置</Tag>
@@ -330,8 +363,14 @@ function defaultComponentDescription(component: AgentIntegrationComponentState):
     : '未注入全局 Rules，点击一键接入自动写入'
 }
 
-function overallDescription(status: AgentIntegrationStatus): string {
-  if (status.overall === 'attention') return '部分配置存在冲突或需手动确认'
-  if (status.overall === 'partial') return '已完成部分配置，可点击一键接入补全'
+function overallDescription(
+  status: AgentIntegrationStatus['overall'],
+  hasConflict: boolean
+): string {
+  if (hasConflict) {
+    return '请按下方说明处理冲突后重试'
+  }
+  if (status === 'attention') return '有配置可更新，点击一键接入处理'
+  if (status === 'partial') return '已完成部分配置，可点击一键接入补全'
   return '未接入 Loci，点击一键接入快速配置 Skill 与 Rules'
 }

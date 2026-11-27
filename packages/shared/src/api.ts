@@ -22,9 +22,9 @@ export interface AgentGlobalRulesResult {
   message: string
 }
 
-export type AgentIntegrationComponent = 'skill' | 'rules'
+export type AgentIntegrationComponent = 'skill' | 'rules' | 'legacy-mcp'
 export type AgentIntegrationComponentStatus =
-  'missing' | 'current' | 'outdated' | 'conflict' | 'manual'
+  'missing' | 'current' | 'outdated' | 'replaceable' | 'conflict' | 'manual'
 export type AgentIntegrationOverallStatus = 'ready' | 'partial' | 'missing' | 'attention'
 
 export interface AgentIntegrationComponentState {
@@ -33,6 +33,7 @@ export interface AgentIntegrationComponentState {
   path: string
   message: string | null
   manualContent?: string
+  backupPath?: string
 }
 
 export interface AgentIntegrationStatus {

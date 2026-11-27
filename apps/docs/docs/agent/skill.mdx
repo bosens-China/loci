@@ -30,6 +30,6 @@ loci skills remove use-loci --agent cursor --project ./
 loci skills clear --agent all --global
 ```
 
-Loci 用本地安装记录与目录中的 `.loci-skill.json` 核对所有权。手工删除、编辑或与已有目录冲突时，先查看 `list` 的 `status` 和 `targetPath`。需要同时同步全局 Skill 和 Rules 时使用 `loci setup <client>`。规则的目标位置见 [配置全局规则](/agent/global-rules)。
+Loci 用本地安装记录与目录中的 `.loci-skill.json` 核对所有权。`loci setup <client>` 可备份占用目标的旧 Skill 并同步全局 Rules。全局接入升级见 [接入 Agent](/agent/overview#升级旧接入)。
 
 Skill 安装、更新或移除中途被中断时，下次检查或操作该目标会先恢复未完成的事务，再继续执行。

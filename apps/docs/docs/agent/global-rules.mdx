@@ -24,9 +24,9 @@ loci setup status codex --json
 
 ## 更新与移除
 
-规则区块以 `<!-- loci:start -->` 开始、`<!-- loci:end -->` 结束。重复同步会更新区块并保留个人指令；边界残缺、重复或逆序时，先修复标记再同步。Cursor 的规则文件需要有效的 MDC frontmatter 和 `alwaysApply: true`。Codex 和 Cursor 检测到受支持的 Context7 配置时，生成的规则会说明何时用它补查。
+规则区块以 `<!-- loci:start -->` 开始、`<!-- loci:end -->` 结束。同步会合并重复的完整区块并保留个人指令。边界残缺、嵌套或逆序时，先修复标记再同步。Cursor 的规则文件需要有效的 MDC frontmatter 和 `alwaysApply: true`。Codex 和 Cursor 检测到受支持的 Context7 配置时，生成的规则会说明何时用它补查。
 
-重新打开 Agent 会话后，可请求它查阅当前项目所用框架的某个 API，并检查回答引用的原文。需要移除该客户端的全局 Skill 与受管规则时执行以下命令。
+重新打开 Agent 会话后，可请求它查阅当前项目所用框架的某个 API，并检查回答引用的原文。需要移除该客户端的受管 Skill、规则和可识别的旧版 Loci MCP 条目时执行以下命令。
 
 ```bash
 loci setup remove codex

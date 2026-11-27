@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, renameSync } from 'node:fs'
+import { lstatSync, mkdirSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import type {
@@ -16,7 +16,8 @@ import {
   beginSkillTransaction,
   commitSkillTransaction,
   hasSkillTransaction,
-  recoverSkillTransaction
+  recoverSkillTransaction,
+  skillBackupPath
 } from './skill-transaction.js'
 import {
   CONCRETE_SKILL_AGENTS,
@@ -30,7 +31,6 @@ import {
   resolveSkillPath,
   skillLockKey,
   transactionPath,
-  validSkillMarker,
   writeBuiltinSkill
 } from './skill-files.js'
 
@@ -89,8 +89,15 @@ export class SkillManager {
     return this.resolveTargets(input).map((target) => ({ ...target, ...this.inspect(target) }))
   }
 
-  add(input: SkillOperationInput = {}): Promise<SkillOperationResult[]> {
-    return Promise.all(this.resolveTargets(input).map((target) => this.singleFlight(target, 'add')))
+  add(
+    input: SkillOperationInput = {},
+    { backupLocalChanges = false } = {}
+  ): Promise<SkillOperationResult[]> {
+    return Promise.all(
+      this.resolveTargets(input).map((target) =>
+        this.singleFlight(target, 'add', backupLocalChanges)
+      )
+    )
   }
 
   remove(input: SkillOperationInput = {}): Promise<SkillOperationResult[]> {
@@ -121,13 +128,14 @@ export class SkillManager {
 
   private singleFlight(
     target: ResolvedTarget,
-    action: 'add' | 'remove'
+    action: 'add' | 'remove',
+    backupLocalChanges = false
   ): Promise<SkillOperationResult> {
-    const key = `${action}:${target.targetPath}`
+    const key = `${action}:${backupLocalChanges}:${target.targetPath}`
     const existing = this.tasks.get(key)
     if (existing) return existing
     const task = Promise.resolve().then(() =>
-      action === 'add' ? this.addOne(target) : this.removeOne(target)
+      action === 'add' ? this.addOne(target, backupLocalChanges) : this.removeOne(target)
     )
     this.tasks.set(key, task)
     void task.then(
@@ -137,7 +145,10 @@ export class SkillManager {
     return task
   }
 
-  private async addOne(target: ResolvedTarget): Promise<SkillOperationResult> {
+  private async addOne(
+    target: ResolvedTarget,
+    backupLocalChanges: boolean
+  ): Promise<SkillOperationResult> {
     const lock = await acquireSkillLock(
       this.options.dataDir,
       skillLockKey(target.targetPath),
@@ -146,7 +157,7 @@ export class SkillManager {
     try {
       recoverSkillTransaction(target.targetPath, this.options.database)
       const state = this.inspect(target)
-      if (state.status === 'conflict')
+      if (state.status === 'conflict' && !backupLocalChanges)
         throw new Error(`目标不是 Loci 管理的目录：${target.targetPath}`)
       if (state.status === 'current') {
         return { action: 'unchanged', name: target.name, targetPath: target.targetPath }
@@ -154,21 +165,27 @@ export class SkillManager {
       mkdirSync(dirname(target.targetPath), { recursive: true })
       const id = randomUUID()
       const temp = transactionPath(target.targetPath, 'tmp', id)
-      const backup = transactionPath(target.targetPath, 'backup', id)
+      const keepBackup =
+        backupLocalChanges && (state.status === 'conflict' || state.status === 'modified')
+      const backup = keepBackup
+        ? skillBackupPath(target.targetPath, id)
+        : transactionPath(target.targetPath, 'backup', id)
+      if (keepBackup) mkdirSync(dirname(backup), { recursive: true, mode: 0o700 })
       const digest = builtinSkillDigest(this.options.skillResourceDir)
       const previousRecord = this.options.database.getSkillInstallationRecord(target.targetPath)
       const journal = {
         id,
         action: 'add' as const,
         committed: false,
-        hadTarget: existsSync(target.targetPath),
+        hadTarget: state.status !== 'absent',
+        keepBackup,
         previous: previousRecord ?? null
       }
       beginSkillTransaction(target.targetPath, journal)
       try {
         writeBuiltinSkill(this.options.skillResourceDir, temp, this.options.packageVersion, digest)
         if (digestSkillDirectory(temp) !== digest) throw new Error('内置 Skill 写入校验失败')
-        if (existsSync(target.targetPath)) {
+        if (journal.hadTarget) {
           renameSync(target.targetPath, backup)
         }
         renameSync(temp, target.targetPath)
@@ -190,7 +207,8 @@ export class SkillManager {
         return {
           action: state.status === 'absent' ? 'installed' : 'reinstalled',
           name: target.name,
-          targetPath: target.targetPath
+          targetPath: target.targetPath,
+          ...(keepBackup && { backupPath: backup })
         }
       } catch (error) {
         recoverSkillTransaction(target.targetPath, this.options.database)
@@ -210,17 +228,19 @@ export class SkillManager {
     try {
       recoverSkillTransaction(target.targetPath, this.options.database)
       const record = this.options.database.getSkillInstallationRecord(target.targetPath)
+      const entry = lstatSync(target.targetPath, { throwIfNoEntry: false })
       if (!record) {
-        if (existsSync(target.targetPath)) {
+        if (entry) {
           throw new Error(`目标存在但没有 Loci 安装记录：${target.targetPath}`)
         }
         return { action: 'missing', name: target.name, targetPath: target.targetPath }
       }
-      if (!existsSync(target.targetPath)) {
+      if (!entry) {
         this.options.database.deleteSkillInstallationRecord(target.targetPath)
         return { action: 'missing', name: target.name, targetPath: target.targetPath }
       }
-      if (!validSkillMarker(target.targetPath, target.name)) {
+      const marker = entry.isDirectory() ? readSkillMarker(target.targetPath) : undefined
+      if (marker?.name !== target.name || marker.contentDigest !== record.contentDigest) {
         throw new Error(`所有权标记无效，拒绝删除：${target.targetPath}`)
       }
       const id = randomUUID()
@@ -269,12 +289,15 @@ export class SkillManager {
       }
     }
     const record = this.options.database.getSkillInstallationRecord(target.targetPath)
-    if (!existsSync(target.targetPath)) return { status: 'absent', modified: false }
-    if (lstatSync(target.targetPath).isSymbolicLink() || !record) {
+    const entry = lstatSync(target.targetPath, { throwIfNoEntry: false })
+    if (!entry) return { status: 'absent', modified: false }
+    if (!entry.isDirectory() || !record) {
       return { status: 'conflict', modified: false }
     }
     const marker = readSkillMarker(target.targetPath)
-    if (!marker || marker.name !== target.name) return { status: 'conflict', modified: false }
+    if (marker?.name !== target.name || marker.contentDigest !== record.contentDigest) {
+      return { status: 'conflict', modified: false }
+    }
     const actual = digestSkillDirectory(target.targetPath)
     const modified = actual !== marker.contentDigest
     if (modified) return { status: 'modified', modified: true }
