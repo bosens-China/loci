@@ -9,14 +9,23 @@ export function library(runtime: CliRuntime, reference: string): DocumentSource 
   const sources = runtime.listLibraries()
   const exact = sources.find((source) => source.id === reference)
   if (exact) return exact
-  const matches = sources.filter(
+  let matches = sources.filter(
     (source) => source.name === reference || source.id.startsWith(reference)
   )
-  if (matches.length !== 1)
-    throw new CliError(
-      `${matches.length ? '文档库名称或短 ID 不唯一' : '未找到文档库'}：${reference}`,
-      2
-    )
+  if (matches.length === 0) {
+    // 使用每个候选的完整版本后缀，以兼容库名和版本中都出现 @。
+    matches = sources.filter((source) => {
+      const suffix = `@${source.version}`
+      if (!reference.endsWith(suffix) || reference.length === suffix.length) return false
+      const base = reference.slice(0, -suffix.length)
+      return source.name === base || source.id.startsWith(base)
+    })
+  }
+  if (!matches.length) throw new CliError(`未找到文档库：${reference}`, 2)
+  if (matches.length > 1) {
+    const candidates = matches.map((source) => `${source.name}@${source.version}（${source.id}）`)
+    throw new CliError(`文档库名称或短 ID 不唯一：${reference}。候选：${candidates.join('、')}`, 2)
+  }
   return matches[0]!
 }
 

@@ -1,6 +1,6 @@
 # 本地文档库
 
-以下示例中的尖括号需要替换为实际值。`<lib>` 可用库 ID、唯一短 ID 或名称。先用 `loci list --json` 找库，它会返回名称、ID、来源 URL、页数、语言和 `readOnly`。`loci list <lib> --json` 列出单库内的文档 ID、路径和标题。列表支持 `--offset <n>` 和 `--limit <n>`，查库时也可以用 `--query <kw>` 筛选。
+以下示例中的尖括号需要替换为实际值。`<lib>` 可用库 ID、唯一短 ID 或名称。同名库有多个版本时，可用 `名称@版本` 或 `短ID@版本` 定位，例如 `React@v19` 和 `React@v1@rc`。完整 ID 优先。其次匹配字面名称或 ID 前缀，只有没有字面匹配时才解析版本。若提示歧义，请从候选中复制完整 ID。先用 `loci list --json` 找库，它会返回名称、ID、来源 URL、页数、语言和 `readOnly`。`loci list <lib> --json` 列出单库内的文档 ID、路径和标题。列表支持 `--offset <n>` 和 `--limit <n>`，查库时也可以用 `--query <kw>` 筛选。
 
 ## 分类与版本
 
