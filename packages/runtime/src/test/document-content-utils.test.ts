@@ -22,7 +22,8 @@ describe('findBestPassage', () => {
     const markdown = `# 开始\n\n${'内容'.repeat(800)}\n\n## 下一节\n\n结束`
     expect(readMarkdownSection(markdown, 'file-1:section:1', 'file-1', '文档')).toEqual({
       title: '下一节',
-      content: '## 下一节\n\n结束'
+      content: '## 下一节\n\n结束',
+      headingPath: ['开始', '下一节']
     })
 
     const first = sliceContent(markdown, 0, 1000)

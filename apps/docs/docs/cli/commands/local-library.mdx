@@ -23,12 +23,28 @@ loci tree <lib> --json
 loci tree <lib> --parent /guide --depth 2 --json
 loci tree <lib> --query router navigation --all --json
 loci search "router navigation" --json
+loci search "页面离开前如何阻止导航" --library <lib> --content --json
 loci search router navigation --library <lib> --path-prefix /guide --tree --json
 ```
 
 `tree` 默认显示两层。`--parent <path|id>` 从指定目录展开，`--all` 显示完整深度。`--query <kw...>` 筛选关键词并保留命中文档的祖先目录。
 
-`search <queries...>` 可输入多个查询，带空格的单组查询用引号括起。`--library <lib...>` 接受一个或多个库，省略时跨库搜索。普通结果提供 `hits`、文档 ID、小节 ID、匹配段落与可选 `nextOffset`，可用 `--offset <n>` 和 `--limit <n>` 分页。`--tree` 返回 `total` 与按库组织的命中树。
+`search <queries...>` 可输入多个查询，带空格的单组查询用引号括起。`--library <lib...>` 接受一个或多个库，省略时跨库搜索。普通结果提供 `hits`，每条命中含文档 ID、库 ID、库版本 `libraryVersion`、小节 ID、匹配段落和原文 `url`。有下一页时，在相同查询后加 `--offset <nextOffset> --page-token <nextPageToken>`。若后台更新改变了排序，命令会提示从第一页重新查询。`--tree` 返回 `total` 与按库组织的命中树。
+
+已就绪的本机模型自动参与同一次搜索，关键词与模型分别定位小节，按文档和小节去重。每个模型对每组查询提供最多 10 个候选。组合命中的 `matchesFrom` 列出来源。同一篇文档可以命中多个小节。树形结果中，一个文件有多个命中小节时会返回 `sectionIds`。
+
+`--content` 为当前页的普通搜索结果附上完整小节 Markdown 和标题路径 `headingPath`。也可以把命中的文档 ID 和小节 ID 传给 `loci read <文档 ID> --section <小节 ID> --json`，单独读取或续读。
+
+### 可选本机检索模型
+
+```bash
+loci model list --json
+loci model install minilm
+loci model install bge-m3
+loci model cancel bge-m3
+```
+
+也可以在本机 Web 的「设置与数据 → 检索模型」安装并查看进度。每个模型可独立安装，允许同时安装两个。安装会下载所选权重、分词器和共享的本机 CPU 推理组件，再为已有文档建索引。需要可用的 npm，支持 Apple Silicon Mac，以及 x64 或 ARM64 的 Windows 和 Linux。已建好索引的文章可立即参与向量搜索，全文搜索在建索引期间照常使用。短文整篇建立一条向量，长文优先按标题和段落切分。MiniLM 每段最多 512 个 token，BGE-M3 每段最多 8,192 个 token。原始 Markdown 完整保存。取消后可再次运行 `model install` 续传或继续建索引。正文更新后，下一次搜索通过后台续建受影响的索引。未安装模型时可直接使用全文搜索。
 
 ## 阅读正文
 

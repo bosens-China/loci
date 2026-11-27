@@ -1,4 +1,5 @@
 import { createDocumentQuery } from './document-query.js'
+import { createEmbeddingService } from './embedding-service.js'
 import { randomUUID } from 'node:crypto'
 import { clearWithMaintenanceLock, importWithMaintenanceLock } from './data-maintenance.js'
 import { mkdirSync } from 'node:fs'
@@ -167,6 +168,13 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     detached: options.detachedCrawl
   })
   const shutdown = new AbortController()
+  const documents = createDocumentQuery(database, dataDir, owner)
+  const embeddings = createEmbeddingService(
+    database,
+    dataDir,
+    options.launchEmbeddingRefresh,
+    options.embeddingBackend
+  )
   const pending = new Set<Promise<unknown>>()
   let closing: Promise<void> | undefined
   function track<T>(operation: Promise<T>): Promise<T> {
@@ -213,7 +221,22 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
     cacheDir,
     database,
     browserManager,
-    ...createDocumentQuery(database, dataDir, owner),
+    ...documents,
+    embeddings,
+    searchDocumentSections: (input) =>
+      track(
+        embeddings
+          .prepareSearch(input)
+          .then((candidates) => documents.searchDocuments(input, candidates))
+      ),
+    getSearchLibraryTree: async (id, input) => {
+      if (input?.queries === undefined) return documents.getLibraryTree(id, input)
+      return track(
+        embeddings
+          .prepareSearch({ queries: input.queries, libraryIds: [id] })
+          .then((candidates) => documents.getLibraryTree(id, input, candidates))
+      )
+    },
     ...createDocumentMutation(database, mutateSource),
     ...createLibraryCrawlStatuses(database, dataDir, (id) => activePages.get(id) ?? states.get(id)),
     agentIntegration,
@@ -285,7 +308,11 @@ export function createLocalRuntime(options: LocalRuntimeOptions = {}): LocalRunt
           await browserManager.waitForCurrent()
           await browser.close()
         } finally {
-          database.close()
+          try {
+            await embeddings.close()
+          } finally {
+            database.close()
+          }
         }
       })()
       return closing

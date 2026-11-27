@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   buildUrlTree,
   documentPath,
@@ -17,6 +18,23 @@ import {
 import { acquireCrawlRuntimeLock } from './runtime-lock.js'
 import type { LociDatabase } from './database.js'
 import { findBestPassage, readMarkdownSection, sliceContent } from './document-content-utils.js'
+
+export class SearchPageChangedError extends Error {
+  constructor() {
+    super('搜索结果已更新，请从第一页重新查询')
+    this.name = 'SearchPageChangedError'
+  }
+}
+
+function searchPage(input: DocumentSearchInput, offset: number, limit: number, keys: string[]) {
+  const nextOffset = offset + limit
+  if (nextOffset >= keys.length && !input.pageToken) return {}
+  const token = createHash('sha256')
+    .update(JSON.stringify([input.queries, input.libraryIds, input.pathPrefix, keys]))
+    .digest('hex')
+  if (input.pageToken && input.pageToken !== token) throw new SearchPageChangedError()
+  return nextOffset < keys.length ? { nextOffset, nextPageToken: token } : {}
+}
 
 function strings(value: string | readonly string[], label: string): string[] {
   const values = typeof value === 'string' ? [value] : value
@@ -119,7 +137,7 @@ export function createDocumentQuery(database: LociDatabase, dataDir: string, own
 
   function tree(
     id: string,
-    hits?: Map<string, DocumentSearchHit>,
+    hits?: Map<string, DocumentSearchHit & { sectionIds?: string[] }>,
     matchedIds?: ReadonlySet<string>
   ): UrlTreeNode[] {
     const documents = database.listDocumentSummaries(id)
@@ -131,17 +149,74 @@ export function createDocumentQuery(database: LociDatabase, dataDir: string, own
     return selected ? filterUrlTree(nodes, selected) : nodes
   }
 
-  function searchDocuments(input: DocumentSearchInput): DocumentSearchResult {
+  function searchDocuments(
+    input: DocumentSearchInput,
+    semantic: DocumentSearchHit[][] = []
+  ): DocumentSearchResult {
     const offset = integer(input.offset ?? 0, 0)
     const limit = integer(input.limit ?? 20, 1)
     const { hits, retrieval } = matches(input)
     const rows = [...hits.values()]
+    const versions = new Map<string, string>()
+    const withDetails = (matches: DocumentSearchHit[]) =>
+      matches.map((match) => {
+        const libraryVersion =
+          versions.get(match.sourceId) ?? database.getSource(match.sourceId).version
+        versions.set(match.sourceId, libraryVersion)
+        if (!input.includeContent) return { ...match, libraryVersion }
+        const document = database.getDocument(match.id)
+        const section =
+          document &&
+          readMarkdownSection(document.content, match.sectionId, match.id, document.title)
+        if (!section) throw new Error('小节已变化，请重试')
+        return {
+          ...match,
+          libraryVersion,
+          headingPath: section.headingPath,
+          content: section.content
+        }
+      })
+    if (semantic.some((group) => group.length)) {
+      const merged = mergeSections([
+        rows.map((row) => ({
+          ...hit(row),
+          matchesFrom: ['keyword']
+        })),
+        ...semantic
+      ])
+      const page = searchPage(
+        input,
+        offset,
+        limit,
+        merged.map((row) => row.sectionId)
+      )
+      const hitsByDocument = input.tree ? groupSectionsByDocument(merged) : undefined
+      return {
+        hits: withDetails(merged.slice(offset, offset + limit)),
+        total: merged.length,
+        retrieval,
+        ...page,
+        ...(input.tree
+          ? {
+              trees: [...new Set(merged.map((row) => row.sourceId))].map((libraryId) => ({
+                libraryId,
+                nodes: tree(libraryId, hitsByDocument)
+              }))
+            }
+          : {})
+      }
+    }
     const page = rows.slice(offset, offset + limit)
     const result: DocumentSearchResult = {
       hits: [],
       total: rows.length,
       retrieval,
-      ...(offset + limit < rows.length ? { nextOffset: offset + limit } : {})
+      ...searchPage(
+        input,
+        offset,
+        limit,
+        rows.map((row) => row.document.id)
+      )
     }
     if (input.tree) {
       const all = new Map(rows.map((row) => [row.document.id, hit(row)]))
@@ -151,10 +226,15 @@ export function createDocumentQuery(database: LociDatabase, dataDir: string, own
         nodes: tree(libraryId, all)
       }))
     } else result.hits = page.map(hit)
+    result.hits = withDetails(result.hits)
     return result
   }
 
-  function getLibraryTree(libraryId: string, options: LibraryTreeOptions = {}): UrlTreeNode[] {
+  function getLibraryTree(
+    libraryId: string,
+    options: LibraryTreeOptions = {},
+    semantic: DocumentSearchHit[][] = []
+  ): UrlTreeNode[] {
     requireLibrary(libraryId)
     const depth = integer(options.depth ?? 1, 1)
     const matchesById =
@@ -166,14 +246,29 @@ export function createDocumentQuery(database: LociDatabase, dataDir: string, own
       : undefined
     const parentId =
       parent === undefined ? options.parent : parent ? `folder:${libraryId}:${parent}` : undefined
-    const roots = tree(libraryId, undefined, matchesById && new Set(matchesById.keys()))
+    let matched = matchesById && new Set(matchesById.keys())
+    const semanticHits = groupSectionsByDocument(mergeSections(semantic))
+    if (matched) matched = new Set([...matched, ...semanticHits.keys()])
+    const roots = tree(libraryId, undefined, matched)
     const nodes = getUrlTreeSlice(roots, parentId, depth) ?? []
     if (matchesById) {
       // 目录计数只需要元数据，展开的可见叶节点才读取 Markdown 和计算段落。
       const attach = (items: UrlTreeNode[]) => {
         for (const node of items) {
-          const match = node.readable && matchesById.get(node.id)
-          if (match) Object.assign(node, hit(match))
+          if (node.readable) {
+            const match = matchesById.get(node.id)
+            const semanticHit = semanticHits.get(node.id)
+            if (match || semanticHit) Object.assign(node, match ? hit(match) : semanticHit)
+            if (match && semanticHit) {
+              const ids = [
+                ...new Set([
+                  node.sectionId!,
+                  ...(semanticHit.sectionIds ?? [semanticHit.sectionId])
+                ])
+              ]
+              if (ids.length > 1) node.sectionIds = ids
+            }
+          }
           if (node.children) attach(node.children)
         }
       }
@@ -244,10 +339,13 @@ export function createDocumentQuery(database: LociDatabase, dataDir: string, own
   return {
     listLibraries: (filters?: LibraryFilters | string) =>
       database.readSnapshot(() => listLibraries(filters)),
-    getLibraryTree: (id: string, options?: LibraryTreeOptions) =>
-      database.readSnapshot(() => getLibraryTree(id, options)),
-    searchDocuments: (input: DocumentSearchInput) =>
-      database.readSnapshot(() => searchDocuments(input)),
+    getLibraryTree: (
+      id: string,
+      options?: LibraryTreeOptions,
+      candidates?: () => DocumentSearchHit[][]
+    ) => database.readSnapshot(() => getLibraryTree(id, options, candidates?.())),
+    searchDocuments: (input: DocumentSearchInput, candidates?: () => DocumentSearchHit[][]) =>
+      database.readSnapshot(() => searchDocuments(input, candidates?.())),
     readDocuments: (input: DocumentReadInput) => database.readSnapshot(() => readDocuments(input)),
     deleteDocuments: (libraryId: string, targets: DocumentReadInput['targets']) =>
       mutate(libraryId, () => {
@@ -261,6 +359,42 @@ export function createDocumentQuery(database: LociDatabase, dataDir: string, own
       }),
     deleteLibrary: (libraryId: string) => mutate(libraryId, () => database.deleteSource(libraryId))
   }
+}
+
+/** 各路保留自己的顺序，轮流取候选，让分页不会被单一路来源占满。 */
+function mergeSections(groups: DocumentSearchHit[][]): DocumentSearchHit[] {
+  const selected = new Map<string, DocumentSearchHit>()
+  const length = Math.max(0, ...groups.map((group) => group.length))
+  for (let index = 0; index < length; index++) {
+    for (const group of groups) {
+      const hit = group[index]
+      if (!hit) continue
+      const key = JSON.stringify([hit.sourceId, hit.id, hit.sectionId])
+      const previous = selected.get(key)
+      if (previous) {
+        previous.matchesFrom = [
+          ...new Set([...(previous.matchesFrom ?? []), ...(hit.matchesFrom ?? [])])
+        ]
+        previous.headingPath ??= hit.headingPath
+      } else selected.set(key, { ...hit })
+    }
+  }
+  return [...selected.values()]
+}
+
+function groupSectionsByDocument(hits: DocumentSearchHit[]) {
+  const grouped = new Map<string, DocumentSearchHit & { sectionIds?: string[] }>()
+  for (const hit of hits) {
+    const previous = grouped.get(hit.id)
+    if (!previous) {
+      grouped.set(hit.id, { ...hit })
+      continue
+    }
+    const ids = previous.sectionIds ?? [previous.sectionId]
+    if (!ids.includes(hit.sectionId)) ids.push(hit.sectionId)
+    if (ids.length > 1) previous.sectionIds = ids
+  }
+  return grouped
 }
 
 export type DocumentQuery = ReturnType<typeof createDocumentQuery>

@@ -27,17 +27,20 @@ export function findBestPassage(
   markdown: string,
   query: string,
   fallbackTitle: string,
-  fileId: string
+  fileId: string,
+  allowedSections?: ReadonlySet<string>
 ): SearchPassage {
   const tokens = toSearchTokens(query).map((token) => token.toLocaleLowerCase())
-  const passages = splitSections(markdown, fallbackTitle).flatMap((section, sectionIndex) =>
-    (section.paragraphs.length ? section.paragraphs : ['']).map((paragraph) => ({
-      sectionId: createSectionId(fileId, sectionIndex),
+  const passages = splitSections(markdown, fallbackTitle).flatMap((section, sectionIndex) => {
+    const sectionId = createSectionId(fileId, sectionIndex)
+    if (allowedSections && !allowedSections.has(sectionId)) return []
+    return (section.paragraphs.length ? section.paragraphs : ['']).map((paragraph) => ({
+      sectionId,
       sectionTitle: section.title,
       paragraph,
       truncated: false
     }))
-  )
+  })
   const best = passages.reduce(
     (current, passage) => {
       const text = `${passage.sectionTitle}\n${passage.paragraph}`.toLocaleLowerCase()
@@ -67,15 +70,26 @@ export function readMarkdownSection(
   sectionId: string,
   fileId: string,
   fallbackTitle: string
-): { title: string; content: string } | undefined {
+): { title: string; content: string; headingPath: string[] } | undefined {
   const prefix = `${fileId}:section:`
   if (!sectionId.startsWith(prefix)) return undefined
   const suffix = sectionId.slice(prefix.length)
   if (!/^\d+$/u.test(suffix)) return undefined
   const index = Number(suffix)
   if (!Number.isSafeInteger(index) || index < 0) return undefined
-  const section = splitSections(markdown, fallbackTitle)[index]
-  return section ? { title: section.title, content: section.content } : undefined
+  const sections = splitSections(markdown, fallbackTitle)
+  const section = sections[index]
+  if (!section) return undefined
+  const headingPath = section.level ? [section.title] : []
+  let level = section.level
+  for (let cursor = index - 1; cursor >= 0 && level > 1; cursor--) {
+    const parent = sections[cursor]
+    if (parent.level && parent.level < level) {
+      headingPath.unshift(parent.title)
+      level = parent.level
+    }
+  }
+  return { title: section.title, content: section.content, headingPath }
 }
 
 // 尽量在段落边界截断，避免续读时把 Markdown 结构从中间切开。

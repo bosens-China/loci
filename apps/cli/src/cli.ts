@@ -1,6 +1,7 @@
 import { Command, CommanderError } from 'commander'
 import { CliError } from './errors.js'
 import { registerBrowserCommands } from './commands/browser.js'
+import { registerModelCommands } from './commands/model.js'
 import { registerCategoryCommands } from './commands/category.js'
 import { registerConfigCommands } from './commands/config.js'
 import { registerCrawlCommands } from './commands/crawl.js'
@@ -38,6 +39,7 @@ export function createProgram(json = false): Command {
   registerWebCommand(program)
   registerSkillsCommands(program)
   registerBrowserCommands(program)
+  registerModelCommands(program)
   registerConfigCommands(program)
   registerDataCommands(program)
   registerUpgradeCommand(program)

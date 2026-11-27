@@ -4,8 +4,13 @@ import type {
   ClearDataScope,
   ClearDataSummary,
   CrawlRunState,
+  DocumentSearchInput,
+  DocumentSearchResult,
+  EmbeddingModelId,
+  LibraryTreeOptions,
   DocumentSource,
-  UpdateSourceInput
+  UpdateSourceInput,
+  UrlTreeNode
 } from '@loci/shared'
 import type { AgentIntegrationOptions, AgentIntegrationService } from './agent-integration.js'
 import type { BrowserInstallPrompt, LocalBrowserCrawler } from './browser-crawler.js'
@@ -20,6 +25,8 @@ import type { CategoryDatabase } from './category-database.js'
 import type { BackupImportSummary } from '@loci/shared'
 import type { BackupImportOptions } from './database-backup.js'
 import type { LibraryCrawlStatuses } from './library-crawl-status.js'
+import type { EmbeddingBackend } from './embedding-assets.js'
+import type { EmbeddingService } from './embedding-service.js'
 
 export interface LocalRuntime
   extends CategoryDatabase, DocumentQuery, DocumentMutation, LibraryCrawlStatuses {
@@ -27,6 +34,9 @@ export interface LocalRuntime
   cacheDir: string
   database: LociDatabase
   browserManager: BrowserManager
+  embeddings: Pick<EmbeddingService, 'list' | 'start' | 'getStatus' | 'wait' | 'cancel'>
+  searchDocumentSections: (input: DocumentSearchInput) => Promise<DocumentSearchResult>
+  getSearchLibraryTree: (id: string, input?: LibraryTreeOptions) => Promise<UrlTreeNode[]>
   agentIntegration?: AgentIntegrationService
   crawlSource: (
     sourceId: string,
@@ -80,5 +90,7 @@ export interface LocalRuntimeOptions {
   cacheDir?: string
   owner?: string
   browser?: LocalBrowserCrawler
+  embeddingBackend?: EmbeddingBackend
+  launchEmbeddingRefresh?: (id: EmbeddingModelId) => void
   agentIntegration?: Omit<AgentIntegrationOptions, 'database' | 'dataDir'>
 }

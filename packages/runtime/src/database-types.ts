@@ -18,6 +18,7 @@ import type {
 import type { CrawlHistoryDatabase } from './crawl-history-database.js'
 import type { SourceConfig } from './database-local-source.js'
 import type { DocumentContentDatabase, StoredDocument } from './document-content-database.js'
+import type { EmbeddingDatabase } from './embedding-database.js'
 import type { MutationDatabase } from './document-mutation.js'
 import type { MoveDocumentsInput, MoveDocumentsResult } from './document-move-database.js'
 import type { ExplicitPageDatabase } from './explicit-page-database.js'
@@ -52,6 +53,7 @@ export interface LociDatabase
     CrawlHistoryDatabase,
     MutationDatabase,
     DocumentContentDatabase,
+    EmbeddingDatabase,
     SkillInstallationDatabase,
     ExplicitPageDatabase {
   patchAppSettings: (partial: Partial<AppSettings>) => AppSettings

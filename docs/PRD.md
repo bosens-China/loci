@@ -25,6 +25,9 @@ CLI 是 npm 分发入口，包含本机 Web UI 和 `use-loci` Skill。CLI 直接
 
 - 文档记录保留标题、来源 URL、Markdown、语言和抓取元数据。网页按 URL 路径组成树，仓库和 OpenAPI 文档按逻辑路径组成树。目录按父节点和深度展开。关键词筛选保留匹配分支及其祖先，并给出目录命中数和总数。
 - 全文搜索可跨库或限定多个库和路径前缀。每组查询依次尝试全词、任一词及元数据子串匹配，多组结果合并去重。结果可返回文档 ID、小节、匹配段落或按库分组的目录树。
+- 用户可通过 CLI 或本机 Web 分别安装 MiniLM 和 BGE-M3。模型按需下载，索引与推理在本机进行。普通搜索同时使用关键词和已具备索引的模型，覆盖各语言及标为 `und` 的文档。以库、文档和小节 ID 去重，同一篇文档的不同小节可以分别返回。各来源保留自己的顺序，任一模型失败时其他来源仍可返回结果。
+- 按 JavaScript `.length` 判断 Markdown 是否需要切分。符合字符数和模型分词上限的短文整篇建立向量。长篇先按标题层级切分，仍超长时沿段落或句子继续切。每段以实际模型的分词长度确认输入上限，并可追溯文档、库版本和小节。原始 Markdown 完整保存。参见 [LangChain 的 Markdown 切分策略](https://docs.langchain.com/oss/python/integrations/splitters/markdown_header_metadata_splitter)。
+- CLI 与 Web 共享模型安装和索引进度，同一模型的重复请求复用在途操作。正文更新后，失效索引在原写入事务中清除，后续搜索触发后台续建。使用 [模型安装与搜索说明](../apps/docs/docs/cli/commands/local-library.mdx) 查看运行与命令契约。
 - 读取支持一个或多个文档 ID、唯一短 ID、文件路径及子树路径。目标按树序去重，支持按小节读取和按字符偏移续读。正文带可引用的原文 URL。
 - 可写库支持创建和更新文档，以及按标题小节增删改。整库和指定页面抓取都保留手工文档的正文与索引。结构变更后须重新读取小节 ID。同一次小节修改可沿用操作 ID 和原始参数安全重试，包括请求携带文档版本时。删除可以指定文档或子树，也可以显式删除整库。正文修改与索引在事务中保持一致。
 - Web UI 从库列表进入目录与阅读器，支持筛选、选择并预览多个文件、编辑正文及管理小节。本机 Agent、无头浏览器、设置与数据分别有独立入口。参见 [本地文档库](../apps/docs/docs/cli/commands/local-library.mdx)。
@@ -32,8 +35,8 @@ CLI 是 npm 分发入口，包含本机 Web UI 和 `use-loci` Skill。CLI 直接
 ## Agent、Skill 与全局规则
 
 1. 使用 `loci list --json` 选择与项目版本匹配的库。
-2. 用 `loci tree <lib> --query <kw...> --json` 或 `loci search <queries...> --library <lib> --tree --json` 定位。可省略目录筛选词、搜索范围或树形输出。
-3. 用 `loci read <targets...> --library <lib> --json` 核对正文，引用原文 URL。
+2. 用 `loci search <queries...> --library <lib> --content --json` 取得完整的命中小节。用 `nextOffset` 和 `nextPageToken` 读取剩余的唯一小节，结果排序变化时从第一页重新查询；只需定位时可使用普通搜索或目录树。
+3. 用搜索返回的原文 URL 引用来源。需要单独核对某个小节时，用 `loci read <target> --section <sectionId> --json` 读取。
 4. 缺库时核实官方 URL，确认来源与范围后运行 `loci fetch <url>`；已有库过时时运行 `loci update <lib>`。已有同一授权可直接使用。
 5. 轮询 `loci status <lib> --json` 至终态，从 `error` 和 `failures` 查看具体原因，抓取完成后回到定位与阅读。省略库可查询所有有记录的库。
 6. 用户要求时编辑文档或小节；删除、刻意覆盖、可能裁剪已有内容的配置修改须明确授权。只需版本亮点时可查官方发布说明，资料不足时可选用其他合适的文档来源。

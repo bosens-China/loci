@@ -25,18 +25,22 @@ interface TreeEntry {
   totalCount?: number
   children?: TreeEntry[]
   sectionId?: string
+  sectionIds?: string[]
 }
 
 function compactTree(nodes: UrlTreeNode[]): TreeEntry[] {
-  return nodes.map(({ id, title, path, matchedCount, totalCount, children, sectionId }) => ({
-    id,
-    title,
-    path,
-    matchedCount,
-    totalCount,
-    sectionId,
-    children: children ? compactTree(children) : undefined
-  }))
+  return nodes.map(
+    ({ id, title, path, matchedCount, totalCount, children, sectionId, sectionIds }) => ({
+      id,
+      title,
+      path,
+      matchedCount,
+      totalCount,
+      sectionId,
+      sectionIds,
+      children: children ? compactTree(children) : undefined
+    })
+  )
 }
 
 function treeText(nodes: TreeEntry[], indent = ''): string {
@@ -105,7 +109,7 @@ export function registerQueryCommands(program: Command): void {
         opts: OutputOptions & LibraryTreeOptions & { all?: boolean; query?: string[] }
       ) => {
         const nodes = await withRuntime((r) =>
-          r.getLibraryTree(library(r, reference).id, {
+          r.getSearchLibraryTree(library(r, reference).id, {
             parent: opts.parent,
             depth: opts.all ? Number.MAX_SAFE_INTEGER : opts.depth,
             queries: opts.query
@@ -116,7 +120,7 @@ export function registerQueryCommands(program: Command): void {
     )
 
   pagination(
-    jsonOption(program.command('search <queries...>').description('全文搜索并定位命中小节'))
+    jsonOption(program.command('search <queries...>').description('搜索文档并定位命中小节'))
   )
     .addOption(
       new Option('--library <lib...>', '限制文档库，可重复或用逗号分隔').argParser(
@@ -127,18 +131,30 @@ export function registerQueryCommands(program: Command): void {
       )
     )
     .option('--path-prefix <path>', '限制路径前缀')
+    .option('--page-token <token>', '与 --offset 一起验证续页顺序')
     .option('--tree', '显示命中目录树')
+    .option('--content', '附带命中小节的完整正文与原文链接')
     .action(
       async (
         queries: string[],
-        opts: OutputOptions & Page & { library?: string[]; pathPrefix?: string; tree?: boolean }
+        opts: OutputOptions &
+          Page & {
+            library?: string[]
+            pathPrefix?: string
+            pageToken?: string
+            tree?: boolean
+            content?: boolean
+          }
       ) => {
+        if (opts.tree && opts.content) throw new Error('--content 需要普通搜索结果')
         const result = await withRuntime((r) =>
-          r.searchDocuments({
+          r.searchDocumentSections({
             queries,
             libraryIds: opts.library?.map((ref) => library(r, ref).id),
             pathPrefix: opts.pathPrefix,
+            pageToken: opts.pageToken,
             tree: opts.tree,
+            includeContent: opts.content,
             offset: opts.offset,
             limit: opts.limit
           })
@@ -152,19 +168,54 @@ export function registerQueryCommands(program: Command): void {
           )
         } else {
           const hits = result.hits.map(
-            ({ id, title, path, sourceId, sectionId, sectionTitle, paragraph, truncated }) => ({
+            ({
               id,
-              libraryId: sourceId,
-              path,
               title,
+              path,
+              url,
+              sourceId,
+              libraryVersion,
+              updatedAt,
               sectionId,
               sectionTitle,
+              headingPath,
               paragraph,
-              truncated
+              truncated,
+              matchesFrom,
+              content
+            }) => ({
+              id,
+              libraryId: sourceId,
+              libraryVersion,
+              path,
+              title,
+              url,
+              updatedAt,
+              sectionId,
+              sectionTitle,
+              headingPath,
+              paragraph,
+              truncated,
+              matchesFrom,
+              content
             })
           )
-          output(opts, { total: result.total, nextOffset: result.nextOffset, hits }, (v) =>
-            v.hits.map((h) => `${h.id}  ${h.path}  ${h.sectionTitle}\n${h.paragraph}`).join('\n\n')
+          output(
+            opts,
+            {
+              total: result.total,
+              nextOffset: result.nextOffset,
+              nextPageToken: result.nextPageToken,
+              hits
+            },
+            (v) =>
+              v.hits
+                .map((h) =>
+                  h.content === undefined
+                    ? `${h.id}  ${h.path}  ${h.sectionTitle}\n${h.paragraph}`
+                    : `${h.id}  ${h.path}  ${h.sectionTitle}\nURL: ${h.url}\n\n${h.content}`
+                )
+                .join('\n\n')
           )
         }
       }

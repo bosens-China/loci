@@ -1,4 +1,5 @@
 import type { DocumentRecord, DocumentSource, DocumentSummary } from './api.js'
+import type { EmbeddingModelId } from './embedding-models.js'
 import type { UrlTreeNode } from './url-tree.js'
 
 export interface DocumentDetail extends DocumentRecord {
@@ -69,17 +70,24 @@ export interface DocumentSearchInput {
   pathPrefix?: string
   offset?: number
   limit?: number
+  pageToken?: string
   tree?: boolean
+  includeContent?: boolean
 }
 
 export interface DocumentSearchHit extends DocumentSummary, SearchPassage {
   path: string
+  libraryVersion?: string
+  headingPath?: string[]
+  matchesFrom?: Array<'keyword' | EmbeddingModelId>
+  content?: string
 }
 
 export interface DocumentSearchResult {
   hits: DocumentSearchHit[]
   total: number
   nextOffset?: number
+  nextPageToken?: string
   retrieval: Array<{ query: string; mode: 'all' | 'any' | 'fuzzy' }>
   trees?: Array<{ libraryId: string; nodes: UrlTreeNode[] }>
 }

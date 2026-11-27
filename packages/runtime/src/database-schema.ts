@@ -19,7 +19,21 @@ export const ADDITIVE_SCHEMA_EXTENSIONS = `CREATE TABLE IF NOT EXISTS section_ed
 CREATE TABLE IF NOT EXISTS clear_data_receipts (
   operation_id TEXT PRIMARY KEY, summary TEXT NOT NULL, created_at INTEGER NOT NULL
 ) STRICT;
-CREATE INDEX IF NOT EXISTS crawl_runs_source_started ON crawl_runs(source_id, started_at DESC)`
+CREATE INDEX IF NOT EXISTS crawl_runs_source_started ON crawl_runs(source_id, started_at DESC);
+CREATE TABLE IF NOT EXISTS document_embeddings (
+  document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  model_key TEXT NOT NULL,
+  section_ids TEXT NOT NULL,
+  vectors BLOB NOT NULL,
+  PRIMARY KEY (model_key, document_id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS document_embeddings_document ON document_embeddings(document_id);
+CREATE TRIGGER IF NOT EXISTS document_embeddings_invalidate
+AFTER UPDATE OF title, markdown ON documents
+WHEN OLD.title IS NOT NEW.title OR OLD.markdown IS NOT NEW.markdown
+BEGIN
+  DELETE FROM document_embeddings WHERE document_id = OLD.id;
+END;`
 
 export const SKILL_INSTALLATIONS_SCHEMA = `CREATE TABLE IF NOT EXISTS skill_installations (
   id TEXT PRIMARY KEY,

@@ -1,5 +1,6 @@
 export * from './api.js'
 export * from './document-query.js'
+export * from './embedding-models.js'
 export * from './agent-instructions.js'
 export * from './browser.js'
 export * from './content-removal-risk.js'

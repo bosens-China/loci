@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   DatabaseOutlined,
   GlobalOutlined,
+  SearchOutlined,
   SaveOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons'
@@ -14,6 +15,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { DataTransferPanel } from '@/components/DataTransferPanel'
 import { ClearDataPanel } from '@/components/ClearDataPanel'
 import { HostnamePoliciesPanel } from '@/pages/settings/HostnamePoliciesPanel'
+import { EmbeddingModelsPanel } from '@/pages/settings/EmbeddingModelsPanel'
 
 /** 系统设置页面：管理本地抓取并发、容量保护、域名策略与数据备份。 */
 export function SettingsPage(): React.JSX.Element {
@@ -113,7 +115,7 @@ export function SettingsPage(): React.JSX.Element {
             type="info"
             showIcon
             message="本地隐私与服务安全"
-            description="Loci 仅监听本机 127.0.0.1 回环地址，所有文档与向量检索索引均保存在本地 SQLite 数据库中，完全离线可用且不外泄数据。"
+            description="Loci 仅监听本机 127.0.0.1 回环地址。文档、索引和搜索均在本机处理。"
           />
 
           <div className="flex justify-end pt-2">
@@ -142,6 +144,16 @@ export function SettingsPage(): React.JSX.Element {
           <HostnamePoliciesPanel />
         </div>
       )
+    },
+    {
+      key: 'models',
+      label: (
+        <span className="flex items-center gap-2">
+          <SearchOutlined />
+          <span>检索模型</span>
+        </span>
+      ),
+      children: <EmbeddingModelsPanel />
     },
     {
       key: 'data',

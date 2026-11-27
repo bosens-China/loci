@@ -14,6 +14,7 @@ import {
   initializeCrawlHistoryDatabase
 } from './crawl-history-database.js'
 import { createDocumentContentDatabase } from './document-content-database.js'
+import { createEmbeddingDatabase } from './embedding-database.js'
 import { createClearDataDatabase } from './clear-data-database.js'
 import { createMutationDatabase } from './document-mutation.js'
 import {
@@ -117,6 +118,7 @@ export function createDatabase(filename: string): LociDatabase {
     ...createCrawlHistoryDatabase(database, drizzle),
     ...createMutationDatabase(database, drizzle),
     ...createDocumentContentDatabase(database, drizzle),
+    ...createEmbeddingDatabase(database, drizzle),
     ...clear,
     clearDocuments: () => clear.clearData('documents').documents,
     clearSources: () => clear.clearData('sources').libraries,

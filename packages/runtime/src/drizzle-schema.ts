@@ -8,7 +8,8 @@ import type {
   SkillScope
 } from '@loci/shared'
 import { DEFAULT_LIBRARY_CATEGORY, DEFAULT_LIBRARY_VERSION } from '@loci/shared'
-import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import type { EmbeddingChunkLocation } from './embedding-chunks.js'
+import { blob, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 /**
  * 普通查询使用的类型化表映射。
@@ -75,6 +76,20 @@ export const documents = sqliteTable('documents', {
   manual: integer('manual').notNull().default(0),
   relativePath: text('relative_path')
 })
+
+export const documentEmbeddings = sqliteTable(
+  'document_embeddings',
+  {
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    modelKey: text('model_key').notNull(),
+    // 保留已有列名。索引 key 隔离旧的小节 ID 数组和新片段元数据。
+    chunks: text('section_ids', { mode: 'json' }).$type<EmbeddingChunkLocation[]>().notNull(),
+    vectors: blob('vectors', { mode: 'buffer' }).notNull()
+  },
+  (table) => [primaryKey({ columns: [table.modelKey, table.documentId] })]
+)
 
 export const sectionEditReceipts = sqliteTable(
   'section_edit_receipts',

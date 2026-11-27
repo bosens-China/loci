@@ -2,14 +2,15 @@
 
 ## 终端与 Web UI
 
-| 命令 | 用途 |
-| --- | --- |
-| `loci --help` | 列出命令。用 `loci read --help` 等子命令帮助查看参数。 |
-| `loci --version` | 打印当前 CLI 版本。 |
-| `loci upgrade --json` | 检查 npm 上的 CLI 版本。省略 `--json` 时，有更新会显示升级命令。 |
-| `loci ui --port 0 --no-open` | 在本机回环地址启动 Web UI，自动选端口并打印地址。默认端口为 4520。 |
-| `loci cancel <library> --json` | 取消指定库正在运行的抓取。 |
-| `loci status [library] --json` | 查询指定库或各库的最近抓取记录。 |
+| 命令                           | 用途                                                               |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `loci --help`                  | 列出命令。用 `loci read --help` 等子命令帮助查看参数。             |
+| `loci --version`               | 打印当前 CLI 版本。                                                |
+| `loci upgrade --json`          | 检查 npm 上的 CLI 版本。省略 `--json` 时，有更新会显示升级命令。   |
+| `loci ui --port 0 --no-open`   | 在本机回环地址启动 Web UI，自动选端口并打印地址。默认端口为 4520。 |
+| `loci cancel <library> --json` | 取消指定库正在运行的抓取。                                         |
+| `loci status [library] --json` | 查询指定库或各库的最近抓取记录。                                   |
+| `loci model list --json`       | 查看可选本机检索模型、体积和索引状态。                             |
 
 库参数支持完整 ID、唯一 ID 前缀或唯一的名称。供脚本使用的 `--json` 放在相应子命令之后；默认异步抓取的退出码 `0` 表示已启动或复用，轮询 `status` 获取最终结果。加 `--wait` 时进度写入 stderr。前台抓取全部成功时退出码为 `0`，有失败时为 `1`，抓取被信号取消时为 `130`。命令行参数解析错误为 `2`。
 

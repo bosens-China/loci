@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { inspectSource } from '@loci/core'
-import { DOCUMENT_SOURCE_DEFAULTS } from '@loci/shared'
+import { DOCUMENT_SOURCE_DEFAULTS, EMBEDDING_MODEL_IDS } from '@loci/shared'
 import { z } from 'zod'
 import type { LocalRuntime } from './local-runtime.js'
 import { handleAgentIntegrations } from './local-http-agent.js'
@@ -9,6 +9,7 @@ import { handleDataTransfer } from './local-http-data-transfer.js'
 import { handleUpdateApi, type UpdateApiOptions } from './local-http-update.js'
 import type { createForegroundCrawls } from './local-http-crawls.js'
 import { DocumentVersionConflict } from './document-mutation.js'
+import { SearchPageChangedError } from './document-query.js'
 import { RuntimeLockedError } from './runtime-lock.js'
 import { json, readJson, safeClientError } from './local-http-response.js'
 
@@ -53,8 +54,14 @@ const search = z.strictObject({
   pathPrefix: text.optional(),
   offset: number.optional(),
   limit: number.optional(),
-  tree: z.boolean().optional()
+  pageToken: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .optional(),
+  tree: z.boolean().optional(),
+  includeContent: z.boolean().optional()
 })
+const modelAction = z.strictObject({ id: z.enum(EMBEDDING_MODEL_IDS) })
 const read = z.strictObject({
   libraryId: text.optional(),
   targets: strings,
@@ -126,7 +133,16 @@ export async function handleLocalApi(
     if (method === 'POST' && route === '/api/inspect')
       return ok(await inspectSource(inspect.parse(await readJson(request))))
     if (method === 'POST' && route === '/api/search')
-      return ok(runtime.searchDocuments(search.parse(await readJson(request))))
+      return ok(await runtime.searchDocumentSections(search.parse(await readJson(request))))
+    if (method === 'GET' && route === '/api/models') return ok(runtime.embeddings.list())
+    if (method === 'POST' && route === '/api/models/install') {
+      const { id } = modelAction.parse(await readJson(request))
+      return ok(runtime.embeddings.start(id), 202)
+    }
+    if (method === 'POST' && route === '/api/models/cancel') {
+      const { id } = modelAction.parse(await readJson(request))
+      return ok(runtime.embeddings.cancel(id), 202)
+    }
     if (method === 'POST' && route === '/api/read')
       return ok(runtime.readDocuments(read.parse(await readJson(request))))
     if (method === 'GET' && route === '/api/libraries/crawl-status')
@@ -166,7 +182,7 @@ export async function handleLocalApi(
       if (action === 'tree' && method === 'GET') {
         const queries = url.searchParams.getAll('queries')
         return ok(
-          runtime.getLibraryTree(id, {
+          await runtime.getSearchLibraryTree(id, {
             parent: url.searchParams.get('parent') ?? undefined,
             depth: Number(url.searchParams.get('depth') ?? 1),
             queries: queries.length ? queries : undefined
@@ -226,7 +242,11 @@ export async function handleLocalApi(
             ? error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ')
             : safeClientError(error)
       },
-      error instanceof RuntimeLockedError || error instanceof DocumentVersionConflict ? 409 : 400
+      error instanceof RuntimeLockedError ||
+        error instanceof DocumentVersionConflict ||
+        error instanceof SearchPageChangedError
+        ? 409
+        : 400
     )
   }
 }

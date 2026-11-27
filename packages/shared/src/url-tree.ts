@@ -7,6 +7,7 @@ export interface UrlTreeItem extends Partial<DocumentSummary>, Partial<SearchPas
   url: string
   relativePath?: string
   path?: string
+  sectionIds?: string[]
 }
 
 export interface UrlTreeNode extends Partial<UrlTreeItem> {

@@ -39,7 +39,8 @@
 文档库配置要求 `name` 和 `url`。可选字段为 `kind`、`mode`、`pageLimit`、`scopePath`、`excludePathPattern`、`httpConcurrency`、`browserConcurrency`、`githubArchiveLimitMb`、`githubMarkdownLimitMb`。新库省略字段采用 `DOCUMENT_SOURCE_DEFAULTS`，`kind` 根据 URL 推断。`POST` 命中相同身份（网站按域名和收录路径、GitHub 按仓库，再加版本）时保留已有入口 URL，按显式字段更新配置，省略分类时保留原分类。同一 URL 的多个版本可独立共存。`PUT` 会重新应用默认值。改变来源、收窄范围或增加排除规则可能在同一事务中移除旧正文和搜索索引。创建库后单独调用 `sync` 或 `pages` 抓取内容。
 
 - `tree` 默认返回第一层。`parent` 可传目录节点的 `id` 或 `/guide/routing` 形式的逻辑路径，`depth` 为正整数。传入多个关键词时使用 `?queries=router&queries=navigation`。筛选树的目录给出该目录下全部文档的 `totalCount` 和命中的 `matchedCount`，叶节点同时给出元数据、`path` 和匹配段落。空分支返回空数组。
-- `search` 的 `queries` 接受非空字符串或非空字符串数组，其他字段为 `libraryIds?`、`pathPrefix?`、`offset?`、`limit?` 和 `tree?`。每组词在限定范围内依次尝试全部词 FTS、任一词 FTS 和元数据子串匹配，首次有结果即停止。各组结果按输入顺序合并去重。响应包含 `hits`、`total`、`retrieval: [{ query, mode }]` 和可选 `nextOffset`，`mode` 为 `all`、`any` 或 `fuzzy`。默认 `offset=0`、`limit=20`。`tree=true` 另返回 `trees: [{ libraryId, nodes }]`，其中包含全部命中文档，分页只作用于 `hits`。
+- `search` 的 `queries` 接受非空字符串或非空字符串数组，其他字段为 `libraryIds?`、`pathPrefix?`、`offset?`、`limit?`、`pageToken?`、`tree?` 和 `includeContent?`。每组词在限定范围内依次尝试全部词 FTS、任一词 FTS 和元数据子串匹配，首次有结果即停止。响应包含 `hits`、`total`、`retrieval: [{ query, mode }]` 和可选 `nextOffset`、`nextPageToken`，`mode` 为 `all`、`any` 或 `fuzzy`。默认 `offset=0`、`limit=20`。续页沿用查询，并将返回的 `nextOffset` 和 `nextPageToken` 分别传入 `offset` 和 `pageToken`。排序已变动时返回 `409`，客户端可从第一页重新查询。`tree=true` 另返回 `trees: [{ libraryId, nodes }]`，其中包含全部命中文档，分页只作用于 `hits`。
+- `search` 自动合并关键词和本机模型命中，`matchesFrom` 表示命中来源。同一文档的不同小节可分别出现。请求带 `includeContent: true` 时，当前页每个命中会带完整小节 Markdown `content` 和标题路径 `headingPath`。普通命中带库版本 `libraryVersion` 和来源 `url`。`truncated` 仍描述匹配段落预览。命中树的文件节点有多个命中时会附带 `sectionIds`。
 - `read` 接受 `{ libraryId?, targets, sectionId?, offset?, maxCharsPerFile? }`。`targets` 支持一个或多个完整 ID、唯一短 ID、带 `/` 前缀的文件或子树逻辑路径。无库限制时在全部库中解析，命中多个 ID 的短前缀返回 `400`。多目标按库 ID 和库内树顺序去重。`sectionId` 须来自返回的同一文档。默认从 `0` 读取，每篇最多 `20000` 个 UTF-16 码元，按段落边界切片。每条响应均含文件元数据、`path`、`content`、`totalChars`、`offset` 和 `truncated`。截断时返回该文件或小节的 `nextOffset`，续读应传同一文档 ID 与小节 ID。
 - 新增文档须提供 `path` 或 `url` 其中一项。`path` 是库内逻辑路径，按来源站点根地址生成 URL。`url` 使用 HTTP(S)，会去除查询参数和片段。`language` 默认为 `und`。重复创建相同 URL 和内容返回已有记录，内容冲突返回 `400`。标题、正文或语言更新保留文档 ID，提交后立即可检索。只读快照拒绝文档编辑。
 - 整篇编辑先读取 `GET /api/documents/:docId`，响应含 `id`、`sourceId`、`title`、`url`、`path`、`language`、完整 `content` 和 `updatedAt`。新建的手工文档在整库和指定页面抓取时保留正文和索引，并随备份恢复。
@@ -65,6 +66,14 @@
 `ForegroundCrawlState` 包含 `libraryId`、`kind: 'sync' \| 'pages'`、`status: 'running' \| 'completed' \| 'completed_with_errors' \| 'failed' \| 'cancelled'`、`progress: CrawlProgress \| null`、`error: string \| null`。同一前台服务内，同库同抓取类型、同目标的在途请求复用任务和进度，其他在途请求返回 `409`。旧版审查库的普通更新只刷新已收录的 URL 和已登记的指定页面。终态后再次 POST 可以重试或更新。轮询返回此 HTTP 服务最近启动或跟随的任务，服务重启后为 `null`。跨进程跟随已有抓取时取消只结束本入口的等待。`pages` 完成时额外返回 `items: [{ url, status, message? }]`，逐项状态为 `inserted`、`updated`、`unchanged`、`missing` 或 `failed`。手工文档在远端抓取成功时返回 `unchanged`，远端缺失时返回 `missing`，两种情况均保留本地文档。调用方可结合 `progress.failed` 显示部分成功结果。CLI 直接等待 `runLocalSourceSync` 或 `runtime.fetchPages` 时可传进度回调及 `AbortSignal`。
 
 ## Agent、浏览器、设置和备份
+
+### 本机检索模型
+
+| 方法与路径                 | 请求和响应                                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/models`          | 返回 MiniLM 和 BGE-M3 的支持状态、下载大小、索引进度和操作结果。                                                    |
+| `POST /api/models/install` | JSON 为 `{ "id": "minilm" }` 或 `{ "id": "bge-m3" }`。返回当前状态与 HTTP 202，可以继续轮询。重复调用复用在途操作。 |
+| `POST /api/models/cancel`  | 请求同上，取消当前下载或建索引任务，返回当前状态与 HTTP 202。                                                       |
 
 | 方法与路径                                | 请求                                                                                                               | 成功响应                                                                                                         |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { runCli } from './cli.js'
+import { embeddingModelId } from '@loci/runtime'
+import { withCancellation, withRuntime } from './command-runtime.js'
 import { runCrawlWorker } from './crawl-process.js'
 import { CliError, errorMessage } from './errors.js'
 import { UPDATE_CHECK_ARGUMENT, runBackgroundUpdateCheck } from './update.js'
@@ -8,6 +10,16 @@ const args = process.argv.slice(2)
 if (args[0] === UPDATE_CHECK_ARGUMENT) await runBackgroundUpdateCheck()
 else {
   try {
+    if (args[0] === '__model-index') {
+      const id = embeddingModelId(args[1] ?? '')
+      await withCancellation((signal) =>
+        withRuntime(async ({ embeddings }) => {
+          embeddings.start(id, false)
+          await embeddings.wait(id, signal)
+        })
+      )
+      process.exit(0)
+    }
     if (args[0] === '__crawl') {
       await runCrawlWorker(args.slice(1))
       // 数据库、抓取器与 IPC 握手均已收口，主动结束第三方库可能遗留的句柄。

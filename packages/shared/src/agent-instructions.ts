@@ -14,6 +14,7 @@ general web research), use web search or the relevant source directly instead of
 2. Browse with \`loci tree <lib> --json\` or filter with \`loci tree <lib> --query <kw...> --json\`.
    Run \`loci search <queries...> --json\` across libraries, or \`loci search <queries...> --library <lib> --tree --json\` for a matching tree. Use identifiers and error messages verbatim.
 3. Read the matching document IDs or subtree paths with \`loci read <targets...> --library <lib> --json\`.
+   For a search with full deduplicated sections, use \`loci search <queries...> --library <lib> --content --json\` and pass \`nextOffset\` and \`nextPageToken\` as \`--offset\` and \`--page-token\` for more hits. Restart from the first page if the results changed.
    Cite the source URLs from the text you read.
 4. When the library is missing, verify the official documentation URL and run \`loci fetch <url>\`
    directly (use \`--pages\` when only specific known pages are needed).
