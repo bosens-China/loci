@@ -1,27 +1,24 @@
 import { useMemo, useState } from 'react'
 import type { LibraryCrawlStatus, LibrarySummary } from '@loci/shared'
 import {
-  BookOutlined,
   CheckSquareOutlined,
   DeleteOutlined,
-  FileTextOutlined,
-  GithubOutlined,
   PlusOutlined,
   SearchOutlined,
   SyncOutlined
 } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   App,
   Button,
-  Card,
   Empty,
   Input,
   Pagination,
   Segmented,
   Select,
   Space,
-  Statistic
+  Typography
 } from 'antd'
 import { listCategories } from '@/api/categories'
 import { deleteLibrary, syncLibrary } from '@/api/libraries'
@@ -31,10 +28,15 @@ import {
   filterLocalLibrarySources,
   type LibraryKindFilter
 } from '@/pages/documents/library-filter'
+import { LibraryOverviewStats } from '@/pages/documents/LibraryOverviewStats'
 import { LocalLibraryCardItem } from '@/pages/documents/LocalLibraryCardItem'
-import { BatchDeleteError, deleteLibrarySources } from '@/pages/documents/library-batch-delete'
+import {
+  BatchDeleteError,
+  deleteLibrarySources,
+  settleLibraryActions
+} from '@/pages/documents/library-batch-delete'
 import { SourceFormModal } from '@/pages/documents/SourceFormModal'
-import { PAGE_SIZE_OPTIONS } from '@/utils/pagination'
+import { CARD_PAGE_SIZE_OPTIONS } from '@/utils/pagination'
 
 export interface LocalLibraryCardsProps {
   libraries: LibrarySummary[]
@@ -85,10 +87,10 @@ export function LocalLibraryCards(props: {
     [props.crawlStatuses]
   )
 
-  const pagedSources = useMemo(() => {
-    const start = (page - 1) * pageSize
-    return filtered.slice(start, start + pageSize)
-  }, [filtered, page, pageSize])
+  const safePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)))
+  const start = (safePage - 1) * pageSize
+  const pagedSources = filtered.slice(start, start + pageSize)
+  const selectedLibraries = filtered.filter((source) => selectedIds.includes(source.id))
 
   const toggleSelect = (id: string): void => {
     setSelectedIds((prev) =>
@@ -109,13 +111,18 @@ export function LocalLibraryCards(props: {
 
   // 批量更新
   const batchSyncMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      await Promise.allSettled(ids.map((id) => syncLibrary(id)))
-    },
-    onSuccess: () => {
+    mutationFn: (ids: string[]) => settleLibraryActions(ids, syncLibrary),
+    onSuccess: ({ succeededIds, failedIds }) => {
       void client.invalidateQueries({ queryKey: ['libraries'] })
       void client.invalidateQueries({ queryKey: ['library-crawl-statuses'] })
-      void message.success(`已为选中的 ${selectedIds.length} 个文档库触发更新`)
+      if (failedIds.length) {
+        setSelectedIds((current) => current.filter((id) => !succeededIds.includes(id)))
+        void message.warning(
+          `${succeededIds.length} 个文档库已触发更新，${failedIds.length} 个更新失败`
+        )
+        return
+      }
+      void message.success(`已为选中的 ${succeededIds.length} 个文档库触发更新`)
       setSelectedIds([])
       setSelectMode(false)
     }
@@ -134,7 +141,7 @@ export function LocalLibraryCards(props: {
     onError: (err: unknown) => {
       void client.invalidateQueries({ queryKey: ['libraries'] })
       if (err instanceof BatchDeleteError) {
-        setSelectedIds(err.failedIds)
+        setSelectedIds((current) => current.filter((id) => !err.succeededIds.includes(id)))
         void message.warning(
           `已删除 ${err.succeededIds.length} 个文档库，${err.failedIds.length} 个删除失败`
         )
@@ -145,18 +152,36 @@ export function LocalLibraryCards(props: {
   })
 
   const confirmBatchDelete = (): void => {
+    if (!selectedLibraries.length) return
+    const ids = selectedLibraries.map((lib) => lib.id)
     modal.confirm({
-      title: `确认删除选中的 ${selectedIds.length} 个文档库？`,
-      content: '删除后对应的全部文档与全文检索索引将从本机清除。',
+      title: `确认删除选中的 ${ids.length} 个文档库？`,
+      content: (
+        <>
+          <p>删除后对应的全部文档与全文检索索引将从本机清除。</p>
+          <ul>
+            {selectedLibraries.map((lib) => (
+              <li key={lib.id}>
+                {lib.name} ({lib.version})
+              </li>
+            ))}
+          </ul>
+        </>
+      ),
       okText: '确认删除',
       cancelText: '取消',
       okButtonProps: { danger: true },
-      onOk: () => batchDeleteMutation.mutateAsync(selectedIds)
+      onOk: () => batchDeleteMutation.mutateAsync(ids).catch(() => undefined)
     })
   }
 
+  const exitSelectMode = (): void => {
+    setSelectMode(false)
+    setSelectedIds([])
+  }
+
   return (
-    <div className="px-6 py-6 sm:px-8 sm:py-8 space-y-5">
+    <div className="space-y-5 px-6 py-6 sm:px-8 sm:py-8">
       <PageHeader
         title="知识管理"
         description="本地离线技术文档库管理工作台，一站式抓取、检索、阅读与小节编辑。"
@@ -167,74 +192,31 @@ export function LocalLibraryCards(props: {
         }
       />
 
-      {/* 整合概览看板指标 */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Card size="small" className="shadow-xs">
-          <Statistic
-            title="本地文档库"
-            value={counts.total}
-            prefix={<BookOutlined className="text-[var(--ant-color-primary)] text-sm mr-1" />}
-            suffix={
-              <span className="text-xs font-normal text-[var(--ant-color-text-secondary)]">个</span>
-            }
-          />
-        </Card>
-        <Card size="small" className="shadow-xs">
-          <Statistic
-            title="已收录总页面"
-            value={totalPages}
-            prefix={<FileTextOutlined className="text-[var(--ant-color-success)] text-sm mr-1" />}
-            suffix={
-              <span className="text-xs font-normal text-[var(--ant-color-text-secondary)]">页</span>
-            }
-          />
-        </Card>
-        <Card size="small" className="shadow-xs">
-          <Statistic
-            title="进行中抓取"
-            value={runningCrawls}
-            prefix={
-              <SyncOutlined
-                spin={runningCrawls > 0}
-                className="text-[var(--ant-color-info)] text-sm mr-1"
-              />
-            }
-            suffix={
-              <span className="text-xs font-normal text-[var(--ant-color-text-secondary)]">个</span>
-            }
-          />
-        </Card>
-        <Card size="small" className="shadow-xs">
-          <Statistic
-            title="GitHub 仓库库"
-            value={counts.github}
-            prefix={
-              <GithubOutlined className="text-[var(--ant-color-text-tertiary)] text-sm mr-1" />
-            }
-            suffix={
-              <span className="text-xs font-normal text-[var(--ant-color-text-secondary)]">个</span>
-            }
-          />
-        </Card>
-      </div>
+      <LibraryOverviewStats
+        total={counts.total}
+        totalPages={totalPages}
+        running={runningCrawls}
+        github={counts.github}
+      />
 
-      {/* 搜索与工具栏 */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
+      {/* 筛选工具栏：左侧筛选条件，右侧列表操作；统一使用默认尺寸 */}
+      <div className="flex items-center justify-between gap-4">
+        <Space size={12} wrap>
           <Input
             prefix={<SearchOutlined className="text-[var(--ant-color-text-tertiary)]" />}
-            placeholder="搜索库名称、URL 或 ID..."
+            placeholder="搜索名称、版本、URL 或 ID"
             allowClear
             value={keyword}
             onChange={(e) => {
               setKeyword(e.target.value)
+              setSelectedIds([])
               setPage(1)
             }}
-            className="w-64"
+            className="w-72"
           />
           <Select
             aria-label="按分类筛选"
-            className="min-w-36"
+            className="w-40"
             value={category}
             options={[
               { label: '全部分类', value: '' },
@@ -250,67 +232,72 @@ export function LocalLibraryCards(props: {
             value={kindFilter}
             onChange={(val) => {
               setKindFilter(val as LibraryKindFilter)
+              setSelectedIds([])
               setPage(1)
             }}
             options={[
-              { label: `全部 (${counts.total})`, value: 'all' },
-              { label: `文档站 (${counts.web})`, value: 'web' },
-              { label: `GitHub (${counts.github})`, value: 'github' }
+              { label: `全部 ${counts.total}`, value: 'all' },
+              { label: `文档站 ${counts.web}`, value: 'web' },
+              { label: `GitHub ${counts.github}`, value: 'github' }
             ]}
           />
-        </div>
+        </Space>
 
-        <Space size={8}>
-          {selectMode ? (
-            <>
-              <Button size="small" onClick={toggleSelectAll}>
-                {isAllSelected ? '取消全选' : '全选'}
+        <Button
+          icon={<CheckSquareOutlined />}
+          type={selectMode ? 'primary' : 'default'}
+          ghost={selectMode}
+          onClick={selectMode ? exitSelectMode : () => setSelectMode(true)}
+          disabled={props.libraries.length === 0}
+        >
+          {selectMode ? '退出批量' : '批量管理'}
+        </Button>
+      </div>
+
+      {/* 批量选择提示条：经典后台表格的已选信息栏 */}
+      {selectMode && (
+        <Alert
+          type="info"
+          showIcon
+          title={
+            <Space size={16}>
+              <span>
+                已选择 <Typography.Text strong>{selectedLibraries.length}</Typography.Text> 个文档库
+              </span>
+              <Button type="link" size="small" className="px-0!" onClick={toggleSelectAll}>
+                {isAllSelected ? '取消全选' : `全选当前筛选（${filtered.length}）`}
               </Button>
+            </Space>
+          }
+          action={
+            <Space>
               <Button
                 size="small"
                 icon={<SyncOutlined />}
-                disabled={selectedIds.length === 0}
+                disabled={!selectedLibraries.length || batchDeleteMutation.isPending}
                 loading={batchSyncMutation.isPending}
-                onClick={() => batchSyncMutation.mutate(selectedIds)}
+                onClick={() => batchSyncMutation.mutate(selectedLibraries.map((lib) => lib.id))}
               >
-                批量更新 ({selectedIds.length})
+                批量更新
               </Button>
               <Button
                 size="small"
                 danger
                 icon={<DeleteOutlined />}
-                disabled={selectedIds.length === 0}
+                disabled={!selectedLibraries.length || batchSyncMutation.isPending}
                 loading={batchDeleteMutation.isPending}
                 onClick={confirmBatchDelete}
               >
-                批量删除 ({selectedIds.length})
+                批量删除
               </Button>
-              <Button
-                size="small"
-                onClick={() => {
-                  setSelectMode(false)
-                  setSelectedIds([])
-                }}
-              >
-                完成
-              </Button>
-            </>
-          ) : (
-            <Button
-              size="small"
-              icon={<CheckSquareOutlined />}
-              onClick={() => setSelectMode(true)}
-              disabled={props.libraries.length === 0}
-            >
-              批量管理
-            </Button>
-          )}
-        </Space>
-      </div>
+            </Space>
+          }
+        />
+      )}
 
       {/* 库列表网格 */}
       {pagedSources.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
           {pagedSources.map((lib) => (
             <LocalLibraryCardItem
               key={lib.id}
@@ -325,14 +312,14 @@ export function LocalLibraryCards(props: {
           ))}
         </div>
       ) : (
-        <Card className="py-12 text-center shadow-xs">
+        <div className="rounded-lg border border-dashed border-[var(--ant-color-border)] py-16">
           <Empty
             description={
               keyword
                 ? `未找到匹配「${keyword}」的本地文档库`
                 : props.libraries.length
                   ? '筛选条件下没有文档库'
-                  : '当前还没有本地文档库，点击上方按钮添加并抓取'
+                  : '当前还没有本地文档库，添加后即可抓取'
             }
           >
             {!props.libraries.length && (
@@ -341,27 +328,27 @@ export function LocalLibraryCards(props: {
                 icon={<PlusOutlined />}
                 onClick={() => setEditingSource('new')}
               >
-                立即添加第一个文档库
+                添加第一个文档库
               </Button>
             )}
           </Empty>
-        </Card>
+        </div>
       )}
 
-      {/* 分页器 */}
-      {filtered.length > pageSize && (
-        <div className="flex justify-end pt-2">
+      {/* 分页器：有数据即展示总数，保持底部位置稳定 */}
+      {filtered.length > 0 && (
+        <div className="flex justify-end">
           <Pagination
-            current={page}
+            current={safePage}
             pageSize={pageSize}
             total={filtered.length}
             onChange={(p, ps) => {
-              setPage(p)
+              setPage(ps === pageSize ? p : 1)
               setPageSize(ps)
             }}
             showSizeChanger
-            pageSizeOptions={PAGE_SIZE_OPTIONS}
-            size="small"
+            showTotal={(total) => `共 ${total} 个文档库`}
+            pageSizeOptions={CARD_PAGE_SIZE_OPTIONS}
           />
         </div>
       )}

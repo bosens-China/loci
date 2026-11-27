@@ -1,12 +1,12 @@
 import { defaultUrlTransform } from 'react-markdown'
 
 /** 先复用渲染器的协议校验，再按来源解析；不允许相对地址落到本机控制台。 */
-export function resolveReaderUrl(value: string, sourceUrl: string): string {
+export function resolveReaderUrl(value: string, sourceUrl: string, anchorPrefix = 'doc-'): string {
   const safe = defaultUrlTransform(value)
   if (!safe) return safe
-  if (safe.startsWith('#')) return `#doc-${safe.slice(1)}`
+  if (safe.startsWith('#')) return `#${anchorPrefix}${safe.slice(1)}`
   try {
-    return new URL(safe, sourceUrl).href
+    return defaultUrlTransform(new URL(safe, sourceUrl).href)
   } catch {
     return ''
   }
@@ -25,7 +25,7 @@ interface MarkdownNode {
 }
 
 /** 在语法树中保留标题锚点，统一加前缀避免与控制台元素冲突。 */
-export function remarkReaderHeadings() {
+export function remarkReaderHeadings(anchorPrefix = 'doc-') {
   return (tree: MarkdownNode): void => {
     const ids = new Map<string, number>()
     const text = (node: MarkdownNode): string =>
@@ -46,7 +46,10 @@ export function remarkReaderHeadings() {
         ids.set(slug, count + 1)
         node.data = {
           ...node.data,
-          hProperties: { ...node.data?.hProperties, id: `doc-${slug}${count ? `-${count}` : ''}` }
+          hProperties: {
+            ...node.data?.hProperties,
+            id: `${anchorPrefix}${slug}${count ? `-${count}` : ''}`
+          }
         }
       }
       node.children?.forEach(visit)

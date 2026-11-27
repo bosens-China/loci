@@ -2,10 +2,10 @@ import type { Key } from 'react'
 import type { UrlTreeNode } from '@loci/shared'
 import { getLibraryTree } from '@/api/documents'
 
-/** 解析用户输入的单/多关键词（支持逗号或空格分隔） */
+/** 空格属于同一条查询，保留整句语义。 */
 export function parseTreeQueries(input: string): string[] {
   return input
-    .split(/[,，\s]+/u)
+    .split(/[,，\r\n]+/u)
     .map((s) => s.trim())
     .filter(Boolean)
 }
@@ -62,14 +62,11 @@ export function resolveReadTargets(
   indexNodes(treeNodes)
 
   for (const rawKey of keys) {
-    const key = String(rawKey)
-    if (!key.startsWith('folder:')) {
-      result.add(key)
-      continue
-    }
-    const folderNode = nodeMap.get(key)
-    if (folderNode && folderNode.children) {
-      const leafIds = collectReadableDocIds(folderNode.children)
+    const node = nodeMap.get(String(rawKey))
+    if (!node) continue
+    if (node.readable) result.add(node.id)
+    else if (node.children) {
+      const leafIds = collectReadableDocIds(node.children)
       for (const id of leafIds) {
         result.add(id)
       }

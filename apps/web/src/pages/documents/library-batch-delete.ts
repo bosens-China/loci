@@ -13,7 +13,17 @@ export async function deleteLibrarySources(
   ids: string[],
   deleteOne: (id: string) => Promise<unknown>
 ): Promise<string[]> {
-  const results = await Promise.allSettled(ids.map(async (id) => deleteOne(id)))
+  const { succeededIds, failedIds } = await settleLibraryActions(ids, deleteOne)
+  if (failedIds.length) throw new BatchDeleteError(succeededIds, failedIds)
+  return succeededIds
+}
+
+/** 按提交的库 ID 归集结果，调用方可保留失败项供重试。 */
+export async function settleLibraryActions(
+  ids: string[],
+  action: (id: string) => Promise<unknown>
+) {
+  const results = await Promise.allSettled(ids.map(async (id) => action(id)))
   const succeededIds: string[] = []
   const failedIds: string[] = []
 
@@ -24,6 +34,5 @@ export async function deleteLibrarySources(
     else failedIds.push(id)
   })
 
-  if (failedIds.length) throw new BatchDeleteError(succeededIds, failedIds)
-  return succeededIds
+  return { succeededIds, failedIds }
 }

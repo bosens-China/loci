@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { UrlTreeNode } from '@loci/shared'
-import { resolveReadTargets } from '../library-tree'
+import { parseTreeQueries, resolveReadTargets } from '../library-tree'
 
 describe('文档库目录工具函数', () => {
+  it('保留完整问句作为向量检索输入，按逗号分开独立查询', () => {
+    expect(parseTreeQueries('How does dependency injection work，Vue 组件如何通信')).toEqual([
+      'How does dependency injection work',
+      'Vue 组件如何通信'
+    ])
+  })
+
   it('P1-4: 勾选目录节点时解析为可读叶子 ID，且 targets 绝不含 folder: 内部键', () => {
     const treeWithFolderKey: UrlTreeNode[] = [
       {
@@ -34,6 +41,11 @@ describe('文档库目录工具函数', () => {
     )
     expect(mixedTargets).toEqual(['doc-intro', 'doc-quickstart', 'doc-hooks'])
     expect(mixedTargets.some((t) => t.startsWith('folder:'))).toBe(false)
+
+    // 筛选或刷新前勾选的文档已不在树中，预览请求只能包含仍可见的文档。
+    expect(resolveReadTargets(['doc-intro', 'doc-hidden'], treeWithFolderKey)).toEqual([
+      'doc-intro'
+    ])
 
     // 勾选不存在或空的目录节点
     const emptyTargets = resolveReadTargets(['folder:react:unknown'], treeWithFolderKey)

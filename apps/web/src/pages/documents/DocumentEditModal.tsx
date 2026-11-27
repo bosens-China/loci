@@ -147,7 +147,7 @@ export function DocumentEditModal(props: DocumentEditModalProps): React.JSX.Elem
           <Alert
             type="error"
             showIcon
-            message="无法加载文档完整正文"
+            title="无法加载文档完整正文"
             description={docDetailQuery.error?.message || '读取完整内容失败'}
             action={
               <Button

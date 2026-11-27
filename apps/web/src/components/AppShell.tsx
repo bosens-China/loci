@@ -10,6 +10,7 @@ import {
 import { Button, Layout, Menu, Space, Tag, Typography, type MenuProps } from 'antd'
 import { Link, useLocation } from '@tanstack/react-router'
 import { ActiveTaskIndicator } from '@/components/shell/ActiveTaskIndicator'
+import { LociLogo } from '@/components/shell/LociLogo'
 import { resolveActiveMenuKey } from '@/components/shell/navigation-utils'
 import { ShellLayoutContext } from '@/components/shell/ShellLayoutContext'
 import { ThemeSwitcher } from '@/components/shell/ThemeSwitcher'
@@ -65,9 +66,7 @@ export function AppShell({ children }: AppShellProps): React.JSX.Element {
           className="h-full overflow-y-auto border-r border-[var(--ant-color-border-secondary)] bg-[var(--ant-color-bg-container)] shadow-[2px_0_8px_0_rgba(0,0,0,0.05)] dark:shadow-[4px_0_24px_0_rgba(0,0,0,0.7),1px_0_0_0_rgba(255,255,255,0.05)] transition-all duration-200 shrink-0 z-20"
         >
           <div className="flex h-14 items-center gap-2.5 border-b border-[var(--ant-color-border-secondary)] px-4 overflow-hidden whitespace-nowrap shrink-0">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--ant-color-primary)] text-base text-[var(--ant-color-text-light-solid)] shadow-sm dark:bg-blue-950/70 dark:text-blue-400 dark:border dark:border-blue-500/30">
-              <BookOutlined />
-            </div>
+            <LociLogo className="h-8 w-8 shrink-0 select-none" />
             <div
               className={`flex min-w-0 items-center gap-2 transition-all duration-200 ${
                 collapsed ? 'max-w-0 opacity-0 pointer-events-none' : 'max-w-36 opacity-100'

@@ -104,10 +104,6 @@ export function DocumentSectionsModal(props: DocumentSectionsModalProps): React.
     setPreviewContent(section.body)
   }
 
-  const handleDelete = (section: DocumentSectionDetail): void => {
-    editMutation.mutate(createSectionDeleteInput(section))
-  }
-
   const sections = sectionsQuery.data ?? []
   const isSaveDisabled = sectionsQuery.isLoading || sectionsQuery.isError
 
@@ -142,7 +138,7 @@ export function DocumentSectionsModal(props: DocumentSectionsModalProps): React.
       title={
         <div className="flex items-center gap-2">
           <MenuOutlined />
-          <span>文档小节管理（Sections CRUD） - {title}</span>
+          <span>小节管理：{title}</span>
         </div>
       }
       width={720}
@@ -177,7 +173,7 @@ export function DocumentSectionsModal(props: DocumentSectionsModalProps): React.
           <Alert
             type="error"
             showIcon
-            message="加载小节列表失败"
+            title="加载小节列表失败"
             description={sectionsQuery.error?.message}
             action={
               <Button
@@ -286,7 +282,7 @@ export function DocumentSectionsModal(props: DocumentSectionsModalProps): React.
                   okText="删除"
                   cancelText="取消"
                   okButtonProps={{ danger: true }}
-                  onConfirm={() => handleDelete(section)}
+                  onConfirm={() => editMutation.mutateAsync(createSectionDeleteInput(section))}
                 >
                   <Button type="link" size="small" danger icon={<DeleteOutlined />}>
                     删除
@@ -295,7 +291,7 @@ export function DocumentSectionsModal(props: DocumentSectionsModalProps): React.
               ]}
             >
               <div className="flex items-center gap-2">
-                <Tag color="blue" className="font-mono text-[11px] m-0">
+                <Tag variant="filled" color="blue" className="m-0! font-mono">
                   H{section.level}
                 </Tag>
                 <Typography.Text strong className="text-sm">

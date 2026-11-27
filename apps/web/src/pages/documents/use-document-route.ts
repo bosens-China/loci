@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { getRouteApi } from '@tanstack/react-router'
+import { getRouteApi, useRouter } from '@tanstack/react-router'
 import { canonicalDocumentSearch } from '@/routing'
 
 export interface DocumentRouteState {
@@ -14,9 +14,11 @@ const documentsRoute = getRouteApi('/_app/documents')
 export function useDocumentRoute(): {
   state: DocumentRouteState
   selectSource: (sourceId: string) => void
-  selectDocument: (documentId: string) => void
+  selectDocument: (sourceId: string, documentId: string) => void
+  forgetDocument: (sourceId: string, documentId: string) => void
   setQuery: (query: string) => void
 } {
+  const router = useRouter()
   const search = documentsRoute.useSearch()
   const navigate = documentsRoute.useNavigate()
   const state = {
@@ -26,8 +28,9 @@ export function useDocumentRoute(): {
   }
   const rememberedDocuments = useRef(new Map<string, string>())
   useEffect(() => {
-    if (state.sourceId && state.documentId)
-      rememberedDocuments.current.set(state.sourceId, state.documentId)
+    if (!state.sourceId) return
+    if (state.documentId) rememberedDocuments.current.set(state.sourceId, state.documentId)
+    else rememberedDocuments.current.delete(state.sourceId)
   }, [state.documentId, state.sourceId])
   const write = useCallback(
     (next: Partial<DocumentRouteState>, replace = true) => {
@@ -56,12 +59,40 @@ export function useDocumentRoute(): {
       write({ sourceId, documentId: rememberedDocuments.current.get(sourceId) ?? '' }),
     [write]
   )
-  const selectDocument = useCallback((documentId: string) => write({ documentId }, false), [write])
+  // 异步写操作完成时重新读取导航目的地，避免切换版本或离开工作区后改写 URL。
+  const isCurrent = useCallback(
+    (sourceId: string, documentId?: string) => {
+      const location = router.buildLocation({ search: true })
+      const current = canonicalDocumentSearch(location.search)
+      return (
+        location.pathname === '/documents' &&
+        current.source === sourceId &&
+        (documentId === undefined || current.doc === documentId)
+      )
+    },
+    [router]
+  )
+  const selectDocument = useCallback(
+    (sourceId: string, documentId: string) => {
+      if (isCurrent(sourceId)) write({ documentId }, false)
+    },
+    [isCurrent, write]
+  )
+  const forgetDocument = useCallback(
+    (sourceId: string, documentId: string) => {
+      if (rememberedDocuments.current.get(sourceId) === documentId) {
+        rememberedDocuments.current.delete(sourceId)
+      }
+      if (isCurrent(sourceId, documentId)) write({ documentId: '' })
+    },
+    [isCurrent, write]
+  )
   const setQuery = useCallback((query: string) => write({ query, documentId: '' }), [write])
   return {
     state,
     selectSource,
     selectDocument,
+    forgetDocument,
     setQuery
   }
 }

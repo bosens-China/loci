@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import ReactMarkdown from 'react-markdown'
-import {
-  normalizeReaderMarkdown,
-  readerTitle,
-  remarkReaderHeadings,
-  resolveReaderUrl
-} from '../reader-markdown'
+import type { DocumentReadResult, DocumentRecord } from '@loci/shared'
+import { DocumentReaderPanel } from '../DocumentReaderPanel'
+import { normalizeReaderMarkdown, readerTitle, resolveReaderUrl } from '../reader-markdown'
+
+const document: DocumentRecord = {
+  id: 'guide',
+  sourceId: 'vue',
+  sourceName: 'Vue',
+  title: 'Guide',
+  url: 'https://vuejs.org/api/reactivity-core.md',
+  folder: 'api',
+  language: 'en',
+  updatedAt: '2026-01-01',
+  content: ''
+}
+const panel = { loading: false, error: null, onRetry: () => {} }
 
 describe('文档阅读视图边界', () => {
   it('按来源解析链接和图片，不把相对路径交给控制台', () => {
@@ -79,14 +88,7 @@ describe('文档阅读视图边界', () => {
       '# Core {#core}\n\n:::info See also\nRead [reactive](#reactive).\n:::\n\n## `reactive()` {#reactive}\n\n```md\n:::tip\n# Example {#example}\n:::<Intro>\n```\n\n## Repeated\n## Repeated'
     const content = normalizeReaderMarkdown(source)
     const html = renderToStaticMarkup(
-      createElement(
-        ReactMarkdown,
-        {
-          remarkPlugins: [remarkReaderHeadings],
-          urlTransform: (url) => resolveReaderUrl(url, 'https://vuejs.org/api/reactivity-core.md')
-        },
-        content
-      )
+      createElement(DocumentReaderPanel, { ...panel, document: { ...document, content: source } })
     )
     expect(html).toContain('id="doc-reactive"')
     expect(html).toContain('href="#doc-reactive"')
@@ -98,5 +100,27 @@ describe('文档阅读视图边界', () => {
     expect(content).toContain(':::tip\n# Example {#example}\n:::<Intro>')
     expect(readerTitle('Core {#core}')).toBe('Core')
     expect(source).toContain(':::info')
+  })
+
+  it('多选预览分别解析每篇文档的相对图片和同名标题锚点', () => {
+    const content = '## Intro\n\n[Jump](#intro) ![Demo](./demo.png)'
+    const previews: DocumentReadResult[] = ['first', 'second'].map((id) => ({
+      ...document,
+      id,
+      path: '/guide.md',
+      url: `https://${id}.test/guide.md`,
+      content,
+      offset: 0,
+      totalChars: content.length,
+      truncated: false
+    }))
+    const html = renderToStaticMarkup(
+      createElement(DocumentReaderPanel, { ...panel, document: null, multipleDocuments: previews })
+    )
+    for (const { id } of previews) {
+      expect(html).toContain(`href="#doc-${id}-intro"`)
+      expect(html).toContain(`id="doc-${id}-intro"`)
+      expect(html).toContain(`src="https://${id}.test/demo.png"`)
+    }
   })
 })

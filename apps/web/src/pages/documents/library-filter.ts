@@ -40,6 +40,29 @@ export function filterLocalLibrarySources<T extends LibrarySummary | DocumentSou
     (s) =>
       s.name.toLowerCase().includes(q) ||
       s.url.toLowerCase().includes(q) ||
-      s.id.toLowerCase().includes(q)
+      s.id.toLowerCase().includes(q) ||
+      (s.version ?? '').toLowerCase().includes(q)
   )
+}
+
+/**
+ * 查找同一文档库在本地已收录的全部版本（同名或同 URL+收录范围），
+ * 当前选中的版本排在最前，其余按版本号排序，供阅读工作台顶栏切换版本。
+ */
+export function findRelatedVersionLibraries<T extends LibrarySummary | DocumentSource>(
+  sources: readonly T[],
+  current: T
+): T[] {
+  const currentName = current.name.trim().toLowerCase()
+  const currentOriginKey = `${current.url.trim().toLowerCase()}|${current.scopePath}`
+  const siblings = sources.filter((item) => {
+    if (item.id === current.id) return true
+    if (item.name.trim().toLowerCase() === currentName) return true
+    return `${item.url.trim().toLowerCase()}|${item.scopePath}` === currentOriginKey
+  })
+  return siblings.sort((a, b) => {
+    if (a.id === current.id) return -1
+    if (b.id === current.id) return 1
+    return (a.version ?? '').localeCompare(b.version ?? '')
+  })
 }

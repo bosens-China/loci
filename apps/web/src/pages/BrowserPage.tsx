@@ -255,7 +255,7 @@ function localStatusView(status: LocalBrowserStatus): {
       description: status.operation.message,
       icon: <SyncOutlined spin />,
       iconClass:
-        'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xl text-blue-600 dark:bg-blue-950/50 dark:text-blue-400'
+        'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--ant-color-info-bg)] text-xl text-[var(--ant-color-info)]'
     }
   }
   if (status.operation?.state === 'failed' || (status.installed && status.launchable === false)) {
@@ -264,7 +264,7 @@ function localStatusView(status: LocalBrowserStatus): {
       description: status.operation?.error ?? status.error ?? '浏览器已经安装，但当前无法启动。',
       icon: <ExclamationCircleOutlined />,
       iconClass:
-        'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-50 text-xl text-red-600 dark:bg-red-950/50 dark:text-red-400'
+        'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--ant-color-error-bg)] text-xl text-[var(--ant-color-error)]'
     }
   }
   if (status.installed && status.launchable) {
@@ -273,7 +273,7 @@ function localStatusView(status: LocalBrowserStatus): {
       description: '遇到动态站点时，Loci 会启动此 Chromium headless shell 渲染页面。',
       icon: <CheckCircleOutlined />,
       iconClass:
-        'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-green-50 text-xl text-green-600 dark:bg-green-950/50 dark:text-green-400'
+        'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--ant-color-success-bg)] text-xl text-[var(--ant-color-success)]'
     }
   }
   return {
