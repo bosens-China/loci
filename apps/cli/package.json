@@ -1,6 +1,6 @@
 {
   "name": "@boses/cli",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Local documentation CLI for fetching, searching and reading libraries with AI agents.",
   "author": "yliu",
   "license": "MIT",

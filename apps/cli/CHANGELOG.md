@@ -1,5 +1,28 @@
 # Changelog
 
+## [3.1.0](https://github.com/bosens-China/loci/compare/cli-v3.0.0...cli-v3.1.0) (2026-11-27)
+
+
+### Features
+
+* **cli:** 支持按版本定位文档库 ([0729c73](https://github.com/bosens-China/loci/commit/0729c733952b6eff3860c13f06385033829138ad))
+* **search:** 支持本机向量检索与文档小节复用 ([52bfdb0](https://github.com/bosens-China/loci/commit/52bfdb0b1206cfc4856ebf50084c00400464f350))
+* **update:** 统一 CLI 和 Web 的版本检查 ([f2493ff](https://github.com/bosens-China/loci/commit/f2493ff356a90beb5cd508a3208259e9db6f055a))
+
+
+### Bug Fixes
+
+* **agent:** 一键迁移旧版接入配置 ([1bbc7c1](https://github.com/bosens-China/loci/commit/1bbc7c172a7fd3dc49a00a71c48fd036ab5fa73b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @loci/core bumped to 3.0.1
+    * @loci/runtime bumped to 3.1.0
+    * @loci/shared bumped to 3.1.0
+
 ## [3.0.0](https://github.com/bosens-China/loci/compare/cli-v2.0.0...cli-v3.0.0) (2026-11-26)
 
 
